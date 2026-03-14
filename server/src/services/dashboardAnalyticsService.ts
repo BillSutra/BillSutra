@@ -19,6 +19,31 @@ const toMonthKey = (date: Date) =>
 const monthLabel = (date: Date) =>
   date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 
+let expenseTableExistsCache: boolean | null = null;
+
+const hasExpensesTable = async () => {
+  if (expenseTableExistsCache !== null) {
+    return expenseTableExistsCache;
+  }
+
+  try {
+    const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+      SELECT EXISTS (
+        SELECT 1
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'expenses'
+          AND n.nspname = 'public'
+      ) AS "exists"
+    `;
+    expenseTableExistsCache = rows[0]?.exists ?? false;
+  } catch {
+    expenseTableExistsCache = false;
+  }
+
+  return expenseTableExistsCache;
+};
+
 export const buildMonthSeries = (months: number, fromDate = new Date()) => {
   return Array.from({ length: months }, (_, index) => {
     const date = new Date(
@@ -124,6 +149,10 @@ export const getExpenseTotals = async (params: {
 }) => {
   const { userId, from, to } = params;
 
+  if (!(await hasExpensesTable())) {
+    return 0;
+  }
+
   try {
     const rows = await prisma.$queryRaw<
       Array<{ total: Prisma.Decimal | number | null }>
@@ -146,6 +175,10 @@ export const getMonthlyExpenses = async (params: {
   from: Date;
 }) => {
   const { userId, from } = params;
+
+  if (!(await hasExpensesTable())) {
+    return [] as ExpensePoint[];
+  }
 
   try {
     const rows = await prisma.$queryRaw<
@@ -173,6 +206,10 @@ export const getDailyExpenses = async (params: {
   from: Date;
 }) => {
   const { userId, from } = params;
+
+  if (!(await hasExpensesTable())) {
+    return [] as Array<{ day: Date; amount: number }>;
+  }
 
   try {
     const rows = await prisma.$queryRaw<

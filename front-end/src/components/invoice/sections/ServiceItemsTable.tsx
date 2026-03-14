@@ -20,12 +20,12 @@ const ServiceItemsTable = ({ data, theme }: InvoiceSectionProps) => {
         </p>
       </div>
       <div className="mt-2 grid gap-0 border-t border-slate-300">
-        {data.items.map((item) => {
+        {data.items.map((item, index) => {
           const lineTotal = item.quantity * item.unitPrice;
           const taxAmount = lineTotal * ((item.taxRate ?? 0) / 100);
           return (
             <div
-              key={item.name}
+              key={`${item.name}-${index}`}
               className="invoice-row border-b border-slate-300 px-3 py-2"
             >
               <div className="flex items-start justify-between gap-4">

@@ -41,11 +41,11 @@ const ItemsTable = ({ data, theme }: InvoiceSectionProps) => {
             </tr>
           </thead>
           <tbody>
-            {data.items.map((item) => {
+            {data.items.map((item, index) => {
               const lineTotal = item.quantity * item.unitPrice;
               const taxAmount = lineTotal * ((item.taxRate ?? 0) / 100);
               return (
-                <tr key={item.name} className="invoice-row">
+                <tr key={`${item.name}-${index}`} className="invoice-row">
                   <td className="border-b border-r border-slate-200 px-3 py-2">
                     <p className="font-medium">{item.name}</p>
                     {item.description ? (

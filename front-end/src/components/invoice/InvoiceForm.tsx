@@ -129,8 +129,11 @@ const InvoiceForm = ({
         </div>
         <FloatingInput
           id="discount"
-          label="Discount"
+          label="Discount (%)"
           type="number"
+          min="0"
+          max="100"
+          step="0.01"
           value={form.discount}
           onChange={(value) => onFormChange({ ...form, discount: value })}
         />

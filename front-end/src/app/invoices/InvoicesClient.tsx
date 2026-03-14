@@ -54,6 +54,34 @@ type InvoiceClientProps = {
   image?: string;
 };
 
+const sanitizeItemFieldValue = (
+  key: keyof InvoiceItemForm,
+  value: string,
+) => {
+  if (key === "quantity") {
+    if (value === "") return value;
+    const quantity = Number(value);
+    if (!Number.isFinite(quantity)) return value;
+    return String(Math.max(1, Math.floor(quantity)));
+  }
+
+  if (key === "price" || key === "tax_rate") {
+    if (value === "") return value;
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) return value;
+    return String(Math.max(0, numericValue));
+  }
+
+  return value;
+};
+
+const sanitizeDiscountPercent = (value: string) => {
+  if (value === "") return value;
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return value;
+  return String(Math.min(100, Math.max(0, numericValue)));
+};
+
 const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const { data: customers } = useCustomersQuery();
   const { data: products } = useProductsQuery();
@@ -370,9 +398,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
   const handleItemChange = useCallback(
     (index: number, key: keyof InvoiceItemForm, value: string) => {
+      const nextValue = sanitizeItemFieldValue(key, value);
       setItems((prev) =>
         prev.map((item, idx) =>
-          idx === index ? { ...item, [key]: value } : item,
+          idx === index ? { ...item, [key]: nextValue } : item,
         ),
       );
       setItemErrors([]);
@@ -395,10 +424,15 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 ...item,
                 product_id: productId,
                 name: product?.name ?? item.name,
-                price: product?.price ? String(product.price) : item.price,
-                tax_rate: product?.gst_rate
-                  ? String(product.gst_rate)
-                  : item.tax_rate,
+                price:
+                  product?.price !== undefined && product?.price !== null
+                    ? String(product.price)
+                    : item.price,
+                tax_rate:
+                  product?.gst_rate !== undefined &&
+                  product?.gst_rate !== null
+                    ? String(product.gst_rate)
+                    : item.tax_rate,
               }
             : item,
         ),
@@ -435,7 +469,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
   const handleFormChange = useCallback(
     (next: InvoiceFormState) => {
-      setForm(next);
+      setForm({
+        ...next,
+        discount: sanitizeDiscountPercent(next.discount),
+      });
       setSummaryErrors([]);
       setServerError(null);
       markDirty();
@@ -753,7 +790,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               onLoadDraft={loadDraft}
               onDeleteDraft={deleteDraft}
             />
-            <InvoiceTotals totals={totals} taxMode={taxMode} />
+            <InvoiceTotals
+              totals={totals}
+              taxMode={taxMode}
+              discountPercent={form.discount}
+            />
             <div className="no-print rounded-xl border border-gray-200 bg-gray-50 p-6 text-sm text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800">
               <p className="font-semibold text-gray-900 dark:text-gray-100">
                 GST note
