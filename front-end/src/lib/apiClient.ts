@@ -247,6 +247,19 @@ export type Invoice = {
   discount: string;
   total: string;
   customer?: Customer | null;
+  payments: Array<{
+    id: number;
+    amount: string;
+    method?:
+      | "CASH"
+      | "CARD"
+      | "BANK_TRANSFER"
+      | "UPI"
+      | "CHEQUE"
+      | "OTHER"
+      | null;
+    paid_at?: string | null;
+  }>;
   items: Array<{
     id: number;
     product_id?: number | null;
@@ -797,6 +810,17 @@ export const createInvoice = async (
   return response.data.data as Invoice;
 };
 
+export const updateInvoice = async (
+  invoiceId: number,
+  payload: {
+    status?: string;
+    due_date?: string | Date | null;
+    notes?: string | null;
+  },
+): Promise<void> => {
+  await apiClient.put(`/invoices/${invoiceId}`, payload);
+};
+
 export const deleteInvoice = async (invoiceId: number): Promise<void> => {
   await apiClient.delete(`/invoices/${invoiceId}`);
 };
@@ -973,6 +997,14 @@ export const updateUserPassword = async (
   payload: UpdatePasswordPayload,
 ): Promise<void> => {
   await apiClient.put("/users/password", payload);
+};
+
+export const deleteUserData = async (): Promise<void> => {
+  await apiClient.delete("/user/data");
+};
+
+export const deleteUserAccount = async (): Promise<void> => {
+  await apiClient.delete("/user/account");
 };
 
 export const fetchTemplates = async (): Promise<TemplateRecord[]> => {

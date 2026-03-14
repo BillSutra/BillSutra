@@ -19,7 +19,9 @@ import {
   fetchInvoices,
   fetchInvoice,
   createInvoice,
+  updateInvoice,
   deleteInvoice,
+  createPayment,
   createCategory,
   fetchSuppliers,
   fetchWarehouse,
@@ -238,6 +240,37 @@ export const useDeleteInvoiceMutation = () => {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        invalidateDashboardQueries(queryClient),
+      ]),
+  });
+};
+
+export const useUpdateInvoiceMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: number;
+      payload: Parameters<typeof updateInvoice>[1];
+    }) => updateInvoice(id, payload),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        invalidateDashboardQueries(queryClient),
+      ]),
+  });
+};
+
+export const useCreatePaymentMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createPayment,
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        queryClient.invalidateQueries({ queryKey: ["payments"] }),
         invalidateDashboardQueries(queryClient),
       ]),
   });

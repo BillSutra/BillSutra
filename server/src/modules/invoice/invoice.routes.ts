@@ -4,6 +4,7 @@ import validate from "../../middlewares/validate.js";
 import {
   idParamSchema,
   invoiceCreateSchema,
+  invoiceUpdateSchema,
 } from "../../validations/apiValidations.js";
 import {
   destroy,
@@ -14,6 +15,7 @@ import {
   send,
   show,
   store,
+  update,
 } from "./invoice.controller.js";
 
 const router = Router();
@@ -26,6 +28,12 @@ router.post(
   store,
 );
 router.get("/:id", AuthMiddleware, validate({ params: idParamSchema }), show);
+router.put(
+  "/:id",
+  AuthMiddleware,
+  validate({ params: idParamSchema, body: invoiceUpdateSchema }),
+  update,
+);
 router.get(
   "/:id/pdf",
   AuthMiddleware,
