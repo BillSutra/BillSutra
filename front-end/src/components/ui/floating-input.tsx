@@ -7,6 +7,9 @@ type FloatingInputProps = {
   onChange: (value: string) => void;
   type?: string;
   className?: string;
+  min?: string;
+  max?: string;
+  step?: string;
 };
 
 const FloatingInput = ({
@@ -16,12 +19,18 @@ const FloatingInput = ({
   onChange,
   type = "text",
   className,
+  min,
+  max,
+  step,
 }: FloatingInputProps) => {
   return (
     <div className={cn("relative", className)}>
       <input
         id={id}
         type={type}
+        min={min}
+        max={max}
+        step={step}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder=" "

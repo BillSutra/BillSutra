@@ -33,7 +33,10 @@ const A4PreviewStack = ({
     const updateScale = () => {
       const width = viewportRef.current?.clientWidth ?? 0;
       if (!width) return;
-      setScale(Math.min(1, width / A4_WIDTH_PX));
+      const nextScale = Math.min(1, width / A4_WIDTH_PX);
+      setScale((currentScale) =>
+        Math.abs(currentScale - nextScale) < 0.001 ? currentScale : nextScale,
+      );
     };
 
     updateScale();
@@ -62,7 +65,11 @@ const A4PreviewStack = ({
         1,
         Math.ceil(target.scrollHeight / A4_CONTENT_HEIGHT_PX),
       );
-      setPageCount(nextPageCount);
+      setPageCount((currentPageCount) =>
+        currentPageCount === nextPageCount
+          ? currentPageCount
+          : nextPageCount,
+      );
     };
 
     measurePages();

@@ -34,7 +34,11 @@ export const useInvoiceTotals = (
       }
     });
 
-    const discount = Math.max(0, Number(discountValue) || 0);
+    const discountPercent = Math.min(
+      100,
+      Math.max(0, Number(discountValue) || 0),
+    );
+    const discount = (subtotal * discountPercent) / 100;
     const total = subtotal + tax - discount;
 
     return {
