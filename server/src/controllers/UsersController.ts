@@ -1,4 +1,7 @@
 import type { Request, Response } from "express";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
 import bcrypt from "bcryptjs";
@@ -10,6 +13,15 @@ import {
 
 type UserProfileUpdateInput = z.infer<typeof userProfileUpdateSchema>;
 type UserPasswordUpdateInput = z.infer<typeof userPasswordUpdateSchema>;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const LOGO_UPLOADS_ROOT = path.resolve(__dirname, "../../uploads/logos");
+
+const removeUserUploads = (userId: number) => {
+  const userUploadsDir = path.join(LOGO_UPLOADS_ROOT, String(userId));
+  fs.rmSync(userUploadsDir, { recursive: true, force: true });
+};
 
 class UsersController {
   static async me(req: Request, res: Response) {
@@ -132,6 +144,52 @@ class UsersController {
     });
 
     return sendResponse(res, 200, { message: "Password updated" });
+  }
+
+  static async deleteData(req: Request, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    await prisma.passwordResetToken.deleteMany({ where: { user_id: userId } });
+    await prisma.recurringInvoiceTemplate.deleteMany({
+      where: { user_id: userId },
+    });
+    await prisma.invoice.deleteMany({ where: { user_id: userId } });
+    await prisma.sale.deleteMany({ where: { user_id: userId } });
+    await prisma.purchase.deleteMany({ where: { user_id: userId } });
+    await prisma.warehouse.deleteMany({ where: { user_id: userId } });
+    await prisma.product.deleteMany({ where: { user_id: userId } });
+    await prisma.category.deleteMany({ where: { user_id: userId } });
+    await prisma.supplier.deleteMany({ where: { user_id: userId } });
+    await prisma.customer.deleteMany({ where: { user_id: userId } });
+    await prisma.businessProfile.deleteMany({ where: { user_id: userId } });
+    await prisma.userTemplate.deleteMany({ where: { user_id: userId } });
+    await prisma.userSavedTemplate.deleteMany({ where: { user_id: userId } });
+
+    removeUserUploads(userId);
+
+    return sendResponse(res, 200, { message: "User data deleted" });
+  }
+
+  static async deleteAccount(req: Request, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    const deleted = await prisma.user.deleteMany({
+      where: { id: userId },
+    });
+
+    if (!deleted.count) {
+      return sendResponse(res, 404, { message: "User not found" });
+    }
+
+    removeUserUploads(userId);
+
+    return sendResponse(res, 200, { message: "Account deleted" });
   }
 }
 

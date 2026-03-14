@@ -1,7 +1,10 @@
 import type { Request, Response } from "express";
 import { InvoiceStatus } from "@prisma/client";
 import type { z } from "zod";
-import { invoiceCreateSchema } from "../../validations/apiValidations.js";
+import {
+  invoiceCreateSchema,
+  invoiceUpdateSchema,
+} from "../../validations/apiValidations.js";
 import {
   createInvoice,
   duplicateInvoice,
@@ -11,10 +14,12 @@ import {
   getInvoiceForNotification,
   listInvoices,
   markInvoiceAsSent,
+  updateInvoice,
 } from "./invoice.service.js";
 import { sendInvoiceNotification } from "./invoice.notifications.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
+type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
 
 const readQueryValue = (value: unknown): string | undefined => {
   if (typeof value === "string") {
@@ -212,6 +217,27 @@ export const show = async (req: Request, res: Response) => {
   }
 
   return res.status(200).json({ data: invoice });
+};
+
+export const update = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const id = Number(req.params.id);
+  const body = req.body as InvoiceUpdateInput;
+  const updated = await updateInvoice(userId, id, {
+    status: body.status,
+    due_date: body.due_date ?? undefined,
+    notes: body.notes,
+  });
+
+  if (!updated.count) {
+    return res.status(404).json({ message: "Invoice not found" });
+  }
+
+  return res.status(200).json({ message: "Invoice updated" });
 };
 
 export const destroy = async (req: Request, res: Response) => {

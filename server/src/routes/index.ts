@@ -140,6 +140,8 @@ router.put(
   validate({ body: userPasswordUpdateSchema }),
   UsersController.updatePassword,
 );
+router.delete("/user/data", AuthMiddleware, UsersController.deleteData);
+router.delete("/user/account", AuthMiddleware, UsersController.deleteAccount);
 
 // Business profile
 router.get(

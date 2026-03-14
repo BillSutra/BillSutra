@@ -539,6 +539,25 @@ export const markInvoiceAsSent = async (userId: number, id: number) => {
   });
 };
 
+export const updateInvoice = async (
+  userId: number,
+  id: number,
+  payload: {
+    status?: InvoiceStatus;
+    due_date?: Date | string | null;
+    notes?: string | null;
+  },
+) => {
+  return prisma.invoice.updateMany({
+    where: { id, user_id: userId },
+    data: {
+      status: payload.status,
+      due_date: payload.due_date ?? undefined,
+      notes: payload.notes,
+    },
+  });
+};
+
 export const duplicateInvoice = async (userId: number, id: number) => {
   return prisma.$transaction(async (tx) => {
     const source = await tx.invoice.findFirst({
