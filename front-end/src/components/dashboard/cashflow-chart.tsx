@@ -16,23 +16,33 @@ import {
 import { fetchDashboardCashflow } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+const INFLOW_COLOR = "#15803d";
+const OUTFLOW_COLOR = "#f97316";
+
 const formatCurrency = (value: number) => `₹${value.toLocaleString("en-IN")}`;
 
-const formatTooltipValue = (value: unknown) => {
-  if (typeof value === "number") {
-    return formatCurrency(value);
-  }
-  return formatCurrency(0);
+type CashflowTooltipEntry = {
+  color?: string;
+  name?: string;
+  value?: number;
 };
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: CashflowTooltipEntry[];
+  label?: string;
+}) => {
   if (active && payload && payload.length) {
     return (
       <div className="rounded-lg border border-[#ecdccf] bg-white p-3 shadow-xl ring-1 ring-black/5">
         <p className="font-semibold text-[#1f1b16] mb-2">{label}</p>
         <div className="space-y-1.5">
-          {payload.map((entry: any, index: number) => (
-            <div key={index} className="flex items-center justify-between gap-4">
+          {payload.map((entry, index) => (
+            <div key={`${entry.name}-${index}`} className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
                 <div
                   className="h-2 w-2 rounded-full"
@@ -43,7 +53,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
                 </span>
               </div>
               <span className="text-sm font-bold text-[#1f1b16]">
-                {formatCurrency(entry.value)}
+                {formatCurrency(entry.value ?? 0)}
               </span>
             </div>
           ))}
@@ -54,11 +64,18 @@ const CustomTooltip = ({ active, payload, label }: any) => {
   return null;
 };
 
+const legendFormatter = (value: string) => (
+  <span className="text-sm font-medium text-[#5c4331]">{value}</span>
+);
+
 const CashFlowChart = ({ className }: { className?: string }) => {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard", "cashflow"],
     queryFn: fetchDashboardCashflow,
   });
+  const hasSeriesData = (data?.series ?? []).some(
+    (item) => item.inflow > 0 || item.outflow > 0,
+  );
 
   const net = data?.netCashFlow ?? 0;
   const netClass =
@@ -137,7 +154,8 @@ const CashFlowChart = ({ className }: { className?: string }) => {
               ))}
             </div>
 
-            <div className="flex-1 min-h-[350px]">
+            {hasSeriesData ? (
+            <div className="h-[320px] md:h-[360px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart
                   data={data.series}
@@ -145,12 +163,12 @@ const CashFlowChart = ({ className }: { className?: string }) => {
                 >
                   <defs>
                     <linearGradient id="colorInflow" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#0f766e" stopOpacity={0.42} />
-                      <stop offset="95%" stopColor="#0f766e" stopOpacity={0} />
+                      <stop offset="5%" stopColor={INFLOW_COLOR} stopOpacity={0.42} />
+                      <stop offset="95%" stopColor={INFLOW_COLOR} stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorOutflow" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.42} />
-                      <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                      <stop offset="5%" stopColor={OUTFLOW_COLOR} stopOpacity={0.42} />
+                      <stop offset="95%" stopColor={OUTFLOW_COLOR} stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid
@@ -185,29 +203,37 @@ const CashFlowChart = ({ className }: { className?: string }) => {
                     verticalAlign="top"
                     align="right"
                     iconType="circle"
+                    formatter={legendFormatter}
                     wrapperStyle={{ paddingBottom: "20px", fontSize: "12px" }}
                   />
                   <Area
                     type="monotone"
                     dataKey="inflow"
                     name="Cash Inflow"
-                    stroke="#0f766e"
+                    stroke={INFLOW_COLOR}
                     fillOpacity={1}
                     fill="url(#colorInflow)"
                     strokeWidth={3}
+                    strokeLinecap="round"
                   />
                   <Area
                     type="monotone"
                     dataKey="outflow"
                     name="Cash Outflow"
-                    stroke="#f97316"
+                    stroke={OUTFLOW_COLOR}
                     fillOpacity={1}
                     fill="url(#colorOutflow)"
                     strokeWidth={3}
+                    strokeLinecap="round"
                   />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+            ) : (
+              <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed border-[#ecdccf] bg-[#fffaf5] px-4 text-center text-sm text-[#5f5144]">
+                No cash flow activity recorded for this period yet.
+              </div>
+            )}
             <p className="text-xs text-[#8a6d56]">
               Includes direct sale receipts, invoice collections, paid purchase
               amounts, and recorded expenses.

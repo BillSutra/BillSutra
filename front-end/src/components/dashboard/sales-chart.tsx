@@ -27,9 +27,12 @@ const fallbackSales: DashboardSales = {
   categories: [],
 };
 
+const SALES_COLOR = "#15803d";
+const PURCHASES_COLOR = "#f97316";
+
 const chartColors = [
-  "#f97316",
-  "#0f766e",
+  SALES_COLOR,
+  PURCHASES_COLOR,
   "#f59e0b",
   "#1e293b",
   "#fb7185",
@@ -61,6 +64,56 @@ const formatCompactCurrency = (value: number) =>
     notation: "compact",
     maximumFractionDigits: 1,
   }).format(value);
+
+const legendFormatter = (value: string) => (
+  <span className="text-sm font-medium text-[#5c4331]">{value}</span>
+);
+
+const CustomTooltip = ({
+  active,
+  payload,
+  label,
+}: {
+  active?: boolean;
+  payload?: Array<{ color?: string; name?: string; value?: number }>;
+  label?: string;
+}) => {
+  if (!active || !payload?.length) return null;
+
+  return (
+    <div className="rounded-xl border border-[#ecdccf] bg-white/95 p-3 shadow-xl">
+      <p className="text-sm font-semibold text-[#1f1b16]">
+        {label
+          ? new Date(label).toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+            })
+          : ""}
+      </p>
+      <div className="mt-2 space-y-1.5">
+        {payload.map((entry) => (
+          <div
+            key={entry.name}
+            className="flex items-center justify-between gap-4"
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className="h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: entry.color }}
+              />
+              <span className="text-xs font-medium text-[#5f5144]">
+                {entry.name}
+              </span>
+            </div>
+            <span className="text-sm font-semibold text-[#1f1b16]">
+              {formatTooltipValue(entry.value ?? 0)}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
 
 const SalesChart = () => {
   const { data, isLoading, isError } = useQuery({
@@ -105,10 +158,10 @@ const SalesChart = () => {
                 <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
                   Last 7 days
                 </p>
-                <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
+                <p className="mt-1 text-sm font-semibold text-emerald-700">
                   {formatCurrency(sales7Total)} sales
                 </p>
-                <p className="text-xs text-[#8a6d56]">
+                <p className="text-xs text-orange-600">
                   {formatCurrency(purchases7Total)} purchases
                 </p>
               </div>
@@ -116,10 +169,10 @@ const SalesChart = () => {
                 <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
                   Last 30 days
                 </p>
-                <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
+                <p className="mt-1 text-sm font-semibold text-emerald-700">
                   {formatCurrency(sales30Total)} sales
                 </p>
-                <p className="text-xs text-[#8a6d56]">
+                <p className="text-xs text-orange-600">
                   {formatCurrency(purchases30Total)} purchases
                 </p>
               </div>
@@ -157,27 +210,51 @@ const SalesChart = () => {
                         tick={{ fontSize: 12, fill: "#8a6d56" }}
                         tickFormatter={(value) => formatCompactCurrency(value)}
                       />
-                      <Legend />
-                      <Tooltip
-                        formatter={(value) => formatTooltipValue(value)}
+                      <Legend
+                        iconType="circle"
+                        formatter={legendFormatter}
+                        wrapperStyle={{ paddingBottom: "10px" }}
                       />
+                      <Tooltip content={<CustomTooltip />} />
                       <Line
                         type="monotone"
                         dataKey="sales"
                         name="Sales"
-                        stroke="#f97316"
-                        strokeWidth={2}
-                        dot={{ r: 2 }}
-                        activeDot={{ r: 5 }}
+                        stroke={SALES_COLOR}
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                        dot={{
+                          r: 2.5,
+                          strokeWidth: 2,
+                          fill: SALES_COLOR,
+                          stroke: "#ffffff",
+                        }}
+                        activeDot={{
+                          r: 5,
+                          strokeWidth: 2,
+                          fill: SALES_COLOR,
+                          stroke: "#ffffff",
+                        }}
                       />
                       <Line
                         type="monotone"
                         dataKey="purchases"
                         name="Purchases"
-                        stroke="#0f766e"
-                        strokeWidth={2}
-                        dot={{ r: 2 }}
-                        activeDot={{ r: 5 }}
+                        stroke={PURCHASES_COLOR}
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                        dot={{
+                          r: 2.5,
+                          strokeWidth: 2,
+                          fill: PURCHASES_COLOR,
+                          stroke: "#ffffff",
+                        }}
+                        activeDot={{
+                          r: 5,
+                          strokeWidth: 2,
+                          fill: PURCHASES_COLOR,
+                          stroke: "#ffffff",
+                        }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
@@ -205,27 +282,41 @@ const SalesChart = () => {
                         tick={{ fontSize: 12, fill: "#8a6d56" }}
                         tickFormatter={(value) => formatCompactCurrency(value)}
                       />
-                      <Legend />
-                      <Tooltip
-                        formatter={(value) => formatTooltipValue(value)}
+                      <Legend
+                        iconType="circle"
+                        formatter={legendFormatter}
+                        wrapperStyle={{ paddingBottom: "10px" }}
                       />
+                      <Tooltip content={<CustomTooltip />} />
                       <Line
                         type="monotone"
                         dataKey="sales"
                         name="Sales"
-                        stroke="#f97316"
-                        strokeWidth={2}
+                        stroke={SALES_COLOR}
+                        strokeWidth={3}
+                        strokeLinecap="round"
                         dot={false}
-                        activeDot={{ r: 5 }}
+                        activeDot={{
+                          r: 5,
+                          strokeWidth: 2,
+                          fill: SALES_COLOR,
+                          stroke: "#ffffff",
+                        }}
                       />
                       <Line
                         type="monotone"
                         dataKey="purchases"
                         name="Purchases"
-                        stroke="#0f766e"
-                        strokeWidth={2}
+                        stroke={PURCHASES_COLOR}
+                        strokeWidth={3}
+                        strokeLinecap="round"
                         dot={false}
-                        activeDot={{ r: 5 }}
+                        activeDot={{
+                          r: 5,
+                          strokeWidth: 2,
+                          fill: PURCHASES_COLOR,
+                          stroke: "#ffffff",
+                        }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
@@ -254,11 +345,19 @@ const SalesChart = () => {
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(value) => formatTooltipValue(value)} />
-                  <Legend />
-                  <Bar dataKey="sales" fill="#f97316" radius={[6, 6, 0, 0]} />
+                  <Legend
+                    iconType="circle"
+                    formatter={legendFormatter}
+                    wrapperStyle={{ paddingTop: "8px" }}
+                  />
+                  <Bar
+                    dataKey="sales"
+                    fill={SALES_COLOR}
+                    radius={[6, 6, 0, 0]}
+                  />
                   <Bar
                     dataKey="purchases"
-                    fill="#0f766e"
+                    fill={PURCHASES_COLOR}
                     radius={[6, 6, 0, 0]}
                   />
                 </BarChart>
@@ -277,15 +376,15 @@ const SalesChart = () => {
             </p>
           </CardHeader>
           <CardContent className="dashboard-chart-content">
-            <div className="h-44">
+            <div className="h-40">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={salesData.categories}
                     dataKey="value"
                     nameKey="name"
-                    innerRadius={45}
-                    outerRadius={70}
+                    innerRadius={38}
+                    outerRadius={64}
                     paddingAngle={3}
                   >
                     {salesData.categories.map((entry, index) => (
@@ -296,9 +395,22 @@ const SalesChart = () => {
                     ))}
                   </Pie>
                   <Tooltip formatter={(value) => formatTooltipValue(value)} />
-                  <Legend verticalAlign="bottom" height={36} />
                 </PieChart>
               </ResponsiveContainer>
+            </div>
+            <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2">
+              {salesData.categories.map((entry, index) => (
+                <div
+                  key={entry.name}
+                  className="flex items-center gap-2 text-sm font-medium text-[#5c4331]"
+                >
+                  <span
+                    className="h-3.5 w-3.5 rounded-full"
+                    style={{ backgroundColor: chartColors[index % chartColors.length] }}
+                  />
+                  <span>{entry.name}</span>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

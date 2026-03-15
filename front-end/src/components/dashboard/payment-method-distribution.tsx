@@ -99,7 +99,7 @@ const DistributionCard = ({
     <Card className="dashboard-chart-surface rounded-[1.75rem]">
       <CardHeader className="dashboard-chart-content gap-1">
         <CardTitle className="text-base text-[#1f1b16]">{title}</CardTitle>
-        <p className="text-sm text-[#8a6d56]">{description}</p>
+        <p className="text-sm text-[#5f5144]">{description}</p>
       </CardHeader>
       <CardContent className="dashboard-chart-content grid gap-4">
         {isLoading ? (
@@ -158,6 +158,14 @@ const DistributionCard = ({
               </div>
 
               <div className="grid content-start gap-2">
+                <div className="flex items-center justify-between px-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
+                    Legend
+                  </p>
+                  <p className="text-xs font-medium text-[#6f6257]">
+                    Share of amount
+                  </p>
+                </div>
                 {data.map((item, index) => {
                   const share = totalAmount === 0 ? 0 : (item.amount / totalAmount) * 100;
 
@@ -179,14 +187,14 @@ const DistributionCard = ({
                             {paymentMethodLabels[item.method]}
                           </p>
                         </div>
-                        <p className="text-xs font-semibold text-[#8a6d56]">
+                        <p className="text-xs font-semibold text-[#5f5144]">
                           {share.toFixed(1)}%
                         </p>
                       </div>
                       <p className="mt-2 text-sm text-[#1f1b16]">
                         {formatCurrency(item.amount)}
                       </p>
-                      <p className="text-xs text-[#8a6d56]">
+                      <p className="text-xs text-[#5f5144]">
                         {item.count.toLocaleString("en-IN")} transaction(s)
                       </p>
                     </div>
@@ -213,10 +221,10 @@ const PaymentMethodDistribution = ({ className }: { className?: string }) => {
     <section className={cn("grid gap-4", className)}>
       <div className="flex flex-col gap-3 rounded-[1.5rem] border border-[#ecdccf] bg-[linear-gradient(135deg,rgba(255,250,244,0.92),rgba(255,255,255,0.88))] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
             Payment method distribution
           </p>
-          <p className="mt-1 text-sm text-[#8a6d56]">
+          <p className="mt-1 text-sm text-[#5f5144]">
             Breakdown of paid sales and purchases by payment type.
           </p>
         </div>
