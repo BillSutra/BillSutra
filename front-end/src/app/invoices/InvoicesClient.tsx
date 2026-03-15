@@ -24,11 +24,11 @@ import {
 import {
   fetchInvoicePdfFile,
   fetchBusinessProfile,
-  sendInvoiceEmail,
   fetchTemplates,
   fetchUserTemplates,
   saveUserTemplate,
 } from "@/lib/apiClient";
+import { sendInvoiceSentEmail } from "@/lib/emailService";
 import { SECTION_LABELS, TEMPLATE_CATALOG } from "@/lib/invoiceTemplateData";
 import { useInvoiceTotals } from "@/hooks/invoice/useInvoiceTotals";
 import { useInvoiceValidation } from "@/hooks/invoice/useInvoiceValidation";
@@ -108,7 +108,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     },
   });
   const sendInvoiceEmailMutation = useMutation({
-    mutationFn: sendInvoiceEmail,
+    mutationFn: sendInvoiceSentEmail,
   });
   const createInvoice = useCreateInvoiceMutation();
   const { downloadPdf } = useInvoicePdf();
@@ -121,6 +121,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const [lastCreatedCustomerEmail, setLastCreatedCustomerEmail] = useState<
     string | null
   >(null);
+  const [lastCreatedInvoiceEmailPayload, setLastCreatedInvoiceEmailPayload] =
+    useState<Parameters<typeof sendInvoiceSentEmail>[0] | null>(null);
 
   const [form, setForm] = useState<InvoiceFormState>({
     customer_id: "",
@@ -566,6 +568,17 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     if (validation.summary.length > 0) return;
 
     try {
+      const selectedCustomer =
+        customers?.find((customer) => customer.id === Number(form.customer_id)) ??
+        null;
+      const itemsSummary = items
+        .map((item) => {
+          const quantity = Number(item.quantity || 0);
+          const price = Number(item.price || 0);
+          return `${item.name || "Item"} x${quantity} @ INR ${price.toFixed(2)}`;
+        })
+        .join("\n");
+
       const createdInvoice = await createInvoice.mutateAsync({
         customer_id: Number(form.customer_id),
         date: form.date || undefined,
@@ -584,7 +597,25 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
       setLastCreatedInvoiceId(createdInvoice.id);
       setLastCreatedInvoiceNumber(createdInvoice.invoice_number);
-      setLastCreatedCustomerEmail(createdInvoice.customer?.email ?? null);
+      setLastCreatedCustomerEmail(selectedCustomer?.email ?? null);
+      setLastCreatedInvoiceEmailPayload(
+        selectedCustomer?.email
+          ? {
+              user_email: selectedCustomer.email,
+              customer_name: selectedCustomer.name,
+              invoice_number: createdInvoice.invoice_number,
+              invoice_date: form.date || new Date().toISOString().slice(0, 10),
+              due_date: form.due_date || null,
+              total: `INR ${totals.total.toFixed(2)}`,
+              business_name:
+                businessProfile?.business_name ?? "BillSutra",
+              business_email: businessProfile?.email ?? null,
+              business_phone: businessProfile?.phone ?? null,
+              notes: form.notes || null,
+              items_summary: itemsSummary || "No items",
+            }
+          : null,
+      );
 
       try {
         const pdfFile = await fetchInvoicePdfFile(
@@ -635,22 +666,25 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       return;
     }
 
-    if (!lastCreatedCustomerEmail) {
+    if (!lastCreatedCustomerEmail || !lastCreatedInvoiceEmailPayload) {
       toast.error("Customer email is missing on the saved invoice");
       return;
     }
 
     try {
-      await sendInvoiceEmailMutation.mutateAsync(lastCreatedInvoiceId);
+      await sendInvoiceEmailMutation.mutateAsync(lastCreatedInvoiceEmailPayload);
+      toast.success("Email sent successfully");
       toast.success(
         `Invoice ${lastCreatedInvoiceNumber ?? `#${lastCreatedInvoiceId}`} email sent`,
       );
     } catch (error) {
+      console.error("Invoice email failed:", error);
       setServerError(parseServerErrors(error, "Unable to send invoice email."));
-      toast.error("Unable to send invoice email");
+      toast.error("Failed to send email");
     }
   }, [
     lastCreatedCustomerEmail,
+    lastCreatedInvoiceEmailPayload,
     lastCreatedInvoiceId,
     lastCreatedInvoiceNumber,
     parseServerErrors,

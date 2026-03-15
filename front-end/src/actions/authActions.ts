@@ -20,6 +20,10 @@ export async function registerAction(prevState: any, formdata: FormData) {
       message:
         "You have been registered successfully ,check email to verify your account",
       errors: {},
+      data: {
+        name: String(formdata.get("name") ?? ""),
+        email: String(formdata.get("email") ?? ""),
+      },
     };
   } catch (error) {
     if (error instanceof AxiosError) {
@@ -28,6 +32,7 @@ export async function registerAction(prevState: any, formdata: FormData) {
           status: 422,
           message: error.response.data.message,
           errors: error.response.data.errors,
+          data: {},
         };
       }
     }
@@ -36,6 +41,7 @@ export async function registerAction(prevState: any, formdata: FormData) {
       status: 500,
       message: "something went wrong. Try again",
       errors: {},
+      data: {},
     };
   }
 }
@@ -48,6 +54,13 @@ export async function forgetAction(prevState: any, formData: FormData) {
       status: 200,
       message: "Credentials matched loging you shortly!",
       errors: {},
+      data: {
+        email: String(formData.get("email") ?? ""),
+        token:
+          data.data?.data?.token ??
+          data.data?.token ??
+          null,
+      },
     };
   } catch (error) {
     if (error instanceof AxiosError) {
@@ -56,6 +69,7 @@ export async function forgetAction(prevState: any, formData: FormData) {
           status: 422,
           message: error.response.data.message,
           errors: error.response.data.errors,
+          data: {},
         };
       }
     }
@@ -64,6 +78,7 @@ export async function forgetAction(prevState: any, formData: FormData) {
       status: 500,
       message: "something went wrong. Try again",
       errors: {},
+      data: {},
     };
   }
 }
@@ -125,6 +140,7 @@ export async function resetPasswordAction(prevState: any, formdata: FormData) {
           status: 422,
           message: error.response.data.message,
           errors: error.response.data.errors,
+          data: {},
         };
       }
     }

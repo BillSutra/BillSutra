@@ -39,18 +39,39 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 const ProductSalesChart = ({ className }: { className?: string }) => {
-  const [period, setPeriod] = useState<"lifetime" | "month" | "week">("lifetime");
+  const [period, setPeriod] = useState<"lifetime" | "month" | "week" | "year">("lifetime");
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard", "productSales", period],
     queryFn: () => fetchDashboardProductSales(period),
   });
 
+  const totalUnits = (data?.products ?? []).reduce(
+    (sum, item) => sum + item.quantity,
+    0,
+  );
+  const totalRevenue = (data?.products ?? []).reduce(
+    (sum, item) => sum + item.revenue,
+    0,
+  );
+
   return (
-    <Card className={`border-[#ecdccf] bg-white/90 flex flex-col ${className}`}>
-      <CardHeader className="pb-3">
+    <Card
+      className={`dashboard-chart-surface flex flex-col rounded-[1.75rem] ${className}`}
+    >
+      <CardHeader className="dashboard-chart-content pb-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <CardTitle className="text-base">Product Sales Performance</CardTitle>
+          <div>
+            <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
+              Product momentum
+            </p>
+            <CardTitle className="mt-2 text-2xl text-[#1f1b16]">
+              Product sales performance
+            </CardTitle>
+            <p className="mt-2 text-sm text-[#8a6d56]">
+              Best-selling products ranked by units sold for the selected window.
+            </p>
+          </div>
           <div className="flex bg-[#fdf7f1] p-1 rounded-lg border border-[#ecdccf]">
             <Button
               variant={period === "week" ? "default" : "ghost"}
@@ -77,6 +98,18 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
               This Month
             </Button>
             <Button
+              variant={period === "year" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setPeriod("year")}
+              className={`h-7 px-3 text-xs ${
+                period === "year"
+                  ? "bg-[#1f1b16] text-white hover:bg-[#1f1b16]/90"
+                  : "text-[#5c4b3b] hover:bg-[#fff9f2] hover:text-[#1f1b16]"
+              }`}
+            >
+              This Year
+            </Button>
+            <Button
               variant={period === "lifetime" ? "default" : "ghost"}
               size="sm"
               onClick={() => setPeriod("lifetime")}
@@ -91,7 +124,27 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex flex-col flex-1 min-h-0">
+      <CardContent className="dashboard-chart-content flex flex-col flex-1 min-h-0 gap-5">
+        {!isLoading && !isError && data && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="dashboard-chart-metric rounded-2xl p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
+                Units sold
+              </p>
+              <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
+                {totalUnits.toLocaleString("en-IN")}
+              </p>
+            </div>
+            <div className="dashboard-chart-metric rounded-2xl p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
+                Revenue captured
+              </p>
+              <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
+                {formatCurrency(totalRevenue)}
+              </p>
+            </div>
+          </div>
+        )}
         {isLoading && (
           <div className="h-64 rounded-xl bg-[#fdf7f1] animate-pulse" />
         )}

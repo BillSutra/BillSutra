@@ -56,6 +56,12 @@ const formatTooltipValue = (value: unknown) => {
   return formatCurrency(0);
 };
 
+const formatCompactCurrency = (value: number) =>
+  new Intl.NumberFormat("en-IN", {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
+
 const SalesChart = () => {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard", "sales"],
@@ -63,14 +69,64 @@ const SalesChart = () => {
   });
 
   const salesData = data ?? fallbackSales;
+  const sales7Total = salesData.last7Days.reduce((sum, item) => sum + item.sales, 0);
+  const purchases7Total = salesData.last7Days.reduce(
+    (sum, item) => sum + item.purchases,
+    0,
+  );
+  const sales30Total = salesData.last30Days.reduce(
+    (sum, item) => sum + item.sales,
+    0,
+  );
+  const purchases30Total = salesData.last30Days.reduce(
+    (sum, item) => sum + item.purchases,
+    0,
+  );
 
   return (
     <div className="grid gap-4 lg:grid-cols-[1.7fr_1fr]">
-      <Card className="border-[#ecdccf] bg-white/90">
-        <CardHeader>
-          <CardTitle className="text-lg">Sales analytics</CardTitle>
+      <Card className="dashboard-chart-surface rounded-[1.75rem]">
+        <CardHeader className="dashboard-chart-content">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
+                Trade pulse
+              </p>
+              <CardTitle className="mt-2 text-2xl text-[#1f1b16]">
+                Sales and purchase analytics
+              </CardTitle>
+              <p className="mt-2 max-w-xl text-sm text-[#8a6d56]">
+                Compare booked sales against purchase activity to spot demand
+                bursts and stocking pressure.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="dashboard-chart-metric rounded-2xl px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
+                  Last 7 days
+                </p>
+                <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
+                  {formatCurrency(sales7Total)} sales
+                </p>
+                <p className="text-xs text-[#8a6d56]">
+                  {formatCurrency(purchases7Total)} purchases
+                </p>
+              </div>
+              <div className="dashboard-chart-metric rounded-2xl px-4 py-3">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
+                  Last 30 days
+                </p>
+                <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
+                  {formatCurrency(sales30Total)} sales
+                </p>
+                <p className="text-xs text-[#8a6d56]">
+                  {formatCurrency(purchases30Total)} purchases
+                </p>
+              </div>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="grid gap-6">
+        <CardContent className="dashboard-chart-content grid gap-6">
           {isLoading && (
             <div className="h-48 rounded-xl bg-[#fdf7f1] animate-pulse" />
           )}
@@ -87,17 +143,41 @@ const SalesChart = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={salesData.last7Days}>
                       <CartesianGrid stroke="#f2e6dc" strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 12, fill: "#8a6d56" }}
+                        tickFormatter={(value) =>
+                          new Date(value).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })
+                        }
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12, fill: "#8a6d56" }}
+                        tickFormatter={(value) => formatCompactCurrency(value)}
+                      />
+                      <Legend />
                       <Tooltip
                         formatter={(value) => formatTooltipValue(value)}
                       />
                       <Line
                         type="monotone"
                         dataKey="sales"
+                        name="Sales"
                         stroke="#f97316"
                         strokeWidth={2}
-                        dot={false}
+                        dot={{ r: 2 }}
+                        activeDot={{ r: 5 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="purchases"
+                        name="Purchases"
+                        stroke="#0f766e"
+                        strokeWidth={2}
+                        dot={{ r: 2 }}
+                        activeDot={{ r: 5 }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
@@ -111,17 +191,41 @@ const SalesChart = () => {
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={salesData.last30Days}>
                       <CartesianGrid stroke="#f2e6dc" strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 12, fill: "#8a6d56" }}
+                        tickFormatter={(value) =>
+                          new Date(value).toLocaleDateString("en-US", {
+                            month: "short",
+                            day: "numeric",
+                          })
+                        }
+                      />
+                      <YAxis
+                        tick={{ fontSize: 12, fill: "#8a6d56" }}
+                        tickFormatter={(value) => formatCompactCurrency(value)}
+                      />
+                      <Legend />
                       <Tooltip
                         formatter={(value) => formatTooltipValue(value)}
                       />
                       <Line
                         type="monotone"
                         dataKey="sales"
+                        name="Sales"
+                        stroke="#f97316"
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{ r: 5 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="purchases"
+                        name="Purchases"
                         stroke="#0f766e"
                         strokeWidth={2}
                         dot={false}
+                        activeDot={{ r: 5 }}
                       />
                     </LineChart>
                   </ResponsiveContainer>
@@ -133,13 +237,16 @@ const SalesChart = () => {
       </Card>
 
       <div className="grid gap-4">
-        <Card className="border-[#ecdccf] bg-white/90">
-          <CardHeader>
-            <CardTitle className="text-base">
-              Monthly sales vs purchases
+        <Card className="dashboard-chart-surface rounded-[1.75rem]">
+          <CardHeader className="dashboard-chart-content">
+            <CardTitle className="text-base text-[#1f1b16]">
+              Six-month trade balance
             </CardTitle>
+            <p className="text-sm text-[#8a6d56]">
+              Monthly sales and purchase movement across the latest six months.
+            </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="dashboard-chart-content">
             <div className="h-44">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={salesData.monthly}>
@@ -160,11 +267,16 @@ const SalesChart = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-[#ecdccf] bg-white/90">
-          <CardHeader>
-            <CardTitle className="text-base">Category mix (Top 7)</CardTitle>
+        <Card className="dashboard-chart-surface rounded-[1.75rem]">
+          <CardHeader className="dashboard-chart-content">
+            <CardTitle className="text-base text-[#1f1b16]">
+              Category revenue mix
+            </CardTitle>
+            <p className="text-sm text-[#8a6d56]">
+              Top categories ranked by booked sales value.
+            </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="dashboard-chart-content">
             <div className="h-44">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>

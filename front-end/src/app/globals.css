@@ -207,6 +207,38 @@
     animation: pageFade 280ms ease-out;
   }
 
+  .dashboard-chart-surface {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid #ecdccf;
+    background:
+      radial-gradient(circle at top right, rgba(249, 115, 22, 0.12), transparent 30%),
+      linear-gradient(180deg, rgba(255, 251, 246, 0.98), rgba(255, 255, 255, 0.94));
+    box-shadow: 0 26px 70px -42px rgba(31, 27, 22, 0.35);
+    backdrop-filter: blur(8px);
+  }
+
+  .dashboard-chart-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(120deg, rgba(255, 255, 255, 0.65), transparent 45%),
+      radial-gradient(circle at bottom left, rgba(15, 118, 110, 0.08), transparent 28%);
+    pointer-events: none;
+  }
+
+  .dashboard-chart-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .dashboard-chart-metric {
+    border: 1px solid #f2e6dc;
+    background: rgba(255, 249, 242, 0.88);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  }
+
   @keyframes pageFade {
     from {
       opacity: 0;
@@ -258,6 +290,25 @@
   .dark .border-\[\#eadacc\],
   .dark .border-\[\#f5d0b5\] {
     border-color: var(--border);
+  }
+
+  .dark .dashboard-chart-surface {
+    border-color: var(--border);
+    background:
+      radial-gradient(circle at top right, rgba(249, 115, 22, 0.16), transparent 30%),
+      linear-gradient(180deg, rgba(30, 41, 59, 0.9), rgba(17, 24, 39, 0.94));
+    box-shadow: 0 28px 80px -46px rgba(0, 0, 0, 0.6);
+  }
+
+  .dark .dashboard-chart-surface::before {
+    background:
+      linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 45%),
+      radial-gradient(circle at bottom left, rgba(15, 118, 110, 0.12), transparent 28%);
+  }
+
+  .dark .dashboard-chart-metric {
+    border-color: var(--border);
+    background: rgba(17, 24, 39, 0.58);
   }
 
   .dark .a4-page-frame,

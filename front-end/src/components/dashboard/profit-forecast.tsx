@@ -53,11 +53,22 @@ const ProfitForecast = ({ className }: { className?: string }) => {
   const avgMargin = totalRevenue === 0 ? 0 : (totalProfit / totalRevenue) * 100;
 
   return (
-    <Card className={`border-[#ecdccf] bg-white/90 flex flex-col ${className}`}>
-      <CardHeader>
-        <CardTitle className="text-lg">Profit analytics</CardTitle>
+    <Card
+      className={`dashboard-chart-surface flex flex-col rounded-[1.75rem] ${className}`}
+    >
+      <CardHeader className="dashboard-chart-content">
+        <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
+          Profit radar
+        </p>
+        <CardTitle className="mt-2 text-2xl text-[#1f1b16]">
+          Profit analytics
+        </CardTitle>
+        <p className="mt-2 max-w-xl text-sm text-[#8a6d56]">
+          Revenue, operating cost, and net profit across the latest six-month
+          window.
+        </p>
       </CardHeader>
-      <CardContent className="flex flex-col flex-1 gap-6 min-h-0">
+      <CardContent className="dashboard-chart-content flex flex-col flex-1 gap-6 min-h-0">
         {isLoading && (
           <div className="h-40 rounded-xl bg-[#fdf7f1] animate-pulse" />
         )}
@@ -85,7 +96,7 @@ const ProfitForecast = ({ className }: { className?: string }) => {
               ].map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4"
+                  className="dashboard-chart-metric rounded-2xl p-4"
                 >
                   <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                     {item.label}

@@ -16,6 +16,7 @@ import SupplierOverview from "@/components/dashboard/supplier-overview";
 import CashFlowChart from "@/components/dashboard/cashflow-chart";
 import ProductSalesChart from "@/components/dashboard/product-sales-chart";
 import SalesChart from "@/components/dashboard/sales-chart";
+import PaymentMethodDistribution from "@/components/dashboard/payment-method-distribution";
 import QuickActions from "@/components/dashboard/quick-actions";
 import ActivityTimeline from "@/components/dashboard/activity-timeline";
 import NotificationsPanel from "@/components/dashboard/notifications-panel";
@@ -108,17 +109,51 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
       name={name}
       image={image}
       title={`Welcome back, ${name}.`}
-      subtitle="A clean snapshot of revenue, cash flow, inventory health, and customer momentum."
+      subtitle="A sharper view of sales, cash movement, profit trend, and inventory demand."
     >
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="flex flex-col gap-2">
-          <p className="text-xs uppercase tracking-[0.2em] text-gray-500">
-            Business analytics
+        <header className="rounded-[1.75rem] border border-[#ecdccf] bg-[linear-gradient(135deg,rgba(255,247,239,0.96),rgba(255,255,255,0.92))] px-6 py-5 shadow-[0_28px_70px_-48px_rgba(31,27,22,0.42)]">
+          <p className="text-xs uppercase tracking-[0.28em] text-[#8a6d56]">
+            Business command center
           </p>
-          <p className="max-w-2xl text-sm text-gray-500">
-            A clean snapshot of revenue, cash flow, inventory health, and
-            customer momentum.
-          </p>
+          <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="max-w-3xl text-2xl font-semibold tracking-tight text-[#1f1b16]">
+                Revenue, purchases, collections, and product momentum in one
+                operating view.
+              </p>
+              <p className="mt-2 max-w-2xl text-sm text-[#8a6d56]">
+                Use the charts below to compare demand, stocking pressure,
+                payment mix, and short-term forecast signals without leaving the
+                dashboard.
+              </p>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {[
+                { label: "Sales", value: formatCurrency(metrics?.totalSales ?? 0) },
+                {
+                  label: "Purchases",
+                  value: formatCurrency(metrics?.totalPurchases ?? 0),
+                },
+                {
+                  label: "Pending",
+                  value: formatCurrency(metrics?.pendingPayments ?? 0),
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-2xl border border-[#f2e6dc] bg-white/70 px-4 py-3"
+                >
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
+                    {item.label}
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
+                    {item.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -167,7 +202,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           )}
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <SalesChart />
+
+        <section className="grid gap-4 lg:grid-cols-[1.35fr_1fr]">
           <CashFlowChart className="h-full" />
           <div className="flex flex-col gap-4">
             {invoiceStats && (
@@ -207,7 +244,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           <SalesForecast className="h-full" />
         </section>
 
-        <SalesChart />
+        <PaymentMethodDistribution />
 
         <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
           <ProductSalesChart className="h-full" />

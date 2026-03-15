@@ -92,28 +92,34 @@ const SalesForecast = ({ className }: { className?: string }) => {
     };
 
     return (
-        <div className={`rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800 flex flex-col ${className}`}>
-            <div className="flex flex-col flex-1 gap-4 min-h-0">
+        <div className={`dashboard-chart-surface rounded-[1.75rem] p-5 flex flex-col ${className}`}>
+            <div className="dashboard-chart-content flex flex-col flex-1 gap-5 min-h-0">
                 {/* Header */}
                 <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-gray-500">
-                        Sales Forecast
+                    <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
+                        Forecast studio
                     </p>
-                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                        Historical revenue and predicted sales trends
+                    <p className="mt-2 text-2xl font-semibold text-[#1f1b16]">
+                        Sales forecast
+                    </p>
+                    <p className="mt-2 text-sm text-[#8a6d56]">
+                        Historical sales against projected movement for the selected period.
                     </p>
                 </div>
 
                 {/* Period Toggle */}
                 <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 rounded-2xl border border-[#ecdccf] bg-[#fff9f2] p-1">
                         {(["weekly", "monthly", "yearly"] as const).map((p) => (
                             <Button
                                 key={p}
-                                variant={period === p ? "default" : "outline"}
+                                variant={period === p ? "default" : "ghost"}
                                 size="sm"
                                 onClick={() => setPeriod(p)}
-                                className="capitalize"
+                                className={`capitalize ${period === p
+                                    ? "bg-[#1f1b16] text-white hover:bg-[#1f1b16]/90"
+                                    : "text-[#5c4b3b] hover:bg-[#fff2e5] hover:text-[#1f1b16]"
+                                    }`}
                             >
                                 {periodLabels[p]}
                             </Button>
@@ -124,7 +130,7 @@ const SalesForecast = ({ className }: { className?: string }) => {
                         size="sm"
                         onClick={() => refetch()}
                         disabled={isLoading}
-                        className="text-xs"
+                        className="border-[#ecdccf] bg-white/70 text-xs hover:bg-[#fff2e5]"
                     >
                         {isLoading ? "Refreshing..." : "Refresh"}
                     </Button>
@@ -133,45 +139,46 @@ const SalesForecast = ({ className }: { className?: string }) => {
                 {/* Chart */}
                 <div className="flex-1 min-h-[300px]">
                     {isLoading ? (
-                        <div className="flex h-full items-center justify-center bg-gray-50 dark:bg-gray-900 rounded-lg">
-                            <p className="text-sm text-gray-500">Loading forecast...</p>
+                        <div className="flex h-full items-center justify-center rounded-2xl bg-[#fff9f2]">
+                            <p className="text-sm text-[#8a6d56]">Loading forecast...</p>
                         </div>
                     ) : error ? (
-                        <div className="flex h-full items-center justify-center bg-gray-50 dark:bg-gray-900 rounded-lg">
-                            <p className="text-sm text-red-500">
+                        <div className="flex h-full items-center justify-center rounded-2xl bg-[#fff9f2]">
+                            <p className="text-sm text-[#b45309]">
                                 Failed to load forecast data
                             </p>
                         </div>
                     ) : chartData.length === 0 ? (
-                        <div className="flex h-full items-center justify-center bg-gray-50 dark:bg-gray-900 rounded-lg">
-                            <p className="text-sm text-gray-500">No data available</p>
+                        <div className="flex h-full items-center justify-center rounded-2xl bg-[#fff9f2]">
+                            <p className="text-sm text-[#8a6d56]">No data available</p>
                         </div>
                     ) : (
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={chartData}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                <CartesianGrid strokeDasharray="3 3" stroke="#f2e6dc" />
                                 <XAxis
                                     dataKey="date"
-                                    stroke="#9ca3af"
+                                    stroke="#8a6d56"
                                     style={{ fontSize: "12px" }}
-                                    tick={{ fill: "#9ca3af" }}
+                                    tick={{ fill: "#8a6d56" }}
                                 />
                                 <YAxis
-                                    stroke="#9ca3af"
+                                    stroke="#8a6d56"
                                     style={{ fontSize: "12px" }}
-                                    tick={{ fill: "#9ca3af" }}
+                                    tick={{ fill: "#8a6d56" }}
                                     tickFormatter={formatCurrency}
                                 />
                                 <Tooltip
                                     contentStyle={{
                                         backgroundColor: "#fff",
-                                        border: "1px solid #e5e7eb",
-                                        borderRadius: "0.5rem",
+                                        border: "1px solid #ecdccf",
+                                        borderRadius: "1rem",
+                                        boxShadow: "0 18px 40px -28px rgba(15, 23, 42, 0.45)",
                                     }}
-                                    labelStyle={{ color: "#000" }}
+                                    labelStyle={{ color: "#1f1b16" }}
                                     formatter={(value: any, name: any) => [
                                         formatCurrency(value),
-                                        name === "revenue" ? "Historical Revenue" : "Predicted Revenue",
+                                        name === "revenue" ? "Historical Sales" : "Predicted Sales",
                                     ] as any}
                                 />
                                 <Legend
@@ -182,19 +189,19 @@ const SalesForecast = ({ className }: { className?: string }) => {
                                     type="monotone"
                                     dataKey="revenue"
                                     stroke="#10b981"
-                                    strokeWidth={2}
+                                    strokeWidth={3}
                                     dot={false}
-                                    name="Historical Revenue"
+                                    name="Historical Sales"
                                     isAnimationActive={false}
                                 />
                                 <Line
                                     type="monotone"
                                     dataKey="forecast"
                                     stroke="#f59e0b"
-                                    strokeWidth={2}
+                                    strokeWidth={3}
                                     strokeDasharray="5 5"
                                     dot={false}
-                                    name="Predicted Revenue"
+                                    name="Predicted Sales"
                                     isAnimationActive={false}
                                 />
                             </LineChart>
@@ -240,12 +247,12 @@ const SalesForecast = ({ className }: { className?: string }) => {
                         })().map((stat) => (
                             <div
                                 key={stat.label}
-                                className="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900"
+                                className="dashboard-chart-metric rounded-2xl p-3"
                             >
-                                <p className="text-xs uppercase tracking-[0.2em] text-gray-500">
+                                <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                                     {stat.label}
                                 </p>
-                                <p className="mt-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                <p className="mt-2 text-sm font-semibold text-[#1f1b16]">
                                     {typeof stat.value === "number" ? stat.value : stat.value}
                                 </p>
                             </div>

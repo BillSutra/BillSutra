@@ -11,12 +11,10 @@ import {
   deleteInvoice,
   generateInvoicePdf,
   getInvoice,
-  getInvoiceForNotification,
   listInvoices,
   markInvoiceAsSent,
   updateInvoice,
 } from "./invoice.service.js";
-import { sendInvoiceNotification } from "./invoice.notifications.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
@@ -60,14 +58,6 @@ const parseDateFilter = (value?: string) => {
   }
 
   return parsed;
-};
-
-const getPublicInvoiceLink = (req: Request, invoiceId: number) => {
-  const configuredBaseUrl = process.env.PUBLIC_INVOICE_BASE_URL;
-  const requestBaseUrl = `${req.protocol}://${req.get("host")}`;
-  const baseUrl = (configuredBaseUrl || requestBaseUrl).replace(/\/$/, "");
-
-  return `${baseUrl}/api/public/invoice/${invoiceId}`;
 };
 
 export const index = async (req: Request, res: Response) => {
@@ -143,51 +133,9 @@ export const store = async (req: Request, res: Response) => {
     const body = req.body as InvoiceCreateInput;
     const invoice = await createInvoice(userId, body);
 
-    let notificationWarning: string | null = null;
-    try {
-      const invoiceForNotification = await getInvoiceForNotification(
-        userId,
-        invoice.id,
-      );
-
-      if (invoiceForNotification) {
-        const publicInvoiceLink = getPublicInvoiceLink(
-          req,
-          invoiceForNotification.id,
-        );
-
-        await sendInvoiceNotification(
-          "created",
-          {
-            invoiceId: invoiceForNotification.id,
-            invoiceNumber: invoiceForNotification.invoice_number,
-            status: invoiceForNotification.status,
-            issueDate: invoiceForNotification.date,
-            dueDate: invoiceForNotification.due_date,
-            total: invoiceForNotification.total,
-            subtotal: invoiceForNotification.subtotal,
-            tax: invoiceForNotification.tax,
-            discount: invoiceForNotification.discount,
-            customer: invoiceForNotification.customer,
-            items: invoiceForNotification.items,
-            businessProfile: invoiceForNotification.user.business_profile,
-          },
-          publicInvoiceLink,
-        );
-      }
-    } catch (notificationError) {
-      const err = notificationError as Error;
-      notificationWarning =
-        err.message || "Invoice created but notification failed";
-      console.warn(
-        `[invoice.store] Created invoice ${invoice.id}, but notification failed: ${notificationWarning}`,
-      );
-    }
-
     return res.status(201).json({
       message: "Invoice created",
       data: invoice,
-      warning: notificationWarning,
     });
   } catch (error) {
     const err = error as Error & {
@@ -328,36 +276,10 @@ export const send = async (req: Request, res: Response) => {
 
   try {
     const id = Number(req.params.id);
-    await markInvoiceAsSent(userId, id);
-
-    const invoice = await getInvoiceForNotification(userId, id);
-    if (!invoice) {
-      return res.status(404).json({ message: "Invoice not found" });
-    }
-
-    const publicInvoiceLink = getPublicInvoiceLink(req, invoice.id);
-
-    await sendInvoiceNotification(
-      "sent",
-      {
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.invoice_number,
-        status: invoice.status,
-        issueDate: invoice.date,
-        dueDate: invoice.due_date,
-        total: invoice.total,
-        subtotal: invoice.subtotal,
-        tax: invoice.tax,
-        discount: invoice.discount,
-        customer: invoice.customer,
-        items: invoice.items,
-        businessProfile: invoice.user.business_profile,
-      },
-      publicInvoiceLink,
-    );
+    const invoice = await markInvoiceAsSent(userId, id);
 
     return res.status(200).json({
-      message: "Invoice sent notification email delivered",
+      message: "Invoice status updated to sent",
       data: { invoiceId: invoice.id, status: invoice.status },
     });
   } catch (error) {
@@ -380,34 +302,13 @@ export const reminder = async (req: Request, res: Response) => {
 
   try {
     const id = Number(req.params.id);
-    const invoice = await getInvoiceForNotification(userId, id);
+    const invoice = await getInvoice(userId, id);
     if (!invoice) {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
-    const publicInvoiceLink = getPublicInvoiceLink(req, invoice.id);
-
-    await sendInvoiceNotification(
-      "reminder",
-      {
-        invoiceId: invoice.id,
-        invoiceNumber: invoice.invoice_number,
-        status: invoice.status,
-        issueDate: invoice.date,
-        dueDate: invoice.due_date,
-        total: invoice.total,
-        subtotal: invoice.subtotal,
-        tax: invoice.tax,
-        discount: invoice.discount,
-        customer: invoice.customer,
-        items: invoice.items,
-        businessProfile: invoice.user.business_profile,
-      },
-      publicInvoiceLink,
-    );
-
     return res.status(200).json({
-      message: "Payment reminder email delivered",
+      message: "Invoice reminder payload ready for client email delivery",
       data: { invoiceId: invoice.id },
     });
   } catch (error) {
