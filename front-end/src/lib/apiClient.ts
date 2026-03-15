@@ -336,6 +336,7 @@ export type DashboardOverview = {
       today: number;
       weekly: number;
       monthly: number;
+      yearly: number;
     };
     changes: {
       totalRevenue: number;
@@ -347,6 +348,7 @@ export type DashboardOverview = {
       todayProfit: number;
       weeklyProfit: number;
       monthlyProfit: number;
+      yearlyProfit: number;
       pendingPayments: number;
       inventoryValue: number;
     };

@@ -2,8 +2,9 @@
 
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchDashboardSuppliers } from "@/lib/apiClient";
+import { type DashboardSuppliers, fetchDashboardSuppliers } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Truck } from "lucide-react";
 
 const formatCurrency = (value: number) => `₹${value.toLocaleString("en-IN")}`;
 
@@ -18,6 +19,13 @@ const getSegmentColor = (segment: string): string => {
   }
 };
 
+type SupplierLtvEntry =
+  DashboardSuppliers["supplierAnalytics"] extends infer T
+    ? T extends { highValueSuppliers: Array<infer U> }
+      ? U
+      : never
+    : never;
+
 const SupplierOverview = ({ className }: { className?: string }) => {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["dashboard", "suppliers"],
@@ -25,11 +33,26 @@ const SupplierOverview = ({ className }: { className?: string }) => {
   });
 
   return (
-    <Card className={`border-[#ecdccf] bg-white/90 flex flex-col ${className}`}>
-      <CardHeader>
-        <CardTitle className="text-lg">Supplier Overview</CardTitle>
+    <Card className={`dashboard-chart-surface flex flex-col gap-0 rounded-[1.75rem] ${className}`}>
+      <CardHeader className="dashboard-chart-content gap-2">
+        <div className="flex items-center gap-3">
+          <div className="rounded-2xl border border-[#f2e6dc] bg-white/80 p-2 text-[#8b5e34]">
+            <Truck size={18} />
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.24em] text-[#8a6d56]">
+              Vendor desk
+            </p>
+            <CardTitle className="mt-1 text-lg text-[#1f1b16]">
+              Supplier overview
+            </CardTitle>
+          </div>
+        </div>
+        <p className="text-sm text-[#8a6d56]">
+          Purchase concentration, payables, and top supplier relationships.
+        </p>
       </CardHeader>
-      <CardContent className="flex flex-col flex-1 gap-4 overflow-auto min-h-0">
+      <CardContent className="dashboard-chart-content flex min-h-0 flex-1 flex-col gap-5 overflow-auto">
         {isLoading && (
           <div className="h-24 rounded-xl bg-[#fdf7f1] animate-pulse" />
         )}
@@ -50,7 +73,7 @@ const SupplierOverview = ({ className }: { className?: string }) => {
               ].map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4"
+                  className="dashboard-chart-metric rounded-2xl p-4"
                 >
                   <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                     {item.label}
@@ -65,19 +88,19 @@ const SupplierOverview = ({ className }: { className?: string }) => {
             {/* Supplier Segmentation Badges */}
             {data.supplierAnalytics && (
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-xl border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-900/20">
+                <div className="rounded-2xl border border-green-200 bg-[linear-gradient(135deg,rgba(220,252,231,0.9),rgba(255,255,255,0.95))] p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-green-700 dark:text-green-400">
                     High Value
                   </p>
-                  <p className="mt-2 text-2xl font-bold text-green-900 dark:text-green-100">
+                  <p className="mt-2 text-2xl font-semibold text-green-900 dark:text-green-100">
                     {data.supplierAnalytics.highValueCount}
                   </p>
                 </div>
-                <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800">
+                <div className="rounded-2xl border border-[#e7ddd2] bg-[linear-gradient(135deg,rgba(255,249,242,0.96),rgba(255,255,255,0.95))] p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-gray-700 dark:text-gray-400">
                     Low Value
                   </p>
-                  <p className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
+                  <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">
                     {data.supplierAnalytics.lowValueCount}
                   </p>
                 </div>
@@ -98,7 +121,7 @@ const SupplierOverview = ({ className }: { className?: string }) => {
                   {data.topSuppliers?.map((supplier) => {
                     let segment: "HIGH_VALUE" | "LOW_VALUE" =
                       "LOW_VALUE";
-                    let ltvData: any = null;
+                    let ltvData: SupplierLtvEntry | null = null;
 
                     const highValue =
                       data.supplierAnalytics?.highValueSuppliers?.find(
@@ -120,7 +143,7 @@ const SupplierOverview = ({ className }: { className?: string }) => {
                     return (
                       <div
                         key={supplier.name}
-                        className="flex items-start justify-between rounded-xl border border-[#f2e6dc] bg-white px-4 py-3 text-sm"
+                        className="flex items-start justify-between rounded-2xl border border-[#f2e6dc] bg-white/90 px-4 py-3 text-sm shadow-[0_14px_30px_-24px_rgba(31,27,22,0.28)]"
                       >
                         <div className="flex-1">
                           <div className="flex items-center gap-2">

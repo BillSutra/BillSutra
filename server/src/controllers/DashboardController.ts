@@ -183,6 +183,10 @@ class DashboardController {
       const previousMonthStart = new Date(
         Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
       );
+      const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+      const previousYearStart = new Date(
+        Date.UTC(now.getUTCFullYear() - 1, 0, 1),
+      );
 
       const {
         saleTotals,
@@ -203,6 +207,10 @@ class DashboardController {
         monthlyPurchases,
         previousMonthlySales,
         previousMonthlyPurchases,
+        yearlySales,
+        yearlyPurchases,
+        previousYearlySales,
+        previousYearlyPurchases,
         pendingSalesRows,
         pendingPurchaseRows,
         salePaymentMethodRows,
@@ -213,6 +221,8 @@ class DashboardController {
         previousWeeklyExpenses,
         monthlyExpenses,
         previousMonthlyExpenses,
+        yearlyExpenses,
+        previousYearlyExpenses,
         totalExpenses,
         totalInvoices,
         paidInvoices,
@@ -375,6 +385,42 @@ class DashboardController {
             },
             _sum: { total: true },
           }),
+        yearlySales: () =>
+          prisma.sale.aggregate({
+            where: {
+              user_id: userId,
+              sale_date: { gte: yearStart },
+              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
+            },
+            _sum: { total: true },
+          }),
+        yearlyPurchases: () =>
+          prisma.purchase.aggregate({
+            where: {
+              user_id: userId,
+              purchase_date: { gte: yearStart },
+              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
+            },
+            _sum: { total: true },
+          }),
+        previousYearlySales: () =>
+          prisma.sale.aggregate({
+            where: {
+              user_id: userId,
+              sale_date: { gte: previousYearStart, lt: yearStart },
+              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
+            },
+            _sum: { total: true },
+          }),
+        previousYearlyPurchases: () =>
+          prisma.purchase.aggregate({
+            where: {
+              user_id: userId,
+              purchase_date: { gte: previousYearStart, lt: yearStart },
+              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
+            },
+            _sum: { total: true },
+          }),
         pendingSalesRows: () =>
           prisma.sale.findMany({
             where: {
@@ -442,6 +488,13 @@ class DashboardController {
             from: previousMonthStart,
             to: monthStart,
           }),
+        yearlyExpenses: () => getExpenseTotals({ userId, from: yearStart }),
+        previousYearlyExpenses: () =>
+          getExpenseTotals({
+            userId,
+            from: previousYearStart,
+            to: yearStart,
+          }),
         totalExpenses: () => getExpenseTotals({ userId }),
         totalInvoices: () => prisma.sale.count({ where: { user_id: userId } }),
         paidInvoices: () =>
@@ -497,6 +550,16 @@ class DashboardController {
         toNumber(previousMonthlySales._sum.total),
         toNumber(previousMonthlyPurchases._sum.total),
         previousMonthlyExpenses,
+      );
+      const yearlyProfit = toProfit(
+        toNumber(yearlySales._sum.total),
+        toNumber(yearlyPurchases._sum.total),
+        yearlyExpenses,
+      );
+      const previousYearlyProfit = toProfit(
+        toNumber(previousYearlySales._sum.total),
+        toNumber(previousYearlyPurchases._sum.total),
+        previousYearlyExpenses,
       );
 
       const pendingPayments = toNumber(pendingSalesTotals._sum.pendingAmount);
@@ -559,6 +622,7 @@ class DashboardController {
               today: todayProfit,
               weekly: weeklyProfit,
               monthly: monthlyProfit,
+              yearly: yearlyProfit,
             },
             changes: {
               totalRevenue: percentChange(totalRevenue, 0),
@@ -573,6 +637,7 @@ class DashboardController {
                 monthlyProfit,
                 previousMonthlyProfit,
               ),
+              yearlyProfit: percentChange(yearlyProfit, previousYearlyProfit),
               pendingPayments: percentChange(pendingPayments, 0),
               inventoryValue: 0,
             },

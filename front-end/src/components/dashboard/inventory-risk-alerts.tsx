@@ -4,6 +4,7 @@ import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient, fetchDashboardInventory } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PackageSearch } from "lucide-react";
 
 const formatCurrency = (value: number) => `₹${value.toLocaleString("en-IN")}`;
 
@@ -29,11 +30,11 @@ const getAlertColor = (
 ): string => {
     switch (alertLevel) {
         case "critical":
-            return "border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20";
+            return "border border-red-200 bg-[linear-gradient(135deg,rgba(254,242,242,0.96),rgba(255,255,255,0.95))]";
         case "warning":
-            return "border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20";
+            return "border border-amber-200 bg-[linear-gradient(135deg,rgba(255,251,235,0.96),rgba(255,255,255,0.95))]";
         default:
-            return "border-l-4 border-gray-300 bg-gray-50 dark:bg-gray-900/20";
+            return "border border-[#ecdccf] bg-white/90";
     }
 };
 
@@ -77,22 +78,44 @@ const InventoryRiskAlerts = ({ className }: { className?: string }) => {
     });
 
     const alerts = data?.data.alerts || [];
+    const outOfStockCount = alerts.filter((alert) => alert.stock_left === 0).length;
+    const lowStockCount = alerts.filter((alert) => alert.stock_left > 0).length;
 
     return (
-        <Card className={`border-[#ecdccf] bg-white/90 flex flex-col ${className}`}>
-            <CardHeader>
-                <CardTitle className="text-lg">Inventory Risk Alerts</CardTitle>
-                <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+        <Card className={`dashboard-chart-surface flex flex-col gap-0 rounded-[1.75rem] ${className}`}>
+            <CardHeader className="dashboard-chart-content gap-2">
+                <div className="flex items-center gap-3">
+                    <div className="rounded-2xl border border-[#f2e6dc] bg-white/80 p-2 text-[#b45309]">
+                        <PackageSearch size={18} />
+                    </div>
+                    <div>
+                        <p className="text-xs uppercase tracking-[0.24em] text-[#8a6d56]">
+                            Stock watch
+                        </p>
+                        <CardTitle className="mt-1 text-lg text-[#1f1b16]">
+                            Inventory risk alerts
+                        </CardTitle>
+                    </div>
+                </div>
+                <p className="text-sm text-[#8a6d56]">
                     Products that need attention
                 </p>
             </CardHeader>
-            <CardContent className="flex flex-col flex-1 gap-4 min-h-0">
+            <CardContent className="dashboard-chart-content flex min-h-0 flex-1 flex-col gap-5">
                 {inventoryData && (
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                         {[
                             { label: "Total products", value: inventoryData.totalProducts },
-                            { label: "Low stock", value: inventoryData.lowStock },
-                            { label: "Out of stock", value: inventoryData.outOfStock },
+                            {
+                                label: "Low stock",
+                                value: alerts.length > 0 ? lowStockCount : inventoryData.lowStock,
+                            },
+                            {
+                                label: "Out of stock",
+                                value: alerts.length > 0
+                                    ? outOfStockCount
+                                    : inventoryData.outOfStock,
+                            },
                             {
                                 label: "Inventory value",
                                 value: formatCurrency(inventoryData.inventoryValue),
@@ -100,7 +123,7 @@ const InventoryRiskAlerts = ({ className }: { className?: string }) => {
                         ].map((item) => (
                             <div
                                 key={item.label}
-                                className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4"
+                                className="dashboard-chart-metric rounded-2xl p-4"
                             >
                                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                                     {item.label}
@@ -118,77 +141,77 @@ const InventoryRiskAlerts = ({ className }: { className?: string }) => {
                         {[1, 2, 3].map((i) => (
                             <div
                                 key={i}
-                                className="h-16 rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse"
+                                className="h-20 animate-pulse rounded-2xl bg-[#fdf7f1]"
                             />
                         ))}
                     </div>
                 )}
 
                 {isError && (
-                    <p className="text-sm text-red-500">
+                    <p className="text-sm text-[#b45309]">
                         Failed to load inventory alerts
                     </p>
                 )}
 
                 {!isLoading && !isError && alerts.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                        <p className="text-sm text-gray-500">
+                    <div className="rounded-2xl border border-[#f2e6dc] bg-white/85 px-4 py-6 text-center">
+                        <p className="text-sm text-[#8a6d56]">
                             No products at risk. Inventory levels are healthy.
                         </p>
                     </div>
                 )}
 
                 {!isLoading && !isError && alerts.length > 0 && (
-                    <div className="space-y-3 flex-1 overflow-auto pr-1">
+                    <div className="grid flex-1 gap-3 overflow-auto pr-1">
                         {alerts.map((alert) => (
                             <div
                                 key={alert.product_id}
-                                className={`rounded-lg p-4 ${getAlertColor(alert.alert_level)}`}
+                                className={`rounded-2xl p-4 shadow-[0_16px_34px_-26px_rgba(31,27,22,0.32)] ${getAlertColor(alert.alert_level)}`}
                             >
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2">
-                                            <h3 className="font-semibold text-gray-900 dark:text-white">
+                                            <h3 className="font-semibold text-[#1f1b16]">
                                                 {alert.product_name}
                                             </h3>
                                             <span
-                                                className={`inline-block px-2 py-1 rounded text-xs font-semibold uppercase ${getAlertBadgeColor(alert.alert_level)}`}
+                                                className={`inline-block rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase ${getAlertBadgeColor(alert.alert_level)}`}
                                             >
                                                 {getAlertLabel(alert)}
                                             </span>
                                         </div>
-                                        <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
-                                            <div>
-                                                <p className="text-gray-600 dark:text-gray-400">
+                                        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                                            <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
+                                                <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
                                                     Stock Left
                                                 </p>
-                                                <p className="font-semibold text-gray-900 dark:text-white">
+                                                <p className="mt-1 font-semibold text-[#1f1b16]">
                                                     {alert.stock_left} units
                                                 </p>
                                             </div>
-                                            <div>
-                                                <p className="text-gray-600 dark:text-gray-400">
+                                            <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
+                                                <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
                                                     Daily Sales
                                                 </p>
-                                                <p className="font-semibold text-gray-900 dark:text-white">
+                                                <p className="mt-1 font-semibold text-[#1f1b16]">
                                                     {alert.predicted_daily_sales.toFixed(1)} units
                                                 </p>
                                             </div>
-                                            <div>
-                                                <p className="text-gray-600 dark:text-gray-400">
+                                            <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
+                                                <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
                                                     Days Until Stockout
                                                 </p>
-                                                <p className="font-semibold text-gray-900 dark:text-white">
+                                                <p className="mt-1 font-semibold text-[#1f1b16]">
                                                     {alert.days_until_stockout === 999
                                                         ? "N/A"
                                                         : `${alert.days_until_stockout} days`}
                                                 </p>
                                             </div>
-                                            <div>
-                                                <p className="text-gray-600 dark:text-gray-400">
+                                            <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
+                                                <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
                                                     Reorder Qty
                                                 </p>
-                                                <p className="font-semibold text-gray-900 dark:text-white">
+                                                <p className="mt-1 font-semibold text-[#1f1b16]">
                                                     {alert.recommended_reorder_quantity} units
                                                 </p>
                                             </div>
