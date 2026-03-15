@@ -1,4 +1,4 @@
-import { Prisma, InvoiceStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import prisma from "../../config/db.config.js";
 
 type PeriodType = "weekly" | "monthly" | "yearly";
@@ -21,34 +21,39 @@ type ForecastResult = {
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 
+const startOfDayUtc = (date: Date) =>
+    new Date(
+        Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+    );
+
+const addDays = (date: Date, days: number) => {
+    const next = new Date(date);
+    next.setUTCDate(next.getUTCDate() + days);
+    return next;
+};
+
 /**
  * Get date range based on period
  */
 const getDateRange = (period: PeriodType): { from: Date; to: Date } => {
     const now = new Date();
-    // Create from date with UTC to avoid timezone issues
-    const from = new Date(now);
+    const todayStart = startOfDayUtc(now);
+    const to = addDays(todayStart, 1);
+    let from: Date;
 
     switch (period) {
         case "weekly":
-            // Last 30 days for weekly
-            from.setUTCDate(from.getUTCDate() - 30);
+            from = startOfDayUtc(addDays(now, -29));
             break;
         case "monthly":
-            // Last 6 months
-            from.setUTCMonth(from.getUTCMonth() - 6);
+            from = new Date(
+                Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1),
+            );
             break;
         case "yearly":
-            // Last 3 years
-            from.setUTCFullYear(from.getUTCFullYear() - 3);
+            from = new Date(Date.UTC(now.getUTCFullYear() - 2, 0, 1));
             break;
     }
-
-    // Include through end of tomorrow to ensure all today's data is captured
-    // regardless of timezone differences between server and user
-    const to = new Date(now);
-    to.setUTCDate(to.getUTCDate() + 1);
-    to.setUTCHours(23, 59, 59, 999);
 
     return { from, to };
 };
@@ -189,17 +194,14 @@ const forecastValues = (
 };
 
 /**
- * Aggregate revenue based on period and payment status
- * PAID sales: count 100% of total
- * PARTIALLY_PAID sales: count only the paid portion (paid_amount)
- * UNPAID sales: not counted as realized revenue
+ * Aggregate booked sales based on sale date.
+ * This intentionally matches dashboard sales analytics so both cards
+ * describe the same business signal.
  */
 const aggregateRevenue = (
     sales: Array<{
         sale_date: Date;
-        totalAmount: Prisma.Decimal;
-        paidAmount: Prisma.Decimal;
-        paymentStatus: string;
+        total: Prisma.Decimal;
     }>,
     period: PeriodType,
 ): Map<string, number> => {
@@ -208,18 +210,7 @@ const aggregateRevenue = (
     sales.forEach((sale) => {
         const key = formatDateKey(sale.sale_date, period);
         const current = aggregated.get(key) ?? 0;
-
-        // Calculate realized revenue based on payment status
-        let realizedRevenue = 0;
-        if (sale.paymentStatus === "PAID") {
-            realizedRevenue = toNumber(sale.totalAmount);
-        } else if (sale.paymentStatus === "PARTIALLY_PAID") {
-            // Only count the paid portion
-            realizedRevenue = toNumber(sale.paidAmount);
-        }
-        // UNPAID sales are not counted as realized revenue
-
-        aggregated.set(key, current + realizedRevenue);
+        aggregated.set(key, current + toNumber(sale.total));
     });
 
     return aggregated;
@@ -278,11 +269,9 @@ const getForecastPeriods = (period: PeriodType): number => {
 };
 
 /**
- * Main forecasting service
- * Uses Sales data based on payment status
- * PAID sales: count 100% of amount
- * PARTIALLY_PAID sales: count only paid portion
- * UNPAID sales: excluded from realized revenue
+ * Main forecasting service.
+ * Uses booked sales totals so the forecast card stays consistent with
+ * the dashboard sales analytics card. Collections are analyzed separately.
  */
 export const getSalesForecast = async (
     userId: number,
@@ -294,35 +283,25 @@ export const getSalesForecast = async (
     console.log(`[FORECAST] Fetching sales for user ${userId}, period: ${period}`);
     console.log(`[FORECAST] Date range: ${from.toISOString()} to ${to.toISOString()}`);
 
-    // Fetch sales with PAID and PARTIALLY_PAID status only
-    // These represent realized revenue
     const sales = await prisma.sale.findMany({
         where: {
             user_id: userId,
             sale_date: {
                 gte: from,
-                lte: to,
-            },
-            paymentStatus: {
-                in: ["PAID", "PARTIALLY_PAID"],
+                lt: to,
             },
         },
         select: {
             sale_date: true,
-            totalAmount: true,
-            paidAmount: true,
-            paymentStatus: true,
+            total: true,
             id: true,
         },
         orderBy: { sale_date: "asc" },
     });
 
-    console.log(`[FORECAST] Found ${sales.length} sales with PAID/PARTIALLY_PAID status`);
+    console.log(`[FORECAST] Found ${sales.length} sales`);
     sales.slice(0, 5).forEach((sale) => {
-        const realized = sale.paymentStatus === "PAID"
-            ? toNumber(sale.totalAmount)
-            : toNumber(sale.paidAmount);
-        console.log(`[FORECAST] Sale ${sale.id}: ${sale.sale_date} - ${sale.totalAmount} (${sale.paymentStatus}, realized: ${realized})`);
+        console.log(`[FORECAST] Sale ${sale.id}: ${sale.sale_date} - ${sale.total}`);
     });
 
     // Aggregate revenue by period

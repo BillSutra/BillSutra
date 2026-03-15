@@ -48,10 +48,103 @@ const percentChange = (current: number, previous: number) => {
   return ((current - previous) / previous) * 100;
 };
 
+const formatPaymentMethodDistribution = <
+  T extends {
+    paymentMethod: string | null;
+    _count: { _all: number };
+    _sum: { paidAmount: unknown | null };
+  },
+>(
+  rows: T[],
+) =>
+  rows
+    .filter((row) => row.paymentMethod)
+    .map((row) => ({
+      method: row.paymentMethod as string,
+      count: row._count._all,
+      amount: toNumber(row._sum.paidAmount),
+    }))
+    .sort((a, b) => b.amount - a.amount);
+
+type PaymentMethodPeriod = "week" | "month" | "year";
+type ProductSalesPeriod = PaymentMethodPeriod | "lifetime";
+
+const resolvePaymentMethodPeriod = (value: unknown): PaymentMethodPeriod => {
+  if (typeof value !== "string") return "month";
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "week") return "week";
+  if (normalized === "year") return "year";
+  return "month";
+};
+
+const resolveProductSalesPeriod = (value: unknown): ProductSalesPeriod => {
+  if (typeof value !== "string") return "lifetime";
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "week") return "week";
+  if (normalized === "month") return "month";
+  if (normalized === "year") return "year";
+  return "lifetime";
+};
+
+const getPeriodStart = (period: PaymentMethodPeriod, now: Date) => {
+  if (period === "week") {
+    return startOfDayUtc(addDays(now, -6));
+  }
+
+  if (period === "year") {
+    return new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+  }
+
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+};
+
+const getPaymentMethodDistribution = async (params: {
+  userId: number;
+  from?: Date;
+}) => {
+  const { userId, from } = params;
+
+  const salesWhere = {
+    user_id: userId,
+    paymentMethod: { not: null },
+    paidAmount: { gt: 0 },
+    ...(from ? { paymentDate: { gte: from } } : {}),
+  };
+
+  const purchasesWhere = {
+    user_id: userId,
+    paymentMethod: { not: null },
+    paidAmount: { gt: 0 },
+    ...(from ? { paymentDate: { gte: from } } : {}),
+  };
+
+  const [sales, purchases] = await Promise.all([
+    prisma.sale.groupBy({
+      by: ["paymentMethod"],
+      where: salesWhere,
+      _count: { _all: true },
+      _sum: { paidAmount: true },
+    }),
+    prisma.purchase.groupBy({
+      by: ["paymentMethod"],
+      where: purchasesWhere,
+      _count: { _all: true },
+      _sum: { paidAmount: true },
+    }),
+  ]);
+
+  return {
+    sales: formatPaymentMethodDistribution(sales),
+    purchases: formatPaymentMethodDistribution(purchases),
+  };
+};
+
 type CashInflowMode = "sales" | "payments" | "hybrid";
 
 const resolveCashInflowMode = (value: unknown): CashInflowMode => {
-  if (typeof value !== "string") return "sales";
+  // Hybrid is the safest default because direct sale receipts live on the
+  // sale row while invoice collections are stored in the payments table.
+  if (typeof value !== "string") return "hybrid";
   const normalized = value.trim().toLowerCase();
   if (normalized === "payments") return "payments";
   if (normalized === "hybrid") return "hybrid";
@@ -112,6 +205,8 @@ class DashboardController {
         previousMonthlyPurchases,
         pendingSalesRows,
         pendingPurchaseRows,
+        salePaymentMethodRows,
+        purchasePaymentMethodRows,
         dailyExpenses,
         previousDailyExpenses,
         weeklyExpenses,
@@ -311,6 +406,28 @@ class DashboardController {
             },
             take: 8,
           }),
+        salePaymentMethodRows: () =>
+          prisma.sale.groupBy({
+            by: ["paymentMethod"],
+            where: {
+              user_id: userId,
+              paymentMethod: { not: null },
+              paidAmount: { gt: 0 },
+            },
+            _count: { _all: true },
+            _sum: { paidAmount: true },
+          }),
+        purchasePaymentMethodRows: () =>
+          prisma.purchase.groupBy({
+            by: ["paymentMethod"],
+            where: {
+              user_id: userId,
+              paymentMethod: { not: null },
+              paidAmount: { gt: 0 },
+            },
+            _count: { _all: true },
+            _sum: { paidAmount: true },
+          }),
         dailyExpenses: () =>
           getExpenseTotals({ userId, from: todayStart, to: tomorrowStart }),
         previousDailyExpenses: () =>
@@ -500,6 +617,12 @@ class DashboardController {
             pending: pendingInvoices,
             overdue: 0, // Placeholder
           },
+          paymentMethods: {
+            sales: formatPaymentMethodDistribution(salePaymentMethodRows),
+            purchases: formatPaymentMethodDistribution(
+              purchasePaymentMethodRows,
+            ),
+          },
           activity,
         },
       });
@@ -553,20 +676,34 @@ class DashboardController {
         }),
     });
 
-    const dailyTotals = new Map<string, number>();
+    const dailySalesTotals = new Map<string, number>();
     sales.forEach((sale) => {
       const key = toDateKey(sale.sale_date);
-      dailyTotals.set(key, (dailyTotals.get(key) ?? 0) + toNumber(sale.total));
+      dailySalesTotals.set(
+        key,
+        (dailySalesTotals.get(key) ?? 0) + toNumber(sale.total),
+      );
+    });
+
+    const dailyPurchaseTotals = new Map<string, number>();
+    purchases.forEach((purchase) => {
+      const key = toDateKey(purchase.purchase_date);
+      dailyPurchaseTotals.set(
+        key,
+        (dailyPurchaseTotals.get(key) ?? 0) + toNumber(purchase.total),
+      );
     });
 
     const last30Days = buildDateSeries(start30, 30).map((key) => ({
       date: key,
-      sales: dailyTotals.get(key) ?? 0,
+      sales: dailySalesTotals.get(key) ?? 0,
+      purchases: dailyPurchaseTotals.get(key) ?? 0,
     }));
 
     const last7Days = buildDateSeries(start7, 7).map((key) => ({
       date: key,
-      sales: dailyTotals.get(key) ?? 0,
+      sales: dailySalesTotals.get(key) ?? 0,
+      purchases: dailyPurchaseTotals.get(key) ?? 0,
     }));
 
     const monthlyMap = new Map<
@@ -628,6 +765,34 @@ class DashboardController {
         categories,
       },
     });
+  }
+
+  static async paymentMethods(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return sendResponse(res, 401, { message: "Unauthorized" });
+      }
+
+      const period = resolvePaymentMethodPeriod(req.query.period);
+      const now = new Date();
+      const from = getPeriodStart(period, now);
+
+      const distribution = await getPaymentMethodDistribution({ userId, from });
+
+      return sendResponse(res, 200, {
+        data: {
+          period,
+          ...distribution,
+        },
+      });
+    } catch (error) {
+      console.error("Dashboard payment methods error:", error);
+      return sendResponse(res, 500, {
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   static async inventory(req: Request, res: Response) {
@@ -1383,7 +1548,13 @@ class DashboardController {
       req.query.inflowMode ?? process.env.DASHBOARD_CASHFLOW_INFLOW_MODE,
     );
 
-    const { salesCollections, invoicePayments, purchases, dailyExpenses } =
+    const {
+      salesCollections,
+      invoicePayments,
+      paidInvoicesWithoutPayments,
+      purchases,
+      dailyExpenses,
+    } =
       await resolveSequentially({
         salesCollections: () =>
           prisma.sale.findMany({
@@ -1402,6 +1573,20 @@ class DashboardController {
           prisma.payment.findMany({
             where: { user_id: userId, paid_at: { gte: startOfMonth } },
             select: { paid_at: true, amount: true },
+          }),
+        paidInvoicesWithoutPayments: () =>
+          prisma.invoice.findMany({
+            where: {
+              user_id: userId,
+              date: { gte: startOfMonth },
+              status: { in: ["PAID", "PARTIALLY_PAID"] },
+              payments: { none: {} },
+            },
+            select: {
+              date: true,
+              total: true,
+              status: true,
+            },
           }),
         purchases: () =>
           prisma.purchase.findMany({
@@ -1437,6 +1622,20 @@ class DashboardController {
         inflowMap.set(
           key,
           (inflowMap.get(key) ?? 0) + toNumber(payment.amount),
+        );
+      });
+
+      // Backfill paid invoices that were marked as settled without
+      // explicit payment rows so current cashflow reflects legacy data.
+      paidInvoicesWithoutPayments.forEach((invoice) => {
+        if (invoice.status !== "PAID") {
+          return;
+        }
+
+        const key = toDateKey(invoice.date);
+        inflowMap.set(
+          key,
+          (inflowMap.get(key) ?? 0) + toNumber(invoice.total),
         );
       });
     }
@@ -1482,8 +1681,7 @@ class DashboardController {
         return sendResponse(res, 401, { message: "Unauthorized" });
       }
 
-      const period =
-        typeof req.query.period === "string" ? req.query.period : "lifetime";
+      const period = resolveProductSalesPeriod(req.query.period);
 
       const now = new Date();
       let startDate: Date | undefined;
@@ -1494,6 +1692,8 @@ class DashboardController {
         startDate = new Date(
           Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
         );
+      } else if (period === "year") {
+        startDate = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
       }
 
       const whereClause: {

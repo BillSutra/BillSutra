@@ -14,6 +14,10 @@ import {
   updateUserProfile,
   type UserProfile,
 } from "@/lib/apiClient";
+import {
+  sendDeleteAccountConfirmationEmail,
+  sendDeleteDataConfirmationEmail,
+} from "@/lib/emailService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -162,13 +166,22 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
     setDeleteDataLoading(true);
     setDeleteDataError(null);
     try {
+      await sendDeleteDataConfirmationEmail({
+        user_email: profile.email,
+        user_name: profile.name,
+      });
+      toast.success("Email sent successfully");
       await deleteUserData();
       toast.success("Your data has been deleted.");
       closeDeleteDataModal();
     } catch (error) {
       setDeleteDataError(
-        parseApiError(error, "Unable to delete your data right now."),
+        parseApiError(
+          error,
+          "Failed to send email or delete your data right now.",
+        ),
       );
+      toast.error("Failed to send email");
     } finally {
       setDeleteDataLoading(false);
     }
@@ -180,6 +193,11 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
     setDeleteAccountLoading(true);
     setDeleteAccountError(null);
     try {
+      await sendDeleteAccountConfirmationEmail({
+        user_email: profile.email,
+        user_name: profile.name,
+      });
+      toast.success("Email sent successfully");
       await deleteUserAccount();
       if (typeof window !== "undefined") {
         window.localStorage.removeItem("token");
@@ -193,8 +211,12 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
       router.refresh();
     } catch (error) {
       setDeleteAccountError(
-        parseApiError(error, "Unable to delete your account right now."),
+        parseApiError(
+          error,
+          "Failed to send email or delete your account right now.",
+        ),
       );
+      toast.error("Failed to send email");
       setDeleteAccountLoading(false);
     }
   };

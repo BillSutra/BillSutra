@@ -357,6 +357,18 @@ export type DashboardOverview = {
     pending: number;
     overdue: number;
   };
+  paymentMethods: {
+    sales: Array<{
+      method: "CASH" | "CARD" | "BANK_TRANSFER" | "UPI" | "CHEQUE" | "OTHER";
+      count: number;
+      amount: number;
+    }>;
+    purchases: Array<{
+      method: "CASH" | "CARD" | "BANK_TRANSFER" | "UPI" | "CHEQUE" | "OTHER";
+      count: number;
+      amount: number;
+    }>;
+  };
   alerts: {
     lowStock: string[];
     overdueInvoices: string[];
@@ -395,8 +407,8 @@ export type PaymentInput = {
 };
 
 export type DashboardSales = {
-  last7Days: Array<{ date: string; sales: number }>;
-  last30Days: Array<{ date: string; sales: number }>;
+  last7Days: Array<{ date: string; sales: number; purchases: number }>;
+  last30Days: Array<{ date: string; sales: number; purchases: number }>;
   monthly: Array<{ month: string; sales: number; purchases: number }>;
   categories: Array<{ name: string; value: number }>;
 };
@@ -524,6 +536,7 @@ export type DashboardSuppliers = {
 };
 
 export type DashboardCashflow = {
+  inflowSourceMode?: "sales" | "payments" | "hybrid";
   inflow: number;
   outflow: number;
   netCashFlow: number;
@@ -549,11 +562,25 @@ export type DashboardProfit = {
 };
 
 export type DashboardProductSales = {
-  period: "lifetime" | "month" | "week";
+  period: "lifetime" | "month" | "week" | "year";
   products: Array<{
     name: string;
     quantity: number;
     revenue: number;
+  }>;
+};
+
+export type DashboardPaymentMethods = {
+  period: "week" | "month" | "year";
+  sales: Array<{
+    method: "CASH" | "CARD" | "BANK_TRANSFER" | "UPI" | "CHEQUE" | "OTHER";
+    count: number;
+    amount: number;
+  }>;
+  purchases: Array<{
+    method: "CASH" | "CARD" | "BANK_TRANSFER" | "UPI" | "CHEQUE" | "OTHER";
+    count: number;
+    amount: number;
   }>;
 };
 
@@ -944,12 +971,21 @@ export const fetchDashboardInventory =
   };
 
 export const fetchDashboardProductSales = async (
-  period: "lifetime" | "month" | "week" = "lifetime"
+  period: "lifetime" | "month" | "week" | "year" = "lifetime"
 ): Promise<DashboardProductSales> => {
   const response = await apiClient.get("/dashboard/product-sales", {
     params: { period },
   });
   return response.data.data as DashboardProductSales;
+};
+
+export const fetchDashboardPaymentMethods = async (
+  period: "week" | "month" | "year" = "month",
+): Promise<DashboardPaymentMethods> => {
+  const response = await apiClient.get("/dashboard/payment-methods", {
+    params: { period },
+  });
+  return response.data.data as DashboardPaymentMethods;
 };
 
 export const fetchDashboardTransactions =
@@ -971,7 +1007,9 @@ export const fetchDashboardSuppliers =
   };
 
 export const fetchDashboardCashflow = async (): Promise<DashboardCashflow> => {
-  const response = await apiClient.get("/dashboard/cashflow");
+  const response = await apiClient.get("/dashboard/cashflow", {
+    params: { inflowMode: "hybrid" },
+  });
   return response.data.data as DashboardCashflow;
 };
 

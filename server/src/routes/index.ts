@@ -386,6 +386,11 @@ router.get("/analytics/overview", AuthMiddleware, AnalyticsController.overview);
 router.get("/dashboard/overview", AuthMiddleware, DashboardController.overview);
 router.get("/dashboard/sales", AuthMiddleware, DashboardController.sales);
 router.get(
+  "/dashboard/payment-methods",
+  AuthMiddleware,
+  DashboardController.paymentMethods,
+);
+router.get(
   "/dashboard/inventory",
   AuthMiddleware,
   DashboardController.inventory,

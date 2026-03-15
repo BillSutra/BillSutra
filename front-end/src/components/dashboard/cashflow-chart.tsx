@@ -64,12 +64,42 @@ const CashFlowChart = ({ className }: { className?: string }) => {
   const netClass =
     net > 0 ? "text-green-700" : net < 0 ? "text-red-700" : "text-amber-700";
 
+  const inflowModeLabel =
+    data?.inflowSourceMode === "payments"
+      ? "Invoice payments"
+      : data?.inflowSourceMode === "sales"
+        ? "Direct sale receipts"
+        : "Sales receipts + invoice payments";
+
   return (
-    <Card className={`border-[#ecdccf] bg-white/90 flex flex-col ${className}`}>
-      <CardHeader>
-        <CardTitle className="text-lg">Cash flow summary</CardTitle>
+    <Card
+      className={`dashboard-chart-surface flex flex-col rounded-[1.75rem] ${className}`}
+    >
+      <CardHeader className="dashboard-chart-content pb-0">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
+              Cash movement
+            </p>
+            <CardTitle className="mt-2 text-2xl text-[#1f1b16]">
+              Cash flow summary
+            </CardTitle>
+            <p className="mt-2 max-w-xl text-sm text-[#8a6d56]">
+              Current-month collections versus outgoing purchase payments and
+              expenses.
+            </p>
+          </div>
+          <div className="dashboard-chart-metric rounded-2xl px-4 py-3">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
+              Inflow source
+            </p>
+            <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
+              {inflowModeLabel}
+            </p>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="flex flex-col flex-1 gap-6 min-h-0">
+      <CardContent className="dashboard-chart-content flex flex-col flex-1 gap-6 min-h-0 pt-6">
         {isLoading && (
           <div className="h-32 rounded-xl bg-[#fdf7f1] animate-pulse" />
         )}
@@ -89,7 +119,7 @@ const CashFlowChart = ({ className }: { className?: string }) => {
               ].map((item) => (
                 <div
                   key={item.label}
-                  className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4"
+                  className="dashboard-chart-metric rounded-2xl p-4"
                 >
                   <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                     {item.label}
@@ -109,18 +139,25 @@ const CashFlowChart = ({ className }: { className?: string }) => {
 
             <div className="flex-1 min-h-[350px]">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data.series} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <AreaChart
+                  data={data.series}
+                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                >
                   <defs>
                     <linearGradient id="colorInflow" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#0f766e" stopOpacity={0.3} />
+                      <stop offset="5%" stopColor="#0f766e" stopOpacity={0.42} />
                       <stop offset="95%" stopColor="#0f766e" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="colorOutflow" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
+                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.42} />
                       <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="#f2e6dc" strokeDasharray="3 3" vertical={false} />
+                  <CartesianGrid
+                    stroke="#f2e6dc"
+                    strokeDasharray="3 3"
+                    vertical={false}
+                  />
                   <XAxis
                     dataKey="date"
                     tick={{ fontSize: 10, fill: "#8a6d56" }}
@@ -148,7 +185,7 @@ const CashFlowChart = ({ className }: { className?: string }) => {
                     verticalAlign="top"
                     align="right"
                     iconType="circle"
-                    wrapperStyle={{ paddingBottom: '20px', fontSize: '12px' }}
+                    wrapperStyle={{ paddingBottom: "20px", fontSize: "12px" }}
                   />
                   <Area
                     type="monotone"
@@ -171,6 +208,10 @@ const CashFlowChart = ({ className }: { className?: string }) => {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+            <p className="text-xs text-[#8a6d56]">
+              Includes direct sale receipts, invoice collections, paid purchase
+              amounts, and recorded expenses.
+            </p>
           </>
         )}
       </CardContent>

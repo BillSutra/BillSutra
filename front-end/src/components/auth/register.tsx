@@ -10,21 +10,47 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { signIn } from "next-auth/react";
 import Image from "next/image";
+import {
+  sendAccountVerificationEmail,
+  sendWelcomeEmail,
+} from "@/lib/emailService";
 const Register = () => {
   const initalState = {
     status: 0,
     message: "",
     errors: {},
+    data: {},
   };
   const [state, formAction] = useActionState(registerAction, initalState);
 
   useEffect(() => {
+    const sendSignupEmails = async () => {
+      try {
+        const email = String(state.data?.email ?? "");
+        const name = String(state.data?.name ?? "");
+        if (!email || !name) return;
+
+        await sendAccountVerificationEmail({
+          user_email: email,
+          user_name: name,
+        });
+        await sendWelcomeEmail({
+          user_email: email,
+          user_name: name,
+        });
+        toast.success("Email sent successfully");
+      } catch {
+        toast.error("Failed to send email");
+      }
+    };
+
     if (state.status === 500) {
       toast.error(state.message);
     } else if (state.status === 422) {
       toast.error(state.message);
     } else if (state.status === 200) {
       toast.success(state.message);
+      void sendSignupEmails();
     }
   }, [state]);
 
