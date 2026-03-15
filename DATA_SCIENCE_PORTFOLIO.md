@@ -50,6 +50,7 @@ This project transforms a standard billing application into an **Intelligent Bus
     2.  **Stockout Horizon**: `Current_Stock / Daily_Velocity`.
     3.  **Lead Time replenishment**: Recommends reorder quantities based on a 14-day safety stock buffer: `(Velocity * 14) - Current_Stock`.
 *   **Risk Leveling**: Immediate notification for products with < 3 days of runway.
+*   **Operational consistency layer**: The production dashboard now separates `low stock` from `out of stock` at the summary level, ensuring the KPI counters reflect the exact business state shown in the alert list.
 
 ### D. Time-Series Sales Forecasting
 *   **Objective**: Provide 3-month forward-looking visibility into revenue.
@@ -70,6 +71,8 @@ This project transforms a standard billing application into an **Intelligent Bus
     *   Linear gradients for trend visualization.
     *   Custom tooltips for multi-series breakdown.
     *   Interactive legends and baseline anchors (y=0 lines).
+    *   Decision-first KPI cards for sales, purchases, receivables, payables, and multi-horizon profit analysis.
+    *   Styled operational insight panels for inventory risk, customer value segmentation, churn alerts, and supplier value distribution.
 
 ### Database Design for Analytics:
 *   Utilized **Composite Indexes** on `user_id` and `sale_date` to ensure O(log n) retrieval for large-scale transaction datasets.
@@ -82,6 +85,8 @@ This project transforms a standard billing application into an **Intelligent Bus
 *   **Optimized Working Capital**: Inventory alerts prevent over-stocking of slow-moving goods and stockouts of high-velocity items.
 *   **Strategic Growth**: CLV insights identify which customers deserve loyalty rewards or bulk discounts.
 *   **Cash Flow Visibility**: Integrated profit analytics allow business owners to plan for expenses based on actual received payments vs. projected revenue.
+*   **Operational Trust in Metrics**: Distinguishing low-stock from out-of-stock states prevents misleading inventory summaries and improves reorder decisions.
+*   **Faster Financial Triage**: Separate pending-sales and pending-purchase KPI cards help business owners distinguish incoming cash from outgoing obligations instantly.
 
 ---
 
@@ -90,3 +95,4 @@ This project transforms a standard billing application into an **Intelligent Bus
 2.  *"I solved the 'data sparsity' problem for small businesses by using weighted heuristic models that perform better than deep learning on smaller, irregular datasets."*
 3.  *"The dashboard doesn't just show data; it performs feature engineering on-the-fly to calculate composite loyalty scores (CLV) and inventory velocity."*
 4.  *"I implemented data normalization (Min-Max scaling) to ensure that high-ticket items don't skew the frequency scores of high-volume, low-cost clients."*
+5.  *"I treated visualization as part of the analytical product, so legends, KPI grouping, and inventory-state counters reinforce the underlying model logic instead of contradicting it."*

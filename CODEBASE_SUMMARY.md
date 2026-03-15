@@ -267,6 +267,7 @@ class AppError extends Error {
 ✅ Supplier analytics: pending payables per supplier
 
 ### O. Dashboard Engine
+- Dual pending-payment visibility: pending sales collections and pending supplier payments surfaced independently
 ✅ Overview: revenue, purchases, expenses, receivables, payables, profit (filtered by payment status)
 ✅ Metrics with % change vs prior period (filtered by payment status: PAID, PARTIALLY_PAID, UNPAID)
 ✅ Inventory value calculation
@@ -515,6 +516,8 @@ User
 ## 11. RECENT UPDATES & BUG FIXES (March 2026)
 
 ### Dashboard & AI Enhancements (March 2026 - Continued)
+- Dashboard KPI redesign: separate pending sales and pending purchase payment cards, a new yearly profit KPI, color-coded sales/purchase themes, and cleaner spacing/typography.
+- Dashboard visual refresh: unified premium treatment across utility and analytical cards, including Quick Actions, Notifications, Transactions, Timeline, Inventory Risk, Customer Insights, and Supplier Overview.
 ✅ **Customer Churn Prediction** - Implemented a sophisticated churn model that analyzes purchase frequency, recency (days since last purchase), and weighted order value to classify customers into risk segments.
 ✅ **Modernized Cash Flow Summary** - Upgraded visualization with:
   - Linear gradients and smooth monotone curves for data series.
@@ -529,9 +532,12 @@ User
 ✅ **Flexible Card System** - All dashboard components now accept custom classNames and support auto-stretching via flexbox for a perfectly balanced UI.
 
 ### Dashboard Fixes
+- Fixed inventory risk counter logic so summary cards distinguish low-stock products from out-of-stock products and do not double-count zero-stock items.
 ✅ **Fixed Customer Insights & Supplier Overview Loading** - Removed undefined variable references (atRiskCustomers, atRiskSuppliers) that were causing API failures
 
 ### Dashboard UI/UX Improvements
+- Analytical vs informational separation: charts and core business analytics are grouped above supporting operational cards for a clearer reading flow.
+- Chart polish pass: legends, line styling, empty states, and tooltip readability were improved across the main dashboard visualizations.
 ✅ **Reorganized Inventory Components** - Moved analysis cards (total products, low stock, out-of-stock, inventory value) from Inventory Overview to Inventory Risk Alerts for better context
 ✅ **Removed Duplicate Card** - Removed the standalone Inventory Overview card to eliminate redundancy
 ✅ **Updated Dashboard Layout** - Reorganized cards to fill available space efficiently
@@ -539,6 +545,7 @@ User
   - Proper space utilization across all dashboard sections
 
 ### Inventory Risk Alerts Enhancements
+- Alert counter accuracy: displayed low-stock and out-of-stock totals now align with the actual risk list shown to the user.
 ✅ **Out-of-Stock Label** - Products with zero stock now display "Out of Stock" label instead of "critical" badge for better clarity
 
 ### Analytics Consistency Updates
@@ -573,3 +580,4 @@ User
 ---
 
 Use this summary with ChatGPT for detailed feature suggestions, implementation guidance, and architectural decisions.
+
