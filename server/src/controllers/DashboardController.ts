@@ -2,15 +2,22 @@ import type { Request, Response } from "express";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
 import {
+  buildDashboardOverview,
   buildMonthlyProfitSeries,
   buildNotifications,
   buildSalesForecast,
   getDailyExpenses,
   getExpenseTotals,
   getMonthlyExpenses,
+  resolveDashboardFilters,
 } from "../services/dashboardAnalyticsService.js";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
+const resolveRecordedTotal = (totalAmount: unknown, total: unknown) => {
+  const preferred = toNumber(totalAmount);
+  if (preferred > 0) return preferred;
+  return toNumber(total);
+};
 
 const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
 
@@ -170,527 +177,17 @@ class DashboardController {
       if (!userId) {
         return sendResponse(res, 401, { message: "Unauthorized" });
       }
-
-      const now = new Date();
-      const todayStart = startOfDayUtc(now);
-      const tomorrowStart = addDays(todayStart, 1);
-      const yesterdayStart = addDays(todayStart, -1);
-      const weekStart = startOfDayUtc(addDays(now, -6));
-      const previousWeekStart = addDays(weekStart, -7);
-      const monthStart = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-      );
-      const previousMonthStart = new Date(
-        Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
-      );
-      const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
-      const previousYearStart = new Date(
-        Date.UTC(now.getUTCFullYear() - 1, 0, 1),
-      );
-
-      const {
-        saleTotals,
-        purchaseTotals,
-        pendingSalesTotals,
-        products,
-        recentSales,
-        recentPurchases,
-        dailySales,
-        dailyPurchases,
-        previousDaySales,
-        previousDayPurchases,
-        weeklySales,
-        weeklyPurchases,
-        previousWeeklySales,
-        previousWeeklyPurchases,
-        monthlySales,
-        monthlyPurchases,
-        previousMonthlySales,
-        previousMonthlyPurchases,
-        yearlySales,
-        yearlyPurchases,
-        previousYearlySales,
-        previousYearlyPurchases,
-        pendingSalesRows,
-        pendingPurchaseRows,
-        salePaymentMethodRows,
-        purchasePaymentMethodRows,
-        dailyExpenses,
-        previousDailyExpenses,
-        weeklyExpenses,
-        previousWeeklyExpenses,
-        monthlyExpenses,
-        previousMonthlyExpenses,
-        yearlyExpenses,
-        previousYearlyExpenses,
-        totalExpenses,
-        totalInvoices,
-        paidInvoices,
-        pendingInvoices,
-      } = await resolveSequentially({
-        saleTotals: () =>
-          prisma.sale.aggregate({
-            where: {
-              user_id: userId,
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        purchaseTotals: () =>
-          prisma.purchase.aggregate({
-            where: {
-              user_id: userId,
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true, pendingAmount: true },
-          }),
-        pendingSalesTotals: () =>
-          prisma.sale.aggregate({
-            where: {
-              user_id: userId,
-              paymentStatus: { in: ["PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { pendingAmount: true },
-          }),
-        products: () =>
-          prisma.product.findMany({
-            where: { user_id: userId },
-            select: {
-              name: true,
-              stock_on_hand: true,
-              reorder_level: true,
-              price: true,
-              cost: true,
-            },
-          }),
-        recentSales: () =>
-          prisma.sale.findMany({
-            where: { user_id: userId },
-            select: { id: true, sale_date: true },
-            orderBy: { sale_date: "desc" },
-            take: 4,
-          }),
-        recentPurchases: () =>
-          prisma.purchase.findMany({
-            where: { user_id: userId },
-            select: { id: true, purchase_date: true },
-            orderBy: { purchase_date: "desc" },
-            take: 4,
-          }),
-        dailySales: () =>
-          prisma.sale.aggregate({
-            where: {
-              user_id: userId,
-              sale_date: { gte: todayStart, lt: tomorrowStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        dailyPurchases: () =>
-          prisma.purchase.aggregate({
-            where: {
-              user_id: userId,
-              purchase_date: { gte: todayStart, lt: tomorrowStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        previousDaySales: () =>
-          prisma.sale.aggregate({
-            where: {
-              user_id: userId,
-              sale_date: { gte: yesterdayStart, lt: todayStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        previousDayPurchases: () =>
-          prisma.purchase.aggregate({
-            where: {
-              user_id: userId,
-              purchase_date: { gte: yesterdayStart, lt: todayStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        weeklySales: () =>
-          prisma.sale.aggregate({
-            where: {
-              user_id: userId,
-              sale_date: { gte: weekStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        weeklyPurchases: () =>
-          prisma.purchase.aggregate({
-            where: {
-              user_id: userId,
-              purchase_date: { gte: weekStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        previousWeeklySales: () =>
-          prisma.sale.aggregate({
-            where: {
-              user_id: userId,
-              sale_date: { gte: previousWeekStart, lt: weekStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        previousWeeklyPurchases: () =>
-          prisma.purchase.aggregate({
-            where: {
-              user_id: userId,
-              purchase_date: { gte: previousWeekStart, lt: weekStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        monthlySales: () =>
-          prisma.sale.aggregate({
-            where: {
-              user_id: userId,
-              sale_date: { gte: monthStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        monthlyPurchases: () =>
-          prisma.purchase.aggregate({
-            where: {
-              user_id: userId,
-              purchase_date: { gte: monthStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        previousMonthlySales: () =>
-          prisma.sale.aggregate({
-            where: {
-              user_id: userId,
-              sale_date: { gte: previousMonthStart, lt: monthStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        previousMonthlyPurchases: () =>
-          prisma.purchase.aggregate({
-            where: {
-              user_id: userId,
-              purchase_date: { gte: previousMonthStart, lt: monthStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        yearlySales: () =>
-          prisma.sale.aggregate({
-            where: {
-              user_id: userId,
-              sale_date: { gte: yearStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        yearlyPurchases: () =>
-          prisma.purchase.aggregate({
-            where: {
-              user_id: userId,
-              purchase_date: { gte: yearStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        previousYearlySales: () =>
-          prisma.sale.aggregate({
-            where: {
-              user_id: userId,
-              sale_date: { gte: previousYearStart, lt: yearStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        previousYearlyPurchases: () =>
-          prisma.purchase.aggregate({
-            where: {
-              user_id: userId,
-              purchase_date: { gte: previousYearStart, lt: yearStart },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            _sum: { total: true },
-          }),
-        pendingSalesRows: () =>
-          prisma.sale.findMany({
-            where: {
-              user_id: userId,
-              paymentStatus: { in: ["PARTIALLY_PAID", "UNPAID"] },
-            },
-            select: {
-              id: true,
-              sale_date: true,
-              totalAmount: true,
-              paidAmount: true,
-              pendingAmount: true,
-              paymentStatus: true,
-              customer: { select: { name: true } },
-            },
-            orderBy: [{ sale_date: "desc" }],
-            take: 8,
-          }),
-        pendingPurchaseRows: () =>
-          prisma.purchase.findMany({
-            where: {
-              user_id: userId,
-              pendingAmount: { gt: 0 },
-            },
-            select: {
-              id: true,
-              supplier: { select: { name: true } },
-              pendingAmount: true,
-            },
-            take: 8,
-          }),
-        salePaymentMethodRows: () =>
-          prisma.sale.groupBy({
-            by: ["paymentMethod"],
-            where: {
-              user_id: userId,
-              paymentMethod: { not: null },
-              paidAmount: { gt: 0 },
-            },
-            _count: { _all: true },
-            _sum: { paidAmount: true },
-          }),
-        purchasePaymentMethodRows: () =>
-          prisma.purchase.groupBy({
-            by: ["paymentMethod"],
-            where: {
-              user_id: userId,
-              paymentMethod: { not: null },
-              paidAmount: { gt: 0 },
-            },
-            _count: { _all: true },
-            _sum: { paidAmount: true },
-          }),
-        dailyExpenses: () =>
-          getExpenseTotals({ userId, from: todayStart, to: tomorrowStart }),
-        previousDailyExpenses: () =>
-          getExpenseTotals({ userId, from: yesterdayStart, to: todayStart }),
-        weeklyExpenses: () => getExpenseTotals({ userId, from: weekStart }),
-        previousWeeklyExpenses: () =>
-          getExpenseTotals({ userId, from: previousWeekStart, to: weekStart }),
-        monthlyExpenses: () => getExpenseTotals({ userId, from: monthStart }),
-        previousMonthlyExpenses: () =>
-          getExpenseTotals({
-            userId,
-            from: previousMonthStart,
-            to: monthStart,
-          }),
-        yearlyExpenses: () => getExpenseTotals({ userId, from: yearStart }),
-        previousYearlyExpenses: () =>
-          getExpenseTotals({
-            userId,
-            from: previousYearStart,
-            to: yearStart,
-          }),
-        totalExpenses: () => getExpenseTotals({ userId }),
-        totalInvoices: () => prisma.sale.count({ where: { user_id: userId } }),
-        paidInvoices: () =>
-          prisma.sale.count({
-            where: { user_id: userId, paymentStatus: "PAID" },
-          }),
-        pendingInvoices: () =>
-          prisma.sale.count({
-            where: {
-              user_id: userId,
-              paymentStatus: { in: ["PARTIALLY_PAID", "UNPAID"] },
-            },
-          }),
-      });
-
-      const totalRevenue = toNumber(saleTotals._sum.total);
-      const totalPurchases = toNumber(purchaseTotals._sum.total);
-      const payables = toNumber(purchaseTotals._sum.pendingAmount);
-      const expenses = totalExpenses;
-
-      const toProfit = (
-        salesValue: number,
-        purchasesValue: number,
-        expenseValue: number,
-      ) => salesValue - purchasesValue - expenseValue;
-
-      const todayProfit = toProfit(
-        toNumber(dailySales._sum.total),
-        toNumber(dailyPurchases._sum.total),
-        dailyExpenses,
-      );
-      const previousDayProfit = toProfit(
-        toNumber(previousDaySales._sum.total),
-        toNumber(previousDayPurchases._sum.total),
-        previousDailyExpenses,
-      );
-      const weeklyProfit = toProfit(
-        toNumber(weeklySales._sum.total),
-        toNumber(weeklyPurchases._sum.total),
-        weeklyExpenses,
-      );
-      const previousWeeklyProfit = toProfit(
-        toNumber(previousWeeklySales._sum.total),
-        toNumber(previousWeeklyPurchases._sum.total),
-        previousWeeklyExpenses,
-      );
-      const monthlyProfit = toProfit(
-        toNumber(monthlySales._sum.total),
-        toNumber(monthlyPurchases._sum.total),
-        monthlyExpenses,
-      );
-      const previousMonthlyProfit = toProfit(
-        toNumber(previousMonthlySales._sum.total),
-        toNumber(previousMonthlyPurchases._sum.total),
-        previousMonthlyExpenses,
-      );
-      const yearlyProfit = toProfit(
-        toNumber(yearlySales._sum.total),
-        toNumber(yearlyPurchases._sum.total),
-        yearlyExpenses,
-      );
-      const previousYearlyProfit = toProfit(
-        toNumber(previousYearlySales._sum.total),
-        toNumber(previousYearlyPurchases._sum.total),
-        previousYearlyExpenses,
-      );
-
-      const pendingPayments = toNumber(pendingSalesTotals._sum.pendingAmount);
-
-      const pendingPaymentRows = pendingSalesRows
-        .map((sale) => ({
-          id: sale.id,
-          invoiceNumber: `SI-${sale.id}`,
-          customer: sale.customer?.name ?? "Walk-in",
-          date: sale.sale_date,
-          totalAmount: toNumber(sale.totalAmount),
-          paidAmount: toNumber(sale.paidAmount),
-          pendingAmount: toNumber(sale.pendingAmount),
-          paymentStatus:
-            sale.paymentStatus === "PARTIALLY_PAID" ? "PARTIAL" : "PENDING",
-        }))
-        .filter((sale) => sale.pendingAmount > 0);
-
-      const inventoryValue = products.reduce((sum, product) => {
-        const unit = toNumber(product.cost ?? product.price);
-        return sum + unit * product.stock_on_hand;
-      }, 0);
-
-      const lowStockProducts = products.filter(
-        (product) => product.stock_on_hand < product.reorder_level,
-      );
-
-      const activity = [
-        ...recentSales.map((sale) => ({
-          time: sale.sale_date,
-          label: `Sale #${sale.id} recorded`,
-        })),
-        ...recentPurchases.map((purchase) => ({
-          time: purchase.purchase_date,
-          label: `Purchase #${purchase.id} added`,
-        })),
-      ]
-        .sort((a, b) => b.time.getTime() - a.time.getTime())
-        .slice(0, 6)
-        .map((item) => ({
-          time: item.time.toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-          }),
-          label: item.label,
-        }));
-
-      return sendResponse(res, 200, {
-        data: {
-          metrics: {
-            totalRevenue,
-            totalSales: totalRevenue,
-            totalPurchases,
-            expenses,
-            receivables: pendingPayments,
-            payables,
-            pendingPayments,
-            inventoryValue,
-            profits: {
-              today: todayProfit,
-              weekly: weeklyProfit,
-              monthly: monthlyProfit,
-              yearly: yearlyProfit,
-            },
-            changes: {
-              totalRevenue: percentChange(totalRevenue, 0),
-              totalSales: percentChange(totalRevenue, 0),
-              totalPurchases: percentChange(totalPurchases, 0),
-              receivables: percentChange(pendingPayments, 0),
-              payables: percentChange(payables, 0),
-              expenses: percentChange(expenses, 0),
-              todayProfit: percentChange(todayProfit, previousDayProfit),
-              weeklyProfit: percentChange(weeklyProfit, previousWeeklyProfit),
-              monthlyProfit: percentChange(
-                monthlyProfit,
-                previousMonthlyProfit,
-              ),
-              yearlyProfit: percentChange(yearlyProfit, previousYearlyProfit),
-              pendingPayments: percentChange(pendingPayments, 0),
-              inventoryValue: 0,
-            },
-          },
-          pendingPayments: pendingPaymentRows.slice(0, 5).map((item) => ({
-            id: item.id,
-            invoiceNumber: item.invoiceNumber,
-            customer: item.customer,
-            totalAmount: item.totalAmount,
-            paidAmount: item.paidAmount,
-            pendingAmount: item.pendingAmount,
-            paymentStatus: item.paymentStatus,
-            date: item.date.toISOString(),
-          })),
-          alerts: {
-            lowStock: lowStockProducts
-              .slice(0, 6)
-              .map((item) => `${item.name} (${item.stock_on_hand})`),
-            supplierPayables: pendingPurchaseRows
-              .slice(0, 5)
-              .map(
-                (item) =>
-                  `${item.supplier?.name ?? "Supplier"}: ₹${toNumber(item.pendingAmount).toLocaleString("en-IN")}`,
-              ),
-          },
-          notifications: buildNotifications({
-            lowStock: lowStockProducts
-              .slice(0, 6)
-              .map((item) => `${item.name} stock is ${item.stock_on_hand}`),
-            pendingSales: pendingPaymentRows.map((row) => ({
-              customer: row.customer,
-              pendingAmount: row.pendingAmount,
-            })),
-            supplierPayables: pendingPurchaseRows.map((row) => ({
-              supplier: row.supplier?.name ?? "Supplier",
-              pendingAmount: toNumber(row.pendingAmount),
-            })),
-          }),
-          invoiceStats: {
-            total: totalInvoices,
-            paid: paidInvoices,
-            pending: pendingInvoices,
-            overdue: 0, // Placeholder
-          },
-          paymentMethods: {
-            sales: formatPaymentMethodDistribution(salePaymentMethodRows),
-            purchases: formatPaymentMethodDistribution(
-              purchasePaymentMethodRows,
-            ),
-          },
-          activity,
+      const data = await buildDashboardOverview({
+        userId,
+        filters: {
+          range: req.query.range,
+          startDate: req.query.startDate,
+          endDate: req.query.endDate,
+          granularity: req.query.granularity,
         },
       });
+
+      return sendResponse(res, 200, { data });
     } catch (error) {
       console.error("Dashboard overview error:", error);
       return sendResponse(res, 500, {
@@ -706,20 +203,25 @@ class DashboardController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const now = new Date();
-    const start30 = startOfDayUtc(addDays(now, -29));
-    const start7 = startOfDayUtc(addDays(now, -6));
+    const resolved = resolveDashboardFilters({
+      range: req.query.range,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+      granularity: req.query.granularity,
+    });
+    const anchor = addDays(resolved.endExclusive, -1);
+    const start30 = startOfDayUtc(addDays(anchor, -29));
+    const start7 = startOfDayUtc(addDays(anchor, -6));
     const start6Months = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1),
+      Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth() - 5, 1),
     );
-    // Extend end date to ensure today's complete data is included
-    const endDate = addDays(startOfDayUtc(now), 1);
+    const endDate = resolved.endExclusive;
 
     const { sales, purchases, saleItems } = await resolveSequentially({
       sales: () =>
         prisma.sale.findMany({
           where: { user_id: userId, sale_date: { gte: start30, lt: endDate } },
-          select: { sale_date: true, total: true },
+          select: { sale_date: true, total: true, totalAmount: true },
         }),
       purchases: () =>
         prisma.purchase.findMany({
@@ -727,7 +229,7 @@ class DashboardController {
             user_id: userId,
             purchase_date: { gte: start6Months, lt: endDate },
           },
-          select: { purchase_date: true, total: true },
+          select: { purchase_date: true, total: true, totalAmount: true },
         }),
       saleItems: () =>
         prisma.saleItem.findMany({
@@ -746,7 +248,8 @@ class DashboardController {
       const key = toDateKey(sale.sale_date);
       dailySalesTotals.set(
         key,
-        (dailySalesTotals.get(key) ?? 0) + toNumber(sale.total),
+        (dailySalesTotals.get(key) ?? 0) +
+          resolveRecordedTotal(sale.totalAmount, sale.total),
       );
     });
 
@@ -755,7 +258,8 @@ class DashboardController {
       const key = toDateKey(purchase.purchase_date);
       dailyPurchaseTotals.set(
         key,
-        (dailyPurchaseTotals.get(key) ?? 0) + toNumber(purchase.total),
+        (dailyPurchaseTotals.get(key) ?? 0) +
+          resolveRecordedTotal(purchase.totalAmount, purchase.total),
       );
     });
 
@@ -790,7 +294,7 @@ class DashboardController {
       const key = toMonthKey(sale.sale_date);
       const entry = monthlyMap.get(key);
       if (entry) {
-        entry.sales += toNumber(sale.total);
+        entry.sales += resolveRecordedTotal(sale.totalAmount, sale.total);
       }
     });
 
@@ -798,7 +302,7 @@ class DashboardController {
       const key = toMonthKey(purchase.purchase_date);
       const entry = monthlyMap.get(key);
       if (entry) {
-        entry.purchases += toNumber(purchase.total);
+        entry.purchases += resolveRecordedTotal(purchase.totalAmount, purchase.total);
       }
     });
 
@@ -938,8 +442,18 @@ class DashboardController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    const resolved = resolveDashboardFilters({
+      range: req.query.range,
+      startDate: req.query.startDate,
+      endDate: req.query.endDate,
+      granularity: req.query.granularity,
+    });
+
     const sales = await prisma.sale.findMany({
-      where: { user_id: userId },
+      where: {
+        user_id: userId,
+        sale_date: { gte: resolved.start, lt: resolved.endExclusive },
+      },
       include: { customer: true },
       orderBy: { sale_date: "desc" },
       take: 10,
@@ -952,7 +466,7 @@ class DashboardController {
       }),
       invoiceNumber: `SI-${sale.id}`,
       customer: sale.customer?.name ?? "Walk-in",
-      amount: toNumber(sale.totalAmount),
+      amount: resolveRecordedTotal(sale.totalAmount, sale.total),
       paymentStatus:
         sale.paymentStatus === "PAID"
           ? "PAID"

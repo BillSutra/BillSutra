@@ -2,6 +2,10 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import AnimatedNumber from "@/components/dashboard/AnimatedNumber";
+import { clamp, formatPercent } from "@/lib/dashboardUtils";
+import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
+import { DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 
 type MetricCardTheme =
   | "default"
@@ -13,12 +17,20 @@ type MetricCardTheme =
 
 type MetricCardProps = {
   title: string;
-  value: string;
+  value: number;
   change: number;
   icon: React.ReactNode;
   trendLabel?: string;
   description?: string;
   theme?: MetricCardTheme;
+  formatValue?: (value: number) => string;
+  status?: {
+    isLoading?: boolean;
+    isFetching?: boolean;
+    isError?: boolean;
+    dataUpdatedAt?: number;
+    refreshIntervalMs?: number;
+  };
 };
 
 const paletteByTheme: Record<
@@ -109,8 +121,8 @@ const paletteByTheme: Record<
 };
 
 const formatChange = (change: number) => {
-  const sign = change >= 0 ? "+" : "";
-  return `${sign}${change.toFixed(1)}%`;
+  const sign = change > 0 ? "+" : change < 0 ? "-" : "";
+  return `${sign}${formatPercent(Math.abs(change))}`;
 };
 
 const MetricCard = ({
@@ -121,14 +133,18 @@ const MetricCard = ({
   trendLabel,
   description,
   theme = "default",
+  formatValue,
+  status,
 }: MetricCardProps) => {
   const isPositive = change >= 0;
   const palette = paletteByTheme[theme];
+  const resolvedFormatValue =
+    formatValue ?? ((amount: number) => amount.toLocaleString("en-IN"));
 
   return (
     <Card
       className={cn(
-        "relative min-h-[202px] overflow-hidden rounded-[1.6rem] gap-0 py-0",
+        "relative min-h-[202px] overflow-hidden rounded-[1.6rem] gap-0 py-0 transition duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_32px_70px_-46px_rgba(31,27,22,0.42)]",
         palette.card,
       )}
     >
@@ -162,7 +178,7 @@ const MetricCard = ({
                 palette.value,
               )}
             >
-              {value}
+              <AnimatedNumber value={value} format={resolvedFormatValue} />
             </p>
             {description ? (
               <p
@@ -181,7 +197,20 @@ const MetricCard = ({
             {icon}
           </div>
         </div>
-        <div className="mt-auto flex flex-wrap items-end justify-between gap-3 pb-1 pt-1 text-xs text-[#5f5144]">
+        <div className="mt-auto flex flex-col gap-2 pb-1 pt-1 text-xs text-[#5f5144]">
+          {status ? (
+            <DashboardCardStatus
+              isLoading={status.isLoading}
+              isFetching={status.isFetching}
+              isError={status.isError}
+              dataUpdatedAt={status.dataUpdatedAt}
+              refreshIntervalMs={
+                status.refreshIntervalMs ?? DASHBOARD_REFRESH_INTERVAL_MS
+              }
+              className="text-[11px]"
+            />
+          ) : null}
+          <div className="flex flex-wrap items-end justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2.5">
             <span
               className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -202,12 +231,13 @@ const MetricCard = ({
             </span>
           </div>
           <span className="h-1.5 w-14 shrink-0 rounded-full bg-white/70 shadow-[inset_0_1px_2px_rgba(31,27,22,0.08)] dark:bg-gray-700">
-            <span
-              className={`block h-1.5 rounded-full ${isPositive ? palette.accent : "bg-red-500"}`}
-              style={{ width: `${Math.min(100, Math.abs(change) * 2)}%` }}
-            />
-          </span>
-        </div>
+          <span
+            className={`block h-1.5 rounded-full ${isPositive ? palette.accent : "bg-red-500"}`}
+            style={{ width: `${clamp(Math.abs(change) * 2, 4, 100)}%` }}
+          />
+        </span>
+          </div>
+      </div>
       </CardContent>
     </Card>
   );

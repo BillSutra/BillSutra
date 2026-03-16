@@ -1,0 +1,32 @@
+"use client";
+
+import { clamp } from "@/lib/dashboardUtils";
+
+const DEFAULT_REFRESH_MS = 45_000;
+const MIN_REFRESH_MS = 10_000;
+const MAX_REFRESH_MS = 300_000;
+
+const parseRefreshInterval = (value?: string) => {
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const resolveRefreshInterval = () => {
+  const parsed = parseRefreshInterval(process.env.NEXT_PUBLIC_DASHBOARD_REFRESH_MS);
+  if (parsed === undefined) return DEFAULT_REFRESH_MS;
+  return clamp(parsed, MIN_REFRESH_MS, MAX_REFRESH_MS);
+};
+
+export const DASHBOARD_REFRESH_INTERVAL_MS = resolveRefreshInterval();
+
+export const dashboardRetryDelay = (attempt: number) =>
+  Math.min(1000 * 2 ** attempt, 30_000);
+
+export const dashboardQueryDefaults = {
+  refetchInterval: DASHBOARD_REFRESH_INTERVAL_MS,
+  refetchIntervalInBackground: true,
+  staleTime: Math.max(DASHBOARD_REFRESH_INTERVAL_MS - 1000, 0),
+  retry: 3,
+  retryDelay: dashboardRetryDelay,
+};

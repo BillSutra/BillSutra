@@ -13,8 +13,9 @@ import {
 } from "recharts";
 import { fetchDashboardForecast } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const formatCurrency = (value: number) => `₹${value.toLocaleString("en-IN")}`;
+import { formatCurrency, formatPercent, sumBy } from "@/lib/dashboardUtils";
+import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
+import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 
 const formatTooltipValue = (value: unknown) => {
   if (Array.isArray(value)) {
@@ -34,22 +35,17 @@ const formatTooltipValue = (value: unknown) => {
 };
 
 const ProfitForecast = ({ className }: { className?: string }) => {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "forecast"],
     queryFn: fetchDashboardForecast,
+    ...dashboardQueryDefaults,
   });
 
   const monthlyProfit = data?.profit.monthly ?? [];
 
-  const totalRevenue = monthlyProfit.reduce(
-    (sum, item) => sum + item.revenue,
-    0,
-  );
-  const totalCost = monthlyProfit.reduce(
-    (sum, item) => sum + item.totalCost,
-    0,
-  );
-  const totalProfit = monthlyProfit.reduce((sum, item) => sum + item.profit, 0);
+  const totalRevenue = sumBy(monthlyProfit, (item) => item.revenue);
+  const totalCost = sumBy(monthlyProfit, (item) => item.totalCost);
+  const totalProfit = sumBy(monthlyProfit, (item) => item.profit);
   const avgMargin = totalRevenue === 0 ? 0 : (totalProfit / totalRevenue) * 100;
 
   return (
@@ -67,15 +63,20 @@ const ProfitForecast = ({ className }: { className?: string }) => {
           Revenue, operating cost, and net profit across the latest six-month
           window.
         </p>
+        <DashboardCardStatus
+          isLoading={isLoading}
+          isFetching={isFetching}
+          isError={isError}
+          dataUpdatedAt={dataUpdatedAt}
+          refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
+        />
       </CardHeader>
       <CardContent className="dashboard-chart-content flex flex-col flex-1 gap-6 min-h-0">
         {isLoading && (
           <div className="h-40 rounded-xl bg-[#fdf7f1] animate-pulse" />
         )}
         {isError && (
-          <p className="text-sm text-[#b45309]">
-            Unable to load profit data.
-          </p>
+          <p className="text-sm text-[#b45309]">Unable to load profit data.</p>
         )}
         {!isLoading && !isError && (
           <>
@@ -118,9 +119,7 @@ const ProfitForecast = ({ className }: { className?: string }) => {
                     <CartesianGrid stroke="#f2e6dc" strokeDasharray="3 3" />
                     <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                     <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip
-                      formatter={(value) => formatTooltipValue(value)}
-                    />
+                    <Tooltip formatter={(value) => formatTooltipValue(value)} />
                     <Bar
                       dataKey="profit"
                       fill={totalProfit >= 0 ? "#16a34a" : "#dc2626"}
@@ -129,8 +128,8 @@ const ProfitForecast = ({ className }: { className?: string }) => {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <p className="text-xs text-[#8a6d56] mt-2">
-                Avg margin: {avgMargin.toFixed(1)}%
+              <p className="mt-2 text-xs text-[#8a6d56]">
+                Avg margin: {formatPercent(avgMargin)}
               </p>
             </div>
           </>

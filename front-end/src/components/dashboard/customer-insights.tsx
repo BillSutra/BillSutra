@@ -2,11 +2,15 @@
 
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { type DashboardCustomers, fetchDashboardCustomers } from "@/lib/apiClient";
+import {
+  type DashboardCustomers,
+  fetchDashboardCustomers,
+} from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { UsersRound } from "lucide-react";
-
-const formatCurrency = (value: number) => `₹${value.toLocaleString("en-IN")}`;
+import { formatCurrency, formatNumber } from "@/lib/dashboardUtils";
+import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
+import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 
 const getSegmentColor = (segment: string): string => {
   switch (segment) {
@@ -38,13 +42,16 @@ type CustomerClvEntry =
   DashboardCustomers["clvAnalytics"]["premiumCustomers"][number];
 
 const CustomerInsights = ({ className }: { className?: string }) => {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "customers"],
     queryFn: fetchDashboardCustomers,
+    ...dashboardQueryDefaults,
   });
 
   return (
-    <Card className={`dashboard-chart-surface flex flex-col gap-0 rounded-[1.75rem] ${className}`}>
+    <Card
+      className={`dashboard-chart-surface flex flex-col gap-0 rounded-[1.75rem] ${className}`}
+    >
       <CardHeader className="dashboard-chart-content gap-2">
         <div className="flex items-center gap-3">
           <div className="rounded-2xl border border-[#f2e6dc] bg-white/80 p-2 text-[#0f766e]">
@@ -62,6 +69,13 @@ const CustomerInsights = ({ className }: { className?: string }) => {
         <p className="text-sm text-[#8a6d56]">
           Loyalty, churn risk, and visit cadence across your customer base.
         </p>
+        <DashboardCardStatus
+          isLoading={isLoading}
+          isFetching={isFetching}
+          isError={isError}
+          dataUpdatedAt={dataUpdatedAt}
+          refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
+        />
       </CardHeader>
       <CardContent className="dashboard-chart-content flex min-h-0 flex-1 flex-col gap-5 overflow-auto">
         {isLoading && (
@@ -72,15 +86,17 @@ const CustomerInsights = ({ className }: { className?: string }) => {
         )}
         {!isLoading && !isError && data && (
           <>
-            {/* Summary counters */}
             <div className="grid gap-3 sm:grid-cols-3">
               {[
                 {
                   label: "Total Registered Customers",
-                  value: data.totalRegisteredCustomers,
+                  value: formatNumber(data.totalRegisteredCustomers),
                 },
-                { label: "Top customers", value: data.topCustomers.length },
-                { label: "Pending payments", value: data.pendingPayments },
+                { label: "Top customers", value: formatNumber(data.topCustomers.length) },
+                {
+                  label: "Pending payments",
+                  value: formatCurrency(data.pendingPayments),
+                },
               ].map((item) => (
                 <div
                   key={item.label}
@@ -96,14 +112,13 @@ const CustomerInsights = ({ className }: { className?: string }) => {
               ))}
             </div>
 
-            {/* CLV Summary Badges */}
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-green-200 bg-[linear-gradient(135deg,rgba(220,252,231,0.9),rgba(255,255,255,0.95))] p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-green-700 dark:text-green-400">
                   Premium
                 </p>
                 <p className="mt-2 text-2xl font-semibold text-green-900 dark:text-green-100">
-                  {data.clvAnalytics.premiumCount}
+                  {formatNumber(data.clvAnalytics.premiumCount)}
                 </p>
               </div>
               <div className="rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(224,242,254,0.9),rgba(255,255,255,0.95))] p-4">
@@ -111,7 +126,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                   Regular
                 </p>
                 <p className="mt-2 text-2xl font-semibold text-blue-900 dark:text-blue-100">
-                  {data.clvAnalytics.regularCount}
+                  {formatNumber(data.clvAnalytics.regularCount)}
                 </p>
               </div>
               <div className="rounded-2xl border border-[#e7ddd2] bg-[linear-gradient(135deg,rgba(255,249,242,0.96),rgba(255,255,255,0.95))] p-4">
@@ -119,12 +134,11 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                   New / Low
                 </p>
                 <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                  {data.clvAnalytics.newLowCount}
+                  {formatNumber(data.clvAnalytics.newLowCount)}
                 </p>
               </div>
             </div>
 
-            {/* Top Customers by Lifetime Value - with full details */}
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                 Top 5 customers by total purchase amount
@@ -140,13 +154,13 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                     let segment: "PREMIUM" | "REGULAR" | "NEW_LOW" = "NEW_LOW";
 
                     const premium = data.clvAnalytics.premiumCustomers.find(
-                      (c) => c.customerName === customer.name
+                      (c) => c.customerName === customer.name,
                     );
                     const regular = data.clvAnalytics.regularCustomers.find(
-                      (c) => c.customerName === customer.name
+                      (c) => c.customerName === customer.name,
                     );
                     const newLow = data.clvAnalytics.newLowCustomers.find(
-                      (c) => c.customerName === customer.name
+                      (c) => c.customerName === customer.name,
                     );
 
                     if (premium) {
@@ -171,7 +185,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                               {customer.name}
                             </p>
                             <span
-                              className={`text-xs font-medium px-2 py-1 rounded-full ${getSegmentColor(
+                              className={`rounded-full px-2 py-1 text-xs font-medium ${getSegmentColor(
                                 segment,
                               )}`}
                             >
@@ -197,7 +211,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                             </p>
                           </div>
                           <p className="mt-1 text-xs text-[#8a6d56]">
-                            Orders: {customer.numberOfOrders}
+                            Orders: {formatNumber(customer.numberOfOrders)}
                           </p>
                         </div>
                       </div>
@@ -207,7 +221,6 @@ const CustomerInsights = ({ className }: { className?: string }) => {
               )}
             </div>
 
-            {/* Customers at Risk */}
             {data.churnAnalytics && (
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
@@ -219,7 +232,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                       High Risk
                     </p>
                     <p className="mt-2 text-2xl font-semibold text-red-900 dark:text-red-100">
-                      {data.churnAnalytics.highRiskCount}
+                      {formatNumber(data.churnAnalytics.highRiskCount)}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-yellow-200 bg-[linear-gradient(135deg,rgba(254,249,195,0.78),rgba(255,255,255,0.95))] p-4">
@@ -227,7 +240,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                       Medium Risk
                     </p>
                     <p className="mt-2 text-2xl font-semibold text-yellow-900 dark:text-yellow-100">
-                      {data.churnAnalytics.mediumRiskCount}
+                      {formatNumber(data.churnAnalytics.mediumRiskCount)}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-green-200 bg-[linear-gradient(135deg,rgba(220,252,231,0.9),rgba(255,255,255,0.95))] p-4">
@@ -235,7 +248,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                       Low Risk
                     </p>
                     <p className="mt-2 text-2xl font-semibold text-green-900 dark:text-green-100">
-                      {data.churnAnalytics.lowRiskCount}
+                      {formatNumber(data.churnAnalytics.lowRiskCount)}
                     </p>
                   </div>
                 </div>
@@ -253,19 +266,21 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                               {customer.customerName}
                             </p>
                             <span
-                              className={`text-xs font-medium px-2 py-1 rounded-full ${
+                              className={`rounded-full px-2 py-1 text-xs font-medium ${
                                 customer.riskLevel === "HIGH_RISK"
                                   ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100"
                                   : customer.riskLevel === "MEDIUM_RISK"
-                                  ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100"
-                                  : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
+                                    ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-100"
+                                    : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
                               }`}
                             >
-                              {(customer.churnProbability * 100).toFixed(0)}% churn risk
+                              {(customer.churnProbability * 100).toFixed(0)}% churn
+                              risk
                             </span>
                           </div>
                           <p className="mt-1 text-xs text-[#8a6d56]">
-                            Last Purchase: {customer.daysSinceLastPurchase} days ago
+                            Last Purchase: {formatNumber(customer.daysSinceLastPurchase)} days
+                            ago
                           </p>
                         </div>
                       </div>
@@ -275,7 +290,6 @@ const CustomerInsights = ({ className }: { className?: string }) => {
               </div>
             )}
 
-            {/* Daily / Weekly / Monthly customers */}
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                 Daily / Weekly / Monthly customers
@@ -294,9 +308,9 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                       {period.label}
                     </p>
                     <p className="text-xs text-[#8a6d56]">
-                      Registered: {period.value.registeredCustomers} | Walk-in:{" "}
-                      {period.value.walkInCustomers} | Total:{" "}
-                      {period.value.totalCustomers}
+                      Registered: {formatNumber(period.value.registeredCustomers)} | Walk-in:{" "}
+                      {formatNumber(period.value.walkInCustomers)} | Total:{" "}
+                      {formatNumber(period.value.totalCustomers)}
                     </p>
                   </div>
                 ))}

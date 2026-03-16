@@ -3,19 +3,43 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { fetchDashboardOverview } from "@/lib/apiClient";
+import { fetchDashboardOverview, type DashboardOverview } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BellRing } from "lucide-react";
+import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
+import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 
-const NotificationsPanel = ({ className }: { className?: string }) => {
+const NotificationsPanel = ({
+  className,
+  data,
+  isLoading,
+  isError,
+  dataUpdatedAt,
+  isFetching,
+}: {
+  className?: string;
+  data?: DashboardOverview;
+  isLoading?: boolean;
+  isError?: boolean;
+  dataUpdatedAt?: number;
+  isFetching?: boolean;
+}) => {
   const router = useRouter();
-  const { data, isLoading, isError } = useQuery({
+  const fallbackQuery = useQuery({
     queryKey: ["dashboard", "overview"],
     queryFn: fetchDashboardOverview,
+    enabled: !data && !isLoading,
+    ...dashboardQueryDefaults,
   });
 
-  const notifications = data?.notifications ?? [];
+  const resolvedData = data ?? fallbackQuery.data;
+  const resolvedLoading = isLoading ?? fallbackQuery.isLoading;
+  const resolvedError = isError ?? fallbackQuery.isError;
+  const resolvedUpdatedAt = dataUpdatedAt ?? fallbackQuery.dataUpdatedAt;
+  const resolvedFetching = isFetching ?? fallbackQuery.isFetching;
+
+  const notifications = resolvedData?.notifications ?? [];
 
   const typeVariant = (type: string) => {
     if (type === "LOW_STOCK") return "pending";
@@ -24,7 +48,9 @@ const NotificationsPanel = ({ className }: { className?: string }) => {
   };
 
   return (
-    <Card className={`dashboard-chart-surface h-fit self-start gap-0 py-6 rounded-[1.75rem] ${className}`}>
+    <Card
+      className={`dashboard-chart-surface h-fit self-start gap-0 py-6 rounded-[1.75rem] ${className}`}
+    >
       <CardHeader className="dashboard-chart-content gap-2">
         <div className="flex items-center gap-3">
           <div className="rounded-2xl border border-[#f2e6dc] bg-white/80 p-2 text-[#b45309]">
@@ -42,15 +68,22 @@ const NotificationsPanel = ({ className }: { className?: string }) => {
         <p className="text-sm text-[#5f5144]">
           Review stock issues, unpaid invoices, and supplier reminders.
         </p>
+        <DashboardCardStatus
+          isLoading={resolvedLoading}
+          isFetching={resolvedFetching}
+          isError={resolvedError}
+          dataUpdatedAt={resolvedUpdatedAt}
+          refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
+        />
       </CardHeader>
       <CardContent className="dashboard-chart-content grid gap-3">
-        {isLoading && (
+        {resolvedLoading && (
           <div className="h-20 rounded-xl bg-white/70 animate-pulse" />
         )}
-        {isError && (
+        {resolvedError && (
           <p className="text-sm text-[#b45309]">Unable to load alerts.</p>
         )}
-        {!isLoading && !isError && (
+        {!resolvedLoading && !resolvedError && (
           <>
             {notifications.length === 0 ? (
               <div className="rounded-2xl border border-[#f2e6dc] bg-white/80 px-4 py-5 text-sm text-[#5f5144]">
@@ -69,10 +102,7 @@ const NotificationsPanel = ({ className }: { className?: string }) => {
                       <p className="min-w-0 flex-1 font-semibold leading-5 text-[#1f1b16]">
                         {notification.title}
                       </p>
-                      <Badge
-                        variant={typeVariant(notification.type)}
-                        className="shrink-0"
-                      >
+                      <Badge variant={typeVariant(notification.type)} className="shrink-0">
                         {notification.type.replaceAll("_", " ")}
                       </Badge>
                     </div>

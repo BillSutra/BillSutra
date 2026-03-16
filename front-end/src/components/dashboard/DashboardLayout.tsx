@@ -26,7 +26,7 @@ const DashboardLayout = ({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
+    <div className="dashboard-root min-h-screen text-gray-900 dark:text-gray-100">
       <div className="flex min-h-screen">
         <AppSidebar
           collapsed={collapsed}
@@ -47,7 +47,7 @@ const DashboardLayout = ({
             onOpenMobileMenu={() => setMobileOpen(true)}
           />
 
-          <main className="page-fade-in flex-1 px-4 py-6 sm:px-6">
+          <main className="page-fade-in dashboard-grid flex-1 px-4 py-6 sm:px-6">
             <section className="mb-6 flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">

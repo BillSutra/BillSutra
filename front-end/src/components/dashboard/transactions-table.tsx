@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import {
   ColumnDef,
   flexRender,
@@ -10,11 +10,17 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { useQuery } from "@tanstack/react-query";
-import { fetchDashboardTransactions } from "@/lib/apiClient";
+import {
+  fetchDashboardTransactions,
+  type DashboardOverviewFilters,
+} from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ReceiptText } from "lucide-react";
+import { formatCurrency } from "@/lib/dashboardUtils";
+import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
+import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 
 type TransactionRow = {
   date: string;
@@ -24,9 +30,7 @@ type TransactionRow = {
   paymentStatus: "PAID" | "PARTIAL" | "PENDING";
 };
 
-const formatCurrency = (value: number) => `₹${value.toLocaleString("en-IN")}`;
-
-const columns: ColumnDef<TransactionRow>[] = [
+const buildColumns = (): ColumnDef<TransactionRow>[] => [
   {
     accessorKey: "date",
     header: "Date",
@@ -63,11 +67,18 @@ const columns: ColumnDef<TransactionRow>[] = [
   },
 ];
 
-const TransactionsTable = () => {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["dashboard", "transactions"],
-    queryFn: fetchDashboardTransactions,
+const TransactionsTable = ({
+  filters,
+}: {
+  filters?: DashboardOverviewFilters;
+}) => {
+  const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
+    queryKey: ["dashboard", "transactions", filters],
+    queryFn: () => fetchDashboardTransactions(filters),
+    ...dashboardQueryDefaults,
   });
+
+  const columns = useMemo(() => buildColumns(), []);
 
   const table = useReactTable({
     data: data?.transactions ?? [],
@@ -96,6 +107,13 @@ const TransactionsTable = () => {
         <p className="text-sm text-[#8a6d56]">
           Track the latest invoices and payment status at a glance.
         </p>
+        <DashboardCardStatus
+          isLoading={isLoading}
+          isFetching={isFetching}
+          isError={isError}
+          dataUpdatedAt={dataUpdatedAt}
+          refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
+        />
       </CardHeader>
       <CardContent className="dashboard-chart-content">
         {isLoading && (
@@ -106,45 +124,51 @@ const TransactionsTable = () => {
         )}
         {!isLoading && !isError && (
           <>
-            <div className="overflow-hidden rounded-2xl border border-[#ecdccf] bg-white/85 shadow-[0_18px_40px_-30px_rgba(31,27,22,0.3)] dark:border-gray-700">
-              <table className="min-w-full text-sm">
-                <thead className="bg-[#fff5ea] dark:bg-gray-700/50">
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <tr key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => (
-                        <th
-                          key={header.id}
-                          className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6d56]"
-                        >
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext(),
-                              )}
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                  {table.getRowModel().rows.map((row) => (
+            <div className="max-h-[360px] overflow-auto rounded-2xl border border-[#ecdccf] bg-white/85 shadow-[0_18px_40px_-30px_rgba(31,27,22,0.3)] dark:border-gray-700">
+              {table.getRowModel().rows.length === 0 ? (
+                <div className="flex h-48 items-center justify-center px-4 text-sm text-[#8a6d56]">
+                  No transactions found for this range.
+                </div>
+              ) : (
+                <table className="min-w-full text-sm">
+                  <thead className="sticky top-0 z-10 bg-[#fff5ea] shadow-sm dark:bg-gray-700/70">
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <tr key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => (
+                          <th
+                            key={header.id}
+                            className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6d56]"
+                          >
+                            {header.isPlaceholder
+                              ? null
+                              : flexRender(
+                                  header.column.columnDef.header,
+                                  header.getContext(),
+                                )}
+                          </th>
+                        ))}
+                      </tr>
+                    ))}
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                    {table.getRowModel().rows.map((row) => (
                       <tr
                         key={row.id}
                         className="transition-colors odd:bg-white even:bg-[#fffaf5] hover:bg-[#f6efe6] dark:odd:bg-gray-800 dark:even:bg-gray-800/70 dark:hover:bg-indigo-500/10"
                       >
-                      {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-4 py-3 text-[#4b3a2a]">
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        {row.getVisibleCells().map((cell) => (
+                          <td key={cell.id} className="px-4 py-3 text-[#4b3a2a]">
+                            {flexRender(
+                              cell.column.columnDef.cell,
+                              cell.getContext(),
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
             <div className="mt-4 flex items-center justify-between">
               <p className="text-sm text-[#8a6d56]">

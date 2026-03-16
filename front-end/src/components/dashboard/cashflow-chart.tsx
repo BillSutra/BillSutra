@@ -15,11 +15,16 @@ import {
 } from "recharts";
 import { fetchDashboardCashflow } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  formatCompactCurrency,
+  formatCurrency,
+  formatDateLabel,
+} from "@/lib/dashboardUtils";
+import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
+import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 
 const INFLOW_COLOR = "#15803d";
 const OUTFLOW_COLOR = "#f97316";
-
-const formatCurrency = (value: number) => `₹${value.toLocaleString("en-IN")}`;
 
 type CashflowTooltipEntry = {
   color?: string;
@@ -39,16 +44,21 @@ const CustomTooltip = ({
   if (active && payload && payload.length) {
     return (
       <div className="rounded-lg border border-[#ecdccf] bg-white p-3 shadow-xl ring-1 ring-black/5">
-        <p className="font-semibold text-[#1f1b16] mb-2">{label}</p>
+        <p className="mb-2 font-semibold text-[#1f1b16]">
+          {label ? formatDateLabel(label) : ""}
+        </p>
         <div className="space-y-1.5">
           {payload.map((entry, index) => (
-            <div key={`${entry.name}-${index}`} className="flex items-center justify-between gap-4">
+            <div
+              key={`${entry.name}-${index}`}
+              className="flex items-center justify-between gap-4"
+            >
               <div className="flex items-center gap-2">
                 <div
                   className="h-2 w-2 rounded-full"
                   style={{ backgroundColor: entry.color }}
                 />
-                <span className="text-xs text-[#8a6d56] capitalize">
+                <span className="text-xs capitalize text-[#8a6d56]">
                   {entry.name}
                 </span>
               </div>
@@ -69,9 +79,10 @@ const legendFormatter = (value: string) => (
 );
 
 const CashFlowChart = ({ className }: { className?: string }) => {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "cashflow"],
     queryFn: fetchDashboardCashflow,
+    ...dashboardQueryDefaults,
   });
   const hasSeriesData = (data?.series ?? []).some(
     (item) => item.inflow > 0 || item.outflow > 0,
@@ -106,6 +117,14 @@ const CashFlowChart = ({ className }: { className?: string }) => {
               expenses.
             </p>
           </div>
+          <DashboardCardStatus
+            isLoading={isLoading}
+            isFetching={isFetching}
+            isError={isError}
+            dataUpdatedAt={dataUpdatedAt}
+            refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
+            className="lg:items-end lg:text-right"
+          />
           <div className="dashboard-chart-metric rounded-2xl px-4 py-3">
             <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
               Inflow source
@@ -155,80 +174,74 @@ const CashFlowChart = ({ className }: { className?: string }) => {
             </div>
 
             {hasSeriesData ? (
-            <div className="h-[320px] md:h-[360px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart
-                  data={data.series}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                >
-                  <defs>
-                    <linearGradient id="colorInflow" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={INFLOW_COLOR} stopOpacity={0.42} />
-                      <stop offset="95%" stopColor={INFLOW_COLOR} stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorOutflow" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={OUTFLOW_COLOR} stopOpacity={0.42} />
-                      <stop offset="95%" stopColor={OUTFLOW_COLOR} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid
-                    stroke="#f2e6dc"
-                    strokeDasharray="3 3"
-                    vertical={false}
-                  />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 10, fill: "#8a6d56" }}
-                    axisLine={{ stroke: "#ecdccf" }}
-                    tickLine={false}
-                    dy={10}
-                    interval={0}
-                    tickFormatter={(value) => {
-                      const date = new Date(value);
-                      return date.toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                      });
-                    }}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: "#8a6d56" }}
-                    axisLine={{ stroke: "#ecdccf" }}
-                    tickLine={false}
-                    tickFormatter={(value) => `₹${value / 1000}k`}
-                  />
-                  <ReferenceLine y={0} stroke="#8a6d56" strokeWidth={1} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend
-                    verticalAlign="top"
-                    align="right"
-                    iconType="circle"
-                    formatter={legendFormatter}
-                    wrapperStyle={{ paddingBottom: "20px", fontSize: "12px" }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="inflow"
-                    name="Cash Inflow"
-                    stroke={INFLOW_COLOR}
-                    fillOpacity={1}
-                    fill="url(#colorInflow)"
-                    strokeWidth={3}
-                    strokeLinecap="round"
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="outflow"
-                    name="Cash Outflow"
-                    stroke={OUTFLOW_COLOR}
-                    fillOpacity={1}
-                    fill="url(#colorOutflow)"
-                    strokeWidth={3}
-                    strokeLinecap="round"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+              <div className="h-[320px] md:h-[360px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart
+                    data={data.series}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  >
+                    <defs>
+                      <linearGradient id="colorInflow" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={INFLOW_COLOR} stopOpacity={0.42} />
+                        <stop offset="95%" stopColor={INFLOW_COLOR} stopOpacity={0} />
+                      </linearGradient>
+                      <linearGradient id="colorOutflow" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={OUTFLOW_COLOR} stopOpacity={0.42} />
+                        <stop offset="95%" stopColor={OUTFLOW_COLOR} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      stroke="#f2e6dc"
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 10, fill: "#8a6d56" }}
+                      axisLine={{ stroke: "#ecdccf" }}
+                      tickLine={false}
+                      dy={10}
+                      interval={0}
+                      tickFormatter={(value) => formatDateLabel(value)}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: "#8a6d56" }}
+                      axisLine={{ stroke: "#ecdccf" }}
+                      tickLine={false}
+                      tickFormatter={(value) => formatCompactCurrency(value)}
+                    />
+                    <ReferenceLine y={0} stroke="#8a6d56" strokeWidth={1} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Legend
+                      verticalAlign="top"
+                      align="right"
+                      iconType="circle"
+                      formatter={legendFormatter}
+                      wrapperStyle={{ paddingBottom: "20px", fontSize: "12px" }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="inflow"
+                      name="Cash Inflow"
+                      stroke={INFLOW_COLOR}
+                      fillOpacity={1}
+                      fill="url(#colorInflow)"
+                      strokeWidth={3}
+                      strokeLinecap="round"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="outflow"
+                      name="Cash Outflow"
+                      stroke={OUTFLOW_COLOR}
+                      fillOpacity={1}
+                      fill="url(#colorOutflow)"
+                      strokeWidth={3}
+                      strokeLinecap="round"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
               <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed border-[#ecdccf] bg-[#fffaf5] px-4 text-center text-sm text-[#5f5144]">
                 No cash flow activity recorded for this period yet.

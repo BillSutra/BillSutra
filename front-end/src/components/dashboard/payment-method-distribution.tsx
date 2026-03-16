@@ -1,14 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import {
   fetchDashboardPaymentMethods,
   type DashboardPaymentMethods,
@@ -16,6 +10,14 @@ import {
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  formatCurrency,
+  formatNumber,
+  formatPercent,
+  sumBy,
+} from "@/lib/dashboardUtils";
+import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
+import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 
 type DistributionItem = DashboardPaymentMethods["sales"][number];
 type PaymentMethodPeriod = DashboardPaymentMethods["period"];
@@ -37,8 +39,6 @@ const paymentMethodLabels: Record<DistributionItem["method"], string> = {
   CHEQUE: "Cheque",
   OTHER: "Other",
 };
-
-const formatCurrency = (value: number) => `Rs ${value.toLocaleString("en-IN")}`;
 
 const periodLabels: Record<PaymentMethodPeriod, string> = {
   week: "This Week",
@@ -71,7 +71,7 @@ const PaymentMethodTooltip = ({
         Amount: {formatCurrency(item.amount)}
       </p>
       <p className="text-xs text-[#8a6d56]">
-        Transactions: {item.count.toLocaleString("en-IN")}
+        Transactions: {formatNumber(item.count)}
       </p>
     </div>
   );
@@ -84,6 +84,7 @@ const DistributionCard = ({
   data,
   isLoading,
   isError,
+  status,
 }: {
   title: string;
   description: string;
@@ -91,15 +92,33 @@ const DistributionCard = ({
   data: DistributionItem[];
   isLoading: boolean;
   isError: boolean;
+  status: {
+    isFetching?: boolean;
+    isLoading?: boolean;
+    isError?: boolean;
+    dataUpdatedAt?: number;
+    refreshIntervalMs?: number;
+  };
 }) => {
-  const totalAmount = data.reduce((sum, item) => sum + item.amount, 0);
-  const totalTransactions = data.reduce((sum, item) => sum + item.count, 0);
+  const totals = useMemo(() => {
+    return {
+      totalAmount: sumBy(data, (item) => item.amount),
+      totalTransactions: sumBy(data, (item) => item.count),
+    };
+  }, [data]);
 
   return (
     <Card className="dashboard-chart-surface rounded-[1.75rem]">
       <CardHeader className="dashboard-chart-content gap-1">
         <CardTitle className="text-base text-[#1f1b16]">{title}</CardTitle>
         <p className="text-sm text-[#5f5144]">{description}</p>
+        <DashboardCardStatus
+          isLoading={status.isLoading}
+          isFetching={status.isFetching}
+          isError={status.isError}
+          dataUpdatedAt={status.dataUpdatedAt}
+          refreshIntervalMs={status.refreshIntervalMs}
+        />
       </CardHeader>
       <CardContent className="dashboard-chart-content grid gap-4">
         {isLoading ? (
@@ -120,7 +139,7 @@ const DistributionCard = ({
                   Total amount
                 </p>
                 <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
-                  {formatCurrency(totalAmount)}
+                  {formatCurrency(totals.totalAmount)}
                 </p>
               </div>
               <div className="dashboard-chart-metric rounded-2xl p-4">
@@ -128,7 +147,7 @@ const DistributionCard = ({
                   Transactions
                 </p>
                 <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
-                  {totalTransactions.toLocaleString("en-IN")}
+                  {formatNumber(totals.totalTransactions)}
                 </p>
               </div>
             </div>
@@ -167,7 +186,10 @@ const DistributionCard = ({
                   </p>
                 </div>
                 {data.map((item, index) => {
-                  const share = totalAmount === 0 ? 0 : (item.amount / totalAmount) * 100;
+                  const share =
+                    totals.totalAmount === 0
+                      ? 0
+                      : (item.amount / totals.totalAmount) * 100;
 
                   return (
                     <div
@@ -188,14 +210,14 @@ const DistributionCard = ({
                           </p>
                         </div>
                         <p className="text-xs font-semibold text-[#5f5144]">
-                          {share.toFixed(1)}%
+                          {formatPercent(share)}
                         </p>
                       </div>
                       <p className="mt-2 text-sm text-[#1f1b16]">
                         {formatCurrency(item.amount)}
                       </p>
                       <p className="text-xs text-[#5f5144]">
-                        {item.count.toLocaleString("en-IN")} transaction(s)
+                        {formatNumber(item.count)} transaction(s)
                       </p>
                     </div>
                   );
@@ -212,9 +234,10 @@ const DistributionCard = ({
 const PaymentMethodDistribution = ({ className }: { className?: string }) => {
   const [period, setPeriod] = useState<PaymentMethodPeriod>("month");
 
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "paymentMethods", period],
     queryFn: () => fetchDashboardPaymentMethods(period),
+    ...dashboardQueryDefaults,
   });
 
   return (
@@ -229,7 +252,7 @@ const PaymentMethodDistribution = ({ className }: { className?: string }) => {
           </p>
         </div>
         <div className="flex w-fit rounded-lg border border-[#ecdccf] bg-[#fdf7f1] p-1">
-          {(["week", "month", "year"] as PaymentMethodPeriod[]).map((item) => (
+          {(Object.keys(periodLabels) as PaymentMethodPeriod[]).map((item) => (
             <Button
               key={item}
               type="button"
@@ -251,19 +274,37 @@ const PaymentMethodDistribution = ({ className }: { className?: string }) => {
       <div className="grid gap-4 lg:grid-cols-2">
         <DistributionCard
           title="Sales payment methods"
-          description={`Collected amount distribution for ${periodLabels[period].toLowerCase()}.`}
+          description={`Collected amount distribution for ${periodLabels[
+            period
+          ].toLowerCase()}.`}
           emptyMessage="No recorded sale payments in this period."
           data={data?.sales ?? []}
           isLoading={isLoading}
           isError={isError}
+          status={{
+            isLoading,
+            isFetching,
+            isError,
+            dataUpdatedAt,
+            refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
+          }}
         />
         <DistributionCard
           title="Purchase payment methods"
-          description={`Paid amount distribution for ${periodLabels[period].toLowerCase()}.`}
+          description={`Paid amount distribution for ${periodLabels[
+            period
+          ].toLowerCase()}.`}
           emptyMessage="No recorded purchase payments in this period."
           data={data?.purchases ?? []}
           isLoading={isLoading}
           isError={isError}
+          status={{
+            isLoading,
+            isFetching,
+            isError,
+            dataUpdatedAt,
+            refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
+          }}
         />
       </div>
     </section>

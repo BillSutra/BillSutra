@@ -17,8 +17,20 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { fetchDashboardSales, type DashboardSales } from "@/lib/apiClient";
+import {
+  fetchDashboardSales,
+  type DashboardOverviewFilters,
+  type DashboardSales,
+} from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  formatCompactCurrency,
+  formatCurrency,
+  formatDateLabel,
+  sumBy,
+} from "@/lib/dashboardUtils";
+import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
+import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 
 const fallbackSales: DashboardSales = {
   last7Days: [],
@@ -40,8 +52,6 @@ const chartColors = [
   "#ec4899",
 ];
 
-const formatCurrency = (value: number) => `₹${value.toLocaleString("en-IN")}`;
-
 const formatTooltipValue = (value: unknown) => {
   if (Array.isArray(value)) {
     return formatTooltipValue(value[0]);
@@ -58,12 +68,6 @@ const formatTooltipValue = (value: unknown) => {
 
   return formatCurrency(0);
 };
-
-const formatCompactCurrency = (value: number) =>
-  new Intl.NumberFormat("en-IN", {
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
 
 const legendFormatter = (value: string) => (
   <span className="text-sm font-medium text-[#5c4331]">{value}</span>
@@ -83,12 +87,7 @@ const CustomTooltip = ({
   return (
     <div className="rounded-xl border border-[#ecdccf] bg-white/95 p-3 shadow-xl">
       <p className="text-sm font-semibold text-[#1f1b16]">
-        {label
-          ? new Date(label).toLocaleDateString("en-US", {
-              month: "short",
-              day: "numeric",
-            })
-          : ""}
+        {label ? formatDateLabel(label) : ""}
       </p>
       <div className="mt-2 space-y-1.5">
         {payload.map((entry) => (
@@ -115,25 +114,20 @@ const CustomTooltip = ({
   );
 };
 
-const SalesChart = () => {
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["dashboard", "sales"],
-    queryFn: fetchDashboardSales,
+const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
+  const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
+    queryKey: ["dashboard", "sales", filters],
+    queryFn: () => fetchDashboardSales(filters),
+    ...dashboardQueryDefaults,
   });
 
   const salesData = data ?? fallbackSales;
-  const sales7Total = salesData.last7Days.reduce((sum, item) => sum + item.sales, 0);
-  const purchases7Total = salesData.last7Days.reduce(
-    (sum, item) => sum + item.purchases,
-    0,
-  );
-  const sales30Total = salesData.last30Days.reduce(
-    (sum, item) => sum + item.sales,
-    0,
-  );
-  const purchases30Total = salesData.last30Days.reduce(
-    (sum, item) => sum + item.purchases,
-    0,
+  const sales7Total = sumBy(salesData.last7Days, (item) => item.sales);
+  const purchases7Total = sumBy(salesData.last7Days, (item) => item.purchases);
+  const sales30Total = sumBy(salesData.last30Days, (item) => item.sales);
+  const purchases30Total = sumBy(
+    salesData.last30Days,
+    (item) => item.purchases,
   );
 
   return (
@@ -153,6 +147,14 @@ const SalesChart = () => {
                 bursts and stocking pressure.
               </p>
             </div>
+            <DashboardCardStatus
+              isLoading={isLoading}
+              isFetching={isFetching}
+              isError={isError}
+              dataUpdatedAt={dataUpdatedAt}
+              refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
+              className="lg:items-end lg:text-right"
+            />
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="dashboard-chart-metric rounded-2xl px-4 py-3">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
@@ -199,12 +201,7 @@ const SalesChart = () => {
                       <XAxis
                         dataKey="date"
                         tick={{ fontSize: 12, fill: "#8a6d56" }}
-                        tickFormatter={(value) =>
-                          new Date(value).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })
-                        }
+                        tickFormatter={(value) => formatDateLabel(value)}
                       />
                       <YAxis
                         tick={{ fontSize: 12, fill: "#8a6d56" }}
@@ -271,12 +268,7 @@ const SalesChart = () => {
                       <XAxis
                         dataKey="date"
                         tick={{ fontSize: 12, fill: "#8a6d56" }}
-                        tickFormatter={(value) =>
-                          new Date(value).toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                          })
-                        }
+                        tickFormatter={(value) => formatDateLabel(value)}
                       />
                       <YAxis
                         tick={{ fontSize: 12, fill: "#8a6d56" }}
@@ -336,6 +328,13 @@ const SalesChart = () => {
             <p className="text-sm text-[#8a6d56]">
               Monthly sales and purchase movement across the latest six months.
             </p>
+            <DashboardCardStatus
+              isLoading={isLoading}
+              isFetching={isFetching}
+              isError={isError}
+              dataUpdatedAt={dataUpdatedAt}
+              refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
+            />
           </CardHeader>
           <CardContent className="dashboard-chart-content">
             <div className="h-44">
@@ -374,6 +373,13 @@ const SalesChart = () => {
             <p className="text-sm text-[#8a6d56]">
               Top categories ranked by booked sales value.
             </p>
+            <DashboardCardStatus
+              isLoading={isLoading}
+              isFetching={isFetching}
+              isError={isError}
+              dataUpdatedAt={dataUpdatedAt}
+              refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
+            />
           </CardHeader>
           <CardContent className="dashboard-chart-content">
             <div className="h-40">
@@ -406,7 +412,9 @@ const SalesChart = () => {
                 >
                   <span
                     className="h-3.5 w-3.5 rounded-full"
-                    style={{ backgroundColor: chartColors[index % chartColors.length] }}
+                    style={{
+                      backgroundColor: chartColors[index % chartColors.length],
+                    }}
                   />
                   <span>{entry.name}</span>
                 </div>

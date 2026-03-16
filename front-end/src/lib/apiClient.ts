@@ -323,6 +323,13 @@ export type InventoryAdjustInput = {
 };
 
 export type DashboardOverview = {
+  filters?: {
+    range: string;
+    label: string;
+    granularity: string;
+    startDate: string;
+    endDate: string;
+  };
   metrics: {
     totalRevenue: number;
     totalSales: number;
@@ -396,6 +403,23 @@ export type DashboardOverview = {
     date: string;
   }>;
   activity: Array<{ time: string; label: string }>;
+};
+
+export type DashboardOverviewFilters = {
+  range?: "7d" | "30d" | "90d" | "ytd" | "custom";
+  startDate?: string;
+  endDate?: string;
+  granularity?: "day" | "week" | "month";
+};
+
+const buildDashboardFilterParams = (filters?: DashboardOverviewFilters) => {
+  if (!filters) return undefined;
+  const params: Record<string, string> = {};
+  if (filters.range) params.range = filters.range;
+  if (filters.startDate) params.startDate = filters.startDate;
+  if (filters.endDate) params.endDate = filters.endDate;
+  if (filters.granularity) params.granularity = filters.granularity;
+  return params;
 };
 
 export type PaymentInput = {
@@ -956,13 +980,21 @@ export const adjustInventory = async (
   return response.data.data as { inventory: Inventory; product: Product };
 };
 
-export const fetchDashboardOverview = async (): Promise<DashboardOverview> => {
-  const response = await apiClient.get("/dashboard/overview");
+export const fetchDashboardOverview = async (
+  filters?: DashboardOverviewFilters,
+): Promise<DashboardOverview> => {
+  const response = await apiClient.get("/dashboard/overview", {
+    params: buildDashboardFilterParams(filters),
+  });
   return response.data.data as DashboardOverview;
 };
 
-export const fetchDashboardSales = async (): Promise<DashboardSales> => {
-  const response = await apiClient.get("/dashboard/sales");
+export const fetchDashboardSales = async (
+  filters?: DashboardOverviewFilters,
+): Promise<DashboardSales> => {
+  const response = await apiClient.get("/dashboard/sales", {
+    params: buildDashboardFilterParams(filters),
+  });
   return response.data.data as DashboardSales;
 };
 
@@ -991,8 +1023,10 @@ export const fetchDashboardPaymentMethods = async (
 };
 
 export const fetchDashboardTransactions =
-  async (): Promise<DashboardTransactions> => {
-    const response = await apiClient.get("/dashboard/transactions");
+  async (filters?: DashboardOverviewFilters): Promise<DashboardTransactions> => {
+    const response = await apiClient.get("/dashboard/transactions", {
+      params: buildDashboardFilterParams(filters),
+    });
     return response.data.data as DashboardTransactions;
   };
 

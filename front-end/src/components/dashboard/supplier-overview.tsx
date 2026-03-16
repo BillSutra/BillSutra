@@ -2,11 +2,15 @@
 
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { type DashboardSuppliers, fetchDashboardSuppliers } from "@/lib/apiClient";
+import {
+  type DashboardSuppliers,
+  fetchDashboardSuppliers,
+} from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Truck } from "lucide-react";
-
-const formatCurrency = (value: number) => `₹${value.toLocaleString("en-IN")}`;
+import { formatCurrency, formatNumber } from "@/lib/dashboardUtils";
+import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
+import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 
 const getSegmentColor = (segment: string): string => {
   switch (segment) {
@@ -27,13 +31,16 @@ type SupplierLtvEntry =
     : never;
 
 const SupplierOverview = ({ className }: { className?: string }) => {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "suppliers"],
     queryFn: fetchDashboardSuppliers,
+    ...dashboardQueryDefaults,
   });
 
   return (
-    <Card className={`dashboard-chart-surface flex flex-col gap-0 rounded-[1.75rem] ${className}`}>
+    <Card
+      className={`dashboard-chart-surface flex flex-col gap-0 rounded-[1.75rem] ${className}`}
+    >
       <CardHeader className="dashboard-chart-content gap-2">
         <div className="flex items-center gap-3">
           <div className="rounded-2xl border border-[#f2e6dc] bg-white/80 p-2 text-[#8b5e34]">
@@ -51,6 +58,13 @@ const SupplierOverview = ({ className }: { className?: string }) => {
         <p className="text-sm text-[#8a6d56]">
           Purchase concentration, payables, and top supplier relationships.
         </p>
+        <DashboardCardStatus
+          isLoading={isLoading}
+          isFetching={isFetching}
+          isError={isError}
+          dataUpdatedAt={dataUpdatedAt}
+          refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
+        />
       </CardHeader>
       <CardContent className="dashboard-chart-content flex min-h-0 flex-1 flex-col gap-5 overflow-auto">
         {isLoading && (
@@ -61,11 +75,13 @@ const SupplierOverview = ({ className }: { className?: string }) => {
         )}
         {!isLoading && !isError && data && (
           <>
-            {/* Summary counters */}
             <div className="grid gap-3 sm:grid-cols-3">
               {[
-                { label: "Total Suppliers", value: data.total },
-                { label: "Recent Purchases", value: data.recentPurchases },
+                { label: "Total Suppliers", value: formatNumber(data.total) },
+                {
+                  label: "Recent Purchases",
+                  value: formatNumber(data.recentPurchases),
+                },
                 {
                   label: "Outstanding Payables",
                   value: formatCurrency(data.outstandingPayables),
@@ -85,7 +101,6 @@ const SupplierOverview = ({ className }: { className?: string }) => {
               ))}
             </div>
 
-            {/* Supplier Segmentation Badges */}
             {data.supplierAnalytics && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-green-200 bg-[linear-gradient(135deg,rgba(220,252,231,0.9),rgba(255,255,255,0.95))] p-4">
@@ -93,7 +108,7 @@ const SupplierOverview = ({ className }: { className?: string }) => {
                     High Value
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-green-900 dark:text-green-100">
-                    {data.supplierAnalytics.highValueCount}
+                    {formatNumber(data.supplierAnalytics.highValueCount)}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-[#e7ddd2] bg-[linear-gradient(135deg,rgba(255,249,242,0.96),rgba(255,255,255,0.95))] p-4">
@@ -101,13 +116,12 @@ const SupplierOverview = ({ className }: { className?: string }) => {
                     Low Value
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                    {data.supplierAnalytics.lowValueCount}
+                    {formatNumber(data.supplierAnalytics.lowValueCount)}
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Top Suppliers with LTV Analysis */}
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                 Top 5 suppliers by total purchase amount
@@ -119,17 +133,16 @@ const SupplierOverview = ({ className }: { className?: string }) => {
               ) : (
                 <div className="mt-3 grid gap-2">
                   {data.topSuppliers?.map((supplier) => {
-                    let segment: "HIGH_VALUE" | "LOW_VALUE" =
-                      "LOW_VALUE";
+                    let segment: "HIGH_VALUE" | "LOW_VALUE" = "LOW_VALUE";
                     let ltvData: SupplierLtvEntry | null = null;
 
                     const highValue =
                       data.supplierAnalytics?.highValueSuppliers?.find(
-                        (s) => s.supplierName === supplier.name
+                        (s) => s.supplierName === supplier.name,
                       );
                     const lowValue =
                       data.supplierAnalytics?.lowValueSuppliers?.find(
-                        (s) => s.supplierName === supplier.name
+                        (s) => s.supplierName === supplier.name,
                       );
 
                     if (highValue) {
@@ -151,13 +164,11 @@ const SupplierOverview = ({ className }: { className?: string }) => {
                               {supplier.name}
                             </p>
                             <span
-                              className={`text-xs font-medium px-2 py-1 rounded-full ${getSegmentColor(
+                              className={`rounded-full px-2 py-1 text-xs font-medium ${getSegmentColor(
                                 segment,
                               )}`}
                             >
-                              {segment === "HIGH_VALUE"
-                                ? "High Value"
-                                : "Low Value"}
+                              {segment === "HIGH_VALUE" ? "High Value" : "Low Value"}
                             </span>
                           </div>
                           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-[#8a6d56]">
@@ -179,7 +190,7 @@ const SupplierOverview = ({ className }: { className?: string }) => {
                             </p>
                           </div>
                           <p className="mt-1 text-xs text-[#8a6d56]">
-                            Orders: {supplier.numberOfOrders}
+                            Orders: {formatNumber(supplier.numberOfOrders)}
                           </p>
                         </div>
                       </div>

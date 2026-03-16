@@ -13,6 +13,8 @@ type NotificationInput = {
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 
+const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
+
 const toMonthKey = (date: Date) =>
   `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 
@@ -278,4 +280,1074 @@ export const buildNotifications = ({
     ...salesPendingNotifications,
     ...supplierNotifications,
   ];
+};
+
+type DashboardRangePreset = "7d" | "30d" | "90d" | "ytd" | "custom";
+type DashboardGranularity = "day" | "week" | "month";
+
+export type DashboardFilterInput = {
+  range?: unknown;
+  startDate?: unknown;
+  endDate?: unknown;
+  granularity?: unknown;
+};
+
+type PaymentMethodKey =
+  | "CASH"
+  | "CARD"
+  | "BANK_TRANSFER"
+  | "UPI"
+  | "CHEQUE"
+  | "OTHER";
+
+type SaleSnapshot = {
+  id: number;
+  sale_date: Date;
+  total: Prisma.Decimal | number;
+  totalAmount: Prisma.Decimal | number;
+  paidAmount: Prisma.Decimal | number;
+  pendingAmount: Prisma.Decimal | number;
+  paymentStatus: string;
+  paymentMethod: PaymentMethodKey | null;
+  customer: { name: string | null } | null;
+};
+
+type PurchaseSnapshot = {
+  id: number;
+  purchase_date: Date;
+  total: Prisma.Decimal | number;
+  totalAmount: Prisma.Decimal | number;
+  paidAmount: Prisma.Decimal | number;
+  pendingAmount: Prisma.Decimal | number;
+  paymentStatus: string;
+  paymentMethod: PaymentMethodKey | null;
+  supplier: { name: string | null } | null;
+};
+
+type ExpenseDailyPoint = {
+  day: Date;
+  amount: number;
+};
+
+type DashboardBucket = {
+  key: string;
+  start: Date;
+  end: Date;
+  label: string;
+};
+
+type DashboardSummaryTotals = {
+  bookedRevenue: number;
+  collectedRevenue: number;
+  bookedPurchases: number;
+  cashOutflow: number;
+  receivables: number;
+  payables: number;
+  expenses: number;
+  bookedProfit: number;
+  margin: number;
+};
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const roundMetric = (value: number, digits = 2) => {
+  if (!Number.isFinite(value)) return 0;
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+};
+
+const startOfDayUtc = (date: Date) =>
+  new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+
+const addDaysUtc = (date: Date, days: number) => {
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+};
+
+const startOfWeekUtc = (date: Date) => {
+  const normalized = startOfDayUtc(date);
+  const offset = (normalized.getUTCDay() + 6) % 7;
+  return addDaysUtc(normalized, -offset);
+};
+
+const startOfMonthUtc = (date: Date) =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+
+const endOfDayLabel = (date: Date) =>
+  date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+
+const parseDateInput = (value: unknown) => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return null;
+  const parsed = new Date(`${trimmed}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const safePercentChange = (current: number, previous: number) => {
+  if (!Number.isFinite(current) || !Number.isFinite(previous)) return 0;
+  if (previous === 0) {
+    return current === 0 ? 0 : 100;
+  }
+  return roundMetric(((current - previous) / Math.abs(previous)) * 100, 1);
+};
+
+const resolveGranularity = (
+  raw: unknown,
+  daySpan: number,
+): DashboardGranularity => {
+  if (raw === "day" || raw === "week" || raw === "month") {
+    return raw;
+  }
+  if (daySpan <= 31) return "day";
+  if (daySpan <= 120) return "week";
+  return "month";
+};
+
+export const resolveDashboardFilters = (
+  input: DashboardFilterInput,
+  now = new Date(),
+) => {
+  const today = startOfDayUtc(now);
+  const range = (
+    typeof input.range === "string" ? input.range.toLowerCase().trim() : "30d"
+  ) as DashboardRangePreset;
+
+  let resolvedRange: DashboardRangePreset = "30d";
+  let start = addDaysUtc(today, -29);
+  let endInclusive = today;
+
+  if (range === "7d") {
+    resolvedRange = "7d";
+    start = addDaysUtc(today, -6);
+  } else if (range === "90d") {
+    resolvedRange = "90d";
+    start = addDaysUtc(today, -89);
+  } else if (range === "ytd") {
+    resolvedRange = "ytd";
+    start = new Date(Date.UTC(today.getUTCFullYear(), 0, 1));
+  } else if (range === "custom") {
+    const parsedStart = parseDateInput(input.startDate);
+    const parsedEnd = parseDateInput(input.endDate);
+    if (parsedStart && parsedEnd) {
+      resolvedRange = "custom";
+      start =
+        parsedStart.getTime() <= parsedEnd.getTime() ? parsedStart : parsedEnd;
+      endInclusive =
+        parsedStart.getTime() <= parsedEnd.getTime() ? parsedEnd : parsedStart;
+    }
+  }
+
+  const endExclusive = addDaysUtc(endInclusive, 1);
+  const daySpan = Math.max(
+    1,
+    Math.round((endExclusive.getTime() - start.getTime()) / MS_PER_DAY),
+  );
+  const previousStart = addDaysUtc(start, -daySpan);
+  const previousEndExclusive = start;
+  const granularity = resolveGranularity(input.granularity, daySpan);
+
+  const label =
+    resolvedRange === "7d"
+      ? "Last 7 days"
+      : resolvedRange === "30d"
+        ? "Last 30 days"
+        : resolvedRange === "90d"
+          ? "Last 90 days"
+          : resolvedRange === "ytd"
+            ? "Year to date"
+            : `${endOfDayLabel(start)} - ${endOfDayLabel(endInclusive)}`;
+
+  return {
+    range: resolvedRange,
+    start,
+    endInclusive,
+    endExclusive,
+    previousStart,
+    previousEndExclusive,
+    granularity,
+    daySpan,
+    label,
+  };
+};
+
+const formatBucketLabel = (
+  start: Date,
+  endExclusive: Date,
+  granularity: DashboardGranularity,
+) => {
+  if (granularity === "month") {
+    return monthLabel(start);
+  }
+
+  if (granularity === "week") {
+    const end = addDaysUtc(endExclusive, -1);
+    return `${endOfDayLabel(start)} - ${endOfDayLabel(end)}`;
+  }
+
+  return endOfDayLabel(start);
+};
+
+const buildDashboardBuckets = (
+  start: Date,
+  endExclusive: Date,
+  granularity: DashboardGranularity,
+) => {
+  const buckets: DashboardBucket[] = [];
+
+  if (granularity === "day") {
+    for (let cursor = startOfDayUtc(start); cursor < endExclusive; cursor = addDaysUtc(cursor, 1)) {
+      buckets.push({
+        key: toDateKey(cursor),
+        start: cursor,
+        end: addDaysUtc(cursor, 1),
+        label: formatBucketLabel(cursor, addDaysUtc(cursor, 1), "day"),
+      });
+    }
+    return buckets;
+  }
+
+  if (granularity === "week") {
+    for (let cursor = startOfWeekUtc(start); cursor < endExclusive; cursor = addDaysUtc(cursor, 7)) {
+      const bucketStart = new Date(
+        Math.max(cursor.getTime(), start.getTime()),
+      );
+      const bucketEnd = new Date(
+        Math.min(addDaysUtc(cursor, 7).getTime(), endExclusive.getTime()),
+      );
+
+      if (bucketStart < bucketEnd) {
+        buckets.push({
+          key: toDateKey(cursor),
+          start: bucketStart,
+          end: bucketEnd,
+          label: formatBucketLabel(bucketStart, bucketEnd, "week"),
+        });
+      }
+    }
+    return buckets;
+  }
+
+  for (
+    let cursor = startOfMonthUtc(start);
+    cursor < endExclusive;
+    cursor = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1))
+  ) {
+    const nextMonth = new Date(
+      Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1),
+    );
+    const bucketStart = new Date(Math.max(cursor.getTime(), start.getTime()));
+    const bucketEnd = new Date(Math.min(nextMonth.getTime(), endExclusive.getTime()));
+
+    if (bucketStart < bucketEnd) {
+      buckets.push({
+        key: toMonthKey(cursor),
+        start: bucketStart,
+        end: bucketEnd,
+        label: formatBucketLabel(cursor, nextMonth, "month"),
+      });
+    }
+  }
+
+  return buckets;
+};
+
+const resolveBucketKey = (
+  date: Date,
+  granularity: DashboardGranularity,
+) => {
+  if (granularity === "day") return toDateKey(date);
+  if (granularity === "week") return toDateKey(startOfWeekUtc(date));
+  return toMonthKey(date);
+};
+
+const resolveRecordedTotal = (totalAmount: unknown, total: unknown) => {
+  const preferred = toNumber(totalAmount);
+  if (preferred > 0) return preferred;
+  return toNumber(total);
+};
+
+const resolveRealizedAmount = (
+  paymentStatus: string,
+  totalAmount: unknown,
+  paidAmount: unknown,
+  fallbackTotal?: unknown,
+) => {
+  const total = resolveRecordedTotal(totalAmount, fallbackTotal);
+  const paid = Math.max(0, Math.min(toNumber(paidAmount), total));
+
+  if (paymentStatus === "PAID") return total;
+  if (paymentStatus === "PARTIALLY_PAID") return paid;
+  return 0;
+};
+
+const computeDashboardTotals = (params: {
+  sales: Array<Pick<SaleSnapshot, "total" | "totalAmount" | "paidAmount" | "pendingAmount" | "paymentStatus">>;
+  purchases: Array<Pick<PurchaseSnapshot, "total" | "totalAmount" | "paidAmount" | "pendingAmount" | "paymentStatus">>;
+  expenses: number;
+}) => {
+  const { sales, purchases, expenses } = params;
+
+  const bookedRevenue = sales.reduce(
+    (sum, sale) => sum + resolveRecordedTotal(sale.totalAmount, sale.total),
+    0,
+  );
+  const collectedRevenue = sales.reduce(
+    (sum, sale) =>
+      sum +
+      resolveRealizedAmount(
+        sale.paymentStatus,
+        sale.totalAmount,
+        sale.paidAmount,
+        sale.total,
+      ),
+    0,
+  );
+  const receivables = sales.reduce(
+    (sum, sale) => sum + Math.max(0, toNumber(sale.pendingAmount)),
+    0,
+  );
+  const bookedPurchases = purchases.reduce(
+    (sum, purchase) =>
+      sum + resolveRecordedTotal(purchase.totalAmount, purchase.total),
+    0,
+  );
+  const cashOutflow = purchases.reduce(
+    (sum, purchase) =>
+      sum +
+      resolveRealizedAmount(
+        purchase.paymentStatus,
+        purchase.totalAmount,
+        purchase.paidAmount,
+        purchase.total,
+      ),
+    0,
+  );
+  const payables = purchases.reduce(
+    (sum, purchase) => sum + Math.max(0, toNumber(purchase.pendingAmount)),
+    0,
+  );
+  const bookedProfit = bookedRevenue - bookedPurchases - expenses;
+  const margin = bookedRevenue === 0 ? 0 : (bookedProfit / bookedRevenue) * 100;
+
+  return {
+    bookedRevenue: roundMetric(bookedRevenue),
+    collectedRevenue: roundMetric(collectedRevenue),
+    bookedPurchases: roundMetric(bookedPurchases),
+    cashOutflow: roundMetric(cashOutflow + expenses),
+    receivables: roundMetric(receivables),
+    payables: roundMetric(payables),
+    expenses: roundMetric(expenses),
+    bookedProfit: roundMetric(bookedProfit),
+    margin: roundMetric(margin, 1),
+  } satisfies DashboardSummaryTotals;
+};
+
+const fetchProfitSnapshot = async (params: {
+  userId: number;
+  start: Date;
+  endExclusive: Date;
+}) => {
+  const { userId, start, endExclusive } = params;
+
+  const [sales, purchases, expenses] = await Promise.all([
+    prisma.sale.findMany({
+      where: { user_id: userId, sale_date: { gte: start, lt: endExclusive } },
+      select: {
+        total: true,
+        totalAmount: true,
+        paidAmount: true,
+        pendingAmount: true,
+        paymentStatus: true,
+      },
+    }),
+    prisma.purchase.findMany({
+      where: {
+        user_id: userId,
+        purchase_date: { gte: start, lt: endExclusive },
+      },
+      select: {
+        total: true,
+        totalAmount: true,
+        paidAmount: true,
+        pendingAmount: true,
+        paymentStatus: true,
+      },
+    }),
+    getExpenseTotals({ userId, from: start, to: endExclusive }),
+  ]);
+
+  return computeDashboardTotals({
+    sales,
+    purchases,
+    expenses,
+  });
+};
+
+const daysInMonthUtc = (year: number, monthIndex: number) =>
+  new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+
+const buildPaymentMethodBreakdown = <
+  T extends {
+    paymentMethod: PaymentMethodKey | null;
+    paymentStatus: string;
+    totalAmount: unknown;
+    total?: unknown;
+    paidAmount: unknown;
+  },
+>(
+  rows: T[],
+) => {
+  const methodMap = new Map<
+    PaymentMethodKey,
+    { method: PaymentMethodKey; count: number; amount: number }
+  >();
+
+  rows.forEach((row) => {
+    if (!row.paymentMethod) return;
+    const realized = resolveRealizedAmount(
+      row.paymentStatus,
+      row.totalAmount,
+      row.paidAmount,
+      row.total,
+    );
+    if (realized <= 0) return;
+
+    const current = methodMap.get(row.paymentMethod) ?? {
+      method: row.paymentMethod,
+      count: 0,
+      amount: 0,
+    };
+
+    current.count += 1;
+    current.amount += realized;
+    methodMap.set(row.paymentMethod, current);
+  });
+
+  return Array.from(methodMap.values())
+    .map((item) => ({
+      method: item.method,
+      count: item.count,
+      amount: roundMetric(item.amount),
+    }))
+    .sort((a, b) => b.amount - a.amount);
+};
+
+export const buildDashboardOverview = async (params: {
+  userId: number;
+  filters: DashboardFilterInput;
+}) => {
+  const { userId, filters } = params;
+  const resolved = resolveDashboardFilters(filters);
+  const buckets = buildDashboardBuckets(
+    resolved.start,
+    resolved.endExclusive,
+    resolved.granularity,
+  );
+
+  const [
+    currentSales,
+    previousSales,
+    currentPurchases,
+    previousPurchases,
+    saleItems,
+    products,
+    totalCustomers,
+    totalSuppliers,
+    dailyExpenses,
+    previousExpensesTotal,
+  ] = await Promise.all([
+    prisma.sale.findMany({
+      where: {
+        user_id: userId,
+        sale_date: { gte: resolved.start, lt: resolved.endExclusive },
+      },
+      select: {
+        id: true,
+        sale_date: true,
+        total: true,
+        totalAmount: true,
+        paidAmount: true,
+        pendingAmount: true,
+        paymentStatus: true,
+        paymentMethod: true,
+        customer: { select: { name: true } },
+      },
+      orderBy: { sale_date: "desc" },
+    }),
+    prisma.sale.findMany({
+      where: {
+        user_id: userId,
+        sale_date: {
+          gte: resolved.previousStart,
+          lt: resolved.previousEndExclusive,
+        },
+      },
+      select: {
+        total: true,
+        totalAmount: true,
+        paidAmount: true,
+        pendingAmount: true,
+        paymentStatus: true,
+      },
+    }),
+    prisma.purchase.findMany({
+      where: {
+        user_id: userId,
+        purchase_date: { gte: resolved.start, lt: resolved.endExclusive },
+      },
+      select: {
+        id: true,
+        purchase_date: true,
+        total: true,
+        totalAmount: true,
+        paidAmount: true,
+        pendingAmount: true,
+        paymentStatus: true,
+        paymentMethod: true,
+        supplier: { select: { name: true } },
+      },
+      orderBy: { purchase_date: "desc" },
+    }),
+    prisma.purchase.findMany({
+      where: {
+        user_id: userId,
+        purchase_date: {
+          gte: resolved.previousStart,
+          lt: resolved.previousEndExclusive,
+        },
+      },
+      select: {
+        total: true,
+        totalAmount: true,
+        paidAmount: true,
+        pendingAmount: true,
+        paymentStatus: true,
+      },
+    }),
+    prisma.saleItem.findMany({
+      where: {
+        sale: {
+          user_id: userId,
+          sale_date: { gte: resolved.start, lt: resolved.endExclusive },
+        },
+      },
+      select: {
+        name: true,
+        quantity: true,
+        line_total: true,
+        product: { select: { category: { select: { name: true } } } },
+      },
+    }),
+    prisma.product.findMany({
+      where: { user_id: userId },
+      select: {
+        name: true,
+        stock_on_hand: true,
+        reorder_level: true,
+        price: true,
+        cost: true,
+      },
+    }),
+    prisma.customer.count({ where: { user_id: userId } }),
+    prisma.supplier.count({ where: { user_id: userId } }),
+    getDailyExpenses({ userId, from: resolved.start }),
+    getExpenseTotals({
+      userId,
+      from: resolved.previousStart,
+      to: resolved.previousEndExclusive,
+    }),
+  ]);
+
+  const filteredDailyExpenses = dailyExpenses.filter(
+    (expense) => expense.day >= resolved.start && expense.day < resolved.endExclusive,
+  );
+  const expenseTotal = filteredDailyExpenses.reduce(
+    (sum, item) => sum + item.amount,
+    0,
+  );
+
+  const currentTotals = computeDashboardTotals({
+    sales: currentSales,
+    purchases: currentPurchases,
+    expenses: expenseTotal,
+  });
+  const previousTotals = computeDashboardTotals({
+    sales: previousSales,
+    purchases: previousPurchases,
+    expenses: previousExpensesTotal,
+  });
+
+  const now = new Date();
+  const todayStart = startOfDayUtc(now);
+  const todayEnd = addDaysUtc(todayStart, 1);
+  const weekStart = addDaysUtc(todayStart, -6);
+  const monthStart = startOfMonthUtc(now);
+  const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+
+  const monthSpanDays = Math.max(
+    1,
+    Math.round((todayEnd.getTime() - monthStart.getTime()) / MS_PER_DAY),
+  );
+  const prevMonthStart = startOfMonthUtc(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)),
+  );
+  const prevMonthEnd = addDaysUtc(
+    prevMonthStart,
+    Math.min(
+      monthSpanDays,
+      daysInMonthUtc(prevMonthStart.getUTCFullYear(), prevMonthStart.getUTCMonth()),
+    ),
+  );
+
+  const yearSpanDays = Math.max(
+    1,
+    Math.round((todayEnd.getTime() - yearStart.getTime()) / MS_PER_DAY),
+  );
+  const prevYearStart = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1));
+  const prevYearEnd = addDaysUtc(prevYearStart, yearSpanDays);
+
+  const [
+    todaySnapshot,
+    yesterdaySnapshot,
+    weekSnapshot,
+    prevWeekSnapshot,
+    monthSnapshot,
+    prevMonthSnapshot,
+    yearSnapshot,
+    prevYearSnapshot,
+  ] = await Promise.all([
+    fetchProfitSnapshot({ userId, start: todayStart, endExclusive: todayEnd }),
+    fetchProfitSnapshot({
+      userId,
+      start: addDaysUtc(todayStart, -1),
+      endExclusive: todayStart,
+    }),
+    fetchProfitSnapshot({ userId, start: weekStart, endExclusive: todayEnd }),
+    fetchProfitSnapshot({
+      userId,
+      start: addDaysUtc(weekStart, -7),
+      endExclusive: weekStart,
+    }),
+    fetchProfitSnapshot({ userId, start: monthStart, endExclusive: todayEnd }),
+    fetchProfitSnapshot({
+      userId,
+      start: prevMonthStart,
+      endExclusive: prevMonthEnd,
+    }),
+    fetchProfitSnapshot({ userId, start: yearStart, endExclusive: todayEnd }),
+    fetchProfitSnapshot({
+      userId,
+      start: prevYearStart,
+      endExclusive: prevYearEnd,
+    }),
+  ]);
+
+  const performanceMap = new Map(
+    buckets.map((bucket) => [
+      bucket.key,
+      {
+        key: bucket.key,
+        label: bucket.label,
+        revenue: 0,
+        collected: 0,
+        purchases: 0,
+        cashOut: 0,
+        receivables: 0,
+        expenses: 0,
+        profit: 0,
+        orders: 0,
+      },
+    ]),
+  );
+
+  currentSales.forEach((sale) => {
+    const key = resolveBucketKey(sale.sale_date, resolved.granularity);
+    const bucket = performanceMap.get(key);
+    if (!bucket) return;
+
+    bucket.revenue += resolveRecordedTotal(sale.totalAmount, sale.total);
+    bucket.collected += resolveRealizedAmount(
+      sale.paymentStatus,
+      sale.totalAmount,
+      sale.paidAmount,
+      sale.total,
+    );
+    bucket.receivables += Math.max(0, toNumber(sale.pendingAmount));
+    bucket.orders += 1;
+  });
+
+  currentPurchases.forEach((purchase) => {
+    const key = resolveBucketKey(purchase.purchase_date, resolved.granularity);
+    const bucket = performanceMap.get(key);
+    if (!bucket) return;
+
+    bucket.purchases += resolveRecordedTotal(
+      purchase.totalAmount,
+      purchase.total,
+    );
+    bucket.cashOut += resolveRealizedAmount(
+      purchase.paymentStatus,
+      purchase.totalAmount,
+      purchase.paidAmount,
+      purchase.total,
+    );
+  });
+
+  filteredDailyExpenses.forEach((expense) => {
+    const key = resolveBucketKey(expense.day, resolved.granularity);
+    const bucket = performanceMap.get(key);
+    if (!bucket) return;
+    bucket.expenses += expense.amount;
+  });
+
+  const performance = Array.from(performanceMap.values()).map((bucket) => {
+    const profit = bucket.revenue - bucket.purchases - bucket.expenses;
+
+    return {
+      key: bucket.key,
+      label: bucket.label,
+      revenue: roundMetric(bucket.revenue),
+      collected: roundMetric(bucket.collected),
+      purchases: roundMetric(bucket.purchases),
+      cashOut: roundMetric(bucket.cashOut + bucket.expenses),
+      receivables: roundMetric(bucket.receivables),
+      expenses: roundMetric(bucket.expenses),
+      profit: roundMetric(profit),
+      orders: bucket.orders,
+      margin:
+        bucket.revenue === 0 ? 0 : roundMetric((profit / bucket.revenue) * 100, 1),
+    };
+  });
+
+  const categoryMap = new Map<string, number>();
+  saleItems.forEach((item) => {
+    const category = item.product?.category?.name ?? "Uncategorized";
+    categoryMap.set(
+      category,
+      (categoryMap.get(category) ?? 0) + toNumber(item.line_total),
+    );
+  });
+
+  const categoryMix = Array.from(categoryMap.entries())
+    .map(([name, value]) => ({ name, value: roundMetric(value) }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 6);
+
+  const customerMap = new Map<
+    string,
+    { customer: string; revenue: number; receivables: number; orders: number }
+  >();
+  currentSales.forEach((sale) => {
+    const customer = sale.customer?.name ?? "Walk-in";
+    const current = customerMap.get(customer) ?? {
+      customer,
+      revenue: 0,
+      receivables: 0,
+      orders: 0,
+    };
+
+    current.revenue += resolveRecordedTotal(sale.totalAmount, sale.total);
+    current.receivables += Math.max(0, toNumber(sale.pendingAmount));
+    current.orders += 1;
+    customerMap.set(customer, current);
+  });
+
+  const customerHighlights = {
+    totalCustomers,
+    activeCustomers: customerMap.size,
+    repeatRate:
+      customerMap.size === 0
+        ? 0
+        : roundMetric(
+            (Array.from(customerMap.values()).filter((item) => item.orders > 1)
+              .length /
+              customerMap.size) *
+              100,
+            1,
+          ),
+    topCustomers: Array.from(customerMap.values())
+      .map((customer) => ({
+        ...customer,
+        revenue: roundMetric(customer.revenue),
+        receivables: roundMetric(customer.receivables),
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 4),
+  };
+
+  const supplierMap = new Map<
+    string,
+    { supplier: string; spend: number; payables: number; orders: number }
+  >();
+  currentPurchases.forEach((purchase) => {
+    const supplier = purchase.supplier?.name ?? "Unknown supplier";
+    const current = supplierMap.get(supplier) ?? {
+      supplier,
+      spend: 0,
+      payables: 0,
+      orders: 0,
+    };
+
+    current.spend += resolveRecordedTotal(purchase.totalAmount, purchase.total);
+    current.payables += Math.max(0, toNumber(purchase.pendingAmount));
+    current.orders += 1;
+    supplierMap.set(supplier, current);
+  });
+
+  const supplierHighlights = {
+    totalSuppliers,
+    payableTotal: currentTotals.payables,
+    topSuppliers: Array.from(supplierMap.values())
+      .map((supplier) => ({
+        ...supplier,
+        spend: roundMetric(supplier.spend),
+        payables: roundMetric(supplier.payables),
+      }))
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 4),
+  };
+
+  const lowStockItems = products
+    .filter((product) => product.stock_on_hand <= product.reorder_level)
+    .sort((a, b) => a.stock_on_hand - b.stock_on_hand)
+    .slice(0, 6)
+    .map((product) => ({
+      name: product.name,
+      stock: product.stock_on_hand,
+      reorder: product.reorder_level,
+      inventoryValue: roundMetric(
+        resolveRecordedTotal(product.cost, product.price) *
+          Math.max(product.stock_on_hand, 0),
+      ),
+    }));
+
+  const inventoryValue = products.reduce((sum, product) => {
+    const unitValue = resolveRecordedTotal(product.cost, product.price);
+    return sum + unitValue * Math.max(product.stock_on_hand, 0);
+  }, 0);
+
+  const notifications = buildNotifications({
+    lowStock: lowStockItems.map((item) => `${item.name} stock is ${item.stock}`),
+    pendingSales: currentSales
+      .filter((sale) => toNumber(sale.pendingAmount) > 0)
+      .slice(0, 5)
+      .map((sale) => ({
+        customer: sale.customer?.name ?? "Walk-in",
+        pendingAmount: roundMetric(toNumber(sale.pendingAmount)),
+      })),
+    supplierPayables: currentPurchases
+      .filter((purchase) => toNumber(purchase.pendingAmount) > 0)
+      .slice(0, 5)
+      .map((purchase) => ({
+        supplier: purchase.supplier?.name ?? "Supplier",
+        pendingAmount: roundMetric(toNumber(purchase.pendingAmount)),
+      })),
+  });
+
+  const recentTransactions = currentSales
+    .slice(0, 50)
+    .map((sale) => ({
+      id: sale.id,
+      date: sale.sale_date.toISOString(),
+      invoiceNumber: `SI-${sale.id}`,
+      customer: sale.customer?.name ?? "Walk-in",
+      amount: roundMetric(resolveRecordedTotal(sale.totalAmount, sale.total)),
+      paidAmount: roundMetric(toNumber(sale.paidAmount)),
+      pendingAmount: roundMetric(toNumber(sale.pendingAmount)),
+      paymentStatus:
+        sale.paymentStatus === "PAID"
+          ? "PAID"
+          : sale.paymentStatus === "PARTIALLY_PAID"
+            ? "PARTIAL"
+            : "PENDING",
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const activity = [
+    ...currentSales.slice(0, 4).map((sale) => ({
+      time: sale.sale_date,
+      label: `Sale #${sale.id} recorded`,
+    })),
+    ...currentPurchases.slice(0, 4).map((purchase) => ({
+      time: purchase.purchase_date,
+      label: `Purchase #${purchase.id} added`,
+    })),
+  ]
+    .sort((a, b) => b.time.getTime() - a.time.getTime())
+    .slice(0, 6)
+    .map((item) => ({
+      time: item.time.toISOString(),
+      label: item.label,
+    }));
+
+  return {
+    filters: {
+      range: resolved.range,
+      label: resolved.label,
+      granularity: resolved.granularity,
+      startDate: toDateKey(resolved.start),
+      endDate: toDateKey(addDaysUtc(resolved.endExclusive, -1)),
+    },
+    summary: {
+      revenue: {
+        label: "Booked revenue",
+        description: "All sales booked in the selected range.",
+        value: currentTotals.bookedRevenue,
+        previousValue: previousTotals.bookedRevenue,
+        change: safePercentChange(
+          currentTotals.bookedRevenue,
+          previousTotals.bookedRevenue,
+        ),
+        format: "currency",
+      },
+      collected: {
+        label: "Cash collected",
+        description: "Paid sales value realized in the selected range.",
+        value: currentTotals.collectedRevenue,
+        previousValue: previousTotals.collectedRevenue,
+        change: safePercentChange(
+          currentTotals.collectedRevenue,
+          previousTotals.collectedRevenue,
+        ),
+        format: "currency",
+      },
+      profit: {
+        label: "Booked profit",
+        description: "Revenue minus purchases and recorded expenses.",
+        value: currentTotals.bookedProfit,
+        previousValue: previousTotals.bookedProfit,
+        change: safePercentChange(
+          currentTotals.bookedProfit,
+          previousTotals.bookedProfit,
+        ),
+        format: "currency",
+      },
+      receivables: {
+        label: "Outstanding receivables",
+        description: "Customer balances still pending collection.",
+        value: currentTotals.receivables,
+        previousValue: previousTotals.receivables,
+        change: safePercentChange(
+          currentTotals.receivables,
+          previousTotals.receivables,
+        ),
+        format: "currency",
+      },
+      margin: {
+        label: "Net margin",
+        description: "Booked profit as a percentage of booked revenue.",
+        value: currentTotals.margin,
+        previousValue: previousTotals.margin,
+        change: safePercentChange(currentTotals.margin, previousTotals.margin),
+        format: "percent",
+      },
+    },
+    performance,
+    categoryMix,
+    paymentMethods: {
+      sales: buildPaymentMethodBreakdown(currentSales),
+      purchases: buildPaymentMethodBreakdown(currentPurchases),
+    },
+    recentTransactions,
+    customerHighlights,
+    supplierHighlights,
+    inventory: {
+      totalProducts: products.length,
+      lowStock: lowStockItems.length,
+      outOfStock: products.filter((product) => product.stock_on_hand <= 0).length,
+      inventoryValue: roundMetric(inventoryValue),
+      lowStockItems,
+    },
+    notifications,
+    activity,
+    alerts: {
+      lowStock: lowStockItems.map((item) => `${item.name} (${item.stock})`),
+      supplierPayables: supplierHighlights.topSuppliers.map(
+        (item) => `${item.supplier}: Rs ${item.payables.toLocaleString("en-IN")}`,
+      ),
+    },
+    pendingPayments: recentTransactions
+      .filter((item) => item.pendingAmount > 0)
+      .slice(0, 5)
+      .map((item) => ({
+        id: item.id,
+        invoiceNumber: item.invoiceNumber,
+        customer: item.customer,
+        totalAmount: item.amount,
+        paidAmount: item.paidAmount,
+        pendingAmount: item.pendingAmount,
+        paymentStatus: item.paymentStatus,
+        date: item.date,
+      })),
+    invoiceStats: {
+      total: currentSales.length,
+      paid: currentSales.filter((sale) => sale.paymentStatus === "PAID").length,
+      pending: currentSales.filter((sale) => sale.paymentStatus !== "PAID").length,
+      overdue: 0,
+    },
+    metrics: {
+      totalRevenue: currentTotals.bookedRevenue,
+      totalSales: currentTotals.bookedRevenue,
+      totalPurchases: currentTotals.bookedPurchases,
+      expenses: currentTotals.expenses,
+      receivables: currentTotals.receivables,
+      payables: currentTotals.payables,
+      pendingPayments: currentTotals.receivables,
+      inventoryValue: roundMetric(inventoryValue),
+      profits: {
+        today: todaySnapshot.bookedProfit,
+        weekly: weekSnapshot.bookedProfit,
+        monthly: monthSnapshot.bookedProfit,
+        yearly: yearSnapshot.bookedProfit,
+      },
+      changes: {
+        totalRevenue: safePercentChange(
+          currentTotals.bookedRevenue,
+          previousTotals.bookedRevenue,
+        ),
+        totalSales: safePercentChange(
+          currentTotals.bookedRevenue,
+          previousTotals.bookedRevenue,
+        ),
+        totalPurchases: safePercentChange(
+          currentTotals.bookedPurchases,
+          previousTotals.bookedPurchases,
+        ),
+        expenses: safePercentChange(currentTotals.expenses, previousTotals.expenses),
+        receivables: safePercentChange(
+          currentTotals.receivables,
+          previousTotals.receivables,
+        ),
+        payables: safePercentChange(currentTotals.payables, previousTotals.payables),
+        todayProfit: safePercentChange(
+          todaySnapshot.bookedProfit,
+          yesterdaySnapshot.bookedProfit,
+        ),
+        weeklyProfit: safePercentChange(
+          weekSnapshot.bookedProfit,
+          prevWeekSnapshot.bookedProfit,
+        ),
+        monthlyProfit: safePercentChange(
+          monthSnapshot.bookedProfit,
+          prevMonthSnapshot.bookedProfit,
+        ),
+        yearlyProfit: safePercentChange(
+          yearSnapshot.bookedProfit,
+          prevYearSnapshot.bookedProfit,
+        ),
+        pendingPayments: safePercentChange(
+          currentTotals.receivables,
+          previousTotals.receivables,
+        ),
+        inventoryValue: 0,
+      },
+    },
+  };
 };
