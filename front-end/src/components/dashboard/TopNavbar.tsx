@@ -14,7 +14,7 @@ type TopNavbarProps = {
 
 const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
   return (
-    <header className="sticky top-0 z-30 border-b border-gray-200/70 bg-gray-50/95 backdrop-blur dark:border-gray-800 dark:bg-gray-900/90">
+    <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
       <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
         <Button
           type="button"
@@ -28,10 +28,10 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
         </Button>
 
         <div className="relative hidden w-full max-w-md sm:block">
-          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search invoices, customers, products..."
-            className="h-10 rounded-xl border-gray-200 bg-white pl-9 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+            className="h-10 rounded-xl border-border bg-card pl-9 shadow-sm"
           />
         </div>
 

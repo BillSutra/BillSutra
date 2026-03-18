@@ -37,26 +37,11 @@ import {
   updateProduct,
   updateCustomer,
 } from "@/lib/apiClient";
+import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
 
-const dashboardQueryKeys = [
-  ["dashboard", "overview"],
-  ["dashboard", "sales"],
-  ["dashboard", "inventory"],
-  ["dashboard", "transactions"],
-  ["dashboard", "customers"],
-  ["dashboard", "suppliers"],
-  ["dashboard", "cashflow"],
-  ["dashboard", "forecast"],
-] as const;
-
-const invalidateDashboardQueries = (
+const invalidateDashboard = (
   queryClient: ReturnType<typeof useQueryClient>,
-) =>
-  Promise.all(
-    dashboardQueryKeys.map((queryKey) =>
-      queryClient.invalidateQueries({ queryKey }),
-    ),
-  );
+) => invalidateDashboardQueries(queryClient);
 
 export const useProductsQuery = () =>
   useQuery({ queryKey: ["products"], queryFn: fetchProducts });
@@ -182,7 +167,7 @@ export const useCreatePurchaseMutation = () => {
         queryClient.invalidateQueries({ queryKey: ["products"] }),
         queryClient.invalidateQueries({ queryKey: ["inventories"] }),
         queryClient.invalidateQueries({ queryKey: ["warehouses"] }),
-        invalidateDashboardQueries(queryClient),
+        invalidateDashboard(queryClient),
       ]),
   });
 };
@@ -203,7 +188,7 @@ export const useUpdatePurchaseMutation = () => {
         queryClient.invalidateQueries({ queryKey: ["products"] }),
         queryClient.invalidateQueries({ queryKey: ["inventories"] }),
         queryClient.invalidateQueries({ queryKey: ["warehouses"] }),
-        invalidateDashboardQueries(queryClient),
+        invalidateDashboard(queryClient),
       ]),
   });
 };
@@ -228,7 +213,7 @@ export const useCreateInvoiceMutation = () => {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoices"] }),
-        invalidateDashboardQueries(queryClient),
+        invalidateDashboard(queryClient),
       ]),
   });
 };
@@ -240,7 +225,7 @@ export const useDeleteInvoiceMutation = () => {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoices"] }),
-        invalidateDashboardQueries(queryClient),
+        invalidateDashboard(queryClient),
       ]),
   });
 };
@@ -258,7 +243,7 @@ export const useUpdateInvoiceMutation = () => {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoices"] }),
-        invalidateDashboardQueries(queryClient),
+        invalidateDashboard(queryClient),
       ]),
   });
 };
@@ -271,7 +256,7 @@ export const useCreatePaymentMutation = () => {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoices"] }),
         queryClient.invalidateQueries({ queryKey: ["payments"] }),
-        invalidateDashboardQueries(queryClient),
+        invalidateDashboard(queryClient),
       ]),
   });
 };
@@ -286,7 +271,7 @@ export const useCreateSaleMutation = () => {
         queryClient.invalidateQueries({ queryKey: ["products"] }),
         queryClient.invalidateQueries({ queryKey: ["inventories"] }),
         queryClient.invalidateQueries({ queryKey: ["warehouses"] }),
-        invalidateDashboardQueries(queryClient),
+        invalidateDashboard(queryClient),
       ]),
   });
 };
@@ -305,7 +290,7 @@ export const useUpdateSaleMutation = () => {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["sales"] }),
         queryClient.invalidateQueries({ queryKey: ["products"] }),
-        invalidateDashboardQueries(queryClient),
+        invalidateDashboard(queryClient),
       ]),
   });
 };
@@ -320,7 +305,7 @@ export const useDeleteSaleMutation = () => {
         queryClient.invalidateQueries({ queryKey: ["products"] }),
         queryClient.invalidateQueries({ queryKey: ["inventories"] }),
         queryClient.invalidateQueries({ queryKey: ["warehouses"] }),
-        invalidateDashboardQueries(queryClient),
+        invalidateDashboard(queryClient),
       ]),
   });
 };
@@ -385,7 +370,7 @@ export const useAdjustInventoryMutation = () => {
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["inventories"] }),
         queryClient.invalidateQueries({ queryKey: ["warehouses"] }),
-        invalidateDashboardQueries(queryClient),
+        invalidateDashboard(queryClient),
       ]),
   });
 };

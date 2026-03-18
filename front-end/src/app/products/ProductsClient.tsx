@@ -3,8 +3,13 @@
 import React, { useMemo, useState } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ValidationField } from "@/components/ui/ValidationField";
+import {
+  validateName,
+  validateNumber,
+  validateRequired,
+} from "@/lib/validation";
 import {
   useCategoriesQuery,
   useCreateCategoryMutation,
@@ -40,6 +45,7 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
   });
   const [editingForm, setEditingForm] = useState(form);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [formTouched, setFormTouched] = useState(false);
 
   const isMutating =
     createCategory.isPending ||
@@ -65,8 +71,22 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
 
   const toNumber = (value: string) => (value ? Number(value) : undefined);
 
+  const validateAll = () => {
+    return (
+      !validateName(form.name) &&
+      !validateRequired(form.sku) &&
+      !validateNumber(form.price) &&
+      !validateNumber(form.cost, true) &&
+      !validateNumber(form.gst_rate, true) &&
+      !validateNumber(form.stock_on_hand, true) &&
+      !validateNumber(form.reorder_level, true)
+    );
+  };
+
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
+    setFormTouched(true);
+    if (!validateAll()) return;
     await createProduct.mutateAsync({
       name: form.name.trim(),
       sku: form.sku.trim(),
@@ -79,6 +99,7 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
       category_id: form.category_id ? Number(form.category_id) : undefined,
     });
     resetForm();
+    setFormTouched(false);
   };
 
   const handleCreateCategory = async () => {
@@ -154,107 +175,107 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
             <p className="text-sm text-[#8a6d56]">
               Create new SKUs and keep stock levels updated.
             </p>
-            <form className="mt-4 grid gap-4" onSubmit={handleCreate}>
-              <div className="grid gap-2">
-                <Label htmlFor="name">Product name</Label>
-                <Input
-                  id="name"
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, name: event.target.value }))
-                  }
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="sku">SKU</Label>
-                <Input
-                  id="sku"
-                  value={form.sku}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, sku: event.target.value }))
-                  }
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="barcode">Barcode</Label>
-                <Input
-                  id="barcode"
-                  value={form.barcode}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      barcode: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="price">Selling price</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  value={form.price}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, price: event.target.value }))
-                  }
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="cost">Cost price</Label>
-                <Input
-                  id="cost"
-                  type="number"
-                  value={form.cost}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, cost: event.target.value }))
-                  }
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="gst">GST rate</Label>
-                <Input
-                  id="gst"
-                  type="number"
-                  value={form.gst_rate}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      gst_rate: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="stock">Opening stock</Label>
-                <Input
-                  id="stock"
-                  type="number"
-                  value={form.stock_on_hand}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      stock_on_hand: event.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="reorder">Reorder level</Label>
-                <Input
-                  id="reorder"
-                  type="number"
-                  value={form.reorder_level}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      reorder_level: event.target.value,
-                    }))
-                  }
-                />
-              </div>
+            <form
+              className="mt-4 grid gap-4"
+              onSubmit={handleCreate}
+              noValidate
+            >
+              <ValidationField
+                id="name"
+                label="Product name"
+                value={form.name}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, name: value }))
+                }
+                validate={validateName}
+                required
+                placeholder="Product name"
+                success
+              />
+              <ValidationField
+                id="sku"
+                label="SKU"
+                value={form.sku}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, sku: value }))
+                }
+                validate={validateRequired}
+                required
+                placeholder="SKU"
+                success
+              />
+              <ValidationField
+                id="barcode"
+                label="Barcode"
+                value={form.barcode}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, barcode: value }))
+                }
+                validate={() => ""}
+                placeholder="Barcode"
+                success
+              />
+              <ValidationField
+                id="price"
+                label="Selling price"
+                type="number"
+                value={form.price}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, price: value }))
+                }
+                validate={validateNumber}
+                required
+                placeholder="0"
+                success
+              />
+              <ValidationField
+                id="cost"
+                label="Cost price"
+                type="number"
+                value={form.cost}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, cost: value }))
+                }
+                validate={(v) => validateNumber(v, true)}
+                placeholder="0"
+                success
+              />
+              <ValidationField
+                id="gst"
+                label="GST rate"
+                type="number"
+                value={form.gst_rate}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, gst_rate: value }))
+                }
+                validate={(v) => validateNumber(v, true)}
+                placeholder="18"
+                success
+              />
+              <ValidationField
+                id="stock"
+                label="Opening stock"
+                type="number"
+                value={form.stock_on_hand}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, stock_on_hand: value }))
+                }
+                validate={(v) => validateNumber(v, true)}
+                placeholder="0"
+                success
+              />
+              <ValidationField
+                id="reorder"
+                label="Reorder level"
+                type="number"
+                value={form.reorder_level}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, reorder_level: value }))
+                }
+                validate={(v) => validateNumber(v, true)}
+                placeholder="0"
+                success
+              />
               <div className="grid gap-2">
                 <Label htmlFor="category">Category</Label>
                 <select
@@ -267,6 +288,12 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
                       category_id: event.target.value,
                     }))
                   }
+                  aria-invalid={formTouched && !form.category_id}
+                  aria-describedby={
+                    formTouched && !form.category_id
+                      ? "category-error"
+                      : undefined
+                  }
                 >
                   <option value="">Uncategorized</option>
                   {categoryOptions.map((category) => (
@@ -275,6 +302,7 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
                     </option>
                   ))}
                 </select>
+                {/* Optionally, add error message for required category */}
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="new-category">Add new category</Label>
@@ -303,7 +331,8 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
               <Button
                 type="submit"
                 className="bg-[#1f1b16] text-white hover:bg-[#2c2520]"
-                disabled={isMutating}
+                disabled={isMutating || (formTouched && !validateAll())}
+                aria-disabled={isMutating || (formTouched && !validateAll())}
               >
                 Add product
               </Button>

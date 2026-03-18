@@ -21,8 +21,8 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
 
   return (
     <div className="flex h-full flex-col gap-6 p-3">
-      <div className="flex h-11 items-center rounded-xl bg-indigo-600 px-3 text-white shadow-md">
-        <div className="grid h-7 w-7 place-items-center rounded-lg bg-white/20 text-xs font-bold overflow-hidden">
+      <div className="flex h-11 items-center rounded-xl bg-primary px-3 text-primary-foreground shadow-sm">
+        <div className="grid h-7 w-7 place-items-center rounded-lg bg-primary-foreground/15 text-xs font-bold overflow-hidden">
           {/* Show uploaded business logo, or fallback to "BS" text */}
           {logo ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -48,10 +48,10 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
               href={item.href}
               className={cn(
                 "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200",
-                "hover:-translate-y-px hover:bg-gray-100 dark:hover:bg-gray-800",
+                "hover:-translate-y-px hover:bg-sidebar-accent",
                 active
-                  ? "bg-indigo-50 text-indigo-700 shadow-sm dark:bg-indigo-500/20 dark:text-indigo-200"
-                  : "text-gray-600 dark:text-gray-300",
+                  ? "bg-primary/10 text-primary shadow-sm"
+                  : "text-muted-foreground",
               )}
               title={collapsed ? item.label : undefined}
             >
@@ -75,7 +75,7 @@ const AppSidebar = ({
     <>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 hidden border-r border-gray-200/70 bg-white/90 backdrop-blur dark:border-gray-800 dark:bg-gray-900/80 lg:block",
+          "fixed inset-y-0 left-0 z-40 hidden border-r border-sidebar-border bg-sidebar/95 backdrop-blur lg:block",
           collapsed ? "w-20" : "w-64",
         )}
       >
@@ -120,7 +120,7 @@ const AppSidebar = ({
 
       <div
         className={cn(
-          "fixed inset-0 z-40 bg-gray-900/30 backdrop-blur-sm transition-opacity lg:hidden",
+          "fixed inset-0 z-40 bg-black/30 backdrop-blur-sm transition-opacity lg:hidden",
           mobileOpen ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         onClick={onCloseMobile}
@@ -128,7 +128,7 @@ const AppSidebar = ({
 
       <aside
         className={cn(
-          "fixed top-0 left-0 z-50 h-full w-72 overflow-y-auto border-r border-gray-200 bg-white transition-transform duration-200 dark:border-gray-800 dark:bg-gray-900 lg:hidden",
+          "fixed top-0 left-0 z-50 h-full w-72 overflow-y-auto border-r border-sidebar-border bg-sidebar transition-transform duration-200 lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >

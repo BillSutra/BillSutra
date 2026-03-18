@@ -76,6 +76,15 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --dashboard-bg: linear-gradient(180deg, #f8f6f3 0%, #fbfaf7 55%, #ffffff 100%);
+  --dashboard-grid: radial-gradient(rgba(31, 41, 55, 0.08) 0.5px, transparent 0.5px);
+  --dashboard-surface: #ffffff;
+  --dashboard-surface-muted: #f7f4ef;
+  --dashboard-surface-border: #e5ddd4;
+  --dashboard-text: #1f1b16;
+  --dashboard-text-muted: #6f6257;
+  --dashboard-text-subtle: #8a6d56;
+  --dashboard-accent: #2f5d50;
 }
 
 .dark {
@@ -110,6 +119,15 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --dashboard-bg: linear-gradient(180deg, #0b1220 0%, #0f172a 55%, #111827 100%);
+  --dashboard-grid: radial-gradient(rgba(148, 163, 184, 0.16) 0.5px, transparent 0.5px);
+  --dashboard-surface: #111827;
+  --dashboard-surface-muted: #0f172a;
+  --dashboard-surface-border: #1f2937;
+  --dashboard-text: #f3f4f6;
+  --dashboard-text-muted: #9ca3af;
+  --dashboard-text-subtle: #cbd5f5;
+  --dashboard-accent: #6ee7b7;
 }
 
 @layer base {
@@ -209,10 +227,7 @@
 
   .dashboard-root {
     position: relative;
-    background:
-      radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 35%),
-      radial-gradient(circle at 10% 20%, rgba(249, 115, 22, 0.08), transparent 32%),
-      linear-gradient(180deg, #f7f4ef 0%, #fdfbf8 38%, #ffffff 100%);
+    background: var(--dashboard-bg);
   }
 
   .dashboard-root::before {
@@ -220,9 +235,9 @@
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background-image: radial-gradient(rgba(31, 41, 55, 0.08) 0.5px, transparent 0.5px);
+    background-image: var(--dashboard-grid);
     background-size: 24px 24px;
-    opacity: 0.25;
+    opacity: 0.2;
   }
 
   .dashboard-grid {
@@ -233,29 +248,24 @@
   .dashboard-chart-surface {
     position: relative;
     overflow: hidden;
-    border: 1px solid #ecdccf;
-    background:
-      radial-gradient(circle at top right, rgba(249, 115, 22, 0.12), transparent 30%),
-      linear-gradient(180deg, rgba(255, 251, 246, 0.98), rgba(255, 255, 255, 0.94));
-    box-shadow: 0 26px 70px -42px rgba(31, 27, 22, 0.35);
-    backdrop-filter: blur(8px);
+    border: 1px solid var(--dashboard-surface-border);
+    background: var(--dashboard-surface);
+    box-shadow: 0 18px 40px -30px rgba(17, 24, 39, 0.16);
     transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
     will-change: transform, box-shadow;
   }
 
   .dashboard-chart-surface:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 34px 80px -48px rgba(31, 27, 22, 0.45);
-    border-color: #e6d1bf;
+    transform: translateY(-2px);
+    box-shadow: 0 22px 48px -34px rgba(17, 24, 39, 0.22);
+    border-color: color-mix(in oklab, var(--dashboard-surface-border) 70%, var(--dashboard-accent));
   }
 
   .dashboard-chart-surface::before {
     content: "";
     position: absolute;
     inset: 0;
-    background:
-      linear-gradient(120deg, rgba(255, 255, 255, 0.65), transparent 45%),
-      radial-gradient(circle at bottom left, rgba(15, 118, 110, 0.08), transparent 28%);
+    background: linear-gradient(120deg, rgba(255, 255, 255, 0.2), transparent 45%);
     pointer-events: none;
   }
 
@@ -265,9 +275,9 @@
   }
 
   .dashboard-chart-metric {
-    border: 1px solid #f2e6dc;
-    background: rgba(255, 249, 242, 0.88);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    border: 1px solid var(--dashboard-surface-border);
+    background: var(--dashboard-surface-muted);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
     transition: transform 200ms ease, box-shadow 200ms ease;
   }
 
@@ -288,75 +298,62 @@
     }
   }
 
-  .dark .bg-white,
-  .dark .bg-white\/90,
-  .dark .bg-white\/80,
-  .dark .bg-white\/70 {
-    background-color: var(--card);
+  .dashboard-root .bg-white,
+  .dashboard-root .bg-white\/95,
+  .dashboard-root .bg-white\/90,
+  .dashboard-root .bg-white\/85,
+  .dashboard-root .bg-white\/80,
+  .dashboard-root .bg-white\/70 {
+    background-color: var(--dashboard-surface);
   }
 
-  .dark .bg-\[\#f7f2ea\],
-  .dark .bg-\[\#f7f3ee\] {
+  .dashboard-root .bg-\[\#f7f2ea\],
+  .dashboard-root .bg-\[\#f7f3ee\] {
     background-color: var(--background);
   }
 
-  .dark .bg-\[\#fff9f2\],
-  .dark .bg-\[\#fff7ef\],
-  .dark .bg-\[\#fffaf5\],
-  .dark .bg-\[\#fff5ea\],
-  .dark .bg-\[\#fdf7f1\],
-  .dark .bg-\[\#fff2e5\] {
-    background-color: var(--card);
+  .dashboard-root .bg-\[\#fff9f2\],
+  .dashboard-root .bg-\[\#fff7ef\],
+  .dashboard-root .bg-\[\#fffaf5\],
+  .dashboard-root .bg-\[\#fff5ea\],
+  .dashboard-root .bg-\[\#fdf7f1\],
+  .dashboard-root .bg-\[\#f6efe6\],
+  .dashboard-root .bg-\[\#f5f5f4\],
+  .dashboard-root .bg-\[\#fff2e5\] {
+    background-color: var(--dashboard-surface-muted);
   }
 
-  .dark .text-\[\#1f1b16\] {
-    color: var(--foreground);
+  .dashboard-root .text-\[\#1f1b16\] {
+    color: var(--dashboard-text);
   }
 
-  .dark .text-\[\#5c4b3b\],
-  .dark .text-\[\#8a6d56\],
-  .dark .text-\[\#b45309\] {
-    color: var(--muted-foreground);
+  .dashboard-root .text-\[\#5c4b3b\],
+  .dashboard-root .text-\[\#8a6d56\],
+  .dashboard-root .text-\[\#6f5744\],
+  .dashboard-root .text-\[\#5f5144\],
+  .dashboard-root .text-\[\#5c4331\],
+  .dashboard-root .text-\[\#4b3a2a\],
+  .dashboard-root .text-\[\#6f6257\],
+  .dashboard-root .text-\[\#a06d42\],
+  .dashboard-root .text-\[\#8b5e34\],
+  .dashboard-root .text-\[\#b45309\] {
+    color: var(--dashboard-text-muted);
   }
 
-  .dark .border-\[\#ecdccf\],
-  .dark .border-\[\#f2e6dc\],
-  .dark .border-\[\#e4d6ca\],
-  .dark .border-\[\#e8d9cc\],
-  .dark .border-\[\#f0e2d6\],
-  .dark .border-\[\#eadacc\],
-  .dark .border-\[\#f5d0b5\] {
-    border-color: var(--border);
+  .dashboard-root .text-\[\#0f766e\] {
+    color: var(--dashboard-accent);
   }
 
-  .dark .dashboard-chart-surface {
-    border-color: var(--border);
-    background:
-      radial-gradient(circle at top right, rgba(249, 115, 22, 0.16), transparent 30%),
-      linear-gradient(180deg, rgba(30, 41, 59, 0.9), rgba(17, 24, 39, 0.94));
-    box-shadow: 0 28px 80px -46px rgba(0, 0, 0, 0.6);
-  }
-
-  .dark .dashboard-root {
-    background:
-      radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 35%),
-      radial-gradient(circle at 10% 20%, rgba(249, 115, 22, 0.1), transparent 32%),
-      linear-gradient(180deg, #0f172a 0%, #111827 45%, #0b1120 100%);
-  }
-
-  .dark .dashboard-root::before {
-    opacity: 0.2;
-  }
-
-  .dark .dashboard-chart-surface::before {
-    background:
-      linear-gradient(120deg, rgba(255, 255, 255, 0.04), transparent 45%),
-      radial-gradient(circle at bottom left, rgba(15, 118, 110, 0.12), transparent 28%);
-  }
-
-  .dark .dashboard-chart-metric {
-    border-color: var(--border);
-    background: rgba(17, 24, 39, 0.58);
+  .dashboard-root .border-\[\#ecdccf\],
+  .dashboard-root .border-\[\#f2e6dc\],
+  .dashboard-root .border-\[\#e4d6ca\],
+  .dashboard-root .border-\[\#e8d9cc\],
+  .dashboard-root .border-\[\#f0e2d6\],
+  .dashboard-root .border-\[\#eadacc\],
+  .dashboard-root .border-\[\#f0dfcf\],
+  .dashboard-root .border-\[\#d8d4cf\],
+  .dashboard-root .border-\[\#f5d0b5\] {
+    border-color: var(--dashboard-surface-border);
   }
 
   .dark .a4-page-frame,

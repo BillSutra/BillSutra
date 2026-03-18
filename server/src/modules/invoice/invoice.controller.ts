@@ -15,6 +15,7 @@ import {
   markInvoiceAsSent,
   updateInvoice,
 } from "./invoice.service.js";
+import { emitDashboardUpdate } from "../../services/dashboardRealtime.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
@@ -132,6 +133,7 @@ export const store = async (req: Request, res: Response) => {
   try {
     const body = req.body as InvoiceCreateInput;
     const invoice = await createInvoice(userId, body);
+    emitDashboardUpdate({ userId, source: "invoice.create" });
 
     return res.status(201).json({
       message: "Invoice created",
@@ -185,6 +187,7 @@ export const update = async (req: Request, res: Response) => {
     return res.status(404).json({ message: "Invoice not found" });
   }
 
+  emitDashboardUpdate({ userId, source: "invoice.update" });
   return res.status(200).json({ message: "Invoice updated" });
 };
 
@@ -200,6 +203,7 @@ export const destroy = async (req: Request, res: Response) => {
     return res.status(404).json({ message: "Invoice not found" });
   }
 
+  emitDashboardUpdate({ userId, source: "invoice.delete" });
   return res.status(200).json({ message: "Invoice removed" });
 };
 
@@ -212,6 +216,7 @@ export const duplicate = async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     const invoice = await duplicateInvoice(userId, id);
+    emitDashboardUpdate({ userId, source: "invoice.duplicate" });
 
     return res.status(201).json({
       message: "Invoice duplicated",
@@ -277,6 +282,7 @@ export const send = async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     const invoice = await markInvoiceAsSent(userId, id);
+    emitDashboardUpdate({ userId, source: "invoice.sent" });
 
     return res.status(200).json({
       message: "Invoice status updated to sent",

@@ -405,6 +405,38 @@ export type DashboardOverview = {
   activity: Array<{ time: string; label: string }>;
 };
 
+export type DashboardCardMetrics = {
+  filters?: {
+    range: string;
+    label: string;
+    granularity: string;
+    startDate: string;
+    endDate: string;
+  };
+  metrics: {
+    totalSales: number;
+    totalPurchases: number;
+    pendingSalesPayments: number;
+    pendingPurchasePayments: number;
+    profits: {
+      today: number;
+      weekly: number;
+      monthly: number;
+      yearly: number;
+    };
+    changes: {
+      totalSales: number;
+      totalPurchases: number;
+      pendingSalesPayments: number;
+      pendingPurchasePayments: number;
+      todayProfit: number;
+      weeklyProfit: number;
+      monthlyProfit: number;
+      yearlyProfit: number;
+    };
+  };
+};
+
 export type DashboardOverviewFilters = {
   range?: "7d" | "30d" | "90d" | "ytd" | "custom";
   startDate?: string;
@@ -987,6 +1019,15 @@ export const fetchDashboardOverview = async (
     params: buildDashboardFilterParams(filters),
   });
   return response.data.data as DashboardOverview;
+};
+
+export const fetchDashboardCardMetrics = async (
+  filters?: DashboardOverviewFilters,
+): Promise<DashboardCardMetrics> => {
+  const response = await apiClient.get("/dashboard/metrics", {
+    params: buildDashboardFilterParams(filters),
+  });
+  return response.data.data as DashboardCardMetrics;
 };
 
 export const fetchDashboardSales = async (

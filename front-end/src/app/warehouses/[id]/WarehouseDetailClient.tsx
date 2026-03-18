@@ -6,8 +6,9 @@ import axios from "axios";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ValidationField } from "@/components/ui/ValidationField";
+import { validateNumber } from "@/lib/validation";
 import {
   useAdjustInventoryMutation,
   useInventoriesQuery,
@@ -42,6 +43,7 @@ const WarehouseDetailClient = ({
   });
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
+  const [formTouched, setFormTouched] = useState(false);
 
   const filteredInventories = (inventories ?? []).filter((item) => {
     const resolvedId = item.warehouse_id ?? item.warehouse?.id;
@@ -70,23 +72,20 @@ const WarehouseDetailClient = ({
     return fallback;
   };
 
-  const validateForm = () => {
-    const errors: Record<string, string> = {};
-    if (!form.product_id) errors.product_id = "Select a product.";
-
-    const change = Number(form.change);
-    if (!Number.isFinite(change) || change === 0) {
-      errors.change = "Enter a non-zero quantity change.";
-    }
-
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+  const validateAll = () => {
+    return (
+      form.product_id &&
+      !validateNumber(form.change, true) &&
+      form.change.trim() &&
+      Number(form.change) !== 0
+    );
   };
 
   const handleAdjust = async (event: React.FormEvent) => {
     event.preventDefault();
+    setFormTouched(true);
     setServerError(null);
-    if (!validateForm()) return;
+    if (!validateAll()) return;
 
     try {
       await adjustInventory.mutateAsync({
@@ -108,6 +107,7 @@ const WarehouseDetailClient = ({
 
       setForm({ product_id: "", change: "", reason: "ADJUSTMENT", note: "" });
       setFieldErrors({});
+      setFormTouched(false);
     } catch (error) {
       setServerError(
         parseServerErrors(error, "Unable to adjust inventory right now."),
@@ -138,7 +138,11 @@ const WarehouseDetailClient = ({
             <p className="text-sm text-muted-foreground">
               Apply a stock change directly to this warehouse.
             </p>
-            <form className="mt-4 grid gap-4" onSubmit={handleAdjust}>
+            <form
+              className="mt-4 grid gap-4"
+              onSubmit={handleAdjust}
+              noValidate
+            >
               <div className="grid gap-2">
                 <Label htmlFor="product_select">Product</Label>
                 <select
@@ -153,6 +157,12 @@ const WarehouseDetailClient = ({
                     setFieldErrors((prev) => ({ ...prev, product_id: "" }));
                     setServerError(null);
                   }}
+                  aria-invalid={formTouched && !form.product_id}
+                  aria-describedby={
+                    formTouched && !form.product_id
+                      ? "product_select-error"
+                      : undefined
+                  }
                 >
                   <option value="">Select product</option>
                   {(products ?? []).map((product) => (
@@ -161,34 +171,37 @@ const WarehouseDetailClient = ({
                     </option>
                   ))}
                 </select>
-                {fieldErrors.product_id && (
-                  <p className="text-xs text-destructive">
-                    {fieldErrors.product_id}
-                  </p>
+                {formTouched && !form.product_id && (
+                  <span
+                    id="product_select-error"
+                    className="text-xs text-destructive block"
+                    role="alert"
+                  >
+                    Please select an option
+                  </span>
                 )}
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="change">Quantity change</Label>
-                <Input
-                  id="change"
-                  type="number"
-                  value={form.change}
-                  onChange={(event) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      change: event.target.value,
-                    }));
-                    setFieldErrors((prev) => ({ ...prev, change: "" }));
-                    setServerError(null);
-                  }}
-                  placeholder="Use negative values to remove stock"
-                />
-                {fieldErrors.change && (
-                  <p className="text-xs text-destructive">
-                    {fieldErrors.change}
-                  </p>
-                )}
-              </div>
+              <ValidationField
+                id="change"
+                label="Quantity change"
+                type="number"
+                value={form.change}
+                onChange={(value) => {
+                  setForm((prev) => ({ ...prev, change: value }));
+                  setFieldErrors((prev) => ({ ...prev, change: "" }));
+                  setServerError(null);
+                }}
+                validate={(value) => {
+                  if (!value.trim()) return "This field is required";
+                  if (isNaN(Number(value))) return "Enter a valid number";
+                  if (Number(value) === 0)
+                    return "Enter a non-zero quantity change.";
+                  return "";
+                }}
+                required
+                placeholder="Use negative values to remove stock"
+                success
+              />
               <div className="grid gap-2">
                 <Label htmlFor="reason">Reason</Label>
                 <select
@@ -223,7 +236,12 @@ const WarehouseDetailClient = ({
               <Button
                 type="submit"
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
-                disabled={adjustInventory.isPending}
+                disabled={
+                  adjustInventory.isPending || (formTouched && !validateAll())
+                }
+                aria-disabled={
+                  adjustInventory.isPending || (formTouched && !validateAll())
+                }
               >
                 Apply adjustment
               </Button>

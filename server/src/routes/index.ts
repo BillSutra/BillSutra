@@ -20,6 +20,7 @@ import UserSavedTemplateController from "../controllers/UserSavedTemplateControl
 import PublicInvoiceController from "../controllers/PublicInvoiceController.js";
 import LogoController from "../controllers/LogoController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
+import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
 import { logoUploadMiddleware } from "../middlewares/logo.upload.js";
 import { authRateLimiter } from "../middlewares/rateLimit.middleware.js";
 import validate from "../middlewares/validate.js";
@@ -383,7 +384,9 @@ router.get("/reports/summary", AuthMiddleware, ReportsController.summary);
 router.get("/analytics/overview", AuthMiddleware, AnalyticsController.overview);
 
 // Dashboard
+router.get("/dashboard/stream", AuthSseMiddleware, DashboardController.stream);
 router.get("/dashboard/overview", AuthMiddleware, DashboardController.overview);
+router.get("/dashboard/metrics", AuthMiddleware, DashboardController.metrics);
 router.get("/dashboard/sales", AuthMiddleware, DashboardController.sales);
 router.get(
   "/dashboard/payment-methods",

@@ -13,6 +13,7 @@ import {
   saleUpdateSchema,
 } from "../validations/apiValidations.js";
 import { computePaymentState } from "../utils/paymentCalculations.js";
+import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
 
 type SaleCreateInput = z.infer<typeof saleCreateSchema>;
 type SaleUpdateInput = z.infer<typeof saleUpdateSchema>;
@@ -233,6 +234,7 @@ class SalesController {
       return created;
     });
 
+    emitDashboardUpdate({ userId, source: "sale.create" });
     return sendResponse(res, 201, {
       message: "Sale recorded",
       data: decorateSaleFinancials(sale),
@@ -306,6 +308,7 @@ class SalesController {
       },
     });
 
+    emitDashboardUpdate({ userId, source: "sale.update" });
     return sendResponse(res, 200, { message: "Sale updated" });
   }
 
@@ -347,6 +350,7 @@ class SalesController {
       await tx.sale.delete({ where: { id: sale.id } });
     });
 
+    emitDashboardUpdate({ userId, source: "sale.delete" });
     return sendResponse(res, 200, { message: "Sale deleted" });
   }
 }

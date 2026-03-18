@@ -8,6 +8,7 @@ import {
   purchaseUpdateSchema,
 } from "../validations/apiValidations.js";
 import { computePaymentState } from "../utils/paymentCalculations.js";
+import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
 
 type PurchaseCreateInput = z.infer<typeof purchaseCreateSchema>;
 type PurchaseItemInput = PurchaseCreateInput["items"][number];
@@ -195,6 +196,7 @@ class PurchasesController {
       return created;
     });
 
+    emitDashboardUpdate({ userId, source: "purchase.create" });
     return sendResponse(res, 201, {
       message: "Purchase recorded",
       data: decoratePurchaseFinancials(purchase),
@@ -443,6 +445,7 @@ class PurchasesController {
       return updatedPurchase;
     });
 
+    emitDashboardUpdate({ userId, source: "purchase.update" });
     return sendResponse(res, 200, {
       message: "Purchase updated",
       data: decoratePurchaseFinancials(updated),

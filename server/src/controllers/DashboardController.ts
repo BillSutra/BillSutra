@@ -3,6 +3,7 @@ import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
 import {
   buildDashboardOverview,
+  buildDashboardCardMetrics,
   buildMonthlyProfitSeries,
   buildNotifications,
   buildSalesForecast,
@@ -11,6 +12,11 @@ import {
   getMonthlyExpenses,
   resolveDashboardFilters,
 } from "../services/dashboardAnalyticsService.js";
+import { onDashboardUpdate } from "../services/dashboardRealtime.js";
+import {
+  getCachedMetrics,
+  setCachedMetrics,
+} from "../services/dashboardMetricsCache.js";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 const resolveRecordedTotal = (totalAmount: unknown, total: unknown) => {
@@ -170,7 +176,52 @@ const resolveSequentially = async <
   return result;
 };
 
+const buildMetricsCacheKey = (userId: number, query: Request["query"]) => {
+  const parts = [
+    userId,
+    query.range ?? "",
+    query.startDate ?? "",
+    query.endDate ?? "",
+    query.granularity ?? "",
+  ];
+  return parts.join("|");
+};
+
 class DashboardController {
+  static async stream(req: Request, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    res.write(
+      `event: connected\ndata: ${JSON.stringify({ at: Date.now() })}\n\n`,
+    );
+
+    const unsubscribe = onDashboardUpdate((payload) => {
+      if (payload.userId !== userId) return;
+      res.write(
+        `event: dashboard:update\ndata: ${JSON.stringify({
+          at: payload.at,
+          source: payload.source ?? "unknown",
+        })}\n\n`,
+      );
+    });
+
+    const heartbeat = setInterval(() => {
+      res.write(`event: heartbeat\ndata: ${Date.now()}\n\n`);
+    }, 25000);
+
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  }
   static async overview(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
@@ -197,6 +248,41 @@ class DashboardController {
     }
   }
 
+  static async metrics(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return sendResponse(res, 401, { message: "Unauthorized" });
+      }
+
+      const cacheKey = buildMetricsCacheKey(userId, req.query);
+      const cached = getCachedMetrics(cacheKey);
+      if (cached) {
+        return sendResponse(res, 200, { data: cached });
+      }
+
+      const data = await buildDashboardCardMetrics({
+        userId,
+        filters: {
+          range: req.query.range,
+          startDate: req.query.startDate,
+          endDate: req.query.endDate,
+          granularity: req.query.granularity,
+        },
+      });
+
+      setCachedMetrics(cacheKey, data);
+
+      return sendResponse(res, 200, { data });
+    } catch (error) {
+      console.error("Dashboard metrics error:", error);
+      return sendResponse(res, 500, {
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   static async sales(req: Request, res: Response) {
     const userId = req.user?.id;
     if (!userId) {
@@ -210,6 +296,7 @@ class DashboardController {
       granularity: req.query.granularity,
     });
     const anchor = addDays(resolved.endExclusive, -1);
+    const now = anchor;
     const start30 = startOfDayUtc(addDays(anchor, -29));
     const start7 = startOfDayUtc(addDays(anchor, -6));
     const start6Months = new Date(

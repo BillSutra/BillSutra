@@ -4,6 +4,7 @@ import prisma from "../config/db.config.js";
 import { InvoiceStatus, PaymentMethod } from "@prisma/client";
 import type { z } from "zod";
 import { paymentCreateSchema } from "../validations/apiValidations.js";
+import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
 
 type PaymentCreateInput = z.infer<typeof paymentCreateSchema>;
 
@@ -72,6 +73,7 @@ class PaymentsController {
       data: { status },
     });
 
+    emitDashboardUpdate({ userId, source: "payment.create" });
     return sendResponse(res, 201, {
       message: "Payment recorded",
       data: payment,

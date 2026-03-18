@@ -26,7 +26,7 @@ const DashboardLayout = ({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="dashboard-root min-h-screen text-gray-900 dark:text-gray-100">
+    <div className="dashboard-root min-h-screen text-foreground">
       <div className="flex min-h-screen">
         <AppSidebar
           collapsed={collapsed}
@@ -54,7 +54,7 @@ const DashboardLayout = ({
                   {title}
                 </h1>
                 {subtitle ? (
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     {subtitle}
                   </p>
                 ) : null}

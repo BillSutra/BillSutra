@@ -382,6 +382,72 @@ const endOfDayLabel = (date: Date) =>
     day: "numeric",
   });
 
+type TotalsSnapshot = {
+  bookedSales: number;
+  bookedPurchases: number;
+  pendingSales: number;
+  pendingPurchases: number;
+  expenses: number;
+};
+
+const sumSalesPurchases = async (params: {
+  userId: number;
+  start: Date;
+  endExclusive: Date;
+}) => {
+  const { userId, start, endExclusive } = params;
+
+  const [salesRows, purchaseRows] = await Promise.all([
+    prisma.$queryRaw<
+      Array<{ booked: Prisma.Decimal | number | null; pending: Prisma.Decimal | number | null }>
+    >`
+      SELECT COALESCE(SUM(COALESCE(total_amount, total)), 0) AS booked,
+             COALESCE(SUM(pending_amount), 0) AS pending
+      FROM sales
+      WHERE user_id = ${userId}
+        AND sale_date >= ${start}
+        AND sale_date < ${endExclusive}
+    `,
+    prisma.$queryRaw<
+      Array<{ booked: Prisma.Decimal | number | null; pending: Prisma.Decimal | number | null }>
+    >`
+      SELECT COALESCE(SUM(COALESCE(total_amount, total)), 0) AS booked,
+             COALESCE(SUM(pending_amount), 0) AS pending
+      FROM purchases
+      WHERE user_id = ${userId}
+        AND purchase_date >= ${start}
+        AND purchase_date < ${endExclusive}
+    `,
+  ]);
+
+  return {
+    salesBooked: toNumber(salesRows[0]?.booked ?? 0),
+    salesPending: toNumber(salesRows[0]?.pending ?? 0),
+    purchasesBooked: toNumber(purchaseRows[0]?.booked ?? 0),
+    purchasesPending: toNumber(purchaseRows[0]?.pending ?? 0),
+  };
+};
+
+const fetchTotalsSnapshot = async (params: {
+  userId: number;
+  start: Date;
+  endExclusive: Date;
+}) => {
+  const { userId, start, endExclusive } = params;
+  const [totals, expenses] = await Promise.all([
+    sumSalesPurchases({ userId, start, endExclusive }),
+    getExpenseTotals({ userId, from: start, to: endExclusive }),
+  ]);
+
+  return {
+    bookedSales: roundMetric(totals.salesBooked),
+    bookedPurchases: roundMetric(totals.purchasesBooked),
+    pendingSales: roundMetric(totals.salesPending),
+    pendingPurchases: roundMetric(totals.purchasesPending),
+    expenses: roundMetric(expenses),
+  } satisfies TotalsSnapshot;
+};
+
 const parseDateInput = (value: unknown) => {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -1347,6 +1413,148 @@ export const buildDashboardOverview = async (params: {
           previousTotals.receivables,
         ),
         inventoryValue: 0,
+      },
+    },
+  };
+};
+
+export const buildDashboardCardMetrics = async (params: {
+  userId: number;
+  filters: DashboardFilterInput;
+}) => {
+  const { userId, filters } = params;
+  const resolved = resolveDashboardFilters(filters);
+
+  const [currentTotals, previousTotals] = await Promise.all([
+    fetchTotalsSnapshot({
+      userId,
+      start: resolved.start,
+      endExclusive: resolved.endExclusive,
+    }),
+    fetchTotalsSnapshot({
+      userId,
+      start: resolved.previousStart,
+      endExclusive: resolved.previousEndExclusive,
+    }),
+  ]);
+
+  const now = new Date();
+  const todayStart = startOfDayUtc(now);
+  const todayEnd = addDaysUtc(todayStart, 1);
+  const weekStart = addDaysUtc(todayStart, -6);
+  const monthStart = startOfMonthUtc(now);
+  const yearStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+
+  const monthSpanDays = Math.max(
+    1,
+    Math.round((todayEnd.getTime() - monthStart.getTime()) / MS_PER_DAY),
+  );
+  const prevMonthStart = startOfMonthUtc(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)),
+  );
+  const prevMonthEnd = addDaysUtc(
+    prevMonthStart,
+    Math.min(
+      monthSpanDays,
+      daysInMonthUtc(prevMonthStart.getUTCFullYear(), prevMonthStart.getUTCMonth()),
+    ),
+  );
+
+  const yearSpanDays = Math.max(
+    1,
+    Math.round((todayEnd.getTime() - yearStart.getTime()) / MS_PER_DAY),
+  );
+  const prevYearStart = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1));
+  const prevYearEnd = addDaysUtc(prevYearStart, yearSpanDays);
+
+  const [
+    todaySnapshot,
+    yesterdaySnapshot,
+    weekSnapshot,
+    prevWeekSnapshot,
+    monthSnapshot,
+    prevMonthSnapshot,
+    yearSnapshot,
+    prevYearSnapshot,
+  ] = await Promise.all([
+    fetchTotalsSnapshot({ userId, start: todayStart, endExclusive: todayEnd }),
+    fetchTotalsSnapshot({
+      userId,
+      start: addDaysUtc(todayStart, -1),
+      endExclusive: todayStart,
+    }),
+    fetchTotalsSnapshot({ userId, start: weekStart, endExclusive: todayEnd }),
+    fetchTotalsSnapshot({
+      userId,
+      start: addDaysUtc(weekStart, -7),
+      endExclusive: weekStart,
+    }),
+    fetchTotalsSnapshot({ userId, start: monthStart, endExclusive: todayEnd }),
+    fetchTotalsSnapshot({
+      userId,
+      start: prevMonthStart,
+      endExclusive: prevMonthEnd,
+    }),
+    fetchTotalsSnapshot({ userId, start: yearStart, endExclusive: todayEnd }),
+    fetchTotalsSnapshot({
+      userId,
+      start: prevYearStart,
+      endExclusive: prevYearEnd,
+    }),
+  ]);
+
+  const calcProfit = (snapshot: TotalsSnapshot) =>
+    roundMetric(snapshot.bookedSales - snapshot.bookedPurchases - snapshot.expenses);
+
+  const profits = {
+    today: calcProfit(todaySnapshot),
+    weekly: calcProfit(weekSnapshot),
+    monthly: calcProfit(monthSnapshot),
+    yearly: calcProfit(yearSnapshot),
+  };
+
+  const prevProfits = {
+    today: calcProfit(yesterdaySnapshot),
+    weekly: calcProfit(prevWeekSnapshot),
+    monthly: calcProfit(prevMonthSnapshot),
+    yearly: calcProfit(prevYearSnapshot),
+  };
+
+  return {
+    filters: {
+      range: resolved.range,
+      label: resolved.label,
+      granularity: resolved.granularity,
+      startDate: toDateKey(resolved.start),
+      endDate: toDateKey(addDaysUtc(resolved.endExclusive, -1)),
+    },
+    metrics: {
+      totalSales: currentTotals.bookedSales,
+      totalPurchases: currentTotals.bookedPurchases,
+      pendingSalesPayments: currentTotals.pendingSales,
+      pendingPurchasePayments: currentTotals.pendingPurchases,
+      profits,
+      changes: {
+        totalSales: safePercentChange(
+          currentTotals.bookedSales,
+          previousTotals.bookedSales,
+        ),
+        totalPurchases: safePercentChange(
+          currentTotals.bookedPurchases,
+          previousTotals.bookedPurchases,
+        ),
+        pendingSalesPayments: safePercentChange(
+          currentTotals.pendingSales,
+          previousTotals.pendingSales,
+        ),
+        pendingPurchasePayments: safePercentChange(
+          currentTotals.pendingPurchases,
+          previousTotals.pendingPurchases,
+        ),
+        todayProfit: safePercentChange(profits.today, prevProfits.today),
+        weeklyProfit: safePercentChange(profits.weekly, prevProfits.weekly),
+        monthlyProfit: safePercentChange(profits.monthly, prevProfits.monthly),
+        yearlyProfit: safePercentChange(profits.yearly, prevProfits.yearly),
       },
     },
   };

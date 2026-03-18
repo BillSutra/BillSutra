@@ -5,6 +5,17 @@ import { clamp } from "@/lib/dashboardUtils";
 const DEFAULT_REFRESH_MS = 45_000;
 const MIN_REFRESH_MS = 10_000;
 const MAX_REFRESH_MS = 300_000;
+const DEFAULT_REALTIME_ENABLED = true;
+
+const resolveRealtimeEnabled = () => {
+  const raw = process.env.NEXT_PUBLIC_DASHBOARD_REALTIME;
+  if (!raw) return DEFAULT_REALTIME_ENABLED;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "false" || normalized === "0" || normalized === "off") {
+    return false;
+  }
+  return true;
+};
 
 const parseRefreshInterval = (value?: string) => {
   if (!value) return undefined;
@@ -19,12 +30,15 @@ const resolveRefreshInterval = () => {
 };
 
 export const DASHBOARD_REFRESH_INTERVAL_MS = resolveRefreshInterval();
+export const DASHBOARD_REALTIME_ENABLED = resolveRealtimeEnabled();
 
 export const dashboardRetryDelay = (attempt: number) =>
   Math.min(1000 * 2 ** attempt, 30_000);
 
 export const dashboardQueryDefaults = {
-  refetchInterval: DASHBOARD_REFRESH_INTERVAL_MS,
+  refetchInterval: DASHBOARD_REALTIME_ENABLED
+    ? false
+    : DASHBOARD_REFRESH_INTERVAL_MS,
   refetchIntervalInBackground: true,
   staleTime: Math.max(DASHBOARD_REFRESH_INTERVAL_MS - 1000, 0),
   retry: 3,

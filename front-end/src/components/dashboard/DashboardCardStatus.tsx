@@ -2,7 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { formatTimeLabel } from "@/lib/dashboardUtils";
-import { DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
+import {
+  DASHBOARD_REALTIME_ENABLED,
+  DASHBOARD_REFRESH_INTERVAL_MS,
+} from "@/lib/dashboardRefresh";
 import { cn } from "@/lib/utils";
 
 type StatusVariant = "live" | "updating" | "error";
@@ -45,12 +48,15 @@ const DashboardCardStatus = ({
   className,
 }: DashboardCardStatusProps) => {
   const [now, setNow] = useState(() => Date.now());
+  const effectiveRefreshInterval = DASHBOARD_REALTIME_ENABLED
+    ? 0
+    : refreshIntervalMs;
 
   useEffect(() => {
-    if (!showNextUpdate || refreshIntervalMs <= 0) return undefined;
+    if (!showNextUpdate || effectiveRefreshInterval <= 0) return undefined;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [refreshIntervalMs, showNextUpdate]);
+  }, [effectiveRefreshInterval, showNextUpdate]);
 
   const status: StatusVariant = useMemo(() => {
     if (isError) return "error";
@@ -59,8 +65,8 @@ const DashboardCardStatus = ({
   }, [isError, isFetching, isLoading]);
 
   const nextUpdateAt =
-    showNextUpdate && refreshIntervalMs > 0 && dataUpdatedAt
-      ? dataUpdatedAt + refreshIntervalMs
+    showNextUpdate && effectiveRefreshInterval > 0 && dataUpdatedAt
+      ? dataUpdatedAt + effectiveRefreshInterval
       : undefined;
 
   const nextUpdateInSeconds = nextUpdateAt
@@ -75,11 +81,11 @@ const DashboardCardStatus = ({
         <span className={cn("h-2.5 w-2.5 rounded-full", meta.dot)} />
         {meta.label}
       </span>
-      <span className="text-[#8a6d56]">
+      <span className="text-muted-foreground">
         Last updated {dataUpdatedAt ? formatTimeLabel(dataUpdatedAt) : "--"}
       </span>
       {nextUpdateInSeconds !== undefined ? (
-        <span className="text-[#8a6d56]">Next update in {nextUpdateInSeconds}s</span>
+        <span className="text-muted-foreground">Next update in {nextUpdateInSeconds}s</span>
       ) : null}
     </div>
   );

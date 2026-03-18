@@ -2,6 +2,13 @@
 
 import type { FormEvent } from "react";
 import { Input } from "@/components/ui/input";
+import { ValidationField } from "@/components/ui/ValidationField";
+import {
+  validateDropdown,
+  validateDate,
+  validateNumber,
+  validateRequired,
+} from "@/lib/validation";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import FloatingInput from "@/components/ui/floating-input";
@@ -66,6 +73,9 @@ const InvoiceForm = ({
             onChange={(event) =>
               onFormChange({ ...form, customer_id: event.target.value })
             }
+            aria-invalid={!form.customer_id}
+            aria-describedby={!form.customer_id ? "customer-error" : undefined}
+            required
           >
             <option value="">Select customer</option>
             {customers.map((customer) => (
@@ -74,41 +84,36 @@ const InvoiceForm = ({
               </option>
             ))}
           </select>
+          {!form.customer_id && (
+            <span
+              id="customer-error"
+              className="text-xs text-destructive block"
+              role="alert"
+            >
+              Please select an option
+            </span>
+          )}
         </div>
-        <div className="grid gap-2">
-          <Label
-            className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
-            htmlFor="invoice_date"
-          >
-            Invoice date
-          </Label>
-          <Input
-            id="invoice_date"
-            type="date"
-            value={form.date}
-            onChange={(event) =>
-              onFormChange({ ...form, date: event.target.value })
-            }
-            className="h-10 rounded-xl border-gray-200 bg-white shadow-sm focus-visible:ring-indigo-200 dark:border-gray-700 dark:bg-gray-800 dark:focus-visible:ring-indigo-500/20"
-          />
-        </div>
-        <div className="grid gap-2">
-          <Label
-            className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
-            htmlFor="due_date"
-          >
-            Due date
-          </Label>
-          <Input
-            id="due_date"
-            type="date"
-            value={form.due_date}
-            onChange={(event) =>
-              onFormChange({ ...form, due_date: event.target.value })
-            }
-            className="h-10 rounded-xl border-gray-200 bg-white shadow-sm focus-visible:ring-indigo-200 dark:border-gray-700 dark:bg-gray-800 dark:focus-visible:ring-indigo-500/20"
-          />
-        </div>
+        <ValidationField
+          id="invoice_date"
+          label="Invoice date"
+          type="date"
+          value={form.date}
+          onChange={(value) => onFormChange({ ...form, date: value })}
+          validate={validateDate}
+          required
+          success
+        />
+        <ValidationField
+          id="due_date"
+          label="Due date"
+          type="date"
+          value={form.due_date}
+          onChange={(value) => onFormChange({ ...form, due_date: value })}
+          validate={validateDate}
+          required
+          success
+        />
         <div className="grid gap-2">
           <Label
             className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
@@ -127,22 +132,24 @@ const InvoiceForm = ({
             <option value="NONE">No GST</option>
           </select>
         </div>
-        <FloatingInput
+        <ValidationField
           id="discount"
           label="Discount (%)"
           type="number"
-          min="0"
-          max="100"
-          step="0.01"
           value={form.discount}
           onChange={(value) => onFormChange({ ...form, discount: value })}
+          validate={(value) => (value ? validateNumber(value) : "")}
+          placeholder="0"
+          success
         />
         <div className="grid gap-2 sm:col-span-2">
-          <FloatingInput
+          <ValidationField
             id="notes"
             label="Notes"
             value={form.notes}
             onChange={(value) => onFormChange({ ...form, notes: value })}
+            validate={() => ""}
+            success
           />
         </div>
         <div className="sm:col-span-2">
@@ -184,6 +191,11 @@ const InvoiceForm = ({
               onChange={(event) =>
                 onFormChange({ ...form, warehouse_id: event.target.value })
               }
+              aria-invalid={!form.warehouse_id}
+              aria-describedby={
+                !form.warehouse_id ? "warehouse-error" : undefined
+              }
+              required
             >
               <option value="">Select warehouse</option>
               {warehouses.map((warehouse) => (
@@ -192,6 +204,15 @@ const InvoiceForm = ({
                 </option>
               ))}
             </select>
+            {!form.warehouse_id && (
+              <span
+                id="warehouse-error"
+                className="text-xs text-destructive block"
+                role="alert"
+              >
+                Please select an option
+              </span>
+            )}
           </div>
         )}
       </div>

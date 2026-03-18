@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { ValidationField } from "@/components/ui/ValidationField";
+import {
+  validateName,
+  validatePhone,
+  validateEmail,
+  validateRequired,
+} from "@/lib/validation";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
@@ -56,6 +63,7 @@ const BusinessProfileClient = ({
     showPaymentQr: false,
   });
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileTouched, setProfileTouched] = useState(false);
 
   const { data: templateRecords = [] } = useQuery({
     queryKey: ["templates"],
@@ -162,7 +170,20 @@ const BusinessProfileClient = ({
     }));
   };
 
+  // Validate all fields before submit
+  const validateAll = () => {
+    return (
+      !validateName(profile.businessName) &&
+      !validatePhone(profile.phone) &&
+      !validateEmail(profile.email) &&
+      !validateRequired(profile.address) &&
+      !validateRequired(profile.currency)
+    );
+  };
+
   const handleFinish = async () => {
+    setProfileTouched(true);
+    if (!validateAll()) return;
     await saveProfileMutation.mutateAsync({
       business_name: profile.businessName,
       address: profile.address,
@@ -176,6 +197,7 @@ const BusinessProfileClient = ({
       show_tax_number: profile.showTaxNumber,
       show_payment_qr: profile.showPaymentQr,
     });
+    setProfileTouched(false);
   };
 
   return (
@@ -280,82 +302,81 @@ const BusinessProfileClient = ({
                   Step 2: Business profile
                 </h2>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm">
-                    Business name
-                    <input
-                      value={profile.businessName}
-                      onChange={(event) =>
-                        updateProfile("businessName", event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-border px-3 py-2"
-                    />
-                  </label>
-                  <label className="text-sm">
-                    Phone
-                    <input
-                      value={profile.phone}
-                      onChange={(event) =>
-                        updateProfile("phone", event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-border px-3 py-2"
-                    />
-                  </label>
-                  <label className="text-sm sm:col-span-2">
-                    Address
-                    <input
-                      value={profile.address}
-                      onChange={(event) =>
-                        updateProfile("address", event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-border px-3 py-2"
-                    />
-                  </label>
-                  <label className="text-sm">
-                    Email
-                    <input
-                      value={profile.email}
-                      onChange={(event) =>
-                        updateProfile("email", event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-border px-3 py-2"
-                    />
-                  </label>
-                  <label className="text-sm">
-                    Website
-                    <input
-                      value={profile.website}
-                      onChange={(event) =>
-                        updateProfile("website", event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-border px-3 py-2"
-                    />
-                  </label>
+                  <ValidationField
+                    id="businessName"
+                    label="Business name"
+                    value={profile.businessName}
+                    onChange={(value) => updateProfile("businessName", value)}
+                    validate={validateName}
+                    required
+                    placeholder="Business name"
+                    success
+                  />
+                  <ValidationField
+                    id="phone"
+                    label="Phone"
+                    value={profile.phone}
+                    onChange={(value) => updateProfile("phone", value)}
+                    validate={validatePhone}
+                    required
+                    placeholder="9876543210"
+                    success
+                  />
+                  <ValidationField
+                    id="address"
+                    label="Address"
+                    value={profile.address}
+                    onChange={(value) => updateProfile("address", value)}
+                    validate={validateRequired}
+                    required
+                    placeholder="Business address"
+                    success
+                    className="sm:col-span-2"
+                  />
+                  <ValidationField
+                    id="email"
+                    label="Email"
+                    value={profile.email}
+                    onChange={(value) => updateProfile("email", value)}
+                    validate={validateEmail}
+                    required
+                    placeholder="name@example.com"
+                    success
+                  />
+                  <ValidationField
+                    id="website"
+                    label="Website"
+                    value={profile.website}
+                    onChange={(value) => updateProfile("website", value)}
+                    validate={() => ""}
+                    placeholder="https://example.com"
+                    success
+                  />
                   <div className="sm:col-span-2">
                     {/* Logo is stored in localStorage via the hook inside LogoUploader.
                         We intentionally do NOT pipe the Base64 into profile.logoUrl
                         to avoid sending a multi-MB payload to the server API. */}
                     <LogoUploader />
                   </div>
-                  <label className="text-sm">
-                    Tax ID / GSTIN
-                    <input
-                      value={profile.taxId}
-                      onChange={(event) =>
-                        updateProfile("taxId", event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-border px-3 py-2"
-                    />
-                  </label>
-                  <label className="text-sm">
-                    Currency
-                    <input
-                      value={profile.currency}
-                      onChange={(event) =>
-                        updateProfile("currency", event.target.value)
-                      }
-                      className="mt-2 w-full rounded-xl border border-border px-3 py-2"
-                    />
-                  </label>
+                  <ValidationField
+                    id="taxId"
+                    label="Tax ID / GSTIN"
+                    value={profile.taxId}
+                    onChange={(value) => updateProfile("taxId", value)}
+                    validate={() => ""}
+                    placeholder="GSTIN or Tax ID"
+                    success
+                  />
+                  <ValidationField
+                    id="currency"
+                    label="Currency"
+                    value={profile.currency}
+                    onChange={(value) => updateProfile("currency", value)}
+                    validate={validateRequired}
+                    required
+                    placeholder="INR"
+                    success
+                  />
                 </div>
                 <div className="mt-5 grid gap-3 text-sm">
                   <label className="flex items-center gap-2">
@@ -448,7 +469,14 @@ const BusinessProfileClient = ({
                   }
                   setCurrentStep((prev) => Math.min(prev + 1, 3));
                 }}
-                disabled={saveProfileMutation.isPending}
+                disabled={
+                  saveProfileMutation.isPending ||
+                  (currentStep === 3 && profileTouched && !validateAll())
+                }
+                aria-disabled={
+                  saveProfileMutation.isPending ||
+                  (currentStep === 3 && profileTouched && !validateAll())
+                }
                 className="rounded-full bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
               >
                 {currentStep === 3

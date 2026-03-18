@@ -22,6 +22,7 @@ type MetricCardProps = {
   icon: React.ReactNode;
   trendLabel?: string;
   description?: string;
+  helperText?: string;
   theme?: MetricCardTheme;
   formatValue?: (value: number) => string;
   status?: {
@@ -47,76 +48,64 @@ const paletteByTheme: Record<
   }
 > = {
   default: {
-    card:
-      "border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800",
-    label: "text-gray-500",
-    value: "text-gray-900 dark:text-gray-100",
-    description: "text-gray-500 dark:text-gray-400",
-    iconWrap:
-      "border border-gray-200 bg-gray-50 text-indigo-600 dark:border-gray-700 dark:bg-gray-900 dark:text-indigo-300",
-    accent: "bg-slate-500",
-    glow: "bg-slate-200/60",
-    haze: "bg-slate-100/50",
+    card: "border border-border bg-card shadow-sm",
+    label: "text-muted-foreground",
+    value: "text-foreground",
+    description: "text-muted-foreground",
+    iconWrap: "border border-border bg-muted/60 text-foreground",
+    accent: "bg-foreground/80",
+    glow: "bg-transparent",
+    haze: "bg-transparent",
   },
   sales: {
-    card:
-      "border-emerald-200 bg-[linear-gradient(180deg,rgba(240,253,244,0.98),rgba(255,255,255,1))] shadow-[0_20px_48px_-36px_rgba(22,101,52,0.55)]",
-    label: "text-emerald-700",
-    value: "text-emerald-950",
-    description: "text-emerald-700/75",
-    iconWrap:
-      "border border-emerald-200 bg-emerald-50 text-emerald-700",
+    card: "border border-emerald-200/60 bg-emerald-50/40 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/20",
+    label: "text-emerald-700 dark:text-emerald-200",
+    value: "text-foreground",
+    description: "text-muted-foreground",
+    iconWrap: "border border-emerald-200/60 bg-emerald-50/70 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-200",
     accent: "bg-emerald-500",
-    glow: "bg-emerald-200/70",
-    haze: "bg-emerald-100/60",
+    glow: "bg-transparent",
+    haze: "bg-transparent",
   },
   purchases: {
-    card:
-      "border-orange-200 bg-[linear-gradient(180deg,rgba(255,247,237,0.98),rgba(255,255,255,1))] shadow-[0_20px_48px_-36px_rgba(194,65,12,0.45)]",
-    label: "text-orange-700",
-    value: "text-orange-950",
-    description: "text-orange-700/75",
-    iconWrap:
-      "border border-orange-200 bg-orange-50 text-orange-700",
+    card: "border border-orange-200/60 bg-orange-50/40 shadow-sm dark:border-orange-900/40 dark:bg-orange-950/20",
+    label: "text-orange-700 dark:text-orange-200",
+    value: "text-foreground",
+    description: "text-muted-foreground",
+    iconWrap: "border border-orange-200/60 bg-orange-50/70 text-orange-700 dark:border-orange-900/40 dark:bg-orange-950/40 dark:text-orange-200",
     accent: "bg-orange-500",
-    glow: "bg-orange-200/70",
-    haze: "bg-orange-100/60",
+    glow: "bg-transparent",
+    haze: "bg-transparent",
   },
   profit: {
-    card:
-      "border-[#e7d8c9] bg-[linear-gradient(180deg,rgba(255,250,244,0.98),rgba(255,255,255,1))] shadow-[0_20px_48px_-38px_rgba(120,53,15,0.34)]",
-    label: "text-[#8a6d56]",
-    value: "text-[#1f1b16]",
-    description: "text-[#8a6d56]",
-    iconWrap:
-      "border border-[#ecdccf] bg-white/80 text-[#8b5e34]",
-    accent: "bg-[#c08457]",
-    glow: "bg-[#ecdccf]/70",
-    haze: "bg-[#fff0df]/70",
+    card: "border border-border bg-card shadow-sm",
+    label: "text-muted-foreground",
+    value: "text-foreground",
+    description: "text-muted-foreground",
+    iconWrap: "border border-border bg-muted/60 text-foreground",
+    accent: "bg-foreground/80",
+    glow: "bg-transparent",
+    haze: "bg-transparent",
   },
   "pending-sales": {
-    card:
-      "border-emerald-300 bg-[linear-gradient(135deg,rgba(220,252,231,0.98),rgba(255,255,255,0.96))] shadow-[0_28px_70px_-44px_rgba(22,101,52,0.62)] ring-1 ring-emerald-200/80",
-    label: "text-emerald-800",
-    value: "text-emerald-950",
-    description: "text-emerald-800/75",
-    iconWrap:
-      "border border-emerald-300 bg-white text-emerald-700",
+    card: "border border-emerald-200/60 bg-emerald-50/40 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/20",
+    label: "text-emerald-700 dark:text-emerald-200",
+    value: "text-foreground",
+    description: "text-muted-foreground",
+    iconWrap: "border border-emerald-200/60 bg-emerald-50/70 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/40 dark:text-emerald-200",
     accent: "bg-emerald-600",
-    glow: "bg-emerald-300/70",
-    haze: "bg-emerald-100/70",
+    glow: "bg-transparent",
+    haze: "bg-transparent",
   },
   "pending-purchases": {
-    card:
-      "border-orange-300 bg-[linear-gradient(135deg,rgba(255,237,213,0.98),rgba(255,255,255,0.96))] shadow-[0_28px_70px_-44px_rgba(194,65,12,0.55)] ring-1 ring-orange-200/90",
-    label: "text-orange-800",
-    value: "text-orange-950",
-    description: "text-orange-800/75",
-    iconWrap:
-      "border border-orange-300 bg-white text-orange-700",
+    card: "border border-orange-200/60 bg-orange-50/40 shadow-sm dark:border-orange-900/40 dark:bg-orange-950/20",
+    label: "text-orange-700 dark:text-orange-200",
+    value: "text-foreground",
+    description: "text-muted-foreground",
+    iconWrap: "border border-orange-200/60 bg-orange-50/70 text-orange-700 dark:border-orange-900/40 dark:bg-orange-950/40 dark:text-orange-200",
     accent: "bg-orange-500",
-    glow: "bg-orange-300/70",
-    haze: "bg-orange-100/70",
+    glow: "bg-transparent",
+    haze: "bg-transparent",
   },
 };
 
@@ -132,6 +121,7 @@ const MetricCard = ({
   icon,
   trendLabel,
   description,
+  helperText,
   theme = "default",
   formatValue,
   status,
@@ -185,6 +175,11 @@ const MetricCard = ({
                 className={cn("mt-1.5 max-w-[20rem] text-sm leading-5.5", palette.description)}
               >
                 {description}
+              </p>
+            ) : null}
+            {helperText ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                {helperText}
               </p>
             ) : null}
           </div>

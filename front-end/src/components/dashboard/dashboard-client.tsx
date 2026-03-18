@@ -1,8 +1,8 @@
 "use client";
 
 import React, { startTransition, useDeferredValue, useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { fetchDashboardOverview } from "@/lib/apiClient";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { fetchDashboardCardMetrics, fetchDashboardOverview } from "@/lib/apiClient";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import MetricCard from "@/components/dashboard/metric-card";
 import ProfitForecast from "@/components/dashboard/profit-forecast";
@@ -20,6 +20,7 @@ import ActivityTimeline from "@/components/dashboard/activity-timeline";
 import NotificationsPanel from "@/components/dashboard/notifications-panel";
 import AnimatedNumber from "@/components/dashboard/AnimatedNumber";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
+import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
 import DashboardFilters, {
   type DashboardFilters as DashboardFilterState,
 } from "@/components/dashboard/dashboard-filters";
@@ -33,7 +34,11 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatTimeLabel } from "@/lib/dashboardUtils";
-import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
+import {
+  dashboardQueryDefaults,
+  DASHBOARD_REALTIME_ENABLED,
+  DASHBOARD_REFRESH_INTERVAL_MS,
+} from "@/lib/dashboardRefresh";
 
 type DashboardClientProps = {
   name: string;
@@ -69,6 +74,19 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     window.localStorage.setItem("token", token);
   }, [hasValidSessionToken, token]);
 
+  useDashboardRealtime({
+    enabled: hydrated && hasValidSessionToken && DASHBOARD_REALTIME_ENABLED,
+    token,
+  });
+
+  const metricsQuery = useQuery({
+    queryKey: ["dashboard", "metrics", deferredFilters],
+    queryFn: () => fetchDashboardCardMetrics(deferredFilters),
+    enabled: hydrated && hasValidSessionToken,
+    placeholderData: keepPreviousData,
+    ...dashboardQueryDefaults,
+  });
+
   const {
     data,
     isLoading,
@@ -79,10 +97,18 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     queryKey: ["dashboard", "overview", deferredFilters],
     queryFn: () => fetchDashboardOverview(deferredFilters),
     enabled: hydrated && hasValidSessionToken,
+    refetchInterval: DASHBOARD_REALTIME_ENABLED
+      ? false
+      : DASHBOARD_REFRESH_INTERVAL_MS * 2,
+    placeholderData: keepPreviousData,
     ...dashboardQueryDefaults,
   });
 
-  const metrics = data?.metrics;
+  const metrics = metricsQuery.data?.metrics;
+  const metricsUpdatedAt = metricsQuery.dataUpdatedAt;
+  const metricsLoading = metricsQuery.isLoading;
+  const metricsFetching = metricsQuery.isFetching;
+  const metricsError = metricsQuery.isError;
   const invoiceStats = data?.invoiceStats;
   const pendingSalesPayments = data?.pendingPayments ?? [];
 
@@ -92,7 +118,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     return "bg-rose-100 text-rose-700";
   };
 
-  const showLoadingState = !hydrated || (hasValidSessionToken && isLoading);
+  const showLoadingState = !hydrated || (hasValidSessionToken && metricsLoading);
 
   return (
     <DashboardLayout
@@ -109,29 +135,29 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
       }
     >
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="rounded-[1.75rem] border border-[#ecdccf] bg-[linear-gradient(135deg,rgba(255,247,239,0.96),rgba(255,255,255,0.92))] px-6 py-5 shadow-[0_28px_70px_-48px_rgba(31,27,22,0.42)]">
-          <p className="text-xs uppercase tracking-[0.28em] text-[#8a6d56]">
+        <header className="dashboard-chart-surface rounded-[1.5rem] px-6 py-5">
+          <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
             Business command center
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {data?.filters?.label ? (
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#ecdccf] bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
-                {data.filters.label}
+            {metricsQuery.data?.filters?.label ? (
+              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                {metricsQuery.data.filters.label}
               </div>
             ) : null}
-            {dataUpdatedAt ? (
-              <div className="inline-flex items-center gap-2 rounded-full border border-[#ecdccf] bg-white/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
-                Updated {formatTimeLabel(dataUpdatedAt)}
+            {metricsUpdatedAt ? (
+              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Updated {formatTimeLabel(metricsUpdatedAt)}
               </div>
             ) : null}
           </div>
           <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="max-w-3xl text-2xl font-semibold tracking-tight text-[#1f1b16]">
+              <p className="max-w-3xl text-2xl font-semibold tracking-tight text-foreground">
                 Revenue, purchases, receivables, and supplier dues in one
                 operating view.
               </p>
-              <p className="mt-2 max-w-2xl text-sm text-[#8a6d56]">
+              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
                 Use the charts below to compare demand, stocking pressure,
                 payment mix, pending cash to collect, and supplier payments
                 without leaving the dashboard.
@@ -142,36 +168,28 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 {
                   label: "Sales",
                   value: metrics?.totalSales ?? 0,
-                  className:
-                    "border-emerald-200 bg-emerald-50/80 text-emerald-900",
                 },
                 {
                   label: "Purchases",
                   value: metrics?.totalPurchases ?? 0,
-                  className:
-                    "border-orange-200 bg-orange-50/80 text-orange-900",
                 },
                 {
                   label: "Pending Sales",
-                  value: metrics?.pendingPayments ?? 0,
-                  className:
-                    "border-emerald-300 bg-[linear-gradient(135deg,rgba(220,252,231,0.9),rgba(255,255,255,0.9))] text-emerald-900",
+                  value: metrics?.pendingSalesPayments ?? 0,
                 },
                 {
                   label: "Pending Purchases",
-                  value: metrics?.payables ?? 0,
-                  className:
-                    "border-orange-300 bg-[linear-gradient(135deg,rgba(255,237,213,0.9),rgba(255,255,255,0.9))] text-orange-900",
+                  value: metrics?.pendingPurchasePayments ?? 0,
                 },
               ].map((item) => (
                 <div
                   key={item.label}
-                  className={`rounded-2xl border px-4 py-3 shadow-[0_14px_30px_-24px_rgba(31,27,22,0.35)] ${item.className}`}
+                  className="rounded-2xl border border-border bg-card px-4 py-3 shadow-sm"
                 >
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-90">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     {item.label}
                   </p>
-                  <p className="mt-1 text-base font-semibold leading-tight">
+                  <p className="mt-1 text-base font-semibold leading-tight text-foreground">
                     <AnimatedNumber value={item.value} format={formatCurrency} />
                   </p>
                 </div>
@@ -179,6 +197,10 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
             </div>
           </div>
         </header>
+
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+          Dashboard pulse -- at-a-glance from your books
+        </p>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {showLoadingState ? (
@@ -191,13 +213,14 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 change={metrics.changes.totalSales}
                 icon={<TrendingUp size={18} />}
                 description="Booked revenue across all recorded sales."
+                helperText="Sum of sales total_amount (fallback total) for the selected range."
                 theme="sales"
                 formatValue={formatCurrency}
                 status={{
-                  isLoading,
-                  isFetching,
-                  isError,
-                  dataUpdatedAt,
+                  isLoading: metricsLoading,
+                  isFetching: metricsFetching,
+                  isError: metricsError,
+                  dataUpdatedAt: metricsUpdatedAt,
                   refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
                 }}
               />
@@ -207,47 +230,50 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 change={metrics.changes.totalPurchases}
                 icon={<Banknote size={18} />}
                 description="Spend committed to stock and supply purchases."
+                helperText="Sum of purchase total_amount (fallback total) for the selected range."
                 theme="purchases"
                 formatValue={formatCurrency}
                 status={{
-                  isLoading,
-                  isFetching,
-                  isError,
-                  dataUpdatedAt,
+                  isLoading: metricsLoading,
+                  isFetching: metricsFetching,
+                  isError: metricsError,
+                  dataUpdatedAt: metricsUpdatedAt,
                   refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
                 }}
               />
               <MetricCard
                 title="Pending Sales Payments"
-                value={metrics.pendingPayments}
-                change={metrics.changes.pendingPayments}
+                value={metrics.pendingSalesPayments}
+                change={metrics.changes.pendingSalesPayments}
                 icon={<CreditCard size={18} />}
                 trendLabel="to collect"
                 description="Outstanding customer payments still to collect."
+                helperText="Sum of pending_amount on sales in the selected range."
                 theme="pending-sales"
                 formatValue={formatCurrency}
                 status={{
-                  isLoading,
-                  isFetching,
-                  isError,
-                  dataUpdatedAt,
+                  isLoading: metricsLoading,
+                  isFetching: metricsFetching,
+                  isError: metricsError,
+                  dataUpdatedAt: metricsUpdatedAt,
                   refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
                 }}
               />
               <MetricCard
                 title="Pending Purchase Payments"
-                value={metrics.payables}
-                change={metrics.changes.payables}
+                value={metrics.pendingPurchasePayments}
+                change={metrics.changes.pendingPurchasePayments}
                 icon={<Banknote size={18} />}
                 trendLabel="to pay"
                 description="Outstanding supplier payments for recorded purchases."
+                helperText="Sum of pending_amount on purchases in the selected range."
                 theme="pending-purchases"
                 formatValue={formatCurrency}
                 status={{
-                  isLoading,
-                  isFetching,
-                  isError,
-                  dataUpdatedAt,
+                  isLoading: metricsLoading,
+                  isFetching: metricsFetching,
+                  isError: metricsError,
+                  dataUpdatedAt: metricsUpdatedAt,
                   refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
                 }}
               />
@@ -257,13 +283,14 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 change={metrics.changes.todayProfit}
                 icon={<CreditCard size={18} />}
                 description="Today's net after purchases and expenses."
+                helperText="(Sales - purchases - expenses) for today."
                 theme="profit"
                 formatValue={formatCurrency}
                 status={{
-                  isLoading,
-                  isFetching,
-                  isError,
-                  dataUpdatedAt,
+                  isLoading: metricsLoading,
+                  isFetching: metricsFetching,
+                  isError: metricsError,
+                  dataUpdatedAt: metricsUpdatedAt,
                   refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
                 }}
               />
@@ -273,13 +300,14 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 change={metrics.changes.weeklyProfit}
                 icon={<Wallet size={18} />}
                 description="Rolling 7-day profit performance."
+                helperText="(Sales - purchases - expenses) over the last 7 days."
                 theme="profit"
                 formatValue={formatCurrency}
                 status={{
-                  isLoading,
-                  isFetching,
-                  isError,
-                  dataUpdatedAt,
+                  isLoading: metricsLoading,
+                  isFetching: metricsFetching,
+                  isError: metricsError,
+                  dataUpdatedAt: metricsUpdatedAt,
                   refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
                 }}
               />
@@ -289,13 +317,14 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 change={metrics.changes.monthlyProfit}
                 icon={<Package size={18} />}
                 description="Current month profit after all outflows."
+                helperText="(Sales - purchases - expenses) month-to-date."
                 theme="profit"
                 formatValue={formatCurrency}
                 status={{
-                  isLoading,
-                  isFetching,
-                  isError,
-                  dataUpdatedAt,
+                  isLoading: metricsLoading,
+                  isFetching: metricsFetching,
+                  isError: metricsError,
+                  dataUpdatedAt: metricsUpdatedAt,
                   refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
                 }}
               />
@@ -305,13 +334,14 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 change={metrics.changes.yearlyProfit}
                 icon={<Landmark size={18} />}
                 description="Year-to-date profit after purchases and expenses."
+                helperText="(Sales - purchases - expenses) year-to-date."
                 theme="profit"
                 formatValue={formatCurrency}
                 status={{
-                  isLoading,
-                  isFetching,
-                  isError,
-                  dataUpdatedAt,
+                  isLoading: metricsLoading,
+                  isFetching: metricsFetching,
+                  isError: metricsError,
+                  dataUpdatedAt: metricsUpdatedAt,
                   refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
                 }}
               />

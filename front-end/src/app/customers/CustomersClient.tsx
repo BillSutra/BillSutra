@@ -3,8 +3,14 @@
 import React, { useMemo, useState } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ValidationField } from "@/components/ui/ValidationField";
+import {
+  validateName,
+  validateEmail,
+  validatePhone,
+  validateRequired,
+} from "@/lib/validation";
 import {
   useCreateCustomerMutation,
   useCustomersQuery,
@@ -28,6 +34,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     phone: "",
     address: "",
   });
+  const [formTouched, setFormTouched] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingForm, setEditingForm] = useState({
     name: "",
@@ -46,8 +53,20 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
   const resetForm = () =>
     setForm({ name: "", email: "", phone: "", address: "" });
 
+  // Validate all fields before submit
+  const validateAll = () => {
+    return (
+      !validateName(form.name) &&
+      !validateEmail(form.email) &&
+      !validatePhone(form.phone) &&
+      !validateRequired(form.address)
+    );
+  };
+
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
+    setFormTouched(true);
+    if (!validateAll()) return;
     await createCustomer.mutateAsync({
       name: form.name.trim(),
       email: form.email.trim() || undefined,
@@ -55,6 +74,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
       address: form.address.trim() || undefined,
     });
     resetForm();
+    setFormTouched(false);
   };
 
   const handleEdit = (id: number) => {
@@ -107,60 +127,65 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             <p className="text-sm text-[#8a6d56]">
               Capture contact details for billing and follow-ups.
             </p>
-            <form className="mt-4 grid gap-4" onSubmit={handleCreate}>
-              <div className="grid gap-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={form.name}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, name: event.target.value }))
-                  }
-                  placeholder="Customer name"
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={form.email}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, email: event.target.value }))
-                  }
-                  placeholder="name@example.com"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={form.phone}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, phone: event.target.value }))
-                  }
-                  placeholder="+91 98765 43210"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="address">Address</Label>
-                <Input
-                  id="address"
-                  value={form.address}
-                  onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      address: event.target.value,
-                    }))
-                  }
-                  placeholder="City, State"
-                />
-              </div>
+            <form
+              className="mt-4 grid gap-4"
+              onSubmit={handleCreate}
+              noValidate
+            >
+              <ValidationField
+                id="name"
+                label="Name"
+                value={form.name}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, name: value }))
+                }
+                validate={validateName}
+                required
+                placeholder="Customer name"
+                success
+              />
+              <ValidationField
+                id="email"
+                label="Email"
+                type="email"
+                value={form.email}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, email: value }))
+                }
+                validate={validateEmail}
+                required
+                placeholder="name@example.com"
+                success
+              />
+              <ValidationField
+                id="phone"
+                label="Phone"
+                value={form.phone}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, phone: value }))
+                }
+                validate={validatePhone}
+                required
+                placeholder="9876543210"
+                success
+              />
+              <ValidationField
+                id="address"
+                label="Address"
+                value={form.address}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, address: value }))
+                }
+                validate={validateRequired}
+                required
+                placeholder="City, State"
+                success
+              />
               <Button
                 type="submit"
                 className="bg-[#1f1b16] text-white hover:bg-[#2c2520]"
-                disabled={isMutating}
+                disabled={isMutating || (!validateAll() && formTouched)}
+                aria-disabled={isMutating || (!validateAll() && formTouched)}
               >
                 Add customer
               </Button>
@@ -197,57 +222,72 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                       className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] px-4 py-3"
                     >
                       {editingId === customer.id ? (
-                        <form className="grid gap-3" onSubmit={handleUpdate}>
-                          <div className="grid gap-2">
-                            <Label>Name</Label>
-                            <Input
-                              value={editingForm.name}
-                              onChange={(event) =>
-                                setEditingForm((prev) => ({
-                                  ...prev,
-                                  name: event.target.value,
-                                }))
-                              }
-                              required
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label>Email</Label>
-                            <Input
-                              type="email"
-                              value={editingForm.email}
-                              onChange={(event) =>
-                                setEditingForm((prev) => ({
-                                  ...prev,
-                                  email: event.target.value,
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label>Phone</Label>
-                            <Input
-                              value={editingForm.phone}
-                              onChange={(event) =>
-                                setEditingForm((prev) => ({
-                                  ...prev,
-                                  phone: event.target.value,
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label>Address</Label>
-                            <Input
-                              value={editingForm.address}
-                              onChange={(event) =>
-                                setEditingForm((prev) => ({
-                                  ...prev,
-                                  address: event.target.value,
-                                }))
-                              }
-                            />
-                          </div>
+                        <form
+                          className="grid gap-3"
+                          onSubmit={handleUpdate}
+                          noValidate
+                        >
+                          <ValidationField
+                            id={`edit-name-${customer.id}`}
+                            label="Name"
+                            value={editingForm.name}
+                            onChange={(value) =>
+                              setEditingForm((prev) => ({
+                                ...prev,
+                                name: value,
+                              }))
+                            }
+                            validate={validateName}
+                            required
+                            placeholder="Customer name"
+                            success
+                          />
+                          <ValidationField
+                            id={`edit-email-${customer.id}`}
+                            label="Email"
+                            type="email"
+                            value={editingForm.email}
+                            onChange={(value) =>
+                              setEditingForm((prev) => ({
+                                ...prev,
+                                email: value,
+                              }))
+                            }
+                            validate={validateEmail}
+                            required
+                            placeholder="name@example.com"
+                            success
+                          />
+                          <ValidationField
+                            id={`edit-phone-${customer.id}`}
+                            label="Phone"
+                            value={editingForm.phone}
+                            onChange={(value) =>
+                              setEditingForm((prev) => ({
+                                ...prev,
+                                phone: value,
+                              }))
+                            }
+                            validate={validatePhone}
+                            required
+                            placeholder="9876543210"
+                            success
+                          />
+                          <ValidationField
+                            id={`edit-address-${customer.id}`}
+                            label="Address"
+                            value={editingForm.address}
+                            onChange={(value) =>
+                              setEditingForm((prev) => ({
+                                ...prev,
+                                address: value,
+                              }))
+                            }
+                            validate={validateRequired}
+                            required
+                            placeholder="City, State"
+                            success
+                          />
                           <div className="flex flex-wrap gap-2">
                             <Button
                               type="submit"

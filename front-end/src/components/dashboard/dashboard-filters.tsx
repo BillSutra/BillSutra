@@ -45,11 +45,11 @@ const DashboardFilters = ({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-2 rounded-2xl border border-[#e9dccf] bg-white/80 px-3 py-2 shadow-[0_16px_40px_-34px_rgba(31,27,22,0.35)] backdrop-blur",
+        "flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card/90 px-3 py-2 shadow-sm backdrop-blur",
         className,
       )}
     >
-      <div className="flex items-center gap-1 rounded-xl border border-[#e9dccf] bg-[#fff9f2] p-1">
+      <div className="flex items-center gap-1 rounded-xl border border-border bg-muted/60 p-1">
         {(Object.keys(presetLabels) as DashboardRangePreset[]).map((preset) => (
           <Button
             key={preset}
@@ -65,8 +65,8 @@ const DashboardFilters = ({
             disabled={disabled}
             className={`h-7 px-3 text-xs ${
               filters.range === preset
-                ? "bg-[#1f1b16] text-white hover:bg-[#1f1b16]/90"
-                : "text-[#5c4b3b] hover:bg-[#fff2e5] hover:text-[#1f1b16]"
+                ? "bg-foreground text-background hover:bg-foreground/90"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
             }`}
           >
             {presetLabels[preset]}
@@ -74,7 +74,7 @@ const DashboardFilters = ({
         ))}
       </div>
 
-      <div className="flex items-center gap-1 rounded-xl border border-[#e9dccf] bg-[#fff9f2] p-1">
+      <div className="flex items-center gap-1 rounded-xl border border-border bg-muted/60 p-1">
         {(Object.keys(granularityLabels) as DashboardGranularity[]).map((preset) => (
           <Button
             key={preset}
@@ -85,8 +85,8 @@ const DashboardFilters = ({
             disabled={disabled}
             className={`h-7 px-3 text-xs ${
               filters.granularity === preset
-                ? "bg-[#1f1b16] text-white hover:bg-[#1f1b16]/90"
-                : "text-[#5c4b3b] hover:bg-[#fff2e5] hover:text-[#1f1b16]"
+                ? "bg-foreground text-background hover:bg-foreground/90"
+                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
             }`}
           >
             {granularityLabels[preset]}
@@ -95,25 +95,25 @@ const DashboardFilters = ({
       </div>
 
       {filters.range === "custom" && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#e9dccf] bg-white/80 px-2 py-1">
-          <label className="flex items-center gap-2 text-xs font-medium text-[#6f5744]">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card/80 px-2 py-1">
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
             Start
             <input
               type="date"
               value={filters.startDate ?? ""}
               onChange={(event) => update({ startDate: event.target.value })}
               disabled={disabled}
-              className="rounded-lg border border-[#e9dccf] bg-white px-2 py-1 text-xs text-[#1f1b16] shadow-sm"
+              className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm"
             />
           </label>
-          <label className="flex items-center gap-2 text-xs font-medium text-[#6f5744]">
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
             End
             <input
               type="date"
               value={filters.endDate ?? ""}
               onChange={(event) => update({ endDate: event.target.value })}
               disabled={disabled}
-              className="rounded-lg border border-[#e9dccf] bg-white px-2 py-1 text-xs text-[#1f1b16] shadow-sm"
+              className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm"
             />
           </label>
         </div>
