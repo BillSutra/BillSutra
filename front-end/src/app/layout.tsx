@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
-import { Fraunces, Geist, Geist_Mono, Sora } from "next/font/google";
+import {
+  Fraunces,
+  Geist,
+  Geist_Mono,
+  Noto_Sans_Devanagari,
+  Sora,
+} from "next/font/google";
 import "./globals.css";
 import SessionProvider from "../providers/sessionProvider";
 import { Toaster } from "@/components/ui/sonner";
 import QueryProvider from "../providers/QueryProvider";
 import AuthTokenSync from "../providers/AuthTokenSync";
 import ThemeProvider from "@/components/theme-provider";
+import { LanguageProvider } from "@/providers/LanguageProvider";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -28,6 +35,12 @@ const fraunces = Fraunces({
   weight: ["600", "700"],
 });
 
+const hindiSans = Noto_Sans_Devanagari({
+  variable: "--font-hindi-sans",
+  subsets: ["devanagari"],
+  weight: ["400", "500", "600", "700"],
+});
+
 export const metadata: Metadata = {
   title: "BillSutra",
   description: "Billing, invoicing, and inventory control for growing teams.",
@@ -41,17 +54,19 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${sora.variable} ${fraunces.variable} bg-background text-foreground antialiased transition-colors duration-300`}
+        className={`${geistSans.variable} ${geistMono.variable} ${sora.variable} ${fraunces.variable} ${hindiSans.variable} bg-background text-foreground antialiased transition-colors duration-300`}
       >
-        <ThemeProvider>
-          <SessionProvider>
-            <QueryProvider>
-              <AuthTokenSync />
-              {children}
-              <Toaster richColors duration={10000} />
-            </QueryProvider>
-          </SessionProvider>
-        </ThemeProvider>
+        <LanguageProvider>
+          <ThemeProvider>
+            <SessionProvider>
+              <QueryProvider>
+                <AuthTokenSync />
+                {children}
+                <Toaster richColors duration={10000} />
+              </QueryProvider>
+            </SessionProvider>
+          </ThemeProvider>
+        </LanguageProvider>
       </body>
     </html>
   );

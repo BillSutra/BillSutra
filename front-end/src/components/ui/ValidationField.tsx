@@ -1,4 +1,5 @@
-import React, { useState, useCallback } from "react";
+import React, { useCallback, useState } from "react";
+import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ValidationFieldProps {
@@ -46,9 +47,7 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
   const [error, setError] = useState("");
 
   const handleChange = useCallback(
-    (
-      e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
-    ) => {
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       onChange(e.target.value);
       setTouched(true);
       setTimeout(() => {
@@ -69,9 +68,9 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
 
   return (
     <div className={cn("mb-2", className)}>
-      <label htmlFor={id} className="block text-sm font-medium mb-1">
+      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-foreground">
         {label}
-        {required && <span className="text-red-500 ml-1">*</span>}
+        {required && <span className="ml-1 text-red-500">*</span>}
       </label>
       {as === "select" ? (
         <select
@@ -83,12 +82,12 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
           aria-invalid={showError}
           aria-describedby={showError ? `${id}-error` : undefined}
           className={cn(
-            "block w-full rounded-md border px-3 py-2 text-base shadow-sm focus:outline-none focus:ring-2 transition-all",
+            "app-field block h-10 w-full px-3 py-2 text-base focus:outline-none focus:ring-2 transition-all md:text-sm",
             showError
               ? "border-red-500 focus:ring-red-200"
               : showSuccess
                 ? "border-green-500 focus:ring-green-200"
-                : "border-gray-300 focus:ring-indigo-200",
+                : "focus:ring-indigo-200",
           )}
         >
           {children}
@@ -109,27 +108,31 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
           aria-invalid={showError}
           aria-describedby={showError ? `${id}-error` : undefined}
           className={cn(
-            "block w-full rounded-md border px-3 py-2 text-base shadow-sm focus:outline-none focus:ring-2 transition-all",
+            "app-field block h-10 w-full px-3 py-2 text-base focus:outline-none focus:ring-2 transition-all md:text-sm",
             showError
               ? "border-red-500 focus:ring-red-200"
               : showSuccess
                 ? "border-green-500 focus:ring-green-200"
-                : "border-gray-300 focus:ring-indigo-200",
+                : "focus:ring-indigo-200",
           )}
         />
       )}
       {showError && (
         <span
           id={`${id}-error`}
-          className="mt-1 text-xs text-red-600 block"
+          className="mt-1 block text-xs text-red-600 dark:text-red-400"
           role="alert"
         >
           {error}
         </span>
       )}
       {showSuccess && (
-        <span className="mt-1 text-xs text-green-600 block" role="status">
-          ✓
+        <span
+          className="mt-1 inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400"
+          role="status"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5" />
+          Looks good
         </span>
       )}
     </div>

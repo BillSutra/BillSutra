@@ -1,24 +1,12 @@
 "use client";
 
 import React, { startTransition, useDeferredValue, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { fetchDashboardCardMetrics, fetchDashboardOverview } from "@/lib/apiClient";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import MetricCard from "@/components/dashboard/metric-card";
-import ProfitForecast from "@/components/dashboard/profit-forecast";
-import SalesForecast from "@/components/dashboard/sales-forecast";
-import InventoryRiskAlerts from "@/components/dashboard/inventory-risk-alerts";
-import TransactionsTable from "@/components/dashboard/transactions-table";
-import CustomerInsights from "@/components/dashboard/customer-insights";
-import SupplierOverview from "@/components/dashboard/supplier-overview";
-import CashFlowChart from "@/components/dashboard/cashflow-chart";
-import ProductSalesChart from "@/components/dashboard/product-sales-chart";
-import SalesChart from "@/components/dashboard/sales-chart";
-import PaymentMethodDistribution from "@/components/dashboard/payment-method-distribution";
-import QuickActions from "@/components/dashboard/quick-actions";
-import ActivityTimeline from "@/components/dashboard/activity-timeline";
-import NotificationsPanel from "@/components/dashboard/notifications-panel";
 import AnimatedNumber from "@/components/dashboard/AnimatedNumber";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
@@ -41,6 +29,58 @@ import {
   DASHBOARD_REALTIME_ENABLED,
   DASHBOARD_REFRESH_INTERVAL_MS,
 } from "@/lib/dashboardRefresh";
+
+const dashboardSectionFallback = (height: string) => (
+  <div className={`app-loading-skeleton w-full ${height}`} />
+);
+
+const ProfitForecast = dynamic(() => import("@/components/dashboard/profit-forecast"), {
+  loading: () => dashboardSectionFallback("h-[320px]"),
+});
+const SalesForecast = dynamic(() => import("@/components/dashboard/sales-forecast"), {
+  loading: () => dashboardSectionFallback("h-[320px]"),
+});
+const InventoryRiskAlerts = dynamic(
+  () => import("@/components/dashboard/inventory-risk-alerts"),
+  { loading: () => dashboardSectionFallback("h-[340px]") },
+);
+const TransactionsTable = dynamic(
+  () => import("@/components/dashboard/transactions-table"),
+  { loading: () => dashboardSectionFallback("h-[380px]") },
+);
+const CustomerInsights = dynamic(
+  () => import("@/components/dashboard/customer-insights"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
+);
+const SupplierOverview = dynamic(
+  () => import("@/components/dashboard/supplier-overview"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
+);
+const CashFlowChart = dynamic(() => import("@/components/dashboard/cashflow-chart"), {
+  loading: () => dashboardSectionFallback("h-[420px]"),
+});
+const ProductSalesChart = dynamic(
+  () => import("@/components/dashboard/product-sales-chart"),
+  { loading: () => dashboardSectionFallback("h-[360px]") },
+);
+const SalesChart = dynamic(() => import("@/components/dashboard/sales-chart"), {
+  loading: () => dashboardSectionFallback("h-[420px]"),
+});
+const PaymentMethodDistribution = dynamic(
+  () => import("@/components/dashboard/payment-method-distribution"),
+  { loading: () => dashboardSectionFallback("h-[380px]") },
+);
+const QuickActions = dynamic(() => import("@/components/dashboard/quick-actions"), {
+  loading: () => dashboardSectionFallback("h-[300px]"),
+});
+const ActivityTimeline = dynamic(
+  () => import("@/components/dashboard/activity-timeline"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
+);
+const NotificationsPanel = dynamic(
+  () => import("@/components/dashboard/notifications-panel"),
+  { loading: () => dashboardSectionFallback("h-[260px]") },
+);
 
 type DashboardClientProps = {
   name: string;
@@ -381,13 +421,13 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
             {invoiceStats && (
               <div className="dashboard-chart-surface h-fit self-start rounded-[1.75rem]">
                 <div className="dashboard-chart-content px-6 pb-5 pt-6">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
+                  <p className="app-kicker">
                     Billing snapshot
                   </p>
-                  <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
+                  <p className="mt-2 text-lg font-semibold text-foreground">
                     Invoice statistics
                   </p>
-                  <p className="mt-1 text-sm text-[#6f6257]">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     Monitor issued invoices, settled ones, and what still needs
                     follow-up.
                   </p>
@@ -411,10 +451,10 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                         key={item.label}
                         className="dashboard-chart-metric rounded-2xl px-4 py-4"
                       >
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
+                        <p className="app-kicker text-[11px]">
                           {item.label}
                         </p>
-                        <p className="mt-2.5 text-lg font-semibold text-[#1f1b16] dark:text-gray-100">
+                        <p className="mt-2.5 text-lg font-semibold text-foreground">
                           {item.value}
                         </p>
                       </div>
@@ -438,14 +478,14 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
               <div className="dashboard-chart-content flex h-full flex-col p-6">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
+                    <p className="app-kicker">
                       Collection queue
                     </p>
-                    <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
+                    <p className="mt-2 text-lg font-semibold text-foreground">
                       Pending sales payments
                     </p>
                   </div>
-                  <span className="rounded-full border border-[#ecdccf] bg-white/90 px-3 py-1 text-xs font-medium text-[#5c4331]">
+                  <span className="app-chip">
                     {pendingSalesPayments.length} invoice(s)
                   </span>
                 </div>
@@ -458,27 +498,27 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                     refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
                   />
                 </div>
-                <p className="mt-2 text-sm text-[#5f5144]">
+                <p className="mt-2 text-sm text-muted-foreground">
                   Follow up on unpaid and partially paid sales before they age
                   further.
                 </p>
                 <div className="mt-4 grid gap-3">
                   {pendingSalesPayments.length === 0 ? (
-                    <div className="rounded-2xl border border-[#f2e6dc] bg-white/85 px-4 py-5 text-sm text-[#5f5144]">
+                    <div className="app-empty-state px-4 py-5 text-sm">
                       No pending sales invoices.
                     </div>
                   ) : (
                     pendingSalesPayments.map((purchase) => (
                       <div
                         key={purchase.id}
-                        className="flex flex-col gap-3 rounded-2xl border border-[#f2e6dc] bg-white/90 px-4 py-4 shadow-[0_16px_34px_-26px_rgba(31,27,22,0.32)] dark:border-gray-700 dark:bg-gray-900"
+                        className="app-list-item flex flex-col gap-3 px-4 py-4"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-[#1f1b16] dark:text-gray-100">
+                          <p className="text-sm font-semibold text-foreground">
                             {purchase.invoiceNumber} - {purchase.customer}
                           </p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#5f5144]">
-                            <span className="rounded-full border border-[#f0dfcf] bg-[#fff5ea] px-2.5 py-1 font-medium">
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <span className="app-chip">
                               Total: {formatCurrency(purchase.totalAmount)}
                             </span>
                             <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
@@ -500,7 +540,6 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                           <Button
                             type="button"
                             variant="outline"
-                            className="border-[#d8d4cf] bg-[#f5f5f4] text-[#1f1b16] hover:bg-white"
                           >
                             Open sales
                           </Button>
@@ -532,23 +571,23 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           <div className="dashboard-chart-content p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
+                <p className="app-kicker">
                   Invoice records
                 </p>
-                <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
+                <p className="mt-2 text-lg font-semibold text-foreground">
                   Invoice history
                 </p>
-                <p className="mt-1 text-sm text-[#5f5144]">
+                <p className="mt-1 text-sm text-muted-foreground">
                   Review the most recent invoices, totals, and current billing status.
                 </p>
               </div>
-              <Button asChild variant="outline" className="border-[#d8d4cf] bg-[#f5f5f4] text-[#1f1b16] hover:bg-white">
+              <Button asChild variant="outline">
                 <Link href="/invoices/history">Open records</Link>
               </Button>
             </div>
             <div className="mt-4 grid gap-3">
               {recentInvoices.length === 0 ? (
-                <div className="rounded-2xl border border-[#f2e6dc] bg-white/85 px-4 py-5 text-sm text-[#5f5144]">
+                <div className="app-empty-state px-4 py-5 text-sm">
                   No invoice records yet.
                 </div>
               ) : (

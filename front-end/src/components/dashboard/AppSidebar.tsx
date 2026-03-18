@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { dashboardNavItems } from "./dashboard-nav";
 import { useBusinessLogo } from "@/hooks/useBusinessLogo";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type AppSidebarProps = {
   collapsed: boolean;
@@ -18,6 +19,7 @@ type AppSidebarProps = {
 const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
   const pathname = usePathname();
   const { logo } = useBusinessLogo();
+  const { t } = useI18n();
 
   return (
     <div className="flex h-full flex-col gap-6 p-3">
@@ -26,13 +28,13 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
           {/* Show uploaded business logo, or fallback to "BS" text */}
           {logo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt="Business logo" className="h-6 w-6 object-contain" />
+            <img src={logo} alt={t("sidebar.businessLogoAlt")} className="h-6 w-6 object-contain" />
           ) : (
             "BS"
           )}
         </div>
         {!collapsed && (
-          <span className="ml-3 text-sm font-semibold">BillSutra</span>
+          <span className="ml-3 text-sm font-semibold">{t("common.appName")}</span>
         )}
       </div>
 
@@ -44,7 +46,7 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
 
           return (
             <Link
-              key={item.href + item.label}
+              key={item.href + item.labelKey}
               href={item.href}
               className={cn(
                 "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200",
@@ -53,10 +55,10 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
                   ? "bg-primary/10 text-primary shadow-sm"
                   : "text-muted-foreground",
               )}
-              title={collapsed ? item.label : undefined}
+              title={collapsed ? t(item.labelKey) : undefined}
             >
               <Icon className="h-4 w-4" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {!collapsed && <span className="truncate">{t(item.labelKey)}</span>}
             </Link>
           );
         })}
@@ -71,6 +73,8 @@ const AppSidebar = ({
   mobileOpen,
   onCloseMobile,
 }: AppSidebarProps) => {
+  const { t } = useI18n();
+
   return (
     <>
       <aside
@@ -86,7 +90,7 @@ const AppSidebar = ({
               size="icon-sm"
               variant="outline"
               onClick={onToggleCollapsed}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
             >
               {collapsed ? (
                 <PanelLeftOpen className="h-4 w-4" />
@@ -106,7 +110,7 @@ const AppSidebar = ({
               size="icon-sm"
               variant="outline"
               onClick={onToggleCollapsed}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
             >
               {collapsed ? (
                 <PanelLeftOpen className="h-4 w-4" />

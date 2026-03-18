@@ -24,8 +24,12 @@ import { fetchBusinessProfile } from "@/lib/apiClient";
 import { sendInvoiceSentEmail } from "@/lib/emailService";
 import { useInvoiceTotals } from "@/hooks/invoice/useInvoiceTotals";
 import { useInvoiceValidation } from "@/hooks/invoice/useInvoiceValidation";
-import { formatRelativeTime, useInvoiceDrafts } from "@/hooks/invoice/useInvoiceDrafts";
+import {
+  formatRelativeTime,
+  useInvoiceDrafts,
+} from "@/hooks/invoice/useInvoiceDrafts";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
+import { useI18n } from "@/providers/LanguageProvider";
 import type {
   InvoiceDraft,
   InvoiceFormState,
@@ -104,6 +108,7 @@ const DEFAULT_INVOICE_THEME: InvoiceTheme = {
 };
 
 const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
+  const { formatDate, locale, t } = useI18n();
   const { data: customers } = useCustomersQuery();
   const { data: products } = useProductsQuery();
   const { data: warehouses } = useWarehousesQuery();
@@ -190,24 +195,21 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   }, [customers]);
 
   const invoiceDate = useMemo(
-    () =>
-      form.date
-        ? new Date(form.date).toLocaleDateString("en-IN")
-        : new Date().toLocaleDateString("en-IN"),
-    [form.date],
+    () => (form.date ? formatDate(form.date) : formatDate(new Date())),
+    [form.date, formatDate],
   );
 
   const dueDate = useMemo(() => {
     if (form.due_date) {
-      return new Date(form.due_date).toLocaleDateString("en-IN");
+      return formatDate(form.due_date);
     }
     return invoiceDate;
-  }, [form.due_date, invoiceDate]);
+  }, [form.due_date, formatDate, invoiceDate]);
 
   const invoicePreviewData: InvoicePreviewData = useMemo(() => {
     const businessName = businessProfile?.business_name || "BillSutra";
     return {
-      invoiceNumber: "INV-NEW",
+      invoiceNumber: t("invoice.invoicePreviewNumber"),
       invoiceDate,
       dueDate,
       business: {
@@ -224,13 +226,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         showPaymentQr: businessProfile?.show_payment_qr ?? false,
       },
       client: {
-        name: customer?.name ?? "Customer",
+        name: customer?.name ?? t("invoice.fallbackCustomer"),
         email: customer?.email ?? "",
         phone: customer?.phone ?? "",
         address: customer?.address ?? "",
       },
       items: items.map((item) => ({
-        name: item.name || "Item",
+        name: item.name || t("invoice.fallbackItem"),
         description: "",
         quantity: Number(item.quantity) || 0,
         unitPrice: Number(item.price) || 0,
@@ -242,8 +244,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         value: Number(form.discount) || 0,
         label:
           form.discount_type === "PERCENTAGE"
-            ? `Discount (${Math.min(100, Math.max(0, Number(form.discount) || 0)).toFixed(2)}%)`
-            : "Fixed discount",
+            ? t("invoice.discountPercentageLabel", {
+                value: Math.min(100, Math.max(0, Number(form.discount) || 0)).toFixed(
+                  2,
+                ),
+              })
+            : t("invoice.discountFixedLabel"),
       },
       notes: form.notes || "",
       paymentInfo: "",
@@ -257,6 +263,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     form.notes,
     invoiceDate,
     items,
+    t,
     totals,
   ]);
 
@@ -405,7 +412,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         fileName: `invoice-${invoicePreviewData.invoiceNumber}.pdf`,
       });
     } catch {
-      toast.error("Unable to generate PDF from preview");
+      toast.error(t("invoice.pdfError"));
     }
   }, [
     activeDesignConfig,
@@ -414,6 +421,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     activeTheme,
     downloadPdf,
     invoicePreviewData,
+    t,
   ]);
 
   const handleSubmit = async (event: FormEvent) => {
@@ -432,7 +440,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         .map((item) => {
           const quantity = Number(item.quantity || 0);
           const price = Number(item.price || 0);
-          return `${item.name || "Item"} x${quantity} @ INR ${price.toFixed(2)}`;
+          return t("invoice.itemsSummaryLine", {
+            name: item.name || t("invoice.fallbackItem"),
+            quantity,
+            currency: t("common.currencyCode"),
+            price: price.toFixed(2),
+          });
         })
         .join("\n");
 
@@ -465,16 +478,17 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               invoice_date: form.date || new Date().toISOString().slice(0, 10),
               due_date: form.due_date || null,
               total: `INR ${totals.total.toFixed(2)}`,
-              business_name:
-                businessProfile?.business_name ?? "BillSutra",
+              business_name: businessProfile?.business_name ?? "BillSutra",
               business_email: businessProfile?.email ?? null,
               business_phone: businessProfile?.phone ?? null,
               notes: form.notes || null,
-              items_summary: itemsSummary || "No items",
+              items_summary: itemsSummary || t("invoice.noItemsSummary"),
             }
           : null,
       );
-      toast.success(`Invoice ${createdInvoice.invoice_number} created`);
+      toast.success(
+        t("invoice.createSuccess", { invoiceNumber: createdInvoice.invoice_number }),
+      );
 
       setForm({
         customer_id: "",
@@ -494,37 +508,40 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       setServerError(null);
       clearDraft();
     } catch (error) {
-      setServerError(parseServerErrors(error, "Unable to create invoice."));
+      setServerError(parseServerErrors(error, t("invoice.createError")));
     }
   };
 
   const handleSendInvoiceEmail = useCallback(async () => {
     if (!lastCreatedInvoiceId) {
-      toast.error("Create and save the invoice first");
+      toast.error(t("invoice.sendEmailMissingInvoice"));
       return;
     }
 
     if (!lastCreatedCustomerEmail || !lastCreatedInvoiceEmailPayload) {
-      toast.error("Customer email is missing on the saved invoice");
+      toast.error(t("invoice.sendEmailMissingCustomer"));
       return;
     }
 
     try {
       await sendInvoiceEmailMutation.mutateAsync(lastCreatedInvoiceEmailPayload);
-      toast.success("Email sent successfully");
+      toast.success(t("invoice.sendEmailSuccess"));
       toast.success(
-        `Invoice ${lastCreatedInvoiceNumber ?? `#${lastCreatedInvoiceId}`} email sent`,
+        t("invoice.sendEmailSuccessInvoice", {
+          invoiceNumber: lastCreatedInvoiceNumber ?? `#${lastCreatedInvoiceId}`,
+        }),
       );
     } catch (error) {
       console.error("Invoice email failed:", error);
-      setServerError(parseServerErrors(error, "Unable to send invoice email."));
-      toast.error("Failed to send email");
+      setServerError(parseServerErrors(error, t("invoice.sendEmailError")));
+      toast.error(t("invoice.sendEmailFailureToast"));
     }
   }, [
     lastCreatedCustomerEmail,
     lastCreatedInvoiceEmailPayload,
     lastCreatedInvoiceId,
     lastCreatedInvoiceNumber,
+    t,
     parseServerErrors,
     sendInvoiceEmailMutation,
   ]);
@@ -533,18 +550,20 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
       <div className="flex min-w-[150px] flex-col items-start gap-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:items-end sm:text-right">
         <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs uppercase tracking-[0.25em] text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
-          {isDirty ? "Draft" : "Saved"}
+          {isDirty ? t("common.draft") : t("common.saved")}
         </span>
         <span className="text-xs text-gray-500 dark:text-gray-400">
           {isDirty
-            ? "Unsaved changes"
+            ? t("invoice.statusUnsavedChanges")
             : lastSavedAt
-              ? `Saved ${formatRelativeTime(lastSavedAt)}`
-              : "Ready"}
+              ? t("invoiceDrafts.savedRelative", {
+                  time: formatRelativeTime(lastSavedAt, locale),
+                })
+              : t("common.ready")}
         </span>
       </div>
       <Button asChild variant="outline" className="h-11 rounded-xl px-4">
-        <Link href="/invoices/history">View invoice history</Link>
+        <Link href="/invoices/history">{t("invoice.viewHistory")}</Link>
       </Button>
     </div>
   );
@@ -553,8 +572,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title="Create invoice"
-      subtitle="Build GST-ready invoices with live totals, customer details, and preview-ready layouts for printing."
+      title={t("invoice.pageTitle")}
+      subtitle={t("invoice.pageSubtitle")}
       actions={headerActions}
     >
       <div className="mx-auto w-full max-w-7xl font-[var(--font-sora),var(--font-geist-sans)]">
@@ -584,7 +603,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           </div>
 
           <aside className="grid gap-4 lg:sticky lg:top-8">
-            <div className="printable">              <DesignConfigProvider
+            <div className="printable">
+              <DesignConfigProvider
                 value={{
                   designConfig: activeDesignConfig,
                   updateSection: () => {},
@@ -631,12 +651,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             />
             <div className="no-print rounded-xl border border-gray-200 bg-gray-50 p-6 text-sm text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800">
               <p className="font-semibold text-gray-900 dark:text-gray-100">
-                GST note
+                {t("invoice.gstNoteTitle")}
               </p>
-              <p className="mt-2">
-                Choose CGST + SGST for intra-state invoices and IGST for
-                inter-state billing. Use “No GST” for exempt invoices.
-              </p>
+              <p className="mt-2">{t("invoice.gstNoteBody")}</p>
             </div>
             <InvoiceActions
               onPrint={handlePrint}

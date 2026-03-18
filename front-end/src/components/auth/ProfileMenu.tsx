@@ -6,17 +6,21 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import UserAvtar from "../common/UserAvtar";
-import LogoutModal from "./LogoutModal";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { Languages } from "lucide-react";
+import { useI18n } from "@/providers/LanguageProvider";
 const LogoutModalDynamic = dynamic(() => import("../auth/LogoutModal"));
 const ProfileMenu = ({ name, image }: { name: string; image?: string }) => {
   const [logoutopen, setLogoutOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const { language, setLanguage, t } = useI18n();
 
   useEffect(() => {
     setMounted(true);
@@ -38,17 +42,39 @@ const ProfileMenu = ({ name, image }: { name: string; image?: string }) => {
           <UserAvtar name={name} image={image} />
         </DropdownMenuTrigger>
         <DropdownMenuContent>
-          <DropdownMenuLabel>My Account</DropdownMenuLabel>
+          <DropdownMenuLabel>{t("profileMenu.myAccount")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
-            <Link href="/profile">Profile</Link>
+            <Link href="/profile">{t("profileMenu.profile")}</Link>
           </DropdownMenuItem>
+          <DropdownMenuLabel className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Languages className="h-3.5 w-3.5" />
+            {t("profileMenu.languageSection")}
+          </DropdownMenuLabel>
+          <DropdownMenuRadioGroup
+            value={language}
+            onValueChange={(value) => setLanguage(value as "en" | "hi")}
+          >
+            <DropdownMenuRadioItem value="en">
+              {t("common.english")}
+              <span className="ml-auto text-xs text-muted-foreground">
+                {t("profileMenu.languageEnglish")}
+              </span>
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="hi">
+              {t("common.hindi")}
+              <span className="ml-auto text-xs text-muted-foreground">
+                {t("profileMenu.languageHindi")}
+              </span>
+            </DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
           <DropdownMenuItem
             onClick={() => {
               setLogoutOpen(true);
             }}
           >
-            Logout
+            {t("profileMenu.logout")}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>

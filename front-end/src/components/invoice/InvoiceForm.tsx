@@ -2,13 +2,11 @@
 
 import type { FormEvent } from "react";
 import { ValidationField } from "@/components/ui/ValidationField";
-import {
-  validateDate,
-  validateNumber,
-} from "@/lib/validation";
+import { validateDate, validateNumber } from "@/lib/validation";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import type { InvoiceFormState, TaxMode } from "@/types/invoice";
+import { useI18n } from "@/providers/LanguageProvider";
 
 export type InvoiceFormProps = {
   form: InvoiceFormState;
@@ -35,6 +33,12 @@ const InvoiceForm = ({
   summaryErrors,
   serverError,
 }: InvoiceFormProps) => {
+  const { t } = useI18n();
+  const validateRequiredDate = (value: string) =>
+    validateDate(value) ? t("validation.validDate") : "";
+  const validateOptionalNumber = (value: string) =>
+    value && validateNumber(value) ? t("validation.validNumber") : "";
+
   return (
     <form
       className="no-print rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
@@ -46,7 +50,7 @@ const InvoiceForm = ({
             className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
             htmlFor="customer"
           >
-            Customer
+            {t("invoiceForm.customer")}
           </Label>
           <select
             id="customer"
@@ -59,10 +63,10 @@ const InvoiceForm = ({
             aria-describedby={!form.customer_id ? "customer-error" : undefined}
             required
           >
-            <option value="">Select customer</option>
+            <option value="">{t("invoiceForm.selectCustomer")}</option>
             {customers.map((customer) => (
               <option key={customer.id} value={customer.id}>
-                {customer.name} {customer.email ? `• ${customer.email}` : ""}
+                {customer.name} {customer.email ? ` - ${customer.email}` : ""}
               </option>
             ))}
           </select>
@@ -72,27 +76,27 @@ const InvoiceForm = ({
               className="text-xs text-destructive block"
               role="alert"
             >
-              Please select an option
+              {t("invoiceForm.selectOptionError")}
             </span>
           )}
         </div>
         <ValidationField
           id="invoice_date"
-          label="Invoice date"
+          label={t("invoiceForm.invoiceDate")}
           type="date"
           value={form.date}
           onChange={(value) => onFormChange({ ...form, date: value })}
-          validate={validateDate}
+          validate={validateRequiredDate}
           required
           success
         />
         <ValidationField
           id="due_date"
-          label="Due date"
+          label={t("invoiceForm.dueDate")}
           type="date"
           value={form.due_date}
           onChange={(value) => onFormChange({ ...form, due_date: value })}
-          validate={validateDate}
+          validate={validateRequiredDate}
           required
           success
         />
@@ -101,7 +105,7 @@ const InvoiceForm = ({
             className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
             htmlFor="tax_mode"
           >
-            GST mode
+            {t("invoiceForm.gstMode")}
           </Label>
           <select
             id="tax_mode"
@@ -109,23 +113,23 @@ const InvoiceForm = ({
             value={taxMode}
             onChange={(event) => onTaxModeChange(event.target.value as TaxMode)}
           >
-            <option value="CGST_SGST">CGST + SGST</option>
-            <option value="IGST">IGST</option>
-            <option value="NONE">No GST</option>
+            <option value="CGST_SGST">{t("invoiceForm.gstModeCgstSgst")}</option>
+            <option value="IGST">{t("invoiceForm.gstModeIgst")}</option>
+            <option value="NONE">{t("invoiceForm.gstModeNone")}</option>
           </select>
         </div>
         <ValidationField
           id="discount"
           label={
             form.discount_type === "PERCENTAGE"
-              ? "Discount (%)"
-              : "Discount amount"
+              ? t("invoiceForm.discountPercentage")
+              : t("invoiceForm.discountAmount")
           }
           type="number"
           value={form.discount}
           onChange={(value) => onFormChange({ ...form, discount: value })}
-          validate={(value) => (value ? validateNumber(value) : "")}
-          placeholder="0"
+          validate={validateOptionalNumber}
+          placeholder={t("invoiceForm.discountPlaceholder")}
           success
         />
         <div className="grid gap-2">
@@ -133,7 +137,7 @@ const InvoiceForm = ({
             className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
             htmlFor="discount_type"
           >
-            Discount type
+            {t("invoiceForm.discountType")}
           </Label>
           <select
             id="discount_type"
@@ -146,14 +150,14 @@ const InvoiceForm = ({
               })
             }
           >
-            <option value="PERCENTAGE">Percentage</option>
-            <option value="FIXED">Fixed amount</option>
+            <option value="PERCENTAGE">{t("invoiceForm.discountTypePercentage")}</option>
+            <option value="FIXED">{t("invoiceForm.discountTypeFixed")}</option>
           </select>
         </div>
         <div className="grid gap-2 sm:col-span-2">
           <ValidationField
             id="notes"
-            label="Notes"
+            label={t("invoiceForm.notes")}
             value={form.notes}
             onChange={(value) => onFormChange({ ...form, notes: value })}
             validate={() => ""}
@@ -176,10 +180,10 @@ const InvoiceForm = ({
                 className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
                 htmlFor="sync_sales"
               >
-                Sync with sales and inventory
+                {t("invoiceForm.syncSales")}
               </Label>
               <p className="mt-1 text-xs text-gray-500">
-                Creates a sales record and deducts stock from inventory.
+                {t("invoiceForm.syncSalesDescription")}
               </p>
             </div>
           </div>
@@ -190,7 +194,7 @@ const InvoiceForm = ({
               className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
               htmlFor="warehouse"
             >
-              Warehouse for stock sync
+              {t("invoiceForm.warehouse")}
             </Label>
             <select
               id="warehouse"
@@ -205,7 +209,7 @@ const InvoiceForm = ({
               }
               required
             >
-              <option value="">Select warehouse</option>
+              <option value="">{t("invoiceForm.selectWarehouse")}</option>
               {warehouses.map((warehouse) => (
                 <option key={warehouse.id} value={warehouse.id}>
                   {warehouse.name}
@@ -218,7 +222,7 @@ const InvoiceForm = ({
                 className="text-xs text-destructive block"
                 role="alert"
               >
-                Please select an option
+                {t("invoiceForm.selectOptionError")}
               </span>
             )}
           </div>
@@ -241,7 +245,7 @@ const InvoiceForm = ({
 
       <div className="mt-6 flex flex-col gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
         <div className="text-xs uppercase tracking-[0.2em] text-gray-500">
-          Invoice number is generated automatically.
+          {t("invoice.invoiceGeneratedAutomatically")}
         </div>
         <Button
           type="submit"
@@ -249,7 +253,7 @@ const InvoiceForm = ({
           disabled={isSubmitting}
           className="h-11 rounded-xl px-5"
         >
-          Create invoice
+          {t("invoice.createButton")}
         </Button>
       </div>
     </form>

@@ -15,67 +15,67 @@ import {
 
 export const dashboardNavItems = [
   {
-    label: "Dashboard",
+    labelKey: "navigation.dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
   },
   {
-    label: "Products",
+    labelKey: "navigation.products",
     href: "/products",
     icon: Package,
   },
   {
-    label: "Inventory",
+    labelKey: "navigation.inventory",
     href: "/inventory",
     icon: Boxes,
   },
   {
-    label: "Warehouses",
+    labelKey: "navigation.warehouses",
     href: "/warehouses",
     icon: Warehouse,
   },
   {
-    label: "Invoices",
+    labelKey: "navigation.invoices",
     href: "/invoices",
     icon: FileText,
   },
   {
-    label: "Invoice Records",
+    labelKey: "navigation.invoiceRecords",
     href: "/invoices/history",
     icon: FileText,
   },
   {
-    label: "Clients",
+    labelKey: "navigation.clients",
     href: "/customers",
     icon: Users,
   },
   {
-    label: "Suppliers",
+    labelKey: "navigation.suppliers",
     href: "/suppliers",
     icon: Store,
   },
   {
-    label: "Purchases",
+    labelKey: "navigation.purchases",
     href: "/purchases",
     icon: ShoppingCart,
   },
   {
-    label: "Sales",
+    labelKey: "navigation.sales",
     href: "/sales",
     icon: ShoppingBag,
   },
   {
-    label: "Templates",
+    labelKey: "navigation.templates",
     href: "/templates",
     icon: Shapes,
   },
   {
-    label: "Business Profile",
+    labelKey: "navigation.businessProfile",
     href: "/business-profile",
     icon: Building2,
   },
   {
-    label: "Settings",
+    labelKey: "navigation.settings",
     href: "/settings",
     icon: Settings,
   },

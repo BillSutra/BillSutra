@@ -14,9 +14,10 @@ const SettingsPage = async () => {
       subtitle="Manage account and invoice configuration preferences."
     >
       <div className="mx-auto w-full max-w-4xl">
-        <section className="rounded-3xl border border-border bg-white p-6">
-          <h2 className="text-sm font-semibold">Invoice preferences</h2>
-          <p className="mt-2 text-sm text-[#5c4b3b]">
+        <section className="app-panel rounded-3xl p-6">
+          <p className="app-kicker">Preferences</p>
+          <h2 className="mt-2 text-lg font-semibold text-foreground">Invoice preferences</h2>
+          <p className="mt-2 text-sm text-muted-foreground">
             Manage invoice defaults and branding preferences from the business
             profile and templates pages.
           </p>

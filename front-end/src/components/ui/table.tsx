@@ -73,15 +73,15 @@ export function DataTable({
           placeholder={searchPlaceholder}
           className="h-10 max-w-md rounded-xl border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
         />
-        <p className="text-sm text-gray-500 dark:text-gray-400">
+        <p className="text-sm text-muted-foreground">
           {filteredRows.length} results
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <div className="app-panel overflow-hidden rounded-2xl">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-gray-100 text-gray-600 dark:bg-gray-700/50 dark:text-gray-300">
+            <thead className="bg-muted/70 text-muted-foreground">
               <tr>
                 {columns.map((column) => (
                   <th
@@ -101,11 +101,11 @@ export function DataTable({
                 <tr
                   key={row.id}
                   className={cn(
-                    "border-t border-gray-100 transition-colors dark:border-gray-700",
+                    "border-t border-border/70 transition-colors",
                     index % 2 === 0
-                      ? "bg-white dark:bg-gray-800"
-                      : "bg-gray-50/70 dark:bg-gray-800/70",
-                    "hover:bg-indigo-50/60 dark:hover:bg-indigo-500/10",
+                      ? "bg-transparent"
+                      : "bg-muted/25",
+                    "hover:bg-accent/40",
                   )}
                 >
                   {columns.map((column) => (
@@ -123,7 +123,7 @@ export function DataTable({
         </div>
 
         {paginatedRows.length === 0 ? (
-          <div className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">
             {emptyText}
           </div>
         ) : null}
@@ -139,7 +139,7 @@ export function DataTable({
         >
           Previous
         </Button>
-        <span className="text-sm text-gray-500 dark:text-gray-400">
+        <span className="text-sm text-muted-foreground">
           Page {currentPage} of {totalPages}
         </span>
         <Button
