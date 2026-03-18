@@ -15,6 +15,7 @@ const navItems = [
   { label: "Suppliers", href: "/suppliers" },
   { label: "Purchases", href: "/purchases" },
   { label: "Sales", href: "/sales" },
+  { label: "Templates", href: "/templates" },
   { label: "Business Profile", href: "/business-profile" },
   { label: "Settings", href: "/settings" },
 ];

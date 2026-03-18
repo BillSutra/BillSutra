@@ -65,6 +65,11 @@ export const dashboardNavItems = [
     icon: ShoppingBag,
   },
   {
+    label: "Templates",
+    href: "/templates",
+    icon: Shapes,
+  },
+  {
     label: "Business Profile",
     href: "/business-profile",
     icon: Building2,
