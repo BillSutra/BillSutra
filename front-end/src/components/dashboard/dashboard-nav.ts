@@ -40,6 +40,11 @@ export const dashboardNavItems = [
     icon: FileText,
   },
   {
+    label: "Invoice Records",
+    href: "/invoices/history",
+    icon: FileText,
+  },
+  {
     label: "Clients",
     href: "/customers",
     icon: Users,
@@ -58,11 +63,6 @@ export const dashboardNavItems = [
     label: "Sales",
     href: "/sales",
     icon: ShoppingBag,
-  },
-  {
-    label: "Templates",
-    href: "/templates",
-    icon: Shapes,
   },
   {
     label: "Business Profile",

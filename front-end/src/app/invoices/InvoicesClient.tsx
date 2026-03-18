@@ -1,38 +1,30 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import axios from "axios";
-import { toast } from "sonner";
 import Link from "next/link";
+import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
 import InvoiceForm from "@/components/invoice/InvoiceForm";
 import InvoiceTable from "@/components/invoice/InvoiceTable";
-import InvoiceHeader from "@/components/invoice/InvoiceHeader";
 import InvoiceTotals from "@/components/invoice/InvoiceTotals";
 import InvoiceDraftPanel from "@/components/invoice/InvoiceDraftPanel";
 import InvoiceDraftList from "@/components/invoice/InvoiceDraftList";
 import InvoiceActions from "@/components/invoice/InvoiceActions";
 import {
   DesignConfigProvider,
-  type DesignConfig,
   normalizeDesignConfig,
 } from "@/components/invoice/DesignConfigContext";
-import {
-  fetchInvoicePdfFile,
-  fetchBusinessProfile,
-  fetchTemplates,
-  fetchUserTemplates,
-  saveUserTemplate,
-} from "@/lib/apiClient";
+import { Button } from "@/components/ui/button";
+import { fetchBusinessProfile } from "@/lib/apiClient";
 import { sendInvoiceSentEmail } from "@/lib/emailService";
-import { SECTION_LABELS, TEMPLATE_CATALOG } from "@/lib/invoiceTemplateData";
 import { useInvoiceTotals } from "@/hooks/invoice/useInvoiceTotals";
 import { useInvoiceValidation } from "@/hooks/invoice/useInvoiceValidation";
-import { useInvoiceDrafts } from "@/hooks/invoice/useInvoiceDrafts";
+import { formatRelativeTime, useInvoiceDrafts } from "@/hooks/invoice/useInvoiceDrafts";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import type {
   InvoiceDraft,
@@ -41,7 +33,11 @@ import type {
   InvoiceItemForm,
   TaxMode,
 } from "@/types/invoice";
-import type { InvoicePreviewData, SectionKey } from "@/types/invoice-template";
+import type {
+  InvoicePreviewData,
+  InvoiceTheme,
+  SectionKey,
+} from "@/types/invoice-template";
 import {
   useCreateInvoiceMutation,
   useCustomersQuery,
@@ -82,30 +78,38 @@ const sanitizeDiscountPercent = (value: string) => {
   return String(Math.min(100, Math.max(0, numericValue)));
 };
 
+const sanitizeDiscountAmount = (value: string) => {
+  if (value === "") return value;
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return value;
+  return String(Math.max(0, numericValue));
+};
+
+const DEFAULT_INVOICE_SECTIONS: SectionKey[] = [
+  "header",
+  "company_details",
+  "client_details",
+  "items",
+  "tax",
+  "discount",
+  "payment_info",
+  "notes",
+  "footer",
+];
+
+const DEFAULT_INVOICE_THEME: InvoiceTheme = {
+  primaryColor: "#1f2937",
+  fontFamily: "var(--font-geist-mono)",
+  tableStyle: "grid",
+};
+
 const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const { data: customers } = useCustomersQuery();
   const { data: products } = useProductsQuery();
   const { data: warehouses } = useWarehousesQuery();
-  const { data: templateRecords = [] } = useQuery({
-    queryKey: ["templates"],
-    queryFn: fetchTemplates,
-  });
-  const { data: userTemplateRecords = [] } = useQuery({
-    queryKey: ["user-templates"],
-    queryFn: fetchUserTemplates,
-  });
   const { data: businessProfile } = useQuery({
     queryKey: ["business-profile"],
     queryFn: fetchBusinessProfile,
-  });
-  const saveTemplateMutation = useMutation({
-    mutationFn: saveUserTemplate,
-    onSuccess: () => {
-      toast.success("Template applied");
-    },
-    onError: () => {
-      toast.error("Unable to apply template");
-    },
   });
   const sendInvoiceEmailMutation = useMutation({
     mutationFn: sendInvoiceSentEmail,
@@ -129,6 +133,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     date: "",
     due_date: "",
     discount: "0",
+    discount_type: "PERCENTAGE",
     notes: "",
     sync_sales: true,
     warehouse_id: "",
@@ -140,149 +145,17 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const [itemErrors, setItemErrors] = useState<InvoiceItemError[]>([]);
   const [summaryErrors, setSummaryErrors] = useState<string[]>([]);
   const [serverError, setServerError] = useState<string | null>(null);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
-    null,
-  );
-  const [hasManualTemplateSelection, setHasManualTemplateSelection] =
-    useState(false);
   const validation = useInvoiceValidation(form, items);
-  const totals = useInvoiceTotals(items, form.discount, taxMode);
-  const knownSections = useMemo(
-    () => new Set<SectionKey>(Object.keys(SECTION_LABELS) as SectionKey[]),
-    [],
+  const totals = useInvoiceTotals(
+    items,
+    form.discount,
+    form.discount_type,
+    taxMode,
   );
-  const normalizeSection = useCallback(
-    (section: string): SectionKey | null => {
-      return knownSections.has(section as SectionKey)
-        ? (section as SectionKey)
-        : null;
-    },
-    [knownSections],
-  );
-
-  const templatesFromApi = useMemo(() => {
-    if (!templateRecords.length) return null;
-
-    const mapFontFamily = (font: string) => {
-      const value = font.toLowerCase();
-      if (value.includes("sora")) return "var(--font-sora)";
-      if (value.includes("fraunces")) return "var(--font-fraunces)";
-      if (value.includes("mono")) return "var(--font-geist-mono)";
-      return "var(--font-geist-sans)";
-    };
-
-    return templateRecords.map((template) => {
-      const orderedSections = (template.sections ?? [])
-        .slice()
-        .sort((a, b) => a.section_order - b.section_order)
-        .map((section) => normalizeSection(section.section_key))
-        .filter((section): section is SectionKey => Boolean(section));
-      const defaultSections = (template.sections ?? [])
-        .filter((section) => section.is_default)
-        .sort((a, b) => a.section_order - b.section_order)
-        .map((section) => normalizeSection(section.section_key))
-        .filter((section): section is SectionKey => Boolean(section));
-
-      return {
-        id: String(template.id),
-        name: template.name,
-        description: template.description ?? "",
-        layout: template.layout_config.layout,
-        defaultSections: defaultSections.length
-          ? defaultSections
-          : orderedSections,
-        theme: {
-          primaryColor: template.layout_config.primaryColor,
-          fontFamily: mapFontFamily(template.layout_config.font),
-          tableStyle: template.layout_config.tableStyle,
-        },
-        sectionOrder: orderedSections.length
-          ? orderedSections
-          : defaultSections,
-      };
-    });
-  }, [templateRecords, normalizeSection]);
-
-  const templates = templatesFromApi ?? TEMPLATE_CATALOG;
-  const activeUserTemplate = useMemo(() => {
-    if (!userTemplateRecords.length) return null;
-    return [...userTemplateRecords].sort((a, b) => {
-      return (
-        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-      );
-    })[0];
-  }, [userTemplateRecords]);
-
-  const activeTemplate = useMemo(() => {
-    if (activeUserTemplate) {
-      return (
-        templates.find(
-          (template) => Number(template.id) === activeUserTemplate.template_id,
-        ) ?? templates[0]
-      );
-    }
-    return templates[0];
-  }, [activeUserTemplate, templates]);
-
-  useEffect(() => {
-    if (hasManualTemplateSelection) return;
-    if (activeTemplate) {
-      setSelectedTemplateId(activeTemplate.id);
-    }
-  }, [activeTemplate, hasManualTemplateSelection]);
-
-  const selectedTemplate = useMemo(() => {
-    if (!selectedTemplateId) return activeTemplate;
-    return (
-      templates.find((template) => template.id === selectedTemplateId) ??
-      activeTemplate
-    );
-  }, [activeTemplate, selectedTemplateId, templates]);
-
-  const selectedUserTemplate = useMemo(() => {
-    if (!selectedTemplateId) return null;
-    const selectedId = Number(selectedTemplateId);
-    if (!selectedId || Number.isNaN(selectedId)) return null;
-    return (
-      userTemplateRecords.find((item) => item.template_id === selectedId) ??
-      null
-    );
-  }, [selectedTemplateId, userTemplateRecords]);
-
-  const activeEnabledSections = useMemo(() => {
-    if (!selectedUserTemplate) return selectedTemplate.defaultSections;
-    const normalized = selectedUserTemplate.enabled_sections
-      .map((section) => normalizeSection(section))
-      .filter((section): section is SectionKey => Boolean(section));
-    return normalized.length ? normalized : selectedTemplate.defaultSections;
-  }, [selectedTemplate, selectedUserTemplate, normalizeSection]);
-
-  const activeSectionOrder = useMemo(() => {
-    if (!selectedUserTemplate) {
-      return selectedTemplate.sectionOrder ?? selectedTemplate.defaultSections;
-    }
-    const normalized = selectedUserTemplate.section_order
-      .map((section) => normalizeSection(section))
-      .filter((section): section is SectionKey => Boolean(section));
-    return normalized.length
-      ? normalized
-      : (selectedTemplate.sectionOrder ?? selectedTemplate.defaultSections);
-  }, [selectedTemplate, selectedUserTemplate, normalizeSection]);
-
-  const activeTheme = useMemo(() => {
-    if (!selectedUserTemplate?.theme_color) return selectedTemplate.theme;
-    return {
-      ...selectedTemplate.theme,
-      primaryColor: selectedUserTemplate.theme_color,
-    };
-  }, [selectedTemplate, selectedUserTemplate]);
-
-  const activeDesignConfig = useMemo(() => {
-    return normalizeDesignConfig(
-      (selectedUserTemplate?.design_config as Partial<DesignConfig> | null) ??
-        null,
-    );
-  }, [selectedUserTemplate]);
+  const activeEnabledSections = DEFAULT_INVOICE_SECTIONS;
+  const activeSectionOrder = DEFAULT_INVOICE_SECTIONS;
+  const activeTheme = DEFAULT_INVOICE_THEME;
+  const activeDesignConfig = useMemo(() => normalizeDesignConfig(null), []);
 
   const parseServerErrors = (error: unknown, fallback: string) => {
     if (axios.isAxiosError(error)) {
@@ -363,10 +236,29 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         unitPrice: Number(item.price) || 0,
         taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
       })),
+      totals,
+      discount: {
+        type: form.discount_type,
+        value: Number(form.discount) || 0,
+        label:
+          form.discount_type === "PERCENTAGE"
+            ? `Discount (${Math.min(100, Math.max(0, Number(form.discount) || 0)).toFixed(2)}%)`
+            : "Fixed discount",
+      },
       notes: form.notes || "",
       paymentInfo: "",
     };
-  }, [businessProfile, customer, dueDate, form.notes, invoiceDate, items]);
+  }, [
+    businessProfile,
+    customer,
+    dueDate,
+    form.discount,
+    form.discount_type,
+    form.notes,
+    invoiceDate,
+    items,
+    totals,
+  ]);
 
   const handleLoadDraft = useCallback((draft: InvoiceDraft) => {
     setForm({
@@ -471,9 +363,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
   const handleFormChange = useCallback(
     (next: InvoiceFormState) => {
+      const discount =
+        next.discount_type === "PERCENTAGE"
+          ? sanitizeDiscountPercent(next.discount)
+          : sanitizeDiscountAmount(next.discount);
       setForm({
         ...next,
-        discount: sanitizeDiscountPercent(next.discount),
+        discount,
       });
       setSummaryErrors([]);
       setServerError(null);
@@ -500,7 +396,6 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     try {
       await downloadPdf({
         previewPayload: {
-          templateId: selectedTemplate.id,
           data: invoicePreviewData,
           enabledSections: activeEnabledSections,
           sectionOrder: activeSectionOrder,
@@ -519,45 +414,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     activeTheme,
     downloadPdf,
     invoicePreviewData,
-    selectedTemplate.id,
   ]);
-
-  const handleTemplateSelect = async (templateId: string) => {
-    const template = templates.find((item) => item.id === templateId);
-    if (!template) return;
-    setSelectedTemplateId(templateId);
-    setHasManualTemplateSelection(true);
-
-    const normalizedOrder = template.sectionOrder ?? template.defaultSections;
-    await saveTemplateMutation.mutateAsync({
-      template_id: Number(templateId),
-      enabled_sections: template.defaultSections,
-      section_order: normalizedOrder,
-      theme_color: template.theme.primaryColor,
-      design_config: selectedUserTemplate?.design_config ?? null,
-    });
-  };
-
-  const handleSectionToggle = async (section: SectionKey) => {
-    const templateIdNumber = Number(selectedTemplate.id);
-    if (!templateIdNumber || Number.isNaN(templateIdNumber)) return;
-
-    const isEnabled = activeEnabledSections.includes(section);
-    const nextEnabled = isEnabled
-      ? activeEnabledSections.filter((item) => item !== section)
-      : [...activeEnabledSections, section];
-    const nextOrder = isEnabled
-      ? activeSectionOrder.filter((item) => item !== section)
-      : [...activeSectionOrder, section];
-
-    await saveTemplateMutation.mutateAsync({
-      template_id: templateIdNumber,
-      enabled_sections: nextEnabled,
-      section_order: nextOrder,
-      theme_color: activeTheme.primaryColor,
-      design_config: selectedUserTemplate?.design_config ?? null,
-    });
-  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -583,7 +440,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         customer_id: Number(form.customer_id),
         date: form.date || undefined,
         due_date: form.due_date || undefined,
-        discount: totals.discount || undefined,
+        discount: Number(form.discount) || undefined,
+        discount_type: form.discount_type,
         sync_sales: form.sync_sales,
         warehouse_id: form.warehouse_id ? Number(form.warehouse_id) : undefined,
         items: items.map((item) => ({
@@ -616,34 +474,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             }
           : null,
       );
-
-      try {
-        const pdfFile = await fetchInvoicePdfFile(
-          createdInvoice.id,
-          createdInvoice.invoice_number,
-        );
-        const pdfUrl = URL.createObjectURL(pdfFile.blob);
-        const anchor = document.createElement("a");
-        anchor.href = pdfUrl;
-        anchor.download = pdfFile.fileName;
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        URL.revokeObjectURL(pdfUrl);
-      } catch (pdfError) {
-        toast.error(
-          parseServerErrors(
-            pdfError,
-            "Invoice saved, but PDF download failed.",
-          ),
-        );
-      }
+      toast.success(`Invoice ${createdInvoice.invoice_number} created`);
 
       setForm({
         customer_id: "",
         date: "",
         due_date: "",
         discount: "0",
+        discount_type: "PERCENTAGE",
         notes: "",
         sync_sales: true,
         warehouse_id: "",
@@ -691,17 +529,36 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     sendInvoiceEmailMutation,
   ]);
 
+  const headerActions = (
+    <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+      <div className="flex min-w-[150px] flex-col items-start gap-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left shadow-sm dark:border-gray-700 dark:bg-gray-800 sm:items-end sm:text-right">
+        <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs uppercase tracking-[0.25em] text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
+          {isDirty ? "Draft" : "Saved"}
+        </span>
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          {isDirty
+            ? "Unsaved changes"
+            : lastSavedAt
+              ? `Saved ${formatRelativeTime(lastSavedAt)}`
+              : "Ready"}
+        </span>
+      </div>
+      <Button asChild variant="outline" className="h-11 rounded-xl px-4">
+        <Link href="/invoices/history">View invoice history</Link>
+      </Button>
+    </div>
+  );
+
   return (
     <DashboardLayout
       name={name}
       image={image}
       title="Create invoice"
       subtitle="Build GST-ready invoices with live totals, customer details, and preview-ready layouts for printing."
+      actions={headerActions}
     >
       <div className="mx-auto w-full max-w-7xl font-[var(--font-sora),var(--font-geist-sans)]">
-        <InvoiceHeader isDirty={isDirty} lastSavedAt={lastSavedAt} />
-
-        <section className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+        <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr] lg:items-start lg:gap-8">
           <div className="grid gap-6">
             <InvoiceForm
               form={form}
@@ -727,64 +584,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           </div>
 
           <aside className="grid gap-4 lg:sticky lg:top-8">
-            <div className="no-print rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold">Invoice template</h3>
-                <span className="text-[10px] uppercase tracking-[0.2em] text-gray-500">
-                  {selectedTemplate.name}
-                </span>
-              </div>
-              <label className="mt-3 block text-xs text-gray-500">
-                Choose template
-                <select
-                  value={selectedTemplate.id}
-                  onChange={(event) => handleTemplateSelect(event.target.value)}
-                  className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800"
-                >
-                  {templates.map((template) => (
-                    <option key={template.id} value={template.id}>
-                      {template.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500">
-                <span>Theme color: {activeTheme.primaryColor}</span>
-                <Link
-                  href="/templates"
-                  className="rounded-full border border-gray-200 px-3 py-1 text-[11px] font-semibold text-gray-900 transition-colors hover:bg-gray-100 dark:border-gray-700 dark:text-gray-100 dark:hover:bg-gray-700"
-                >
-                  Manage templates
-                </Link>
-              </div>
-            </div>
-            <div className="no-print rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-              <h3 className="text-sm font-semibold">Sections</h3>
-              <div className="mt-3 grid gap-2 text-sm">
-                {activeSectionOrder.map((section) => (
-                  <label
-                    key={section}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 px-3 py-2 dark:border-gray-700"
-                  >
-                    <span>{SECTION_LABELS[section]}</span>
-                    <div className="flex items-center gap-2">
-                      {saveTemplateMutation.isPending ? (
-                        <span className="h-3 w-3 animate-spin rounded-full border border-[#d6c8b8] border-t-transparent" />
-                      ) : null}
-                      <input
-                        type="checkbox"
-                        checked={activeEnabledSections.includes(section)}
-                        onChange={() => handleSectionToggle(section)}
-                        disabled={saveTemplateMutation.isPending}
-                        className="h-4 w-4 rounded border-[#d6c8b8] text-primary disabled:opacity-60"
-                      />
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-            <div className="printable">
-              <DesignConfigProvider
+            <div className="printable">              <DesignConfigProvider
                 value={{
                   designConfig: activeDesignConfig,
                   updateSection: () => {},
@@ -797,11 +597,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                   className="rounded-xl border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none"
                 >
                   <A4PreviewStack
-                    stackKey={`invoices-preview-${selectedTemplate.id}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
+                    stackKey={`invoices-preview-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
                   >
                     <TemplatePreviewRenderer
-                      key={`${selectedTemplate.id}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
-                      templateId={selectedTemplate.id}
+                      key={`${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
                       data={invoicePreviewData}
                       enabledSections={activeEnabledSections}
                       sectionOrder={activeSectionOrder}
@@ -827,7 +626,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             <InvoiceTotals
               totals={totals}
               taxMode={taxMode}
-              discountPercent={form.discount}
+              discountValue={form.discount}
+              discountType={form.discount_type}
             />
             <div className="no-print rounded-xl border border-gray-200 bg-gray-50 p-6 text-sm text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800">
               <p className="font-semibold text-gray-900 dark:text-gray-100">

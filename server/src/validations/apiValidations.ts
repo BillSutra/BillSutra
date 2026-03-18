@@ -185,6 +185,7 @@ export const invoiceCreateSchema = z.object({
   date: z.coerce.date().optional(),
   due_date: z.coerce.date().optional(),
   discount: z.coerce.number().nonnegative().optional(),
+  discount_type: z.enum(["PERCENTAGE", "FIXED"]).optional(),
   status: z.nativeEnum(InvoiceStatus).optional(),
   notes: z.string().optional(),
   sync_sales: z.boolean().optional(),

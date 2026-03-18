@@ -1,9 +1,10 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 
-const normalizeToken = (raw?: string | string[]) => {
+const normalizeToken = (raw?: unknown) => {
   if (!raw) return null;
   const token = Array.isArray(raw) ? raw[0] : raw;
+  if (typeof token !== "string") return null;
   const trimmed = token.trim();
   if (!trimmed) return null;
   if (trimmed.toLowerCase().startsWith("bearer ")) {

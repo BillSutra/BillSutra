@@ -288,6 +288,7 @@ export const createInvoice = async (
     date?: Date | string | null;
     due_date?: Date | string | null;
     discount?: number | null;
+    discount_type?: "PERCENTAGE" | "FIXED" | null;
     status?: InvoiceStatus;
     notes?: string | null;
     sync_sales?: boolean;
@@ -302,7 +303,11 @@ export const createInvoice = async (
   });
 
   const invoiceNumber = generateInvoiceNumber(latest?.invoice_number);
-  const totals = calculateTotals(payload.items, payload.discount ?? 0);
+  const totals = calculateTotals(
+    payload.items,
+    payload.discount ?? 0,
+    payload.discount_type ?? "FIXED",
+  );
 
   const itemPayload = totals.items.map((item) => ({
     product_id: item.product_id ?? undefined,

@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 const renderPayloadSchema = z.object({
   templateId: z.string().min(1).max(120).nullable().optional(),
+  templateName: z.string().min(1).max(120).nullable().optional(),
   data: z.unknown(),
   enabledSections: z.array(z.string().min(1).max(64)).min(1).max(20),
   sectionOrder: z.array(z.string().min(1).max(64)).max(20).optional(),

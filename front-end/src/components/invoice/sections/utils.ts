@@ -20,6 +20,7 @@ export const calculateTotals = (items: InvoiceLineItem[]) => {
   return {
     subtotal,
     tax,
+    discount: 0,
     total: subtotal + tax,
   };
 };

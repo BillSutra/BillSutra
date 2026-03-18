@@ -6,12 +6,14 @@ import type {
 import type { DesignConfig } from "@/components/invoice/DesignConfigContext";
 
 export type TaxMode = "CGST_SGST" | "IGST" | "NONE";
+export type DiscountType = "PERCENTAGE" | "FIXED";
 
 export type InvoiceFormState = {
   customer_id: string;
   date: string;
   due_date: string;
   discount: string;
+  discount_type: DiscountType;
   notes: string;
   sync_sales: boolean;
   warehouse_id?: string;
@@ -101,6 +103,7 @@ export type InvoicePdfInput = {
   element?: HTMLElement | null;
   previewPayload?: {
     templateId?: string | null;
+    templateName?: string | null;
     data: InvoicePreviewData;
     enabledSections: SectionKey[];
     sectionOrder?: SectionKey[];

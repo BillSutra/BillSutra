@@ -24,7 +24,7 @@ const ActivityTimeline = ({
 }) => {
   const fallbackQuery = useQuery({
     queryKey: ["dashboard", "overview"],
-    queryFn: fetchDashboardOverview,
+    queryFn: () => fetchDashboardOverview(),
     enabled: !data && !isLoading,
     ...dashboardQueryDefaults,
   });

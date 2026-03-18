@@ -16,6 +16,7 @@ import type {
 
 type PreviewPayload = {
   templateId?: string | null;
+  templateName?: string | null;
   data: InvoicePreviewData;
   enabledSections: SectionKey[];
   sectionOrder?: SectionKey[];
@@ -100,6 +101,7 @@ const PdfPreviewClient = ({ encodedPayload }: { encodedPayload: string }) => {
           >
             <TemplatePreviewRenderer
               templateId={payload.templateId}
+              templateName={payload.templateName}
               data={payload.data}
               enabledSections={payload.enabledSections}
               sectionOrder={payload.sectionOrder}

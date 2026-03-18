@@ -1,6 +1,7 @@
 "use client";
 
 import React, { startTransition, useDeferredValue, useEffect, useState } from "react";
+import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { fetchDashboardCardMetrics, fetchDashboardOverview } from "@/lib/apiClient";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
@@ -21,6 +22,7 @@ import NotificationsPanel from "@/components/dashboard/notifications-panel";
 import AnimatedNumber from "@/components/dashboard/AnimatedNumber";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
+import { useInvoicesQuery } from "@/hooks/useInventoryQueries";
 import DashboardFilters, {
   type DashboardFilters as DashboardFilterState,
 } from "@/components/dashboard/dashboard-filters";
@@ -97,11 +99,11 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     queryKey: ["dashboard", "overview", deferredFilters],
     queryFn: () => fetchDashboardOverview(deferredFilters),
     enabled: hydrated && hasValidSessionToken,
+    ...dashboardQueryDefaults,
     refetchInterval: DASHBOARD_REALTIME_ENABLED
       ? false
       : DASHBOARD_REFRESH_INTERVAL_MS * 2,
     placeholderData: keepPreviousData,
-    ...dashboardQueryDefaults,
   });
 
   const metrics = metricsQuery.data?.metrics;
@@ -111,6 +113,8 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   const metricsError = metricsQuery.isError;
   const invoiceStats = data?.invoiceStats;
   const pendingSalesPayments = data?.pendingPayments ?? [];
+  const { data: invoices = [] } = useInvoicesQuery();
+  const recentInvoices = invoices.slice(0, 5);
 
   const paymentStatusBadgeClass = (status: string) => {
     if (status === "PAID") return "bg-emerald-100 text-emerald-700";
@@ -522,6 +526,58 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
             dataUpdatedAt={dataUpdatedAt}
             isFetching={isFetching}
           />
+        </section>
+
+        <section className="dashboard-chart-surface rounded-[1.75rem]">
+          <div className="dashboard-chart-content p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
+                  Invoice records
+                </p>
+                <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
+                  Invoice history
+                </p>
+                <p className="mt-1 text-sm text-[#5f5144]">
+                  Review the most recent invoices, totals, and current billing status.
+                </p>
+              </div>
+              <Button asChild variant="outline" className="border-[#d8d4cf] bg-[#f5f5f4] text-[#1f1b16] hover:bg-white">
+                <Link href="/invoices/history">Open records</Link>
+              </Button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              {recentInvoices.length === 0 ? (
+                <div className="rounded-2xl border border-[#f2e6dc] bg-white/85 px-4 py-5 text-sm text-[#5f5144]">
+                  No invoice records yet.
+                </div>
+              ) : (
+                recentInvoices.map((invoice) => (
+                  <div
+                    key={invoice.id}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#f2e6dc] bg-white/90 px-4 py-4 shadow-[0_16px_34px_-26px_rgba(31,27,22,0.32)] dark:border-gray-700 dark:bg-gray-900"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-[#1f1b16] dark:text-gray-100">
+                        {invoice.invoice_number}
+                      </p>
+                      <p className="mt-1 text-xs text-[#5f5144]">
+                        {invoice.customer?.name ?? "Customer"} • {new Date(invoice.date).toLocaleDateString("en-IN")}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <span className="rounded-full border border-[#f0dfcf] bg-[#fff5ea] px-2.5 py-1 font-medium">
+                        {formatCurrency(Number(invoice.total))}
+                      </span>
+                      <span className="rounded-full border border-[#ecdccf] bg-white px-2.5 py-1 font-medium text-[#5c4331]">
+                        {invoice.status.replaceAll("_", " ")}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </section>
       </div>
     </DashboardLayout>

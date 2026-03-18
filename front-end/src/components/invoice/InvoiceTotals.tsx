@@ -1,9 +1,14 @@
-import type { InvoiceTotals as Totals, TaxMode } from "@/types/invoice";
+import type {
+  DiscountType,
+  InvoiceTotals as Totals,
+  TaxMode,
+} from "@/types/invoice";
 
 type InvoiceTotalsProps = {
   totals: Totals;
   taxMode: TaxMode;
-  discountPercent?: string | number;
+  discountValue?: string | number;
+  discountType: DiscountType;
 };
 
 const formatCurrency = (value: number) => `Rs ${value.toFixed(2)}`;
@@ -11,12 +16,14 @@ const formatCurrency = (value: number) => `Rs ${value.toFixed(2)}`;
 const InvoiceTotals = ({
   totals,
   taxMode,
-  discountPercent = 0,
+  discountValue = 0,
+  discountType,
 }: InvoiceTotalsProps) => {
-  const normalizedDiscountPercent = Math.min(
-    100,
-    Math.max(0, Number(discountPercent) || 0),
-  );
+  const normalizedDiscountValue = Math.max(0, Number(discountValue) || 0);
+  const discountLabel =
+    discountType === "PERCENTAGE"
+      ? `Discount (${Math.min(100, normalizedDiscountValue).toFixed(2)}%)`
+      : "Discount (fixed)";
 
   return (
     <div className="no-print rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
@@ -51,9 +58,7 @@ const InvoiceTotals = ({
           </div>
         )}
         <div className="flex items-center justify-between">
-          <span className="text-[#8a6d56]">
-            Discount ({normalizedDiscountPercent.toFixed(2)}%)
-          </span>
+          <span className="text-[#8a6d56]">{discountLabel}</span>
           <span>{formatCurrency(totals.discount)}</span>
         </div>
         <div className="mt-3 flex items-center justify-between text-base font-semibold">

@@ -10,11 +10,11 @@ const navItems = [
   { label: "Inventory", href: "/inventory" },
   { label: "Warehouses", href: "/warehouses" },
   { label: "Invoices", href: "/invoices" },
+  { label: "Invoice Records", href: "/invoices/history" },
   { label: "Clients", href: "/customers" },
   { label: "Suppliers", href: "/suppliers" },
   { label: "Purchases", href: "/purchases" },
   { label: "Sales", href: "/sales" },
-  { label: "Templates", href: "/templates" },
   { label: "Business Profile", href: "/business-profile" },
   { label: "Settings", href: "/settings" },
 ];

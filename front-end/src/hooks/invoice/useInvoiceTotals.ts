@@ -1,5 +1,10 @@
 import { useMemo } from "react";
-import type { InvoiceItemForm, InvoiceTotals, TaxMode } from "@/types/invoice";
+import type {
+  DiscountType,
+  InvoiceItemForm,
+  InvoiceTotals,
+  TaxMode,
+} from "@/types/invoice";
 
 const round2 = (value: number) =>
   Math.round((value + Number.EPSILON) * 100) / 100;
@@ -7,6 +12,7 @@ const round2 = (value: number) =>
 export const useInvoiceTotals = (
   items: InvoiceItemForm[],
   discountValue: string | number,
+  discountType: DiscountType,
   taxMode: TaxMode,
 ) =>
   useMemo<InvoiceTotals>(() => {
@@ -34,11 +40,11 @@ export const useInvoiceTotals = (
       }
     });
 
-    const discountPercent = Math.min(
-      100,
-      Math.max(0, Number(discountValue) || 0),
-    );
-    const discount = (subtotal * discountPercent) / 100;
+    const normalizedDiscountValue = Math.max(0, Number(discountValue) || 0);
+    const discount =
+      discountType === "PERCENTAGE"
+        ? (subtotal * Math.min(100, normalizedDiscountValue)) / 100
+        : Math.min(subtotal + tax, normalizedDiscountValue);
     const total = subtotal + tax - discount;
 
     return {
@@ -50,4 +56,4 @@ export const useInvoiceTotals = (
       discount: round2(discount),
       total: round2(Math.max(0, total)),
     };
-  }, [items, discountValue, taxMode]);
+  }, [discountType, items, discountValue, taxMode]);

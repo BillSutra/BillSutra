@@ -410,6 +410,47 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
     });
   };
 
+  const availableSections = useMemo(() => {
+    return (selectedTemplate.sectionOrder ?? selectedTemplate.defaultSections).filter(
+      (section) => !sectionOrder.includes(section),
+    );
+  }, [sectionOrder, selectedTemplate]);
+
+  const previewAvailableSections = useMemo(() => {
+    if (!previewTemplate) return [];
+    return (previewTemplate.sectionOrder ?? previewTemplate.defaultSections).filter(
+      (section) => !previewSectionOrder.includes(section),
+    );
+  }, [previewSectionOrder, previewTemplate]);
+
+  const removeSection = (section: SectionKey) => {
+    setEnabledSections((prev) => prev.filter((item) => item !== section));
+    setSectionOrder((prev) => prev.filter((item) => item !== section));
+  };
+
+  const addSection = (section: SectionKey) => {
+    setEnabledSections((prev) =>
+      prev.includes(section) ? prev : [...prev, section],
+    );
+    setSectionOrder((prev) =>
+      prev.includes(section) ? prev : [...prev, section],
+    );
+  };
+
+  const removePreviewSection = (section: SectionKey) => {
+    setPreviewEnabledSections((prev) => prev.filter((item) => item !== section));
+    setPreviewSectionOrder((prev) => prev.filter((item) => item !== section));
+  };
+
+  const addPreviewSection = (section: SectionKey) => {
+    setPreviewEnabledSections((prev) =>
+      prev.includes(section) ? prev : [...prev, section],
+    );
+    setPreviewSectionOrder((prev) =>
+      prev.includes(section) ? prev : [...prev, section],
+    );
+  };
+
   const reorderSections = (
     list: SectionKey[],
     source: SectionKey,
@@ -992,6 +1033,13 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         <div className="flex items-center gap-2 text-xs">
                           <button
                             type="button"
+                            onClick={() => removeSection(section)}
+                            className="rounded-full border border-border px-3 py-1"
+                          >
+                            Remove
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => moveSection(section, "up")}
                             className="rounded-full border border-border px-3 py-1"
                           >
@@ -1008,6 +1056,25 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                       </div>
                     ))}
                   </div>
+                  {availableSections.length ? (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6d56]">
+                        Add sections
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {availableSections.map((section) => (
+                          <button
+                            key={`add-${section}`}
+                            type="button"
+                            onClick={() => addSection(section)}
+                            className="rounded-full border border-border px-3 py-1 text-xs"
+                          >
+                            + {SECTION_LABELS[section]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="mt-5 flex flex-wrap items-center gap-4 text-sm">
                     <div className="grid gap-2">
                       <label className="flex items-center gap-2">
@@ -1426,6 +1493,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                       <MemoTemplatePreview
                         key={`live-${selectedTemplate.id}-${enabledSections.join(",")}-${sectionOrder.join(",")}`}
                         templateId={selectedTemplate.id}
+                        templateName={selectedTemplate.name}
                         data={previewData}
                         enabledSections={enabledSections}
                         sectionOrder={sectionOrder}
@@ -1612,6 +1680,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                               <MemoTemplatePreview
                                 key={`featured-${template.id}`}
                                 templateId={template.id}
+                                templateName={template.name}
                                 data={cardPreviewData}
                                 enabledSections={template.defaultSections}
                                 sectionOrder={template.sectionOrder}
@@ -1689,6 +1758,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                             <MemoTemplatePreview
                               key={`all-${template.id}`}
                               templateId={template.id}
+                              templateName={template.name}
                               data={cardPreviewData}
                               enabledSections={template.defaultSections}
                               sectionOrder={template.sectionOrder}
@@ -1748,6 +1818,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                       await downloadPdf({
                         previewPayload: {
                           templateId: previewTemplate.id,
+                          templateName: previewTemplate.name,
                           data: modalPreviewData,
                           enabledSections: previewEnabledSections,
                           sectionOrder: previewSectionOrder,
@@ -1874,6 +1945,13 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         <div className="flex items-center gap-2 text-[11px]">
                           <button
                             type="button"
+                            onClick={() => removePreviewSection(section)}
+                            className="rounded-full border border-border px-2 py-1"
+                          >
+                            Remove
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => movePreviewSection(section, "up")}
                             className="rounded-full border border-border px-2 py-1"
                           >
@@ -1890,6 +1968,25 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                       </div>
                     ))}
                   </div>
+                  {previewAvailableSections.length ? (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6d56]">
+                        Add sections
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {previewAvailableSections.map((section) => (
+                          <button
+                            key={`preview-add-${section}`}
+                            type="button"
+                            onClick={() => addPreviewSection(section)}
+                            className="rounded-full border border-border px-3 py-1 text-[11px]"
+                          >
+                            + {SECTION_LABELS[section]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="rounded-2xl border border-border bg-white p-4">
@@ -1905,6 +2002,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         <MemoTemplatePreview
                           key={`modal-${previewTemplate.id}-${previewEnabledSections.join(",")}-${previewSectionOrder.join(",")}-${previewThemeColor}-${previewShowLogo}`}
                           templateId={previewTemplate.id}
+                          templateName={previewTemplate.name}
                           data={modalPreviewData}
                           enabledSections={previewEnabledSections}
                           sectionOrder={previewSectionOrder}

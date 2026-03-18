@@ -36,9 +36,9 @@ export const dashboardRetryDelay = (attempt: number) =>
   Math.min(1000 * 2 ** attempt, 30_000);
 
 export const dashboardQueryDefaults = {
-  refetchInterval: DASHBOARD_REALTIME_ENABLED
+  refetchInterval: (DASHBOARD_REALTIME_ENABLED
     ? false
-    : DASHBOARD_REFRESH_INTERVAL_MS,
+    : DASHBOARD_REFRESH_INTERVAL_MS) as false | number,
   refetchIntervalInBackground: true,
   staleTime: Math.max(DASHBOARD_REFRESH_INTERVAL_MS - 1000, 0),
   retry: 3,

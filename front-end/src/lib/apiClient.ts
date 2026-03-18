@@ -276,6 +276,7 @@ export type InvoiceInput = {
   date?: string | Date | null;
   due_date?: string | Date | null;
   discount?: number | null;
+  discount_type?: "PERCENTAGE" | "FIXED" | null;
   status?: string | null;
   notes?: string | null;
   sync_sales?: boolean;

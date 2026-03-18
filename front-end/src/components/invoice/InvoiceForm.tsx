@@ -1,17 +1,13 @@
 "use client";
 
 import type { FormEvent } from "react";
-import { Input } from "@/components/ui/input";
 import { ValidationField } from "@/components/ui/ValidationField";
 import {
-  validateDropdown,
   validateDate,
   validateNumber,
-  validateRequired,
 } from "@/lib/validation";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import FloatingInput from "@/components/ui/floating-input";
 import type { InvoiceFormState, TaxMode } from "@/types/invoice";
 
 export type InvoiceFormProps = {
@@ -44,21 +40,7 @@ const InvoiceForm = ({
       className="no-print rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
       onSubmit={onSubmit}
     >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-gray-500">
-            Invoice details
-          </p>
-          <h2 className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
-            Customer and dates
-          </h2>
-        </div>
-        <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-500 dark:border-gray-700 dark:bg-gray-900">
-          Auto number
-        </span>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-5 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label
             className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
@@ -134,7 +116,11 @@ const InvoiceForm = ({
         </div>
         <ValidationField
           id="discount"
-          label="Discount (%)"
+          label={
+            form.discount_type === "PERCENTAGE"
+              ? "Discount (%)"
+              : "Discount amount"
+          }
           type="number"
           value={form.discount}
           onChange={(value) => onFormChange({ ...form, discount: value })}
@@ -142,6 +128,28 @@ const InvoiceForm = ({
           placeholder="0"
           success
         />
+        <div className="grid gap-2">
+          <Label
+            className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
+            htmlFor="discount_type"
+          >
+            Discount type
+          </Label>
+          <select
+            id="discount_type"
+            className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-500/20"
+            value={form.discount_type}
+            onChange={(event) =>
+              onFormChange({
+                ...form,
+                discount_type: event.target.value as InvoiceFormState["discount_type"],
+              })
+            }
+          >
+            <option value="PERCENTAGE">Percentage</option>
+            <option value="FIXED">Fixed amount</option>
+          </select>
+        </div>
         <div className="grid gap-2 sm:col-span-2">
           <ValidationField
             id="notes"
@@ -231,11 +239,16 @@ const InvoiceForm = ({
         </p>
       )}
 
-      <div className="mt-6 flex items-center justify-between">
+      <div className="mt-6 flex flex-col gap-3 border-t border-gray-100 pt-5 sm:flex-row sm:items-center sm:justify-between dark:border-gray-700">
         <div className="text-xs uppercase tracking-[0.2em] text-gray-500">
           Invoice number is generated automatically.
         </div>
-        <Button type="submit" variant="primary" disabled={isSubmitting}>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={isSubmitting}
+          className="h-11 rounded-xl px-5"
+        >
           Create invoice
         </Button>
       </div>
