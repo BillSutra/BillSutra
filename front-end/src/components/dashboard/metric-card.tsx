@@ -1,6 +1,6 @@
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArrowDownRight, ArrowUpRight } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import AnimatedNumber from "@/components/dashboard/AnimatedNumber";
 import { clamp, formatPercent } from "@/lib/dashboardUtils";
@@ -109,9 +109,15 @@ const paletteByTheme: Record<
   },
 };
 
+const MAX_VISIBLE_CHANGE = 999.9;
+
 const formatChange = (change: number) => {
   const sign = change > 0 ? "+" : change < 0 ? "-" : "";
-  return `${sign}${formatPercent(Math.abs(change))}`;
+  const absChange = Math.abs(change);
+  if (absChange > MAX_VISIBLE_CHANGE) {
+    return `${sign}${formatPercent(MAX_VISIBLE_CHANGE)}+`;
+  }
+  return `${sign}${formatPercent(absChange)}`;
 };
 
 const MetricCard = ({
@@ -126,29 +132,81 @@ const MetricCard = ({
   formatValue,
   status,
 }: MetricCardProps) => {
-  const isPositive = change >= 0;
   const palette = paletteByTheme[theme];
   const resolvedFormatValue =
     formatValue ?? ((amount: number) => amount.toLocaleString("en-IN"));
+  const isProfitLoss = theme === "profit" && value < 0;
+  const isChangePositive = change > 0;
+  const isChangeNegative = change < 0;
+  const isLossImproving = isProfitLoss && isChangePositive;
+  const isLossWorsening = isProfitLoss && isChangeNegative;
+  const isExtremeChange = Math.abs(change) > MAX_VISIBLE_CHANGE;
+
+  const trendBadgeClass = cn(
+    "flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold",
+    isLossImproving
+      ? "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200"
+      : isLossWorsening || isChangeNegative
+        ? "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+        : isChangePositive
+          ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+          : "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200",
+  );
+
+  const trendBarClass = isLossImproving
+    ? "bg-amber-500"
+    : isLossWorsening || isChangeNegative
+      ? "bg-red-500"
+      : isChangePositive
+        ? palette.accent
+        : "bg-slate-400";
+
+  const changeCopy =
+    theme === "profit" && isExtremeChange
+      ? isProfitLoss
+        ? isChangePositive
+          ? "Loss improved"
+          : isChangeNegative
+            ? "Loss widened"
+            : "Flat"
+        : isChangePositive
+          ? "Profit surged"
+          : isChangeNegative
+            ? "Profit dropped"
+            : "Flat"
+      : formatChange(change);
+
+  const changeIcon = !isChangePositive && !isChangeNegative
+    ? <Minus size={14} />
+    : isChangePositive
+      ? <ArrowUpRight size={14} />
+      : <ArrowDownRight size={14} />;
 
   return (
     <Card
       className={cn(
         "relative min-h-[202px] overflow-hidden rounded-[1.6rem] gap-0 py-0 transition duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_32px_70px_-46px_rgba(31,27,22,0.28)]",
         palette.card,
+        isProfitLoss &&
+          "border-rose-200/70 bg-rose-50/70 dark:border-rose-900/40 dark:bg-rose-950/20",
       )}
     >
-      <div className={cn("absolute inset-x-0 top-0 h-1", palette.accent)} />
+      <div
+        className={cn(
+          "absolute inset-x-0 top-0 h-1",
+          isProfitLoss ? "bg-rose-500" : palette.accent,
+        )}
+      />
       <div
         className={cn(
           "absolute -right-10 top-6 h-28 w-28 rounded-full blur-3xl",
-          palette.glow,
+          isProfitLoss ? "bg-rose-500/15" : palette.glow,
         )}
       />
       <div
         className={cn(
           "absolute -bottom-8 left-6 h-24 w-24 rounded-full blur-3xl",
-          palette.haze,
+          isProfitLoss ? "bg-rose-300/15" : palette.haze,
         )}
       />
       <CardContent className="relative z-10 flex h-full flex-col gap-2.5 px-5 pb-6.5 pt-7 sm:px-6 sm:pb-7 sm:pt-7.5">
@@ -165,7 +223,7 @@ const MetricCard = ({
             <p
               className={cn(
                 "mt-3 text-[1.9rem] font-medium leading-none tracking-tight sm:text-[2rem]",
-                palette.value,
+                isProfitLoss ? "text-rose-700 dark:text-rose-200" : palette.value,
               )}
             >
               <AnimatedNumber value={value} format={resolvedFormatValue} />
@@ -187,7 +245,9 @@ const MetricCard = ({
           <div
             className={cn(
               "ml-3 shrink-0 rounded-2xl border p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]",
-              palette.iconWrap,
+              isProfitLoss
+                ? "border-rose-200/60 bg-rose-50/80 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-200"
+                : palette.iconWrap,
             )}
           >
             {icon}
@@ -208,20 +268,9 @@ const MetricCard = ({
           ) : null}
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-              <span
-                className={cn(
-                  "flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold",
-                  isPositive
-                    ? "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-                    : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300",
-                )}
-              >
-                {isPositive ? (
-                  <ArrowUpRight size={14} />
-                ) : (
-                  <ArrowDownRight size={14} />
-                )}
-                {formatChange(change)}
+              <span className={trendBadgeClass}>
+                {changeIcon}
+                {changeCopy}
               </span>
               <span className="font-medium text-muted-foreground">
                 {trendLabel ?? "vs last period"}
@@ -229,10 +278,7 @@ const MetricCard = ({
             </div>
             <span className="h-1.5 w-14 shrink-0 rounded-full bg-white/70 shadow-[inset_0_1px_2px_rgba(31,27,22,0.08)] dark:bg-gray-700">
               <span
-                className={cn(
-                  "block h-1.5 rounded-full",
-                  isPositive ? palette.accent : "bg-red-500",
-                )}
+                className={cn("block h-1.5 rounded-full", trendBarClass)}
                 style={{ width: `${clamp(Math.abs(change) * 2, 4, 100)}%` }}
               />
             </span>

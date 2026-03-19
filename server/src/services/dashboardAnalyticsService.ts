@@ -459,7 +459,8 @@ const parseDateInput = (value: unknown) => {
 const safePercentChange = (current: number, previous: number) => {
   if (!Number.isFinite(current) || !Number.isFinite(previous)) return 0;
   if (previous === 0) {
-    return current === 0 ? 0 : 100;
+    if (current === 0) return 0;
+    return current > previous ? 100 : -100;
   }
   return roundMetric(((current - previous) / Math.abs(previous)) * 100, 1);
 };

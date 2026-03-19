@@ -104,8 +104,8 @@ const CashFlowChart = ({ className }: { className?: string }) => {
       className={`dashboard-chart-surface flex flex-col rounded-[1.75rem] ${className}`}
     >
       <CardHeader className="dashboard-chart-content pb-0">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0 flex-1">
             <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
               Cash movement
             </p>
@@ -116,20 +116,21 @@ const CashFlowChart = ({ className }: { className?: string }) => {
               Current-month collections versus outgoing purchase payments and
               expenses.
             </p>
+            <div className="mt-3">
+              <DashboardCardStatus
+                isLoading={isLoading}
+                isFetching={isFetching}
+                isError={isError}
+                dataUpdatedAt={dataUpdatedAt}
+                refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
+              />
+            </div>
           </div>
-          <DashboardCardStatus
-            isLoading={isLoading}
-            isFetching={isFetching}
-            isError={isError}
-            dataUpdatedAt={dataUpdatedAt}
-            refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
-            className="lg:items-end lg:text-right"
-          />
-          <div className="dashboard-chart-metric rounded-2xl px-4 py-3">
+          <div className="dashboard-chart-metric rounded-2xl px-4 py-3 xl:max-w-[220px]">
             <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
               Inflow source
             </p>
-            <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
+            <p className="mt-1 text-sm font-semibold leading-6 text-[#1f1b16]">
               {inflowModeLabel}
             </p>
           </div>
@@ -144,7 +145,7 @@ const CashFlowChart = ({ className }: { className?: string }) => {
         )}
         {!isLoading && !isError && data && (
           <>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[
                 { label: "Cash inflow", value: formatCurrency(data.inflow) },
                 { label: "Cash outflow", value: formatCurrency(data.outflow) },
@@ -152,6 +153,7 @@ const CashFlowChart = ({ className }: { className?: string }) => {
                   label: "Net cash flow",
                   value: formatCurrency(data.netCashFlow),
                 },
+                { label: "Source mode", value: inflowModeLabel },
               ].map((item) => (
                 <div
                   key={item.label}
@@ -214,10 +216,10 @@ const CashFlowChart = ({ className }: { className?: string }) => {
                     <Tooltip content={<CustomTooltip />} />
                     <Legend
                       verticalAlign="top"
-                      align="right"
+                      align="left"
                       iconType="circle"
                       formatter={legendFormatter}
-                      wrapperStyle={{ paddingBottom: "20px", fontSize: "12px" }}
+                      wrapperStyle={{ paddingBottom: "16px", fontSize: "12px" }}
                     />
                     <Area
                       type="monotone"

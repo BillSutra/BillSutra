@@ -1,0 +1,15 @@
+{
+  "name": "billsutra-dadu",
+  "private": true,
+  "workspaces": [
+    "front-end",
+    "server"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace front-end",
+    "build": "npm run build --workspace front-end",
+    "start": "npm run start --workspace front-end",
+    "lint": "npm run lint --workspace front-end",
+    "server": "npm start --workspace server"
+  }
+}
