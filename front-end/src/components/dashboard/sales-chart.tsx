@@ -3,7 +3,6 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ResponsiveContainer,
   LineChart,
   Line,
   XAxis,
@@ -23,6 +22,7 @@ import {
   type DashboardSales,
 } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import DashboardResponsiveChart from "@/components/dashboard/DashboardResponsiveChart";
 import {
   formatCompactCurrency,
   formatCurrency,
@@ -194,8 +194,8 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                   Last 7 days
                 </p>
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-48 min-w-0">
+                  <DashboardResponsiveChart>
                     <LineChart data={salesData.last7Days}>
                       <CartesianGrid stroke="#f2e6dc" strokeDasharray="3 3" />
                       <XAxis
@@ -254,15 +254,15 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
                         }}
                       />
                     </LineChart>
-                  </ResponsiveContainer>
+                  </DashboardResponsiveChart>
                 </div>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                   Last 30 days
                 </p>
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-48 min-w-0">
+                  <DashboardResponsiveChart>
                     <LineChart data={salesData.last30Days}>
                       <CartesianGrid stroke="#f2e6dc" strokeDasharray="3 3" />
                       <XAxis
@@ -311,7 +311,7 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
                         }}
                       />
                     </LineChart>
-                  </ResponsiveContainer>
+                  </DashboardResponsiveChart>
                 </div>
               </div>
             </div>
@@ -337,8 +337,8 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
             />
           </CardHeader>
           <CardContent className="dashboard-chart-content">
-            <div className="h-44">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-44 min-w-0">
+              <DashboardResponsiveChart>
                 <BarChart data={salesData.monthly}>
                   <CartesianGrid stroke="#f2e6dc" strokeDasharray="3 3" />
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
@@ -360,7 +360,7 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
                     radius={[6, 6, 0, 0]}
                   />
                 </BarChart>
-              </ResponsiveContainer>
+              </DashboardResponsiveChart>
             </div>
           </CardContent>
         </Card>
@@ -382,8 +382,8 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
             />
           </CardHeader>
           <CardContent className="dashboard-chart-content">
-            <div className="h-40">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-40 min-w-0">
+              <DashboardResponsiveChart>
                 <PieChart>
                   <Pie
                     data={salesData.categories}
@@ -402,7 +402,7 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
                   </Pie>
                   <Tooltip formatter={(value) => formatTooltipValue(value)} />
                 </PieChart>
-              </ResponsiveContainer>
+              </DashboardResponsiveChart>
             </div>
             <div className="mt-4 flex flex-wrap justify-center gap-x-4 gap-y-2">
               {salesData.categories.map((entry, index) => (

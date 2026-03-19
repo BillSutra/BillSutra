@@ -2,19 +2,20 @@
 
 import React, { useMemo } from "react";
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import DashboardResponsiveChart from "@/components/dashboard/DashboardResponsiveChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatCurrency, formatPercent } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 import { useDashboardForecast } from "@/components/dashboard/use-dashboard-forecast";
+import { formatCurrency } from "@/lib/dashboardUtils";
 
 const formatTooltipValue = (value: unknown) => {
   if (typeof value === "number") return formatCurrency(value);
@@ -25,42 +26,35 @@ const formatTooltipValue = (value: unknown) => {
   return formatCurrency(0);
 };
 
-const ProfitForecast = ({ className }: { className?: string }) => {
+const CashflowForecastCard = ({ className }: { className?: string }) => {
   const { data, isLoading, isError, dataUpdatedAt, isFetching } = useDashboardForecast();
 
-  const historical = data?.profit.historicalMonthly ?? [];
-  const projected = data?.profit.projectedMonthly ?? [];
-  const projected30 = data?.profit.projected30Days;
-
   const chartData = useMemo(
-    () => [
-      ...historical.map((item) => ({
+    () =>
+      (data?.cashflow.predictedMonthly ?? []).map((item) => ({
         month: item.month,
-        actualProfit: item.profit,
-        projectedProfit: 0,
+        inflow: item.inflow,
+        outflow: item.outflow,
+        net: item.net,
       })),
-      ...projected.map((item) => ({
-        month: item.month,
-        actualProfit: 0,
-        projectedProfit: item.profit,
-      })),
-    ],
-    [historical, projected],
+    [data],
   );
+
+  const projected30 = data?.cashflow.projected30Days;
 
   const stats = projected30
     ? [
         {
-          label: "Projected sales",
-          value: formatCurrency(projected30.sales),
+          label: "Expected inflow",
+          value: formatCurrency(projected30.inflow),
         },
         {
-          label: "Projected costs",
-          value: formatCurrency(projected30.purchases + projected30.expenses),
+          label: "Expected outflow",
+          value: formatCurrency(projected30.outflow),
         },
         {
-          label: "Projected profit",
-          value: formatCurrency(projected30.profit),
+          label: "Closing balance",
+          value: formatCurrency(projected30.closingBalanceEstimate),
         },
       ]
     : [];
@@ -71,14 +65,14 @@ const ProfitForecast = ({ className }: { className?: string }) => {
     >
       <CardHeader className="dashboard-chart-content">
         <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
-          Profit projection
+          Cashflow forecast
         </p>
         <CardTitle className="mt-2 text-2xl text-[#1f1b16]">
-          Expected profit outlook
+          Expected cash movement
         </CardTitle>
         <p className="mt-2 max-w-xl text-sm text-[#8a6d56]">
-          Projected profit is based on receipt-driven sales, purchase payouts, and
-          recorded expenses.
+          Forecasted inflow, outflow, and net cash position based on recent payment
+          behavior.
         </p>
         <DashboardCardStatus
           isLoading={isLoading}
@@ -92,7 +86,7 @@ const ProfitForecast = ({ className }: { className?: string }) => {
         {isLoading ? (
           <div className="h-40 animate-pulse rounded-xl bg-[#fdf7f1]" />
         ) : isError ? (
-          <p className="text-sm text-[#b45309]">Unable to load profit projection.</p>
+          <p className="text-sm text-[#b45309]">Unable to load cashflow forecast.</p>
         ) : (
           <>
             <div className="grid gap-3 sm:grid-cols-3">
@@ -110,35 +104,43 @@ const ProfitForecast = ({ className }: { className?: string }) => {
 
             <div className="flex min-h-[320px] flex-1 flex-col">
               <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                Historical vs projected profit
+                Projected monthly cashflow
               </p>
               <div className="mt-3 min-h-0 min-w-0 flex-1">
                 <DashboardResponsiveChart>
-                  <BarChart data={chartData}>
+                  <LineChart data={chartData}>
                     <CartesianGrid stroke="#f2e6dc" strokeDasharray="3 3" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={formatTooltipValue} />
+                    <XAxis dataKey="month" tick={{ fill: "#8a6d56", fontSize: 12 }} />
+                    <YAxis tick={{ fill: "#8a6d56", fontSize: 12 }} tickFormatter={formatTooltipValue} />
                     <Tooltip formatter={(value) => formatTooltipValue(value)} />
-                    <Bar
-                      dataKey="actualProfit"
-                      name="Actual profit"
-                      fill="#0f766e"
-                      radius={[6, 6, 0, 0]}
+                    <Legend wrapperStyle={{ paddingTop: "1rem" }} iconType="line" />
+                    <Line
+                      type="monotone"
+                      dataKey="inflow"
+                      name="Inflow"
+                      stroke="#15803d"
+                      strokeWidth={3}
+                      dot={{ r: 3 }}
                     />
-                    <Bar
-                      dataKey="projectedProfit"
-                      name="Projected profit"
-                      fill="#f59e0b"
-                      radius={[6, 6, 0, 0]}
+                    <Line
+                      type="monotone"
+                      dataKey="outflow"
+                      name="Outflow"
+                      stroke="#f97316"
+                      strokeWidth={3}
+                      dot={{ r: 3 }}
                     />
-                  </BarChart>
+                    <Line
+                      type="monotone"
+                      dataKey="net"
+                      name="Net cashflow"
+                      stroke="#1d4ed8"
+                      strokeWidth={3}
+                      dot={{ r: 3 }}
+                    />
+                  </LineChart>
                 </DashboardResponsiveChart>
               </div>
-              {projected30 ? (
-                <p className="mt-2 text-xs text-[#8a6d56]">
-                  Projected 30-day margin: {formatPercent(projected30.margin)}
-                </p>
-              ) : null}
             </div>
           </>
         )}
@@ -147,4 +149,4 @@ const ProfitForecast = ({ className }: { className?: string }) => {
   );
 };
 
-export default ProfitForecast;
+export default CashflowForecastCard;

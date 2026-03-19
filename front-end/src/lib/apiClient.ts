@@ -643,15 +643,100 @@ export type DashboardPaymentMethods = {
   }>;
 };
 
-export type DashboardForecast = {
-  method: string;
-  historicalMonthly: Array<{ month: string; sales: number }>;
-  predictedMonthly: Array<{ month: string; value: number }>;
+export type DashboardForecastResponse = {
+  generatedAt: string;
+  basis: {
+    averageWindowDays: number;
+    historicalWindowMonths: number;
+    projectionMonths: number;
+  };
+  sales: {
+    method: string;
+    historicalMonthly: Array<{ month: string; receipts: number }>;
+    predictedMonthly: Array<{ month: string; receipts: number }>;
+    trailing30Days: {
+      totalReceipts: number;
+      averageDailyReceipts: number;
+      previous30DaysTotal: number;
+      trendPercent: number;
+    };
+    projectedNext30Days: number;
+  };
+  cashflow: {
+    trailing30Days: {
+      inflow: number;
+      outflow: number;
+      net: number;
+      averageDailyInflow: number;
+      averageDailyOutflow: number;
+      balanceEstimate: number;
+    };
+    projected30Days: {
+      inflow: number;
+      outflow: number;
+      net: number;
+      closingBalanceEstimate: number;
+    };
+    predictedMonthly: Array<{
+      month: string;
+      inflow: number;
+      outflow: number;
+      net: number;
+      closingBalanceEstimate: number;
+    }>;
+  };
+  profit: {
+    historicalMonthly: Array<{
+      month: string;
+      sales: number;
+      purchases: number;
+      expenses: number;
+      profit: number;
+      margin: number;
+    }>;
+    projectedMonthly: Array<{
+      month: string;
+      sales: number;
+      purchases: number;
+      expenses: number;
+      profit: number;
+      margin: number;
+    }>;
+    trailing30Days: {
+      sales: number;
+      purchases: number;
+      expenses: number;
+      profit: number;
+      margin: number;
+    };
+    projected30Days: {
+      sales: number;
+      purchases: number;
+      expenses: number;
+      profit: number;
+      margin: number;
+    };
+  };
+  receivables: {
+    outstanding: number;
+  };
+  insights: Array<{
+    id: string;
+    tone: "positive" | "warning" | "critical" | "info";
+    title: string;
+    message: string;
+  }>;
 };
 
-export type DashboardForecastResponse = {
-  profit: DashboardProfit;
-  forecast: DashboardForecast;
+export type AssistantReply = {
+  language: "en" | "hi";
+  intent: "profit" | "total_sales" | "pending_payments" | "cashflow" | "help";
+  answer: string;
+  highlights: Array<{
+    label: string;
+    value: string;
+  }>;
+  examples: string[];
 };
 
 export type UserProfile = {
@@ -1096,6 +1181,11 @@ export const fetchDashboardForecast =
     const response = await apiClient.get("/dashboard/forecast");
     return response.data.data as DashboardForecastResponse;
   };
+
+export const askAssistant = async (message: string): Promise<AssistantReply> => {
+  const response = await apiClient.post("/assistant/query", { message });
+  return response.data.data as AssistantReply;
+};
 
 export const fetchUserProfile = async (): Promise<UserProfile> => {
   const response = await apiClient.get("/users/me");

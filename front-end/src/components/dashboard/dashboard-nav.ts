@@ -1,4 +1,6 @@
 import {
+  BarChart3,
+  Bot,
   Boxes,
   Building2,
   FileText,
@@ -18,6 +20,16 @@ export const dashboardNavItems = [
     labelKey: "navigation.dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
+  },
+  {
+    labelKey: "navigation.insights",
+    href: "/insights",
+    icon: BarChart3,
+  },
+  {
+    labelKey: "navigation.assistant",
+    href: "/assistant",
+    icon: Bot,
   },
   {
     labelKey: "navigation.products",

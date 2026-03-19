@@ -396,10 +396,82 @@ type SalesMetricSnapshot = {
   pendingSales: number;
 };
 
+type CashInflowEntrySource =
+  | "sale_receipt"
+  | "invoice_payment"
+  | "legacy_invoice_settlement";
+
+type CashInflowEntry = {
+  source: CashInflowEntrySource;
+  amount: number;
+  date: Date;
+  saleId?: number;
+  invoiceId?: number;
+  paymentId?: number;
+};
+
+type CashInflowSnapshot = {
+  total: number;
+  entries: CashInflowEntry[];
+  breakdown: {
+    directSalesReceipts: number;
+    invoicePayments: number;
+    legacyInvoiceSettlements: number;
+  };
+};
+
 const SYNCED_INVOICE_NOTE_PATTERN = /Synced from invoice\s+/i;
+const DASHBOARD_SALES_DEBUG = process.env.DASHBOARD_DEBUG_SALES === "true";
 
 const isSyncedInvoiceSale = (notes: string | null | undefined) =>
   SYNCED_INVOICE_NOTE_PATTERN.test(notes ?? "");
+
+const logCashInflowSnapshot = (
+  label: string,
+  params: {
+    userId: number;
+    start: Date;
+    endExclusive: Date;
+    snapshot: CashInflowSnapshot;
+  },
+) => {
+  if (!DASHBOARD_SALES_DEBUG) return;
+
+  const { userId, start, endExclusive, snapshot } = params;
+  const summarizeEntries = (source: CashInflowEntrySource) =>
+    snapshot.entries
+      .filter((entry) => entry.source === source)
+      .map((entry) => ({
+        amount: entry.amount,
+        date: toDateKey(entry.date),
+        saleId: entry.saleId,
+        invoiceId: entry.invoiceId,
+        paymentId: entry.paymentId,
+      }));
+
+  console.info(
+    `[dashboard:sales] ${label}`,
+    JSON.stringify({
+      userId,
+      range: {
+        start: start.toISOString(),
+        endExclusive: endExclusive.toISOString(),
+      },
+      totals: snapshot.breakdown,
+      totalSales: snapshot.total,
+      counts: {
+        directSalesReceipts: summarizeEntries("sale_receipt").length,
+        invoicePayments: summarizeEntries("invoice_payment").length,
+        legacyInvoiceSettlements: summarizeEntries("legacy_invoice_settlement").length,
+      },
+      entries: {
+        directSalesReceipts: summarizeEntries("sale_receipt"),
+        invoicePayments: summarizeEntries("invoice_payment"),
+        legacyInvoiceSettlements: summarizeEntries("legacy_invoice_settlement"),
+      },
+    }),
+  );
+};
 
 const resolveInvoicePaidAmount = (invoice: {
   total: unknown;
@@ -434,6 +506,120 @@ const resolveInvoicePendingAmount = (invoice: {
   return Math.max(0, total - paid);
 };
 
+export const fetchCashInflowSnapshot = async (params: {
+  userId: number;
+  start: Date;
+  endExclusive: Date;
+  debugLabel?: string;
+}) => {
+  const { userId, start, endExclusive, debugLabel } = params;
+
+  const [salesReceipts, invoicePayments, legacyPaidInvoices] = await Promise.all([
+    prisma.sale.findMany({
+      where: {
+        user_id: userId,
+        status: SaleStatus.COMPLETED,
+        paidAmount: { gt: 0 },
+        OR: [
+          { paymentDate: { gte: start, lt: endExclusive } },
+          { paymentDate: null, sale_date: { gte: start, lt: endExclusive } },
+        ],
+      },
+      select: {
+        id: true,
+        sale_date: true,
+        paymentDate: true,
+        paidAmount: true,
+        notes: true,
+      },
+    }),
+    prisma.payment.findMany({
+      where: {
+        user_id: userId,
+        paid_at: { gte: start, lt: endExclusive },
+      },
+      select: {
+        id: true,
+        invoice_id: true,
+        amount: true,
+        paid_at: true,
+      },
+    }),
+    prisma.invoice.findMany({
+      where: {
+        user_id: userId,
+        date: { gte: start, lt: endExclusive },
+        status: InvoiceStatus.PAID,
+        payments: { none: {} },
+      },
+      select: {
+        id: true,
+        date: true,
+        total: true,
+      },
+    }),
+  ]);
+
+  const directSalesEntries: CashInflowEntry[] = salesReceipts
+    .filter((sale) => !isSyncedInvoiceSale(sale.notes))
+    .map((sale) => ({
+      source: "sale_receipt" as const,
+      amount: roundMetric(toNumber(sale.paidAmount)),
+      date: sale.paymentDate ?? sale.sale_date,
+      saleId: sale.id,
+    }))
+    .filter((entry) => entry.amount > 0);
+
+  const invoicePaymentEntries: CashInflowEntry[] = invoicePayments
+    .map((payment) => ({
+      source: "invoice_payment" as const,
+      amount: roundMetric(toNumber(payment.amount)),
+      date: payment.paid_at,
+      invoiceId: payment.invoice_id,
+      paymentId: payment.id,
+    }))
+    .filter((entry) => entry.amount > 0);
+
+  const legacyInvoiceEntries: CashInflowEntry[] = legacyPaidInvoices
+    .map((invoice) => ({
+      source: "legacy_invoice_settlement" as const,
+      amount: roundMetric(toNumber(invoice.total)),
+      date: invoice.date,
+      invoiceId: invoice.id,
+    }))
+    .filter((entry) => entry.amount > 0);
+
+  const snapshot = {
+    total: roundMetric(
+      [...directSalesEntries, ...invoicePaymentEntries, ...legacyInvoiceEntries].reduce(
+        (sum, entry) => sum + entry.amount,
+        0,
+      ),
+    ),
+    entries: [...directSalesEntries, ...invoicePaymentEntries, ...legacyInvoiceEntries],
+    breakdown: {
+      directSalesReceipts: roundMetric(
+        directSalesEntries.reduce((sum, entry) => sum + entry.amount, 0),
+      ),
+      invoicePayments: roundMetric(
+        invoicePaymentEntries.reduce((sum, entry) => sum + entry.amount, 0),
+      ),
+      legacyInvoiceSettlements: roundMetric(
+        legacyInvoiceEntries.reduce((sum, entry) => sum + entry.amount, 0),
+      ),
+    },
+  } satisfies CashInflowSnapshot;
+
+  logCashInflowSnapshot(debugLabel ?? "cash inflow snapshot", {
+    userId,
+    start,
+    endExclusive,
+    snapshot,
+  });
+
+  return snapshot;
+};
+
 const fetchSalesMetricSnapshot = async (params: {
   userId: number;
   start: Date;
@@ -441,7 +627,13 @@ const fetchSalesMetricSnapshot = async (params: {
 }) => {
   const { userId, start, endExclusive } = params;
 
-  const [sales, invoices] = await Promise.all([
+  const [cashInflowSnapshot, sales, invoices] = await Promise.all([
+    fetchCashInflowSnapshot({
+      userId,
+      start,
+      endExclusive,
+      debugLabel: "dashboard sales metrics",
+    }),
     prisma.sale.findMany({
       where: {
         user_id: userId,
@@ -449,11 +641,7 @@ const fetchSalesMetricSnapshot = async (params: {
         sale_date: { gte: start, lt: endExclusive },
       },
       select: {
-        total: true,
-        totalAmount: true,
-        paidAmount: true,
         pendingAmount: true,
-        paymentStatus: true,
         notes: true,
       },
     }),
@@ -484,25 +672,10 @@ const fetchSalesMetricSnapshot = async (params: {
 
   const directSales = sales.filter((sale) => !isSyncedInvoiceSale(sale.notes));
 
-  const directSalesPaid = directSales.reduce(
+  const directSalesPending = directSales.reduce(
     (sum, sale) =>
       sum +
-      resolveRealizedAmount(
-        sale.paymentStatus,
-        sale.totalAmount,
-        sale.paidAmount,
-        sale.total,
-      ),
-    0,
-  );
-
-  const directSalesPending = directSales.reduce(
-    (sum, sale) => sum + Math.max(0, toNumber(sale.pendingAmount)),
-    0,
-  );
-
-  const invoicePaid = invoices.reduce(
-    (sum, invoice) => sum + resolveInvoicePaidAmount(invoice),
+      Math.max(0, toNumber(sale.pendingAmount)),
     0,
   );
 
@@ -512,7 +685,7 @@ const fetchSalesMetricSnapshot = async (params: {
   );
 
   return {
-    totalSales: roundMetric(directSalesPaid + invoicePaid),
+    totalSales: cashInflowSnapshot.total,
     pendingSales: roundMetric(directSalesPending + invoicePending),
   } satisfies SalesMetricSnapshot;
 };

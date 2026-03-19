@@ -3,7 +3,6 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ResponsiveContainer,
   AreaChart,
   Area,
   XAxis,
@@ -15,6 +14,7 @@ import {
 } from "recharts";
 import { fetchDashboardCashflow } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import DashboardResponsiveChart from "@/components/dashboard/DashboardResponsiveChart";
 import {
   formatCompactCurrency,
   formatCurrency,
@@ -176,8 +176,8 @@ const CashFlowChart = ({ className }: { className?: string }) => {
             </div>
 
             {hasSeriesData ? (
-              <div className="h-[320px] md:h-[360px]">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-[320px] min-w-0 md:h-[360px]">
+                <DashboardResponsiveChart>
                   <AreaChart
                     data={data.series}
                     margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
@@ -242,7 +242,7 @@ const CashFlowChart = ({ className }: { className?: string }) => {
                       strokeLinecap="round"
                     />
                   </AreaChart>
-                </ResponsiveContainer>
+                </DashboardResponsiveChart>
               </div>
             ) : (
               <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed border-[#ecdccf] bg-[#fffaf5] px-4 text-center text-sm text-[#5f5144]">

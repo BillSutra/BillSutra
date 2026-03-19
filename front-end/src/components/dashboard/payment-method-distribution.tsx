@@ -2,12 +2,13 @@
 
 import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Cell, Pie, PieChart, Tooltip } from "recharts";
 import {
   fetchDashboardPaymentMethods,
   type DashboardPaymentMethods,
 } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
+import DashboardResponsiveChart from "@/components/dashboard/DashboardResponsiveChart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -170,8 +171,8 @@ const DistributionCard = ({
             </div>
 
             <div className="grid gap-5">
-              <div className="mx-auto h-56 w-full max-w-[220px]">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="mx-auto h-56 w-full max-w-[220px] min-w-0">
+                <DashboardResponsiveChart>
                   <PieChart>
                     <Pie
                       data={data}
@@ -190,7 +191,7 @@ const DistributionCard = ({
                     </Pie>
                     <Tooltip content={<PaymentMethodTooltip />} />
                   </PieChart>
-                </ResponsiveContainer>
+                </DashboardResponsiveChart>
               </div>
 
               <div className="grid content-start gap-2.5">

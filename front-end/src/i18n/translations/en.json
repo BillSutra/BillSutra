@@ -256,6 +256,8 @@
   },
   "navigation": {
     "dashboard": "Dashboard",
+    "insights": "Insights",
+    "assistant": "Assistant",
     "products": "Products",
     "inventory": "Inventory",
     "warehouses": "Warehouses",
@@ -297,6 +299,75 @@
     "businessLogoAlt": "Business logo",
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar"
+  },
+  "insights": {
+    "title": "Insights and Forecasting",
+    "subtitle": "See projected sales, cashflow, profit, and the alerts that need attention next.",
+    "sections": {
+      "summary": {
+        "kicker": "Forecast snapshot",
+        "title": "Predictions from live business activity",
+        "description": "These cards summarize the next likely direction of receipts, profit, and cash movement using the latest transactions."
+      },
+      "trends": {
+        "kicker": "Trend visualization",
+        "title": "Past vs predicted performance",
+        "description": "Compare historical receipts and profitability against projected movement for the next few months."
+      },
+      "alerts": {
+        "kicker": "Smart alerts",
+        "title": "Risks that need attention",
+        "description": "Focus on warnings first so collections, profitability, and cashflow stay healthy."
+      },
+      "ai": {
+        "kicker": "AI insights",
+        "title": "Actionable business suggestions",
+        "description": "Plain-language suggestions generated from your receipts, expenses, and expected future movement."
+      }
+    },
+    "cards": {
+      "predictedMonthlySales": "Predicted Monthly Sales",
+      "expectedProfit": "Expected Profit",
+      "cashflowForecast": "Cashflow Forecast",
+      "nextThirtyDays": "Next 30 days",
+      "trendVsLastPeriod": "Trend vs last period",
+      "outstandingReceivables": "Outstanding receivables"
+    },
+    "alerts": {
+      "empty": "No major risks flagged right now.",
+      "reviewCollections": "Review collections",
+      "openDashboard": "Open dashboard"
+    }
+  },
+  "assistant": {
+    "title": "AI Assistant",
+    "subtitle": "Ask direct questions about your latest business data and get instant answers.",
+    "introKicker": "Smart assistance",
+    "introTitle": "Ask live questions about sales, profit, pending payments, and cashflow",
+    "introDescription": "The assistant checks your latest financial data for every query and answers in the same language you use.",
+    "chatTitle": "AI Assistant",
+    "chatDescription": "Ask about profit, total sales, pending payments, and cashflow.",
+    "placeholder": "Ask a question about your business...",
+    "send": "Send",
+    "thinking": "Assistant is checking your latest data...",
+    "error": "I could not fetch the latest answer right now. Please try again in a moment.",
+    "welcome": "Hello! I can answer live questions using your Bill Sutra financial data. Ask me about profit, sales, pending payments, or cashflow.",
+    "examplesTitle": "Try these questions",
+    "understandsTitle": "What the assistant understands",
+    "roleUser": "You",
+    "roleAssistant": "Bill Sutra AI",
+    "quickPrompts": {
+      "profit": "What is my profit this month?",
+      "sales": "Show my total sales",
+      "pending": "How much is pending in payments?",
+      "cashflow": "What is my cashflow this month?"
+    },
+    "understands": {
+      "profit": "Profit and margin",
+      "sales": "Total sales and receipts",
+      "pending": "Pending payments and dues",
+      "cashflow": "Cashflow inflow and outflow"
+    }
   },
   "dashboard": {
     "title": "Welcome back, {name}.",

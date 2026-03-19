@@ -4,14 +4,13 @@ import prisma from "../config/db.config.js";
 import {
   buildDashboardOverview,
   buildDashboardCardMetrics,
-  buildMonthlyProfitSeries,
   buildNotifications,
-  buildSalesForecast,
+  fetchCashInflowSnapshot,
   getDailyExpenses,
   getExpenseTotals,
-  getMonthlyExpenses,
   resolveDashboardFilters,
 } from "../services/dashboardAnalyticsService.js";
+import { buildDashboardForecast } from "../services/dashboardForecastService.js";
 import { onDashboardUpdate } from "../services/dashboardRealtime.js";
 import {
   getCachedMetrics,
@@ -1214,45 +1213,13 @@ class DashboardController {
       req.query.inflowMode ?? process.env.DASHBOARD_CASHFLOW_INFLOW_MODE,
     );
 
-    const {
-      salesCollections,
-      invoicePayments,
-      paidInvoicesWithoutPayments,
-      purchases,
-      dailyExpenses,
-    } =
-      await resolveSequentially({
-        salesCollections: () =>
-          prisma.sale.findMany({
-            where: {
-              user_id: userId,
-              paidAmount: { gt: 0 },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-              OR: [
-                { paymentDate: { gte: startOfMonth } },
-                { paymentDate: null, sale_date: { gte: startOfMonth } },
-              ],
-            },
-            select: { sale_date: true, paymentDate: true, paidAmount: true },
-          }),
-        invoicePayments: () =>
-          prisma.payment.findMany({
-            where: { user_id: userId, paid_at: { gte: startOfMonth } },
-            select: { paid_at: true, amount: true },
-          }),
-        paidInvoicesWithoutPayments: () =>
-          prisma.invoice.findMany({
-            where: {
-              user_id: userId,
-              date: { gte: startOfMonth },
-              status: { in: ["PAID", "PARTIALLY_PAID"] },
-              payments: { none: {} },
-            },
-            select: {
-              date: true,
-              total: true,
-              status: true,
-            },
+    const { cashInflow, purchases, dailyExpenses } = await resolveSequentially({
+        cashInflow: () =>
+          fetchCashInflowSnapshot({
+            userId,
+            start: startOfMonth,
+            endExclusive: addDays(startOfMonth, daysInMonth),
+            debugLabel: "dashboard cashflow",
           }),
         purchases: () =>
           prisma.purchase.findMany({
@@ -1271,40 +1238,16 @@ class DashboardController {
       });
 
     const inflowMap = new Map<string, number>();
-
-    if (inflowMode === "sales" || inflowMode === "hybrid") {
-      salesCollections.forEach((sale) => {
-        const key = toDateKey(sale.paymentDate ?? sale.sale_date);
-        inflowMap.set(
-          key,
-          (inflowMap.get(key) ?? 0) + toNumber(sale.paidAmount),
-        );
+    cashInflow.entries
+      .filter((entry) => {
+        if (inflowMode === "sales") return entry.source === "sale_receipt";
+        if (inflowMode === "payments") return entry.source !== "sale_receipt";
+        return true;
+      })
+      .forEach((entry) => {
+        const key = toDateKey(entry.date);
+        inflowMap.set(key, (inflowMap.get(key) ?? 0) + entry.amount);
       });
-    }
-
-    if (inflowMode === "payments" || inflowMode === "hybrid") {
-      invoicePayments.forEach((payment) => {
-        const key = toDateKey(payment.paid_at);
-        inflowMap.set(
-          key,
-          (inflowMap.get(key) ?? 0) + toNumber(payment.amount),
-        );
-      });
-
-      // Backfill paid invoices that were marked as settled without
-      // explicit payment rows so current cashflow reflects legacy data.
-      paidInvoicesWithoutPayments.forEach((invoice) => {
-        if (invoice.status !== "PAID") {
-          return;
-        }
-
-        const key = toDateKey(invoice.date);
-        inflowMap.set(
-          key,
-          (inflowMap.get(key) ?? 0) + toNumber(invoice.total),
-        );
-      });
-    }
 
     const outflowMap = new Map<string, number>();
     purchases.forEach((purchase) => {
@@ -1426,139 +1369,10 @@ class DashboardController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const now = new Date();
-    const start30 = startOfDayUtc(addDays(now, -29));
-    const start6Months = new Date(
-      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1),
-    );
-
-    const {
-      salesLast30,
-      purchasesLast30,
-      salesMonthlyRaw,
-      purchasesMonthlyRaw,
-      expenseMonthly,
-    } = await resolveSequentially({
-      salesLast30: () =>
-        prisma.sale.findMany({
-          where: {
-            user_id: userId,
-            sale_date: { gte: start30 },
-            paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-          },
-          select: { sale_date: true, total: true },
-        }),
-      purchasesLast30: () =>
-        prisma.purchase.findMany({
-          where: {
-            user_id: userId,
-            purchase_date: { gte: start30 },
-            paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-          },
-          select: { purchase_date: true, total: true },
-        }),
-      salesMonthlyRaw: () =>
-        prisma.sale.findMany({
-          where: {
-            user_id: userId,
-            sale_date: { gte: start6Months },
-            paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-          },
-          select: { sale_date: true, total: true },
-        }),
-      purchasesMonthlyRaw: () =>
-        prisma.purchase.findMany({
-          where: {
-            user_id: userId,
-            purchase_date: { gte: start6Months },
-            paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-          },
-          select: { purchase_date: true, total: true },
-        }),
-      expenseMonthly: () => getMonthlyExpenses({ userId, from: start6Months }),
-    });
-
-    const salesByDate = new Map<string, number>();
-    salesLast30.forEach((sale) => {
-      const key = toDateKey(sale.sale_date);
-      salesByDate.set(key, (salesByDate.get(key) ?? 0) + toNumber(sale.total));
-    });
-
-    const purchasesByDate = new Map<string, number>();
-    purchasesLast30.forEach((purchase) => {
-      const key = toDateKey(purchase.purchase_date);
-      purchasesByDate.set(
-        key,
-        (purchasesByDate.get(key) ?? 0) + toNumber(purchase.total),
-      );
-    });
-
-    const dailyExpenseByDate = new Map<string, number>();
-    const dailyExpenseRows = await getDailyExpenses({ userId, from: start30 });
-    dailyExpenseRows.forEach((row) => {
-      const key = toDateKey(row.day);
-      dailyExpenseByDate.set(
-        key,
-        (dailyExpenseByDate.get(key) ?? 0) + row.amount,
-      );
-    });
-
-    const last30 = buildDateSeries(start30, 30).map((key) => {
-      const revenue = salesByDate.get(key) ?? 0;
-      const purchaseCost = purchasesByDate.get(key) ?? 0;
-      const expenses = dailyExpenseByDate.get(key) ?? 0;
-      const totalCost = purchaseCost + expenses;
-      return {
-        date: key,
-        revenue,
-        cost: totalCost,
-        expenses,
-        profit: revenue - totalCost,
-      };
-    });
-
-    const monthlyProfitSeries = buildMonthlyProfitSeries({
-      months: 6,
-      sales: salesMonthlyRaw.map((item) => ({
-        date: item.sale_date,
-        total: item.total,
-      })),
-      purchases: purchasesMonthlyRaw.map((item) => ({
-        date: item.purchase_date,
-        total: item.total,
-      })),
-      expenses: expenseMonthly,
-      fromDate: now,
-    });
-
-    const monthly = monthlyProfitSeries.map((entry) => ({
-      month: entry.month,
-      revenue: entry.revenue,
-      totalCost: entry.totalCost,
-      expenses: entry.expenses,
-      profit: entry.profit,
-      margin: entry.revenue === 0 ? 0 : (entry.profit / entry.revenue) * 100,
-    }));
-
-    const forecast = buildSalesForecast(
-      monthlyProfitSeries.map((entry) => ({
-        month: entry.month,
-        value: entry.revenue,
-      })),
-    );
+    const data = await buildDashboardForecast({ userId });
 
     return sendResponse(res, 200, {
-      data: {
-        profit: { monthly, last30 },
-        forecast: {
-          method: "moving-average-3m",
-          historicalMonthly: monthlyProfitSeries.map((entry) => ({
-            month: entry.month,
-            sales: entry.revenue,
-          })),
-          predictedMonthly: forecast,
-        },
-      },
+      data,
     });
   }
 }

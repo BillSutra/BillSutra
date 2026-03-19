@@ -47,6 +47,10 @@ const ProfitForecast = dynamic(() => import("@/components/dashboard/profit-forec
 const SalesForecast = dynamic(() => import("@/components/dashboard/sales-forecast"), {
   loading: () => dashboardSectionFallback("h-[320px]"),
 });
+const ForecastInsightsPanel = dynamic(
+  () => import("@/components/dashboard/forecast-insights-panel"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
+);
 const InventoryRiskAlerts = dynamic(
   () => import("@/components/dashboard/inventory-risk-alerts"),
   { loading: () => dashboardSectionFallback("h-[340px]") },
@@ -641,9 +645,12 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         <ProfitForecast className="h-full" />
         <SalesForecast className="h-full" />
       </div>
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <ProductSalesChart className="h-full" />
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+        <ForecastInsightsPanel className="h-full" />
         <InventoryRiskAlerts className="h-full" />
+      </div>
+      <div className="grid gap-4">
+        <ProductSalesChart className="h-full" />
       </div>
     </section>
   );
