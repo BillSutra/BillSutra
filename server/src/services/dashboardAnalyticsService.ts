@@ -1025,16 +1025,12 @@ const fetchProfitSnapshot = async (params: {
 }) => {
   const { userId, start, endExclusive } = params;
 
-  const [sales, purchases, expenses] = await Promise.all([
-    prisma.sale.findMany({
-      where: { user_id: userId, sale_date: { gte: start, lt: endExclusive } },
-      select: {
-        total: true,
-        totalAmount: true,
-        paidAmount: true,
-        pendingAmount: true,
-        paymentStatus: true,
-      },
+  const [cashInflowSnapshot, purchases, expenses] = await Promise.all([
+    fetchCashInflowSnapshot({
+      userId,
+      start,
+      endExclusive,
+      debugLabel: "dashboard profit snapshot",
     }),
     prisma.purchase.findMany({
       where: {
@@ -1052,11 +1048,42 @@ const fetchProfitSnapshot = async (params: {
     getExpenseTotals({ userId, from: start, to: endExclusive }),
   ]);
 
-  return computeDashboardTotals({
-    sales,
-    purchases,
-    expenses,
-  });
+  const bookedPurchases = purchases.reduce(
+    (sum, purchase) =>
+      sum + resolveRecordedTotal(purchase.totalAmount, purchase.total),
+    0,
+  );
+  const cashOutflow = purchases.reduce(
+    (sum, purchase) =>
+      sum +
+      resolveRealizedAmount(
+        purchase.paymentStatus,
+        purchase.totalAmount,
+        purchase.paidAmount,
+        purchase.total,
+      ),
+    0,
+  );
+  const payables = purchases.reduce(
+    (sum, purchase) => sum + Math.max(0, toNumber(purchase.pendingAmount)),
+    0,
+  );
+  const realizedRevenue = roundMetric(cashInflowSnapshot.total);
+  const realizedProfit = realizedRevenue - bookedPurchases - expenses;
+  const realizedMargin =
+    realizedRevenue === 0 ? 0 : (realizedProfit / realizedRevenue) * 100;
+
+  return {
+    bookedRevenue: realizedRevenue,
+    collectedRevenue: realizedRevenue,
+    bookedPurchases: roundMetric(bookedPurchases),
+    cashOutflow: roundMetric(cashOutflow + expenses),
+    receivables: 0,
+    payables: roundMetric(payables),
+    expenses: roundMetric(expenses),
+    bookedProfit: roundMetric(realizedProfit),
+    margin: roundMetric(realizedMargin, 1),
+  } satisfies DashboardSummaryTotals;
 };
 
 const daysInMonthUtc = (year: number, monthIndex: number) =>
@@ -1819,7 +1846,7 @@ export const buildDashboardCardMetrics = async (params: {
   ]);
 
   const calcProfit = (snapshot: TotalsSnapshot) =>
-    roundMetric(snapshot.bookedSales - snapshot.bookedPurchases - snapshot.expenses);
+    roundMetric(snapshot.totalSales - snapshot.bookedPurchases - snapshot.expenses);
 
   const profits = {
     today: calcProfit(todaySnapshot),
