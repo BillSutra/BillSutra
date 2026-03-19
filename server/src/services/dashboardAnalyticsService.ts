@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { InvoiceStatus, Prisma, SaleStatus } from "@prisma/client";
 import prisma from "../config/db.config.js";
 
 type RevenuePoint = { date: Date; total: Prisma.Decimal | number };
@@ -384,10 +384,137 @@ const endOfDayLabel = (date: Date) =>
 
 type TotalsSnapshot = {
   bookedSales: number;
+  totalSales: number;
   bookedPurchases: number;
   pendingSales: number;
   pendingPurchases: number;
   expenses: number;
+};
+
+type SalesMetricSnapshot = {
+  totalSales: number;
+  pendingSales: number;
+};
+
+const SYNCED_INVOICE_NOTE_PATTERN = /Synced from invoice\s+/i;
+
+const isSyncedInvoiceSale = (notes: string | null | undefined) =>
+  SYNCED_INVOICE_NOTE_PATTERN.test(notes ?? "");
+
+const resolveInvoicePaidAmount = (invoice: {
+  total: unknown;
+  status: InvoiceStatus | string;
+  payments: Array<{ amount: unknown }>;
+}) => {
+  const total = toNumber(invoice.total);
+  const paidFromPayments = invoice.payments.reduce(
+    (sum, payment) => sum + toNumber(payment.amount),
+    0,
+  );
+  const normalizedPaid = Math.max(0, Math.min(paidFromPayments, total));
+
+  if (normalizedPaid > 0) {
+    return normalizedPaid;
+  }
+
+  return invoice.status === InvoiceStatus.PAID ? total : 0;
+};
+
+const resolveInvoicePendingAmount = (invoice: {
+  total: unknown;
+  status: InvoiceStatus | string;
+  payments: Array<{ amount: unknown }>;
+}) => {
+  if (invoice.status === InvoiceStatus.VOID || invoice.status === InvoiceStatus.DRAFT) {
+    return 0;
+  }
+
+  const total = toNumber(invoice.total);
+  const paid = resolveInvoicePaidAmount(invoice);
+  return Math.max(0, total - paid);
+};
+
+const fetchSalesMetricSnapshot = async (params: {
+  userId: number;
+  start: Date;
+  endExclusive: Date;
+}) => {
+  const { userId, start, endExclusive } = params;
+
+  const [sales, invoices] = await Promise.all([
+    prisma.sale.findMany({
+      where: {
+        user_id: userId,
+        status: SaleStatus.COMPLETED,
+        sale_date: { gte: start, lt: endExclusive },
+      },
+      select: {
+        total: true,
+        totalAmount: true,
+        paidAmount: true,
+        pendingAmount: true,
+        paymentStatus: true,
+        notes: true,
+      },
+    }),
+    prisma.invoice.findMany({
+      where: {
+        user_id: userId,
+        date: { gte: start, lt: endExclusive },
+        status: {
+          in: [
+            InvoiceStatus.SENT,
+            InvoiceStatus.PARTIALLY_PAID,
+            InvoiceStatus.PAID,
+            InvoiceStatus.OVERDUE,
+          ],
+        },
+      },
+      select: {
+        total: true,
+        status: true,
+        payments: {
+          select: {
+            amount: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const directSales = sales.filter((sale) => !isSyncedInvoiceSale(sale.notes));
+
+  const directSalesPaid = directSales.reduce(
+    (sum, sale) =>
+      sum +
+      resolveRealizedAmount(
+        sale.paymentStatus,
+        sale.totalAmount,
+        sale.paidAmount,
+        sale.total,
+      ),
+    0,
+  );
+
+  const directSalesPending = directSales.reduce(
+    (sum, sale) => sum + Math.max(0, toNumber(sale.pendingAmount)),
+    0,
+  );
+
+  const invoicePaid = invoices.reduce(
+    (sum, invoice) => sum + resolveInvoicePaidAmount(invoice),
+    0,
+  );
+
+  const invoicePending = invoices.reduce(
+    (sum, invoice) => sum + resolveInvoicePendingAmount(invoice),
+    0,
+  );
+
+  return {
+    totalSales: roundMetric(directSalesPaid + invoicePaid),
+    pendingSales: roundMetric(directSalesPending + invoicePending),
+  } satisfies SalesMetricSnapshot;
 };
 
 const sumSalesPurchases = async (params: {
@@ -434,15 +561,17 @@ const fetchTotalsSnapshot = async (params: {
   endExclusive: Date;
 }) => {
   const { userId, start, endExclusive } = params;
-  const [totals, expenses] = await Promise.all([
+  const [totals, salesMetrics, expenses] = await Promise.all([
     sumSalesPurchases({ userId, start, endExclusive }),
+    fetchSalesMetricSnapshot({ userId, start, endExclusive }),
     getExpenseTotals({ userId, from: start, to: endExclusive }),
   ]);
 
   return {
     bookedSales: roundMetric(totals.salesBooked),
+    totalSales: salesMetrics.totalSales,
     bookedPurchases: roundMetric(totals.purchasesBooked),
-    pendingSales: roundMetric(totals.salesPending),
+    pendingSales: salesMetrics.pendingSales,
     pendingPurchases: roundMetric(totals.purchasesPending),
     expenses: roundMetric(expenses),
   } satisfies TotalsSnapshot;
@@ -829,6 +958,8 @@ export const buildDashboardOverview = async (params: {
     totalSuppliers,
     dailyExpenses,
     previousExpensesTotal,
+    currentSalesMetrics,
+    previousSalesMetrics,
   ] = await Promise.all([
     prisma.sale.findMany({
       where: {
@@ -929,6 +1060,16 @@ export const buildDashboardOverview = async (params: {
       userId,
       from: resolved.previousStart,
       to: resolved.previousEndExclusive,
+    }),
+    fetchSalesMetricSnapshot({
+      userId,
+      start: resolved.start,
+      endExclusive: resolved.endExclusive,
+    }),
+    fetchSalesMetricSnapshot({
+      userId,
+      start: resolved.previousStart,
+      endExclusive: resolved.previousEndExclusive,
     }),
   ]);
 
@@ -1361,12 +1502,12 @@ export const buildDashboardOverview = async (params: {
     },
     metrics: {
       totalRevenue: currentTotals.bookedRevenue,
-      totalSales: currentTotals.bookedRevenue,
+      totalSales: currentSalesMetrics.totalSales,
       totalPurchases: currentTotals.bookedPurchases,
       expenses: currentTotals.expenses,
       receivables: currentTotals.receivables,
       payables: currentTotals.payables,
-      pendingPayments: currentTotals.receivables,
+      pendingPayments: currentSalesMetrics.pendingSales,
       inventoryValue: roundMetric(inventoryValue),
       profits: {
         today: todaySnapshot.bookedProfit,
@@ -1380,8 +1521,8 @@ export const buildDashboardOverview = async (params: {
           previousTotals.bookedRevenue,
         ),
         totalSales: safePercentChange(
-          currentTotals.bookedRevenue,
-          previousTotals.bookedRevenue,
+          currentSalesMetrics.totalSales,
+          previousSalesMetrics.totalSales,
         ),
         totalPurchases: safePercentChange(
           currentTotals.bookedPurchases,
@@ -1410,8 +1551,8 @@ export const buildDashboardOverview = async (params: {
           prevYearSnapshot.bookedProfit,
         ),
         pendingPayments: safePercentChange(
-          currentTotals.receivables,
-          previousTotals.receivables,
+          currentSalesMetrics.pendingSales,
+          previousSalesMetrics.pendingSales,
         ),
         inventoryValue: 0,
       },
@@ -1530,15 +1671,15 @@ export const buildDashboardCardMetrics = async (params: {
       endDate: toDateKey(addDaysUtc(resolved.endExclusive, -1)),
     },
     metrics: {
-      totalSales: currentTotals.bookedSales,
+      totalSales: currentTotals.totalSales,
       totalPurchases: currentTotals.bookedPurchases,
       pendingSalesPayments: currentTotals.pendingSales,
       pendingPurchasePayments: currentTotals.pendingPurchases,
       profits,
       changes: {
         totalSales: safePercentChange(
-          currentTotals.bookedSales,
-          previousTotals.bookedSales,
+          currentTotals.totalSales,
+          previousTotals.totalSales,
         ),
         totalPurchases: safePercentChange(
           currentTotals.bookedPurchases,

@@ -8,13 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { ValidationField } from "@/components/ui/ValidationField";
 import { Input } from "@/components/ui/input";
-import { validateNumber, validateRequired } from "@/lib/validation";
+import { validateNumber } from "@/lib/validation";
 import {
   useAdjustInventoryMutation,
   useInventoriesQuery,
   useProductsQuery,
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type InventoryClientProps = {
   name: string;
@@ -22,6 +23,7 @@ type InventoryClientProps = {
 };
 
 const InventoryClient = ({ name, image }: InventoryClientProps) => {
+  const { t } = useI18n();
   const { data, isLoading, isError } = useInventoriesQuery();
   const { data: products } = useProductsQuery();
   const { data: warehouses } = useWarehousesQuery();
@@ -33,7 +35,6 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
     reason: "ADJUSTMENT",
     note: "",
   });
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [formTouched, setFormTouched] = useState(false);
 
@@ -46,7 +47,10 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
       existing.push(item);
       map.set(key, existing);
     });
-    return Array.from(map.entries()).map(([name, items]) => ({ name, items }));
+    return Array.from(map.entries()).map(([warehouseName, items]) => ({
+      name: warehouseName,
+      items,
+    }));
   }, [data]);
 
   const parseServerErrors = (error: unknown, fallback: string) => {
@@ -64,18 +68,6 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
       if (messages.size) return Array.from(messages).join(" ");
     }
     return fallback;
-  };
-
-  const validateForm = () => {
-    const errors: Record<string, string> = {};
-    if (!form.warehouse_id) errors.warehouse_id = "Please select an option";
-    if (!form.product_id) errors.product_id = "Please select an option";
-    if (!form.change.trim()) errors.change = "This field is required";
-    else if (isNaN(Number(form.change))) errors.change = "Enter a valid number";
-    else if (Number(form.change) === 0)
-      errors.change = "Enter a non-zero quantity change.";
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
   };
 
   const validateAll = () => {
@@ -108,8 +100,10 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
         note: form.note.trim() || undefined,
       });
 
-      toast.success("Inventory updated", {
-        description: `Change: ${form.change} units`,
+      toast.success(t("inventory.updateSuccess"), {
+        description: t("inventory.updateSuccessDescription", {
+          change: form.change,
+        }),
       });
 
       setForm({
@@ -119,12 +113,9 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
         reason: "ADJUSTMENT",
         note: "",
       });
-      setFieldErrors({});
       setFormTouched(false);
     } catch (error) {
-      setServerError(
-        parseServerErrors(error, "Unable to adjust inventory right now."),
-      );
+      setServerError(parseServerErrors(error, t("inventory.updateError")));
     }
   };
 
@@ -132,24 +123,24 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title="Warehouse Inventory"
-      subtitle="All warehouse stock levels, grouped by location."
+      title={t("inventory.title")}
+      subtitle={t("inventory.subtitle")}
     >
       <div className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-2">
           <p className="text-sm uppercase tracking-[0.2em] text-gray-500">
-            Inventory
+            {t("inventory.kicker")}
           </p>
           <p className="max-w-2xl text-base text-gray-500">
-            All warehouse stock levels, grouped by location.
+            {t("inventory.lead")}
           </p>
         </div>
 
         <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="text-lg font-semibold">Adjust inventory</h2>
+            <h2 className="text-lg font-semibold">{t("inventory.adjustTitle")}</h2>
             <p className="text-sm text-gray-500">
-              Log stock movements for audits and corrections.
+              {t("inventory.adjustDescription")}
             </p>
             <form
               className="mt-4 grid gap-4"
@@ -161,7 +152,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   htmlFor="warehouse_select"
                   className="text-xs text-gray-500"
                 >
-                  Warehouse
+                  {t("inventory.fields.warehouse")}
                 </Label>
                 <select
                   id="warehouse_select"
@@ -172,7 +163,6 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                       ...prev,
                       warehouse_id: event.target.value,
                     }));
-                    setFieldErrors((prev) => ({ ...prev, warehouse_id: "" }));
                     setServerError(null);
                   }}
                   aria-invalid={formTouched && !form.warehouse_id}
@@ -182,7 +172,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                       : undefined
                   }
                 >
-                  <option value="">Select warehouse</option>
+                  <option value="">{t("inventory.selectWarehouse")}</option>
                   {(warehouses ?? []).map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name}
@@ -195,7 +185,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                     className="text-xs text-destructive block"
                     role="alert"
                   >
-                    Please select an option
+                    {t("common.selectOption")}
                   </span>
                 )}
               </div>
@@ -204,7 +194,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   htmlFor="product_select"
                   className="text-xs text-gray-500"
                 >
-                  Product
+                  {t("inventory.fields.product")}
                 </Label>
                 <select
                   id="product_select"
@@ -215,7 +205,6 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                       ...prev,
                       product_id: event.target.value,
                     }));
-                    setFieldErrors((prev) => ({ ...prev, product_id: "" }));
                     setServerError(null);
                   }}
                   aria-invalid={formTouched && !form.product_id}
@@ -225,10 +214,10 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                       : undefined
                   }
                 >
-                  <option value="">Select product</option>
+                  <option value="">{t("inventory.selectProduct")}</option>
                   {(products ?? []).map((product) => (
                     <option key={product.id} value={product.id}>
-                      {product.name} • {product.sku}
+                      {product.name} - {product.sku}
                     </option>
                   ))}
                 </select>
@@ -238,34 +227,34 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                     className="text-xs text-destructive block"
                     role="alert"
                   >
-                    Please select an option
+                    {t("common.selectOption")}
                   </span>
                 )}
               </div>
               <ValidationField
                 id="change"
-                label="Quantity change"
+                label={t("inventory.fields.quantityChange")}
                 type="number"
                 value={form.change}
                 onChange={(value) => {
                   setForm((prev) => ({ ...prev, change: value }));
-                  setFieldErrors((prev) => ({ ...prev, change: "" }));
                   setServerError(null);
                 }}
                 validate={(value) => {
-                  if (!value.trim()) return "This field is required";
-                  if (isNaN(Number(value))) return "Enter a valid number";
-                  if (Number(value) === 0)
-                    return "Enter a non-zero quantity change.";
+                  if (!value.trim()) return t("validation.required");
+                  if (isNaN(Number(value))) return t("validation.validNumber");
+                  if (Number(value) === 0) {
+                    return t("inventory.nonZeroQuantity");
+                  }
                   return "";
                 }}
                 required
-                placeholder="Use negative values to remove stock"
+                placeholder={t("inventory.placeholders.quantityChange")}
                 success
               />
               <div className="grid gap-2">
                 <Label htmlFor="reason" className="text-xs text-gray-500">
-                  Reason
+                  {t("inventory.fields.reason")}
                 </Label>
                 <select
                   id="reason"
@@ -278,16 +267,24 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                     }))
                   }
                 >
-                  <option value="ADJUSTMENT">Adjustment</option>
-                  <option value="PURCHASE">Purchase</option>
-                  <option value="SALE">Sale</option>
-                  <option value="RETURN">Return</option>
-                  <option value="DAMAGE">Damage</option>
+                  <option value="ADJUSTMENT">
+                    {t("inventory.reasons.ADJUSTMENT")}
+                  </option>
+                  <option value="PURCHASE">
+                    {t("inventory.reasons.PURCHASE")}
+                  </option>
+                  <option value="SALE">{t("inventory.reasons.SALE")}</option>
+                  <option value="RETURN">
+                    {t("inventory.reasons.RETURN")}
+                  </option>
+                  <option value="DAMAGE">
+                    {t("inventory.reasons.DAMAGE")}
+                  </option>
                 </select>
               </div>
               <div className="grid gap-2">
                 <Label htmlFor="note" className="text-xs text-gray-500">
-                  Note
+                  {t("inventory.fields.note")}
                 </Label>
                 <Input
                   id="note"
@@ -295,7 +292,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, note: event.target.value }))
                   }
-                  placeholder="Optional context"
+                  placeholder={t("inventory.placeholders.note")}
                   className="h-10 rounded-xl border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
                 />
               </div>
@@ -309,11 +306,11 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   adjustInventory.isPending || (formTouched && !validateAll())
                 }
               >
-                Apply adjustment
+                {t("inventory.applyAdjustment")}
               </Button>
               {(adjustInventory.isError || serverError) && (
                 <p className="text-sm text-destructive">
-                  {serverError ?? "Unable to adjust inventory right now."}
+                  {serverError ?? t("inventory.updateError")}
                 </p>
               )}
             </form>
@@ -321,15 +318,15 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
 
           <div className="grid gap-4">
             {isLoading && (
-              <p className="text-sm text-gray-500">Loading inventory...</p>
+              <p className="text-sm text-gray-500">{t("inventory.loading")}</p>
             )}
             {isError && (
               <p className="text-sm text-destructive">
-                Failed to load inventory.
+                {t("inventory.loadError")}
               </p>
             )}
             {!isLoading && !isError && grouped.length === 0 && (
-              <p className="text-sm text-gray-500">No inventory records yet.</p>
+              <p className="text-sm text-gray-500">{t("inventory.empty")}</p>
             )}
             {!isLoading && !isError && grouped.length > 0 && (
               <div className="grid gap-4">
@@ -347,14 +344,16 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                         >
                           <div>
                             <p className="text-base font-semibold">
-                              {item.product.name} • {item.product.sku}
+                              {item.product.name} - {item.product.sku}
                             </p>
                             <p className="text-xs text-gray-500">
-                              Reorder at {item.product.reorder_level}
+                              {t("inventory.reorderAt", {
+                                level: item.product.reorder_level,
+                              })}
                             </p>
                           </div>
                           <div className="text-sm text-gray-500">
-                            Stock: {item.quantity}
+                            {t("inventory.stock", { quantity: item.quantity })}
                           </div>
                         </div>
                       ))}

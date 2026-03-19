@@ -29,12 +29,13 @@ import {
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, formatTimeLabel } from "@/lib/dashboardUtils";
 import {
   DASHBOARD_REALTIME_ENABLED,
   DASHBOARD_REFRESH_INTERVAL_MS,
   dashboardQueryDefaults,
 } from "@/lib/dashboardRefresh";
+import { useI18n } from "@/providers/LanguageProvider";
+import { useDashboardFormatters } from "@/components/dashboard/use-dashboard-formatters";
 
 const dashboardSectionFallback = (height: string) => (
   <div className={`app-loading-skeleton w-full ${height}`} />
@@ -102,9 +103,6 @@ type DashboardSectionIntroProps = {
   action?: React.ReactNode;
 };
 
-const subtitle =
-  "A sharper view of sales, cash movement, profit trend, and inventory demand.";
-
 const DashboardSectionIntro = ({
   headingId,
   kicker,
@@ -128,12 +126,16 @@ const DashboardSectionIntro = ({
 );
 
 const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
+  const { t } = useI18n();
+  const { currency, dateLabel, dateWithYear, timeLabel, translateEnum } =
+    useDashboardFormatters();
   const [hydrated, setHydrated] = useState(false);
   const [filters, setFilters] = useState<DashboardFilterState>({
     range: "30d",
     granularity: "day",
   });
   const deferredFilters = useDeferredValue(filters);
+  const displayName = name.trim() || t("common.guest");
 
   const hasValidSessionToken =
     typeof token === "string" &&
@@ -213,67 +215,84 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     data?.notifications.filter((notification) => !notification.read).length ??
     data?.notifications.length ??
     0;
+  const rangeLabelByPreset: Record<DashboardFilterState["range"], string> = {
+    "7d": t("dashboard.filters.range7d"),
+    "30d": t("dashboard.filters.range30d"),
+    "90d": t("dashboard.filters.range90d"),
+    ytd: t("dashboard.filters.rangeYtd"),
+    custom: t("dashboard.filters.rangeCustom"),
+  };
+  const filterLabel =
+    filters.range === "custom" && (filters.startDate || filters.endDate)
+      ? [
+          filters.startDate ? dateLabel(filters.startDate) : null,
+          filters.endDate ? dateLabel(filters.endDate) : null,
+        ]
+          .filter(Boolean)
+          .join(" - ")
+      : rangeLabelByPreset[filters.range];
 
   const heroStats = [
-    { label: "Sales", value: metrics?.totalSales ?? 0, helper: "Booked revenue" },
     {
-      label: "Purchases",
+      label: t("dashboard.hero.stats.salesLabel"),
+      value: metrics?.totalSales ?? 0,
+      helper: t("dashboard.hero.stats.salesHelper"),
+    },
+    {
+      label: t("dashboard.hero.stats.purchasesLabel"),
       value: metrics?.totalPurchases ?? 0,
-      helper: "Stock and supply spend",
+      helper: t("dashboard.hero.stats.purchasesHelper"),
     },
     {
-      label: "Pending sales",
+      label: t("dashboard.hero.stats.pendingSalesLabel"),
       value: metrics?.pendingSalesPayments ?? 0,
-      helper: "Customer dues",
+      helper: t("dashboard.hero.stats.pendingSalesHelper"),
     },
     {
-      label: "Pending purchases",
+      label: t("dashboard.hero.stats.pendingPurchasesLabel"),
       value: metrics?.pendingPurchasePayments ?? 0,
-      helper: "Supplier dues",
+      helper: t("dashboard.hero.stats.pendingPurchasesHelper"),
     },
   ];
 
   const primaryMetricCards = metrics
     ? [
         {
-          title: "Total Sales",
+          title: t("dashboard.primaryMetrics.totalSalesTitle"),
           value: metrics.totalSales,
           change: metrics.changes.totalSales,
           icon: <TrendingUp size={18} />,
-          description: "Booked revenue across all recorded sales.",
-          helperText:
-            "Sum of sales total_amount (fallback total) for the selected range.",
+          description: t("dashboard.primaryMetrics.totalSalesDescription"),
+          helperText: t("dashboard.primaryMetrics.totalSalesHelper"),
           theme: "sales" as const,
         },
         {
-          title: "Total Purchases",
+          title: t("dashboard.primaryMetrics.totalPurchasesTitle"),
           value: metrics.totalPurchases,
           change: metrics.changes.totalPurchases,
           icon: <Banknote size={18} />,
-          description: "Spend committed to stock and supply purchases.",
-          helperText:
-            "Sum of purchase total_amount (fallback total) for the selected range.",
+          description: t("dashboard.primaryMetrics.totalPurchasesDescription"),
+          helperText: t("dashboard.primaryMetrics.totalPurchasesHelper"),
           theme: "purchases" as const,
         },
         {
-          title: "Pending Sales Payments",
+          title: t("dashboard.primaryMetrics.pendingSalesPaymentsTitle"),
           value: metrics.pendingSalesPayments,
           change: metrics.changes.pendingSalesPayments,
           icon: <CreditCard size={18} />,
-          trendLabel: "to collect",
-          description: "Outstanding customer payments still to collect.",
-          helperText: "Sum of pending_amount on sales in the selected range.",
+          trendLabel: t("dashboard.primaryMetrics.pendingSalesPaymentsTrend"),
+          description: t("dashboard.primaryMetrics.pendingSalesPaymentsDescription"),
+          helperText: t("dashboard.primaryMetrics.pendingSalesPaymentsHelper"),
           theme: "pending-sales" as const,
         },
         {
-          title: "Pending Purchase Payments",
+          title: t("dashboard.primaryMetrics.pendingPurchasePaymentsTitle"),
           value: metrics.pendingPurchasePayments,
           change: metrics.changes.pendingPurchasePayments,
           icon: <Banknote size={18} />,
-          trendLabel: "to pay",
-          description: "Outstanding supplier payments for recorded purchases.",
-          helperText:
-            "Sum of pending_amount on purchases in the selected range.",
+          trendLabel: t("dashboard.primaryMetrics.pendingPurchasePaymentsTrend"),
+          description: t("dashboard.primaryMetrics.pendingPurchasePaymentsDescription"),
+          helperText: t("dashboard.primaryMetrics.pendingPurchasePaymentsHelper"),
           theme: "pending-purchases" as const,
         },
       ]
@@ -282,69 +301,69 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   const profitMetricCards = metrics
     ? [
         {
-          title: "Today's Profit",
+          title: t("dashboard.profitMetrics.todayTitle"),
           value: metrics.profits.today,
           change: metrics.changes.todayProfit,
           icon: <CreditCard size={18} />,
-          description: "Today's net after purchases and expenses.",
-          helperText: "(Sales - purchases - expenses) for today.",
+          description: t("dashboard.profitMetrics.todayDescription"),
+          helperText: t("dashboard.profitMetrics.todayHelper"),
         },
         {
-          title: "Weekly Profit",
+          title: t("dashboard.profitMetrics.weeklyTitle"),
           value: metrics.profits.weekly,
           change: metrics.changes.weeklyProfit,
           icon: <Wallet size={18} />,
-          description: "Rolling 7-day profit performance.",
-          helperText: "(Sales - purchases - expenses) over the last 7 days.",
+          description: t("dashboard.profitMetrics.weeklyDescription"),
+          helperText: t("dashboard.profitMetrics.weeklyHelper"),
         },
         {
-          title: "Monthly Profit",
+          title: t("dashboard.profitMetrics.monthlyTitle"),
           value: metrics.profits.monthly,
           change: metrics.changes.monthlyProfit,
           icon: <Package size={18} />,
-          description: "Current month profit after all outflows.",
-          helperText: "(Sales - purchases - expenses) month-to-date.",
+          description: t("dashboard.profitMetrics.monthlyDescription"),
+          helperText: t("dashboard.profitMetrics.monthlyHelper"),
         },
         {
-          title: "Yearly Profit",
+          title: t("dashboard.profitMetrics.yearlyTitle"),
           value: metrics.profits.yearly,
           change: metrics.changes.yearlyProfit,
           icon: <Landmark size={18} />,
-          description: "Year-to-date profit after purchases and expenses.",
-          helperText: "(Sales - purchases - expenses) year-to-date.",
+          description: t("dashboard.profitMetrics.yearlyDescription"),
+          helperText: t("dashboard.profitMetrics.yearlyHelper"),
         },
       ]
     : [];
 
   const focusCards = [
     {
-      label: "Overdue invoices",
+      label: t("dashboard.focus.overdueInvoicesLabel"),
       value: invoiceStats?.overdue ?? 0,
-      meta: "Needs billing follow-up",
+      meta: t("dashboard.focus.overdueInvoicesMeta"),
       href: "/invoices/history",
       tone:
         "border-rose-200/80 bg-rose-50/80 text-rose-950 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-100",
     },
     {
-      label: "Pending collections",
+      label: t("dashboard.focus.pendingCollectionsLabel"),
       value: pendingSalesPayments.length,
-      meta: formatCurrency(metrics?.pendingSalesPayments ?? 0),
+      meta: currency(metrics?.pendingSalesPayments ?? 0),
       href: "#operations",
       tone:
         "border-amber-200/80 bg-amber-50/80 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100",
     },
     {
-      label: "Low stock alerts",
+      label: t("dashboard.focus.lowStockAlertsLabel"),
       value: data?.alerts.lowStock.length ?? 0,
-      meta: "Inventory watchlist",
+      meta: t("dashboard.focus.lowStockAlertsMeta"),
       href: "/inventory",
       tone:
         "border-orange-200/80 bg-orange-50/80 text-orange-950 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-100",
     },
     {
-      label: "Unread signals",
+      label: t("dashboard.focus.unreadSignalsLabel"),
       value: unreadNotifications,
-      meta: "Operational notifications",
+      meta: t("dashboard.focus.unreadSignalsMeta"),
       href: "#operations",
       tone:
         "border-border/80 bg-card/90 text-foreground dark:border-border/70 dark:bg-card/70",
@@ -352,11 +371,11 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   ];
 
   const sectionLinks = [
-    { label: "Overview", href: "#overview" },
-    { label: "Performance", href: "#performance" },
-    { label: "Forecasting", href: "#forecasting" },
-    { label: "Operations", href: "#operations" },
-    { label: "Records", href: "#records" },
+    { label: t("dashboard.sectionLinks.overview"), href: "#overview" },
+    { label: t("dashboard.sectionLinks.performance"), href: "#performance" },
+    { label: t("dashboard.sectionLinks.forecasting"), href: "#forecasting" },
+    { label: t("dashboard.sectionLinks.operations"), href: "#operations" },
+    { label: t("dashboard.sectionLinks.records"), href: "#records" },
   ];
 
   const heroSection = (
@@ -364,16 +383,18 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
       <header className="dashboard-chart-surface rounded-[1.75rem] px-6 py-6 sm:px-7">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
-            Business command center
+            {t("dashboard.hero.kicker")}
           </p>
-          {metricsQuery.data?.filters?.label ? (
+          {filterLabel ? (
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              {metricsQuery.data.filters.label}
+              {filterLabel}
             </div>
           ) : null}
           {metricsUpdatedAt ? (
             <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-              Updated {formatTimeLabel(metricsUpdatedAt)}
+              {t("dashboard.status.lastUpdated", {
+                time: timeLabel(metricsUpdatedAt),
+              })}
             </div>
           ) : null}
         </div>
@@ -381,18 +402,15 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         <div className="mt-4 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <p className="text-2xl font-semibold tracking-tight text-foreground sm:text-[2rem]">
-              Revenue, receivables, supplier dues, and next actions in one
-              operating view.
+              {t("dashboard.hero.operatingViewTitle")}
             </p>
             <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-[0.95rem]">
-              The dashboard now leads with what needs attention first, then steps
-              through performance, forecasting, and records so the page is easier
-              to scan on every screen size.
+              {t("dashboard.hero.operatingViewDescription")}
             </p>
           </div>
           <Button asChild size="lg" className="w-full sm:w-auto">
             <Link href="#operations">
-              Review priority items
+              {t("dashboard.hero.reviewPriorityItems")}
               <ArrowRight size={16} />
             </Link>
           </Button>
@@ -408,7 +426,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 {item.label}
               </p>
               <p className="mt-2 text-lg font-semibold leading-tight text-foreground">
-                <AnimatedNumber value={item.value} format={formatCurrency} />
+                <AnimatedNumber value={item.value} format={currency} />
               </p>
               <p className="mt-1 text-xs text-muted-foreground">{item.helper}</p>
             </div>
@@ -419,28 +437,38 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="app-kicker text-[11px]">Collections focus</p>
+                <p className="app-kicker text-[11px]">
+                  {t("dashboard.hero.collectionsFocus")}
+                </p>
                 <p className="mt-2 text-base font-semibold text-foreground">
-                  {formatCurrency(metrics?.pendingSalesPayments ?? 0)}
+                  {currency(metrics?.pendingSalesPayments ?? 0)}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Outstanding customer payments across {pendingSalesPayments.length}{" "}
-                  invoice(s).
+                  {t("dashboard.hero.collectionsSummary", {
+                    count: pendingSalesPayments.length,
+                  })}
                 </p>
               </div>
-              <span className="app-chip">Receivables</span>
+              <span className="app-chip">{t("dashboard.hero.receivables")}</span>
             </div>
           </div>
 
           <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="app-kicker text-[11px]">Billing health</p>
+                <p className="app-kicker text-[11px]">
+                  {t("dashboard.hero.billingHealth")}
+                </p>
                 <p className="mt-2 text-base font-semibold text-foreground">
-                  {invoiceStats?.overdue ?? 0} overdue invoice(s)
+                  {t("dashboard.hero.overdueInvoices", {
+                    count: invoiceStats?.overdue ?? 0,
+                  })}
                 </p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Paid: {invoiceStats?.paid ?? 0} of {invoiceStats?.total ?? 0} total.
+                  {t("dashboard.hero.paidSummary", {
+                    paid: invoiceStats?.paid ?? 0,
+                    total: invoiceStats?.total ?? 0,
+                  })}
                 </p>
               </div>
               <AlertTriangle size={18} className="mt-1 text-amber-600" />
@@ -457,13 +485,12 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 <BellRing size={18} />
               </div>
               <div>
-                <p className="app-kicker">Today&apos;s focus</p>
+                <p className="app-kicker">{t("dashboard.focus.kicker")}</p>
                 <h2 className="mt-1 text-lg font-semibold text-foreground">
-                  Priority items
+                  {t("dashboard.focus.title")}
                 </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Surface the tasks most likely to need action before you dive
-                  into the charts.
+                  {t("dashboard.focus.description")}
                 </p>
               </div>
             </div>
@@ -502,7 +529,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
 
   const navSection = (
     <nav
-      aria-label="Dashboard sections"
+      aria-label={t("navigation.dashboard")}
       className="flex flex-wrap items-center gap-2"
     >
       {sectionLinks.map((item) => (
@@ -517,9 +544,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     <section id="overview" aria-labelledby="overview-heading" className="grid gap-4">
       <DashboardSectionIntro
         headingId="overview-heading"
-        kicker="Core metrics"
-        title="Business pulse at a glance"
-        description="Primary KPIs are grouped together first so revenue, spend, collections, and payables can be compared without hunting through the page."
+        kicker={t("dashboard.sections.overview.kicker")}
+        title={t("dashboard.sections.overview.title")}
+        description={t("dashboard.sections.overview.description")}
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {showLoadingState ? (
@@ -536,7 +563,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
               description={card.description}
               helperText={card.helperText}
               theme={card.theme}
-              formatValue={formatCurrency}
+              formatValue={currency}
               status={{
                 isLoading: metricsLoading,
                 isFetching: metricsFetching,
@@ -555,9 +582,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     <section aria-labelledby="profit-heading" className="grid gap-4">
       <DashboardSectionIntro
         headingId="profit-heading"
-        kicker="Profit trend"
-        title="How profitability is moving over time"
-        description="Profit cards are separated from operational balances to reduce cognitive load and make period-over-period changes easier to read."
+        kicker={t("dashboard.sections.profit.kicker")}
+        title={t("dashboard.sections.profit.title")}
+        description={t("dashboard.sections.profit.description")}
       />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {showLoadingState ? (
@@ -573,7 +600,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
               description={card.description}
               helperText={card.helperText}
               theme="profit"
-              formatValue={formatCurrency}
+              formatValue={currency}
               status={{
                 isLoading: metricsLoading,
                 isFetching: metricsFetching,
@@ -592,9 +619,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     <section id="performance" aria-labelledby="performance-heading" className="grid gap-4">
       <DashboardSectionIntro
         headingId="performance-heading"
-        kicker="Performance"
-        title="Revenue, cash, and payment mix"
-        description="Charts are grouped by financial story so users can move from booked activity to actual cash movement and then to payment behavior."
+        kicker={t("dashboard.sections.performance.kicker")}
+        title={t("dashboard.sections.performance.title")}
+        description={t("dashboard.sections.performance.description")}
       />
       <SalesChart filters={deferredFilters} />
       <CashFlowChart />
@@ -606,9 +633,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     <section id="forecasting" aria-labelledby="forecasting-heading" className="grid gap-4">
       <DashboardSectionIntro
         headingId="forecasting-heading"
-        kicker="Forecasting"
-        title="Demand, inventory, and forward-looking signals"
-        description="Forecast widgets sit together with product demand and risk alerts so replenishment decisions can be made from one area."
+        kicker={t("dashboard.sections.forecasting.kicker")}
+        title={t("dashboard.sections.forecasting.title")}
+        description={t("dashboard.sections.forecasting.description")}
       />
       <div className="grid gap-4 lg:grid-cols-2">
         <ProfitForecast className="h-full" />
@@ -625,12 +652,12 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     <section id="operations" aria-labelledby="operations-heading" className="grid gap-4">
       <DashboardSectionIntro
         headingId="operations-heading"
-        kicker="Operations"
-        title="Alerts, billing health, and collection queue"
-        description="Action-oriented cards are grouped ahead of supporting insight panels so the dashboard helps users decide what to do next, not just what happened."
+        kicker={t("dashboard.sections.operations.kicker")}
+        title={t("dashboard.sections.operations.title")}
+        description={t("dashboard.sections.operations.description")}
         action={
           <Button asChild variant="outline">
-            <Link href="/sales">Open sales ledger</Link>
+            <Link href="/sales">{t("dashboard.sections.operations.openSalesLedger")}</Link>
           </Button>
         }
       />
@@ -640,13 +667,14 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           {invoiceStats ? (
             <section className="dashboard-chart-surface rounded-[1.75rem]">
               <div className="dashboard-chart-content px-6 pb-5 pt-6">
-                <p className="app-kicker">Billing snapshot</p>
+                <p className="app-kicker">
+                  {t("dashboard.operations.billingSnapshotKicker")}
+                </p>
                 <h3 className="mt-2 text-lg font-semibold text-foreground">
-                  Invoice statistics
+                  {t("dashboard.operations.invoiceStatisticsTitle")}
                 </h3>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Keep invoice totals, pending items, and overdue follow-ups visible
-                  without opening the records page.
+                  {t("dashboard.operations.invoiceStatisticsDescription")}
                 </p>
                 <div className="mt-3">
                   <DashboardCardStatus
@@ -659,10 +687,22 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 </div>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   {[
-                    { label: "Total", value: invoiceStats.total },
-                    { label: "Paid", value: invoiceStats.paid },
-                    { label: "Pending", value: invoiceStats.pending },
-                    { label: "Overdue", value: invoiceStats.overdue },
+                    {
+                      label: t("dashboard.operations.invoiceStatsTotal"),
+                      value: invoiceStats.total,
+                    },
+                    {
+                      label: t("dashboard.operations.invoiceStatsPaid"),
+                      value: invoiceStats.paid,
+                    },
+                    {
+                      label: t("dashboard.operations.invoiceStatsPending"),
+                      value: invoiceStats.pending,
+                    },
+                    {
+                      label: t("dashboard.operations.invoiceStatsOverdue"),
+                      value: invoiceStats.overdue,
+                    },
                   ].map((item) => (
                     <div
                       key={item.label}
@@ -692,12 +732,18 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           <div className="dashboard-chart-content flex h-full flex-col p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="app-kicker">Collection queue</p>
+                <p className="app-kicker">
+                  {t("dashboard.operations.collectionQueueKicker")}
+                </p>
                 <h3 className="mt-2 text-lg font-semibold text-foreground">
-                  Pending sales payments
+                  {t("dashboard.operations.pendingSalesPaymentsTitle")}
                 </h3>
               </div>
-              <span className="app-chip">{pendingSalesPayments.length} invoice(s)</span>
+              <span className="app-chip">
+                {t("dashboard.operations.invoiceCount", {
+                  count: pendingSalesPayments.length,
+                })}
+              </span>
             </div>
             <div className="mt-2">
               <DashboardCardStatus
@@ -709,13 +755,12 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
               />
             </div>
             <p className="mt-2 text-sm text-muted-foreground">
-              The highest pending balances are surfaced first so collection work
-              stays short and targeted.
+              {t("dashboard.operations.collectionQueueDescription")}
             </p>
             <div className="mt-4 grid gap-3">
               {prioritizedPendingSalesPayments.length === 0 ? (
                 <div className="app-empty-state px-4 py-5 text-sm">
-                  No pending sales invoices.
+                  {t("dashboard.operations.noPendingSalesInvoices")}
                 </div>
               ) : (
                 prioritizedPendingSalesPayments.map((purchase) => (
@@ -729,13 +774,19 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                       </p>
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <span className="app-chip">
-                          Total: {formatCurrency(purchase.totalAmount)}
+                          {t("dashboard.operations.totalPill", {
+                            amount: currency(purchase.totalAmount),
+                          })}
                         </span>
                         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
-                          Paid: {formatCurrency(purchase.paidAmount)}
+                          {t("dashboard.operations.paidPill", {
+                            amount: currency(purchase.paidAmount),
+                          })}
                         </span>
                         <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
-                          Pending: {formatCurrency(purchase.pendingAmount)}
+                          {t("dashboard.operations.pendingPill", {
+                            amount: currency(purchase.pendingAmount),
+                          })}
                         </span>
                       </div>
                     </div>
@@ -745,10 +796,13 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                           purchase.paymentStatus,
                         )}`}
                       >
-                        {purchase.paymentStatus.replace("_", " ")}
+                        {translateEnum(
+                          "dashboard.enums.paymentStatus",
+                          purchase.paymentStatus,
+                        )}
                       </span>
                       <Button asChild type="button" variant="outline">
-                        <Link href="/sales">Open sales</Link>
+                        <Link href="/sales">{t("dashboard.operations.openSales")}</Link>
                       </Button>
                     </div>
                   </div>
@@ -759,7 +813,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
               <div className="mt-4">
                 <Button asChild variant="outline">
                   <Link href="/sales">
-                    View all pending collections
+                    {t("dashboard.operations.viewAllPendingCollections")}
                     <ArrowRight size={16} />
                   </Link>
                 </Button>
@@ -788,12 +842,12 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     <section id="records" aria-labelledby="records-heading" className="grid gap-4">
       <DashboardSectionIntro
         headingId="records-heading"
-        kicker="Records"
-        title="Transactions and recent invoice history"
-        description="Dense data views are pushed toward the end of the page and paired with direct navigation, which keeps the main dashboard focused while still making detail accessible."
+        kicker={t("dashboard.sections.records.kicker")}
+        title={t("dashboard.sections.records.title")}
+        description={t("dashboard.sections.records.description")}
         action={
           <Button asChild variant="outline">
-            <Link href="/invoices/history">Open records</Link>
+            <Link href="/invoices/history">{t("dashboard.sections.records.openRecords")}</Link>
           </Button>
         }
       />
@@ -804,23 +858,22 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         <div className="dashboard-chart-content p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="app-kicker">Invoice records</p>
+              <p className="app-kicker">{t("dashboard.records.invoiceRecordsKicker")}</p>
               <h3 className="mt-2 text-lg font-semibold text-foreground">
-                Recent invoice history
+                {t("dashboard.records.recentInvoiceHistoryTitle")}
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Recent invoices are sorted by date and trimmed to the latest five
-                so the dashboard stays readable.
+                {t("dashboard.records.recentInvoiceHistoryDescription")}
               </p>
             </div>
             <Button asChild variant="outline">
-              <Link href="/invoices/history">Open records</Link>
+              <Link href="/invoices/history">{t("dashboard.sections.records.openRecords")}</Link>
             </Button>
           </div>
           <div className="mt-4 grid gap-3">
             {recentInvoices.length === 0 ? (
               <div className="app-empty-state px-4 py-5 text-sm">
-                No invoice records yet.
+                {t("dashboard.records.noInvoiceRecords")}
               </div>
             ) : (
               recentInvoices.map((invoice) => (
@@ -833,16 +886,16 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                       {invoice.invoice_number}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {invoice.customer?.name ?? "Customer"} -{" "}
-                      {new Date(invoice.date).toLocaleDateString("en-IN")}
+                      {invoice.customer?.name ?? t("invoice.fallbackCustomer")} -{" "}
+                      {dateWithYear(invoice.date)}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-xs">
                     <span className="rounded-full border border-border bg-card px-2.5 py-1 font-medium text-foreground">
-                      {formatCurrency(Number(invoice.total))}
+                      {currency(Number(invoice.total))}
                     </span>
                     <span className="rounded-full border border-border bg-background px-2.5 py-1 font-medium text-muted-foreground">
-                      {invoice.status.replaceAll("_", " ")}
+                      {translateEnum("dashboard.enums.paymentStatus", invoice.status)}
                     </span>
                   </div>
                 </div>
@@ -856,10 +909,10 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
 
   return (
     <DashboardLayout
-      name={name}
+      name={displayName}
       image={image}
-      title={`Welcome back, ${name}.`}
-      subtitle={subtitle}
+      title={t("dashboard.title", { name: displayName })}
+      subtitle={t("dashboard.subtitle")}
       actions={
         <DashboardFilters
           filters={filters}

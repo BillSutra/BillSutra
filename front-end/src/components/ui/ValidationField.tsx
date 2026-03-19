@@ -1,6 +1,7 @@
 import React, { useCallback, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/providers/LanguageProvider";
 
 interface ValidationFieldProps {
   id: string;
@@ -43,6 +44,7 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
   className,
   children,
 }) => {
+  const { t } = useI18n();
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState("");
 
@@ -132,7 +134,7 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
           role="status"
         >
           <CheckCircle2 className="h-3.5 w-3.5" />
-          Looks good
+          {t("common.looksGood")}
         </span>
       )}
     </div>

@@ -9,8 +9,10 @@ import { loginAction } from "@/actions/authActions";
 import SubmitBtn from "@/components/common/SubmitBtn";
 import { signIn } from "next-auth/react";
 import Image from "next/image";
+import { useI18n } from "@/providers/LanguageProvider";
 
 export default function Login() {
+  const { t } = useI18n();
   const initialState = {
     message: "",
     status: 0,
@@ -49,23 +51,26 @@ export default function Login() {
     <>
       <form action={formAction} className="grid gap-4">
         <div className="grid gap-2">
-          <Label htmlFor="email">Work email</Label>
-          <Input placeholder="you@company.com" name="email" />
+          <Label htmlFor="email">{t("auth.loginForm.emailLabel")}</Label>
+          <Input
+            placeholder={t("auth.loginForm.emailPlaceholder")}
+            name="email"
+          />
           <span className="text-xs text-[#b45309]">{state.errors?.email}</span>
         </div>
         <div className="grid gap-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">{t("auth.loginForm.passwordLabel")}</Label>
             <Link
               href="/forgot-password"
               className="text-xs font-semibold text-[#b45309]"
             >
-              Forgot password?
+              {t("auth.loginForm.forgotPassword")}
             </Link>
           </div>
           <Input
             type="password"
-            placeholder="Enter your password"
+            placeholder={t("auth.loginForm.passwordPlaceholder")}
             name="password"
           />
           <span className="text-xs text-[#b45309]">
@@ -82,7 +87,7 @@ export default function Login() {
           </div>
           <div className="relative flex justify-center text-xs uppercase">
             <span className="bg-white px-2 text-[#8a6d56]">
-              Or continue with
+              {t("auth.loginForm.continueWith")}
             </span>
           </div>
         </div>
@@ -95,11 +100,11 @@ export default function Login() {
           >
             <Image
               src="/images/google.png"
-              alt="Google logo"
+              alt={t("auth.loginForm.googleLogoAlt")}
               width={18}
               height={18}
             />
-            Sign in with Google
+            {t("auth.loginForm.google")}
           </Button>
         </div>
       </div>

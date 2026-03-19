@@ -4,6 +4,7 @@ import { Bell, Menu, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ThemeToggle from "@/components/theme-toggle";
+import LanguageToggle from "@/components/language-toggle";
 import ProfileMenu from "@/components/auth/ProfileMenu";
 import { useI18n } from "@/providers/LanguageProvider";
 
@@ -47,6 +48,7 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
           >
             <Bell className="h-4 w-4" />
           </Button>
+          <LanguageToggle className="hidden sm:inline-flex" />
           <ThemeToggle />
           <ProfileMenu name={name} image={image} />
         </div>

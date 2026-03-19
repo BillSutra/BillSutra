@@ -14,7 +14,9 @@ import {
   sendAccountVerificationEmail,
   sendWelcomeEmail,
 } from "@/lib/emailService";
+import { useI18n } from "@/providers/LanguageProvider";
 const Register = () => {
+  const { t } = useI18n();
   const initalState = {
     status: 0,
     message: "",
@@ -38,9 +40,9 @@ const Register = () => {
           user_email: email,
           user_name: name,
         });
-        toast.success("Email sent successfully");
+        toast.success(t("auth.registerForm.emailSent"));
       } catch {
-        toast.error("Failed to send email");
+        toast.error(t("auth.registerForm.emailFailed"));
       }
     };
 
@@ -52,7 +54,7 @@ const Register = () => {
       toast.success(state.message);
       void sendSignupEmails();
     }
-  }, [state]);
+  }, [state, t]);
 
   const handleGoogleSignup = () => {
     signIn("google", { callbackUrl: "/dashboard", redirect: true });
@@ -62,26 +64,31 @@ const Register = () => {
     <div>
       <form action={formAction} className="grid gap-4">
         <div className="grid gap-2">
-          <Label htmlFor="name">Full name</Label>
-          <Input id="name" name="name" placeholder="Your name" type="text" />
+          <Label htmlFor="name">{t("auth.registerForm.nameLabel")}</Label>
+          <Input
+            id="name"
+            name="name"
+            placeholder={t("auth.registerForm.namePlaceholder")}
+            type="text"
+          />
           <span className="text-xs text-[#b45309]">{state.errors?.name}</span>
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="email">Work email</Label>
+          <Label htmlFor="email">{t("auth.registerForm.emailLabel")}</Label>
           <Input
             id="email"
             name="email"
-            placeholder="you@company.com"
+            placeholder={t("auth.registerForm.emailPlaceholder")}
             type="email"
           />
           <span className="text-xs text-[#b45309]">{state.errors?.email}</span>
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">{t("auth.registerForm.passwordLabel")}</Label>
           <Input
             id="password"
             name="password"
-            placeholder="Create a password"
+            placeholder={t("auth.registerForm.passwordPlaceholder")}
             type="password"
           />
           <span className="text-xs text-[#b45309]">
@@ -89,11 +96,13 @@ const Register = () => {
           </span>
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="confirm_password">Confirm password</Label>
+          <Label htmlFor="confirm_password">
+            {t("auth.registerForm.confirmPasswordLabel")}
+          </Label>
           <Input
             id="confirm_password"
             name="confirm_password"
-            placeholder="Repeat your password"
+            placeholder={t("auth.registerForm.confirmPasswordPlaceholder")}
             type="password"
           />
           <span className="text-xs text-[#b45309]">
@@ -111,7 +120,7 @@ const Register = () => {
           </div>
           <div className="relative flex justify-center text-xs uppercase">
             <span className="bg-white px-2 text-[#8a6d56]">
-              Or continue with
+              {t("auth.registerForm.continueWith")}
             </span>
           </div>
         </div>
@@ -123,11 +132,11 @@ const Register = () => {
         >
           <Image
             src="/images/google.png"
-            alt="Google logo"
+            alt={t("auth.registerForm.googleLogoAlt")}
             width={18}
             height={18}
           />
-          Sign up with Google
+          {t("auth.registerForm.google")}
         </Button>
       </div>
     </div>

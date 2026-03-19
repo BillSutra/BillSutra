@@ -5,6 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 export const dashboardQueryKeys = [
   ["dashboard", "metrics"],
   ["dashboard", "overview"],
+  ["dashboard", "recentInvoices"],
   ["dashboard", "sales"],
   ["dashboard", "transactions"],
   ["dashboard", "cashflow"],

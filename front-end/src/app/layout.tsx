@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import {
   Fraunces,
   Geist,
@@ -13,6 +14,11 @@ import QueryProvider from "../providers/QueryProvider";
 import AuthTokenSync from "../providers/AuthTokenSync";
 import ThemeProvider from "@/components/theme-provider";
 import { LanguageProvider } from "@/providers/LanguageProvider";
+import {
+  DEFAULT_LANGUAGE,
+  isLanguage,
+  LANGUAGE_COOKIE_KEY,
+} from "@/i18n";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -46,17 +52,23 @@ export const metadata: Metadata = {
   description: "Billing, invoicing, and inventory control for growing teams.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const cookieStore = await cookies();
+  const cookieLanguage = cookieStore.get(LANGUAGE_COOKIE_KEY)?.value;
+  const initialLanguage = isLanguage(cookieLanguage)
+    ? cookieLanguage
+    : DEFAULT_LANGUAGE;
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={initialLanguage} suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${sora.variable} ${fraunces.variable} ${hindiSans.variable} bg-background text-foreground antialiased transition-colors duration-300`}
       >
-        <LanguageProvider>
+        <LanguageProvider initialLanguage={initialLanguage}>
           <ThemeProvider>
             <SessionProvider>
               <QueryProvider>

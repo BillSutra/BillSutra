@@ -1,7 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const Hero = () => {
+  const { t } = useI18n();
+
   return (
     <section className="relative overflow-hidden bg-background pb-16 pt-14 text-foreground">
       <div className="absolute inset-0 -z-10">
@@ -12,21 +17,20 @@ const Hero = () => {
       <div className="mx-auto grid w-full max-w-6xl items-center gap-12 px-6 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="space-y-6">
           <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-            Business management platform
+            {t("landing.hero.kicker")}
           </p>
           <h1 className="text-4xl font-semibold leading-tight md:text-5xl">
-            Manage Your Business Smarter with BillSutra
+            {t("landing.hero.title")}
           </h1>
           <p className="max-w-xl text-base text-muted-foreground">
-            Create invoices, track inventory, manage customers and payments —
-            all in one powerful platform.
+            {t("landing.hero.description")}
           </p>
           <div className="flex flex-wrap items-center gap-3">
             <Button asChild>
-              <Link href="/register">Get Started Free</Link>
+              <Link href="/register">{t("landing.hero.primaryCta")}</Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="#product">View Demo</Link>
+              <Link href="#product">{t("landing.hero.secondaryCta")}</Link>
             </Button>
           </div>
         </div>
@@ -34,8 +38,8 @@ const Hero = () => {
         <div className="rounded-3xl border border-border bg-card/90 p-6 shadow-xl">
           <div className="rounded-2xl border border-dashed border-border bg-muted/60 p-6">
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Dashboard Preview</span>
-              <span>Live</span>
+              <span>{t("landing.hero.previewLabel")}</span>
+              <span>{t("landing.hero.live")}</span>
             </div>
             <div className="mt-6 grid gap-4">
               <div className="h-3 w-40 rounded-full bg-primary/40" />
