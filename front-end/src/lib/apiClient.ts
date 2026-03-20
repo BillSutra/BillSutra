@@ -121,6 +121,26 @@ export type SupplierInput = {
   address?: string | null;
 };
 
+export type Worker = {
+  id: string;
+  name: string;
+  email: string;
+  role: "ADMIN" | "WORKER";
+  businessId: string;
+  createdAt: string;
+};
+
+export type WorkerInput = {
+  name: string;
+  email: string;
+  password: string;
+};
+
+export type WorkerUpdateInput = {
+  name?: string;
+  password?: string;
+};
+
 export type Purchase = {
   id: number;
   purchase_date: string;
@@ -740,12 +760,16 @@ export type AssistantReply = {
 };
 
 export type UserProfile = {
-  id: number;
+  id: number | string;
   name: string;
   email: string;
   provider: string;
   image?: string | null;
   is_email_verified: boolean;
+  role?: "ADMIN" | "WORKER";
+  businessId?: string | null;
+  account_type?: "OWNER" | "WORKER";
+  worker_id?: string | null;
 };
 
 export type UpdateProfilePayload = {
@@ -908,6 +932,30 @@ export const updateSupplier = async (
 
 export const deleteSupplier = async (id: number): Promise<void> => {
   await apiClient.delete(`/suppliers/${id}`);
+};
+
+export const fetchWorkers = async (): Promise<Worker[]> => {
+  const response = await apiClient.get("/workers");
+  return response.data.data as Worker[];
+};
+
+export const createWorker = async (
+  payload: WorkerInput,
+): Promise<Worker> => {
+  const response = await apiClient.post("/workers/create", payload);
+  return response.data.data as Worker;
+};
+
+export const updateWorker = async (
+  id: string,
+  payload: WorkerUpdateInput,
+): Promise<Worker> => {
+  const response = await apiClient.put(`/workers/${id}`, payload);
+  return response.data.data as Worker;
+};
+
+export const deleteWorker = async (id: string): Promise<void> => {
+  await apiClient.delete(`/workers/${id}`);
 };
 
 export const fetchPurchases = async (): Promise<Purchase[]> => {

@@ -5,24 +5,34 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import Link from "next/link";
-import { loginAction } from "@/actions/authActions";
+import { loginAction, workerLoginAction } from "@/actions/authActions";
 import SubmitBtn from "@/components/common/SubmitBtn";
 import { signIn } from "next-auth/react";
 import Image from "next/image";
 import { useI18n } from "@/providers/LanguageProvider";
 
-export default function Login() {
+type LoginProps = {
+  mode?: "owner" | "worker";
+};
+
+export default function Login({ mode = "owner" }: LoginProps) {
   const { t } = useI18n();
+  const isWorkerMode = mode === "worker";
   const initialState = {
     message: "",
     status: 0,
     errors: {},
     data: {},
   };
-  const [state, formAction] = useActionState(loginAction, initialState);
+  const [state, formAction] = useActionState(
+    isWorkerMode ? workerLoginAction : loginAction,
+    initialState,
+  );
 
   useEffect(() => {
     if (state.status === 500) {
+      toast.error(state.message);
+    } else if (state.status === 422) {
       toast.error(state.message);
     } else if (state.status === 200) {
       toast.success(state.message);
@@ -34,14 +44,14 @@ export default function Login() {
       } else {
         window.localStorage.removeItem("token");
       }
-      signIn("credentials", {
+      signIn(isWorkerMode ? "worker-credentials" : "credentials", {
         email: state.data?.email,
         password: state.data?.password,
         redirect: true,
-        callbackUrl: "/dashboard",
+        callbackUrl: isWorkerMode ? "/sales" : "/dashboard",
       });
     }
-  }, [state]);
+  }, [isWorkerMode, state]);
 
   const handleGoogleLogin = () => {
     signIn("google", { callbackUrl: "/dashboard", redirect: true });
@@ -61,12 +71,14 @@ export default function Login() {
         <div className="grid gap-2">
           <div className="flex items-center justify-between">
             <Label htmlFor="password">{t("auth.loginForm.passwordLabel")}</Label>
-            <Link
-              href="/forgot-password"
-              className="text-xs font-semibold text-[#b45309]"
-            >
-              {t("auth.loginForm.forgotPassword")}
-            </Link>
+            {!isWorkerMode ? (
+              <Link
+                href="/forgot-password"
+                className="text-xs font-semibold text-[#b45309]"
+              >
+                {t("auth.loginForm.forgotPassword")}
+              </Link>
+            ) : null}
           </div>
           <Input
             type="password"
@@ -80,34 +92,36 @@ export default function Login() {
         <SubmitBtn />
       </form>
 
-      <div className="mt-6">
-        <div className="relative">
-          <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-[#ecdccf]" />
+      {!isWorkerMode ? (
+        <div className="mt-6">
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-[#ecdccf]" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-white px-2 text-[#8a6d56]">
+                {t("auth.loginForm.continueWith")}
+              </span>
+            </div>
           </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-[#8a6d56]">
-              {t("auth.loginForm.continueWith")}
-            </span>
+          <div className="mt-4 grid gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex items-center justify-center gap-3 border-[#ecdccf] bg-white"
+              onClick={handleGoogleLogin}
+            >
+              <Image
+                src="/images/google.png"
+                alt={t("auth.loginForm.googleLogoAlt")}
+                width={18}
+                height={18}
+              />
+              {t("auth.loginForm.google")}
+            </Button>
           </div>
         </div>
-        <div className="mt-4 grid gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="flex items-center justify-center gap-3 border-[#ecdccf] bg-white"
-            onClick={handleGoogleLogin}
-          >
-            <Image
-              src="/images/google.png"
-              alt={t("auth.loginForm.googleLogoAlt")}
-              width={18}
-              height={18}
-            />
-            {t("auth.loginForm.google")}
-          </Button>
-        </div>
-      </div>
+      ) : null}
     </>
   );
 }

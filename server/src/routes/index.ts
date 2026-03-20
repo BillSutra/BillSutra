@@ -19,8 +19,10 @@ import UserTemplateController from "../controllers/UserTemplateController.js";
 import UserSavedTemplateController from "../controllers/UserSavedTemplateController.js";
 import PublicInvoiceController from "../controllers/PublicInvoiceController.js";
 import LogoController from "../controllers/LogoController.js";
+import WorkersController from "../controllers/WorkersController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
 import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
+import RequireAdminMiddleware from "../middlewares/RequireAdminMiddleware.js";
 import { logoUploadMiddleware } from "../middlewares/logo.upload.js";
 import { authRateLimiter } from "../middlewares/rateLimit.middleware.js";
 import validate from "../middlewares/validate.js";
@@ -32,6 +34,10 @@ import {
   authRegisterSchema,
   authForgotSchema,
   authResetSchema,
+  workerLoginSchema,
+  workerCreateSchema,
+  workerIdParamSchema,
+  workerUpdateSchema,
   userProfileUpdateSchema,
   userPasswordUpdateSchema,
   customerCreateSchema,
@@ -86,6 +92,11 @@ router.post(
   "/auth/forgot-password",
   validate({ body: authForgotSchema }),
   AuthController.forgotPassword,
+);
+router.post(
+  "/auth/worker/login",
+  validate({ body: workerLoginSchema }),
+  AuthController.workerLogin,
 );
 router.post(
   "/auth/reset-password",
@@ -156,6 +167,35 @@ router.post(
   AuthMiddleware,
   validate({ body: businessProfileUpsertSchema }),
   BusinessProfileController.store,
+);
+
+// Workers
+router.get(
+  "/workers",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  WorkersController.index,
+);
+router.post(
+  "/workers/create",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  validate({ body: workerCreateSchema }),
+  WorkersController.store,
+);
+router.put(
+  "/workers/:id",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  validate({ params: workerIdParamSchema, body: workerUpdateSchema }),
+  WorkersController.update,
+);
+router.delete(
+  "/workers/:id",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  validate({ params: workerIdParamSchema }),
+  WorkersController.destroy,
 );
 
 // Logo management

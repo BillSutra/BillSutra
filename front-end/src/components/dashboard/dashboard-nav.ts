@@ -11,11 +11,20 @@ import {
   Settings,
   Shapes,
   Store,
+  UserCog,
   Users,
   Warehouse,
+  type LucideIcon,
 } from "lucide-react";
 
-export const dashboardNavItems = [
+type DashboardNavItem = {
+  labelKey: string;
+  href: string;
+  icon: LucideIcon;
+  adminOnly?: boolean;
+};
+
+export const dashboardNavItems: DashboardNavItem[] = [
   {
     labelKey: "navigation.dashboard",
     href: "/dashboard",
@@ -62,6 +71,12 @@ export const dashboardNavItems = [
     icon: Users,
   },
   {
+    labelKey: "navigation.workers",
+    href: "/workers",
+    icon: UserCog,
+    adminOnly: true,
+  },
+  {
     labelKey: "navigation.suppliers",
     href: "/suppliers",
     icon: Store,
@@ -91,4 +106,4 @@ export const dashboardNavItems = [
     href: "/settings",
     icon: Settings,
   },
-] as const;
+];

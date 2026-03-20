@@ -4,6 +4,7 @@ import {
   PaymentMethod,
   SaleStatus,
   StockReason,
+  WorkerRole,
 } from "@prisma/client";
 
 export const idParamSchema = z.object({
@@ -78,6 +79,31 @@ export const authResetSchema = z
     message: "Passwords do not match",
     path: ["confirm_password"],
   });
+
+export const workerLoginSchema = authLoginSchema;
+
+export const workerCreateSchema = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
+export const workerUpdateSchema = z
+  .object({
+    name: z.string().min(2).optional(),
+    password: z.string().min(6).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one field is required",
+  });
+
+export const workerRoleSchema = z.object({
+  role: z.nativeEnum(WorkerRole),
+});
+
+export const workerIdParamSchema = z.object({
+  id: z.string().min(1),
+});
 
 export const userProfileUpdateSchema = z.object({
   name: z.string().min(2).optional(),

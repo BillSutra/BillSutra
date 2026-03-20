@@ -55,6 +55,9 @@ export const getInventoryDemandPredictions = async (
     userId: number,
     productId?: number,
 ): Promise<InventoryDemandPrediction[]> => {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setTime(thirtyDaysAgo.getTime() - 30 * 24 * 60 * 60 * 1000);
+
     // Fetch products for the user
     const products = await prisma.product.findMany({
         where: {
@@ -68,59 +71,44 @@ export const getInventoryDemandPredictions = async (
         },
     });
 
-    const predictions: InventoryDemandPrediction[] = [];
+    if (products.length === 0) {
+        return [];
+    }
+
+    const recentSalesByProduct = await prisma.saleItem.groupBy({
+        by: ["product_id"],
+        where: {
+            product_id: {
+                in: products.map((product) => product.id),
+            },
+            sale: {
+                user_id: userId,
+                sale_date: {
+                    gte: thirtyDaysAgo,
+                },
+                paymentStatus: {
+                    in: ["PAID", "PARTIALLY_PAID"],
+                },
+            },
+        },
+        _sum: {
+            quantity: true,
+        },
+    });
+
+    const quantitySoldByProductId = new Map<number, number>(
+        recentSalesByProduct.flatMap((entry) =>
+            entry.product_id == null
+                ? []
+                : [[entry.product_id, toNumber(entry._sum.quantity)]],
+        ),
+    );
 
     // Calculate predictions for each product
-    for (const product of products) {
+    const predictions: InventoryDemandPrediction[] = products.map((product) => {
         const currentStock = product.stock_on_hand ?? 0;
-
-        // Fetch sales history for the last 90 days
-        const ninetyDaysAgo = new Date();
-        ninetyDaysAgo.setTime(ninetyDaysAgo.getTime() - 90 * 24 * 60 * 60 * 1000);
-
-        const salesHistory = await prisma.saleItem.aggregate({
-            where: {
-                product_id: product.id,
-                sale: {
-                    user_id: userId,
-                    sale_date: {
-                        gte: ninetyDaysAgo,
-                    },
-                    paymentStatus: {
-                        in: ["PAID", "PARTIALLY_PAID"],
-                    },
-                },
-            },
-            _sum: {
-                quantity: true,
-            },
-        });
-
-        const totalQuantitySold = toNumber(salesHistory._sum.quantity);
-
-        // Get the last 30 days of sales for more recent trend
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setTime(thirtyDaysAgo.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-        const last30DaysSales = await prisma.saleItem.aggregate({
-            where: {
-                product_id: product.id,
-                sale: {
-                    user_id: userId,
-                    sale_date: {
-                        gte: thirtyDaysAgo,
-                    },
-                    paymentStatus: {
-                        in: ["PAID", "PARTIALLY_PAID"],
-                    },
-                },
-            },
-            _sum: {
-                quantity: true,
-            },
-        });
-
-        const quantitySold30Days = toNumber(last30DaysSales._sum.quantity);
+        const quantitySold30Days =
+            quantitySoldByProductId.get(product.id) ?? 0;
 
         // Use 30-day average for more recent predictions
         const predictedDailySales = calculatePredictedDailySales(
@@ -140,7 +128,7 @@ export const getInventoryDemandPredictions = async (
         // Determine alert level
         const alertLevel = getAlertLevel(daysUntilStockout);
 
-        predictions.push({
+        return {
             product_id: product.id,
             product_name: product.name,
             stock_left: currentStock,
@@ -149,8 +137,8 @@ export const getInventoryDemandPredictions = async (
                 daysUntilStockout === Infinity ? 999 : Math.round(daysUntilStockout), // Show 999 for infinity
             recommended_reorder_quantity: recommendedReorderQuantity,
             alert_level: alertLevel,
-        });
-    }
+        };
+    });
 
     // Sort by days_until_stockout (lowest first - critical products first)
     predictions.sort((a, b) => a.days_until_stockout - b.days_until_stockout);

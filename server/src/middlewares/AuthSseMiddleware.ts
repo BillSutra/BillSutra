@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
+import { resolveAuthUserFromDecoded } from "../lib/authSession.js";
 
 const normalizeToken = (raw?: unknown) => {
   if (!raw) return null;
@@ -27,22 +28,35 @@ const AuthSseMiddleware = (
     return;
   }
 
-  jwt.verify(
-    token,
-    process.env.JWT_SECRET as string,
-    (
-      err: jwt.VerifyErrors | null,
-      decoded: string | jwt.JwtPayload | undefined,
-    ) => {
-      if (err) {
+  jwt.verify(token, process.env.JWT_SECRET as string, async (err, decoded) => {
+    if (err) {
+      res.status(401).json({ status: 401, message: "Unauthorized" });
+      return;
+    }
+
+    try {
+      const authUser = await resolveAuthUserFromDecoded(decoded);
+
+      if (!authUser) {
         res.status(401).json({ status: 401, message: "Unauthorized" });
         return;
       }
 
-      req.user = decoded as AuthUser;
+      req.user = authUser;
+
+      if (authUser.role === "WORKER") {
+        res.status(403).json({
+          status: 403,
+          message: "Workers cannot access dashboard streams",
+        });
+        return;
+      }
+
       next();
-    },
-  );
+    } catch {
+      res.status(401).json({ status: 401, message: "Unauthorized" });
+    }
+  });
 };
 
 export default AuthSseMiddleware;

@@ -73,6 +73,12 @@ const LoginPageContent = () => {
                 {t("auth.loginPage.footerAction")}
               </Link>
             </p>
+            <p className="mt-3 text-center text-sm text-[#5c4b3b]">
+              Team member?{" "}
+              <Link href="/worker/login" className="font-semibold text-[#0f766e]">
+                Login as Worker
+              </Link>
+            </p>
           </div>
         </div>
       </div>

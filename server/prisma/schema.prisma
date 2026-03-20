@@ -39,6 +39,34 @@ model User {
   @@map("users")
 }
 
+model Business {
+  id        String   @id @default(cuid()) @db.VarChar(191)
+  name      String   @db.VarChar(191)
+  ownerId   String   @unique @map("owner_id") @db.VarChar(191)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  workers Worker[]
+
+  @@map("businesses")
+}
+
+model Worker {
+  id         String     @id @default(cuid()) @db.VarChar(191)
+  email      String     @unique @db.VarChar(191)
+  name       String     @db.VarChar(191)
+  password   String     @db.VarChar(191)
+  role       WorkerRole @default(WORKER)
+  businessId String     @map("business_id") @db.VarChar(191)
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@map("workers")
+}
+
 model BusinessProfile {
   id                   Int      @id @default(autoincrement())
   user                 User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
@@ -557,4 +585,9 @@ enum RecurrenceFrequency {
   WEEKLY
   MONTHLY
   YEARLY
+}
+
+enum WorkerRole {
+  ADMIN
+  WORKER
 }

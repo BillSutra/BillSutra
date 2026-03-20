@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { dashboardNavItems } from "./dashboard-nav";
@@ -21,14 +22,24 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
   const pathname = usePathname();
   const { logo } = useBusinessLogo();
   const { language, t } = useI18n();
+  const { data: session } = useSession();
 
   const translatedNavItems = useMemo(
     () =>
-      dashboardNavItems.map((item) => ({
-        ...item,
-        label: t(item.labelKey),
-      })),
-    [language, t],
+      dashboardNavItems
+        .filter((item) => {
+          const role = session?.user?.role;
+          if (role === "WORKER") {
+            return item.href === "/sales" || item.href === "/invoices";
+          }
+
+          return !item.adminOnly || role === "ADMIN";
+        })
+        .map((item) => ({
+          ...item,
+          label: t(item.labelKey),
+        })),
+    [language, session?.user?.role, t],
   );
 
   useEffect(() => {

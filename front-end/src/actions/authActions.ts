@@ -4,6 +4,7 @@ import {
   check_credential,
   forgetPassword,
   REGISTER_URL,
+  WORKER_LOGIN_URL,
 } from "@/lib/apiEndPoints";
 import axios, { AxiosError } from "axios";
 import { resetPassword } from "../lib/apiEndPoints";
@@ -92,6 +93,44 @@ export async function loginAction(prevState: any, formData: FormData) {
     return {
       status: 200,
       message: "Credentials matched loging you shortly!",
+      errors: {},
+      data: {
+        email: formData.get("email"),
+        password: formData.get("password"),
+        token: authPayload?.token ?? null,
+      },
+    };
+  } catch (error) {
+    if (error instanceof AxiosError) {
+      if (error.response?.status === 422) {
+        return {
+          status: 422,
+          message: error.response.data.message,
+          errors: error.response.data.errors,
+          data: {},
+        };
+      }
+    }
+
+    return {
+      status: 500,
+      message: "something went wrong. Try again",
+      errors: {},
+      data: {},
+    };
+  }
+}
+
+export async function workerLoginAction(prevState: any, formData: FormData) {
+  try {
+    const response = await axios.post(WORKER_LOGIN_URL, {
+      email: formData.get("email"),
+      password: formData.get("password"),
+    });
+    const authPayload = response.data?.data ?? response.data;
+    return {
+      status: 200,
+      message: "Worker credentials matched",
       errors: {},
       data: {
         email: formData.get("email"),

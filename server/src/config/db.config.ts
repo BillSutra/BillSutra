@@ -9,10 +9,22 @@ const normalizeDatabaseUrl = () => {
 
   const normalizedUrl = rawUrl.replace(/^"(.*)"$/, "$1");
   const url = new URL(normalizedUrl);
+  const configuredConnectionLimit =
+    process.env.PRISMA_CONNECTION_LIMIT?.trim() || "10";
+  const configuredPoolTimeout =
+    process.env.PRISMA_POOL_TIMEOUT?.trim() || "30";
 
-  url.searchParams.set("connection_limit", "3");
-  url.searchParams.set("pool_timeout", "30");
-  url.searchParams.set("sslmode", "require");
+  if (!url.searchParams.has("connection_limit")) {
+    url.searchParams.set("connection_limit", configuredConnectionLimit);
+  }
+
+  if (!url.searchParams.has("pool_timeout")) {
+    url.searchParams.set("pool_timeout", configuredPoolTimeout);
+  }
+
+  if (!url.searchParams.has("sslmode")) {
+    url.searchParams.set("sslmode", "require");
+  }
 
   return url.toString();
 };

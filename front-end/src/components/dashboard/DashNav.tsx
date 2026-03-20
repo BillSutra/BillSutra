@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import ProfileMenu from "../auth/ProfileMenu";
 import ThemeToggle from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
@@ -18,14 +19,24 @@ export default function DashNavbar({
 }) {
   const pathname = usePathname();
   const { language, t } = useI18n();
+  const { data: session } = useSession();
 
   const navItems = useMemo(
     () =>
-      dashboardNavItems.map((item) => ({
-        ...item,
-        label: t(item.labelKey),
-      })),
-    [language, t],
+      dashboardNavItems
+        .filter((item) => {
+          const role = session?.user?.role;
+          if (role === "WORKER") {
+            return item.href === "/sales" || item.href === "/invoices";
+          }
+
+          return !item.adminOnly || role === "ADMIN";
+        })
+        .map((item) => ({
+          ...item,
+          label: t(item.labelKey),
+        })),
+    [language, session?.user?.role, t],
   );
 
   return (

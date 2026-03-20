@@ -24,6 +24,7 @@ import {
   createPayment,
   createCategory,
   fetchSuppliers,
+  fetchWorkers,
   fetchWarehouse,
   fetchWarehouses,
   fetchInventories,
@@ -36,6 +37,9 @@ import {
   updateSupplier,
   updateProduct,
   updateCustomer,
+  createWorker,
+  deleteWorker,
+  updateWorker,
 } from "@/lib/apiClient";
 import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
 
@@ -151,6 +155,39 @@ export const useDeleteSupplierMutation = () => {
   return useMutation({
     mutationFn: deleteSupplier,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["suppliers"] }),
+  });
+};
+
+export const useWorkersQuery = () =>
+  useQuery({ queryKey: ["workers"], queryFn: fetchWorkers });
+
+export const useCreateWorkerMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: createWorker,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workers"] }),
+  });
+};
+
+export const useDeleteWorkerMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteWorker,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workers"] }),
+  });
+};
+
+export const useUpdateWorkerMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: Parameters<typeof updateWorker>[1];
+    }) => updateWorker(id, payload),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workers"] }),
   });
 };
 

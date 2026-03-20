@@ -15,6 +15,7 @@ import {
   sendWelcomeEmail,
 } from "@/lib/emailService";
 import { useI18n } from "@/providers/LanguageProvider";
+
 const Register = () => {
   const { t } = useI18n();
   const initalState = {
@@ -28,8 +29,9 @@ const Register = () => {
   useEffect(() => {
     const sendSignupEmails = async () => {
       try {
-        const email = String(state.data?.email ?? "");
-        const name = String(state.data?.name ?? "");
+        const payload = state.data as { email?: string; name?: string } | undefined;
+        const email = String(payload?.email ?? "");
+        const name = String(payload?.name ?? "");
         if (!email || !name) return;
 
         await sendAccountVerificationEmail({

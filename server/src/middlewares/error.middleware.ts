@@ -22,6 +22,12 @@ const mapPrismaKnownError = (
         message:
           "Database schema is out of sync with the API. Run Prisma migrations and restart the server.",
       };
+    case "P2021":
+      return {
+        statusCode: 503,
+        message:
+          "Database schema is out of sync with the API. Run Prisma migrations and restart the server.",
+      };
     default:
       return { statusCode: 400, message: "Database request failed" };
   }

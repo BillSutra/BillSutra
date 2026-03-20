@@ -1,7 +1,6 @@
 import type { Request, Response } from "express";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
-import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import type { z } from "zod";
@@ -11,19 +10,36 @@ import {
   authOauthSchema,
   authRegisterSchema,
   authResetSchema,
+  workerLoginSchema,
 } from "../validations/apiValidations.js";
-
-const signToken = (payload: { id: number; email: string; name: string }) => {
-  return jwt.sign(payload, process.env.JWT_SECRET as string, {
-    expiresIn: "365d",
-  });
-};
+import {
+  buildOwnerAuthUser,
+  buildWorkerAuthUser,
+  createAuthBearerToken,
+  ensureBusinessForUser,
+} from "../lib/authSession.js";
 
 type OAuthLoginPayload = z.infer<typeof authOauthSchema>;
 type CredentialsLoginPayload = z.infer<typeof authLoginSchema>;
 type CredentialsRegisterPayload = z.infer<typeof authRegisterSchema>;
 type ForgotPasswordPayload = z.infer<typeof authForgotSchema>;
 type ResetPasswordPayload = z.infer<typeof authResetSchema>;
+type WorkerLoginPayload = z.infer<typeof workerLoginSchema>;
+
+const serializeOwnerUser = (
+  user: Awaited<ReturnType<typeof prisma.user.findUniqueOrThrow>>,
+  authUser: AuthUser,
+) => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  provider: user.provider,
+  image: user.image,
+  is_email_verified: user.is_email_verified,
+  businessId: authUser.businessId,
+  role: authUser.role,
+  accountType: authUser.accountType,
+});
 
 class AuthController {
   static async oauthLogin(req: Request, res: Response) {
@@ -50,16 +66,12 @@ class AuthController {
         },
       });
 
-      const token = signToken({
-        id: findUser.id,
-        name: findUser.name,
-        email: findUser.email,
-      });
+      const authUser = await buildOwnerAuthUser(findUser);
 
       return sendResponse(res, 200, {
         message: "Login successful",
-        user: findUser,
-        token: `Bearer ${token}`,
+        user: serializeOwnerUser(findUser, authUser),
+        token: createAuthBearerToken(authUser),
       });
     } catch (error) {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -90,9 +102,20 @@ class AuthController {
         },
       });
 
+      await ensureBusinessForUser(user.id, body.name);
+
       return sendResponse(res, 200, {
         message: "Registration successful",
-        user,
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          provider: user.provider,
+          image: user.image,
+          is_email_verified: user.is_email_verified,
+          role: "ADMIN",
+          accountType: "OWNER",
+        },
       });
     } catch (error) {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -122,16 +145,56 @@ class AuthController {
         });
       }
 
-      const token = signToken({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-      });
+      const authUser = await buildOwnerAuthUser(user);
 
       return sendResponse(res, 200, {
         message: "Login successful",
-        user,
-        token: `Bearer ${token}`,
+        user: serializeOwnerUser(user, authUser),
+        token: createAuthBearerToken(authUser),
+      });
+    } catch (error) {
+      return sendResponse(res, 500, { message: "Internal Server Error" });
+    }
+  }
+
+  static async workerLogin(req: Request, res: Response) {
+    try {
+      const body: WorkerLoginPayload = req.body;
+
+      const worker = await prisma.worker.findUnique({
+        where: { email: body.email },
+      });
+
+      if (!worker) {
+        return sendResponse(res, 422, {
+          message: "Invalid worker credentials",
+          errors: { email: "Invalid worker credentials" },
+        });
+      }
+
+      const isValidPassword = await bcrypt.compare(body.password, worker.password);
+
+      if (!isValidPassword) {
+        return sendResponse(res, 422, {
+          message: "Invalid worker credentials",
+          errors: { email: "Invalid worker credentials" },
+        });
+      }
+
+      const authUser = await buildWorkerAuthUser(worker);
+
+      return sendResponse(res, 200, {
+        message: "Worker login successful",
+        user: {
+          id: worker.id,
+          name: worker.name,
+          email: worker.email,
+          role: worker.role,
+          businessId: worker.businessId,
+          accountType: "WORKER",
+          workerId: worker.id,
+        },
+        token: createAuthBearerToken(authUser),
       });
     } catch (error) {
       return sendResponse(res, 500, { message: "Internal Server Error" });
