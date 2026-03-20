@@ -81,6 +81,11 @@ router.post(
   AdminController.login,
 );
 router.get(
+  "/admin/summary",
+  AdminAuthMiddleware,
+  AdminController.summary,
+);
+router.get(
   "/admin/businesses",
   AdminAuthMiddleware,
   AdminController.listBusinesses,

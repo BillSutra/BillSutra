@@ -17,8 +17,30 @@ export type AdminBusinessSummary = {
   id: string;
   name: string;
   ownerId: string;
+  ownerName?: string | null;
+  ownerEmail?: string | null;
   createdAt: string;
   workerCount: number;
+};
+
+export type AdminSummaryResponse = {
+  totals: {
+    totalBusinesses: number;
+    totalWorkers: number;
+    activeBusinesses: number;
+    zeroWorkerBusinesses: number;
+    businessesCreatedLast7Days: number;
+    workersCreatedLast7Days: number;
+    adminWorkers: number;
+    averageWorkersPerBusiness: number;
+  };
+  topBusinessesByWorkers: Array<{
+    id: string;
+    name: string;
+    ownerId: string;
+    createdAt: string;
+    workerCount: number;
+  }>;
 };
 
 export type AdminWorkerRecord = {
@@ -102,6 +124,11 @@ export const loginSuperAdmin = async (payload: {
 export const fetchAdminBusinesses = async () => {
   const response = await adminApiClient.get("/admin/businesses");
   return response.data.data as AdminBusinessSummary[];
+};
+
+export const fetchAdminSummary = async () => {
+  const response = await adminApiClient.get("/admin/summary");
+  return response.data.data as AdminSummaryResponse;
 };
 
 export const fetchAdminBusinessDetail = async (businessId: string) => {

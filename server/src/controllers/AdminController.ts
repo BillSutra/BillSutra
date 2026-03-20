@@ -70,14 +70,105 @@ class AdminController {
       },
     });
 
+    const ownerIds = businesses
+      .map((business) => parseOwnerUserId(business.ownerId))
+      .filter((ownerId): ownerId is number => ownerId !== null);
+
+    const owners = ownerIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: ownerIds } },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        })
+      : [];
+
+    const ownerMap = new Map(
+      owners.map((owner) => [String(owner.id), owner]),
+    );
+
     return sendResponse(res, 200, {
       data: businesses.map((business) => ({
         id: business.id,
         name: business.name,
         ownerId: business.ownerId,
+        ownerName: ownerMap.get(business.ownerId)?.name ?? null,
+        ownerEmail: ownerMap.get(business.ownerId)?.email ?? null,
         createdAt: business.createdAt,
         workerCount: business._count.workers,
       })),
+    });
+  }
+
+  static async summary(_req: Request, res: Response) {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const [businesses, workers] = await Promise.all([
+      prisma.business.findMany({
+        select: {
+          id: true,
+          name: true,
+          ownerId: true,
+          createdAt: true,
+          _count: {
+            select: { workers: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.worker.findMany({
+        select: {
+          role: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    const totalBusinesses = businesses.length;
+    const totalWorkers = workers.length;
+    const zeroWorkerBusinesses = businesses.filter(
+      (business) => business._count.workers === 0,
+    ).length;
+    const activeBusinesses = businesses.filter(
+      (business) => business._count.workers > 0,
+    ).length;
+    const businessesCreatedLast7Days = businesses.filter(
+      (business) => business.createdAt >= sevenDaysAgo,
+    ).length;
+    const workersCreatedLast7Days = workers.filter(
+      (worker) => worker.createdAt >= sevenDaysAgo,
+    ).length;
+    const adminWorkers = workers.filter((worker) => worker.role === "ADMIN").length;
+
+    return sendResponse(res, 200, {
+      data: {
+        totals: {
+          totalBusinesses,
+          totalWorkers,
+          activeBusinesses,
+          zeroWorkerBusinesses,
+          businessesCreatedLast7Days,
+          workersCreatedLast7Days,
+          adminWorkers,
+          averageWorkersPerBusiness:
+            totalBusinesses === 0
+              ? 0
+              : Number((totalWorkers / totalBusinesses).toFixed(1)),
+        },
+        topBusinessesByWorkers: businesses
+          .map((business) => ({
+            id: business.id,
+            name: business.name,
+            ownerId: business.ownerId,
+            createdAt: business.createdAt,
+            workerCount: business._count.workers,
+          }))
+          .sort((left, right) => right.workerCount - left.workerCount)
+          .slice(0, 5),
+      },
     });
   }
 
