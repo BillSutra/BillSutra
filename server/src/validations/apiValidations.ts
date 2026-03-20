@@ -80,17 +80,24 @@ export const authResetSchema = z
     path: ["confirm_password"],
   });
 
+export const adminLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
 export const workerLoginSchema = authLoginSchema;
 
 export const workerCreateSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
+  phone: z.string().regex(/^\d{10,15}$/),
   password: z.string().min(6),
 });
 
 export const workerUpdateSchema = z
   .object({
     name: z.string().min(2).optional(),
+    phone: z.string().regex(/^\d{10,15}$/).optional(),
     password: z.string().min(6).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
@@ -102,6 +109,10 @@ export const workerRoleSchema = z.object({
 });
 
 export const workerIdParamSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const adminBusinessIdParamSchema = z.object({
   id: z.string().min(1),
 });
 

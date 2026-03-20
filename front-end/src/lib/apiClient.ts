@@ -125,6 +125,7 @@ export type Worker = {
   id: string;
   name: string;
   email: string;
+  phone?: string | null;
   role: "ADMIN" | "WORKER";
   businessId: string;
   createdAt: string;
@@ -133,11 +134,13 @@ export type Worker = {
 export type WorkerInput = {
   name: string;
   email: string;
+  phone: string;
   password: string;
 };
 
 export type WorkerUpdateInput = {
   name?: string;
+  phone?: string;
   password?: string;
 };
 

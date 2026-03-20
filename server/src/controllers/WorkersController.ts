@@ -12,6 +12,8 @@ import {
 const WORKER_MIGRATION_MESSAGE =
   "Worker management requires the latest database migration. Run Prisma migrations and restart the server.";
 
+const normalizeWorkerPhone = (value: string) => value.replace(/\D/g, "");
+
 const ensureWorkerTablesReady = async (res: Response) => {
   const [hasBusinessTable, hasWorkersTable] = await Promise.all([
     isBusinessTableAvailable(),
@@ -63,6 +65,7 @@ class WorkersController {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         businessId: true,
         createdAt: true,
@@ -83,25 +86,36 @@ class WorkersController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const { name, email, password } = req.body as {
+    const { name, email, phone, password } = req.body as {
       name: string;
       email: string;
+      phone: string;
       password: string;
     };
+    const normalizedPhone = normalizeWorkerPhone(phone);
 
-    const existingWorker = await prisma.worker.findUnique({
-      where: { email },
-      select: { id: true },
+    const existingWorker = await prisma.worker.findFirst({
+      where: {
+        OR: [{ email }, { phone: normalizedPhone }],
+      },
+      select: { id: true, email: true, phone: true },
     });
     const existingUser = await prisma.user.findUnique({
       where: { email },
       select: { id: true },
     });
 
-    if (existingWorker || existingUser) {
+    if (existingUser || existingWorker?.email === email) {
       return sendResponse(res, 422, {
         message: "Worker email already registered",
         errors: { email: "Worker email already registered" },
+      });
+    }
+
+    if (existingWorker?.phone === normalizedPhone) {
+      return sendResponse(res, 422, {
+        message: "Worker phone number already registered",
+        errors: { phone: "Worker phone number already registered" },
       });
     }
 
@@ -111,6 +125,7 @@ class WorkersController {
       data: {
         name,
         email,
+        phone: normalizedPhone,
         role: "WORKER" as WorkerRole,
         businessId,
         password: hashedPassword,
@@ -119,6 +134,7 @@ class WorkersController {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         businessId: true,
         createdAt: true,
@@ -143,10 +159,12 @@ class WorkersController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const { name, password } = req.body as {
+    const { name, phone, password } = req.body as {
       name?: string;
+      phone?: string;
       password?: string;
     };
+    const normalizedPhone = phone ? normalizeWorkerPhone(phone) : undefined;
 
     const worker = await prisma.worker.findFirst({
       where: {
@@ -160,16 +178,35 @@ class WorkersController {
       return sendResponse(res, 404, { message: "Worker not found" });
     }
 
+    if (normalizedPhone) {
+      const workerWithPhone = await prisma.worker.findFirst({
+        where: {
+          phone: normalizedPhone,
+          NOT: { id: worker.id },
+        },
+        select: { id: true },
+      });
+
+      if (workerWithPhone) {
+        return sendResponse(res, 422, {
+          message: "Worker phone number already registered",
+          errors: { phone: "Worker phone number already registered" },
+        });
+      }
+    }
+
     const updatedWorker = await prisma.worker.update({
       where: { id: worker.id },
       data: {
         name: name ?? undefined,
+        phone: normalizedPhone ?? undefined,
         password: password ? await bcrypt.hash(password, 12) : undefined,
       },
       select: {
         id: true,
         name: true,
         email: true,
+        phone: true,
         role: true,
         businessId: true,
         createdAt: true,

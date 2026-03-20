@@ -1,5 +1,11 @@
 import { PrismaClient } from "@prisma/client";
 
+const resolvePositiveNumber = (value: string | null | undefined) => {
+  if (!value) return null;
+  const parsed = Number.parseInt(value.trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+};
+
 const normalizeDatabaseUrl = () => {
   const rawUrl = process.env.DATABASE_URL;
 
@@ -9,18 +15,27 @@ const normalizeDatabaseUrl = () => {
 
   const normalizedUrl = rawUrl.replace(/^"(.*)"$/, "$1");
   const url = new URL(normalizedUrl);
-  const configuredConnectionLimit =
-    process.env.PRISMA_CONNECTION_LIMIT?.trim() || "10";
-  const configuredPoolTimeout =
-    process.env.PRISMA_POOL_TIMEOUT?.trim() || "30";
+  const configuredConnectionLimit = resolvePositiveNumber(
+    process.env.PRISMA_CONNECTION_LIMIT,
+  );
+  const configuredPoolTimeout = resolvePositiveNumber(
+    process.env.PRISMA_POOL_TIMEOUT,
+  );
+  const existingConnectionLimit = resolvePositiveNumber(
+    url.searchParams.get("connection_limit"),
+  );
+  const existingPoolTimeout = resolvePositiveNumber(
+    url.searchParams.get("pool_timeout"),
+  );
+  const normalizedConnectionLimit = String(
+    configuredConnectionLimit ?? Math.max(existingConnectionLimit ?? 0, 10),
+  );
+  const normalizedPoolTimeout = String(
+    configuredPoolTimeout ?? Math.max(existingPoolTimeout ?? 0, 30),
+  );
 
-  if (!url.searchParams.has("connection_limit")) {
-    url.searchParams.set("connection_limit", configuredConnectionLimit);
-  }
-
-  if (!url.searchParams.has("pool_timeout")) {
-    url.searchParams.set("pool_timeout", configuredPoolTimeout);
-  }
+  url.searchParams.set("connection_limit", normalizedConnectionLimit);
+  url.searchParams.set("pool_timeout", normalizedPoolTimeout);
 
   if (!url.searchParams.has("sslmode")) {
     url.searchParams.set("sslmode", "require");

@@ -39,6 +39,16 @@ model User {
   @@map("users")
 }
 
+model Admin {
+  id        String   @id @default(cuid()) @db.VarChar(191)
+  email     String   @unique @db.VarChar(191)
+  password  String   @db.VarChar(191)
+  role      String   @default("SUPER_ADMIN") @db.VarChar(32)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("admins")
+}
+
 model Business {
   id        String   @id @default(cuid()) @db.VarChar(191)
   name      String   @db.VarChar(191)
@@ -55,6 +65,7 @@ model Worker {
   id         String     @id @default(cuid()) @db.VarChar(191)
   email      String     @unique @db.VarChar(191)
   name       String     @db.VarChar(191)
+  phone      String?    @unique @db.VarChar(191)
   password   String     @db.VarChar(191)
   role       WorkerRole @default(WORKER)
   businessId String     @map("business_id") @db.VarChar(191)

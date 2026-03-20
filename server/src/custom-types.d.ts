@@ -15,9 +15,16 @@ declare global {
     workerId?: string;
   }
 
+  interface AdminAuthUser {
+    adminId: string;
+    role: "SUPER_ADMIN";
+    email: string;
+  }
+
   namespace Express {
     interface Request {
       user?: AuthUser;
+      admin?: AdminAuthUser;
       file?: Multer.File;
     }
   }

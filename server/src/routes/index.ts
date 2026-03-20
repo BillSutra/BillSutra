@@ -1,5 +1,6 @@
 import { Router } from "express";
 import AuthController from "../controllers/AuthController.js";
+import AdminController from "../controllers/AdminController.js";
 import CustomersController from "../controllers/CustomersController.js";
 import CategoriesController from "../controllers/CategoriesController.js";
 import ProductsController from "../controllers/ProductsController.js";
@@ -21,6 +22,7 @@ import PublicInvoiceController from "../controllers/PublicInvoiceController.js";
 import LogoController from "../controllers/LogoController.js";
 import WorkersController from "../controllers/WorkersController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
+import AdminAuthMiddleware from "../middlewares/AdminAuthMiddleware.js";
 import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
 import RequireAdminMiddleware from "../middlewares/RequireAdminMiddleware.js";
 import { logoUploadMiddleware } from "../middlewares/logo.upload.js";
@@ -29,6 +31,8 @@ import validate from "../middlewares/validate.js";
 import {
   idParamSchema,
   invoiceIdParamSchema,
+  adminLoginSchema,
+  adminBusinessIdParamSchema,
   authOauthSchema,
   authLoginSchema,
   authRegisterSchema,
@@ -69,6 +73,35 @@ import inventoryDemandRoutes from "../modules/inventory-demand/inventoryDemand.r
 import assistantRoutes from "../modules/assistant/assistant.routes.js";
 
 const router = Router();
+
+// Super admin routes
+router.post(
+  "/admin/login",
+  validate({ body: adminLoginSchema }),
+  AdminController.login,
+);
+router.get(
+  "/admin/businesses",
+  AdminAuthMiddleware,
+  AdminController.listBusinesses,
+);
+router.get(
+  "/admin/business/:id",
+  AdminAuthMiddleware,
+  validate({ params: adminBusinessIdParamSchema }),
+  AdminController.showBusiness,
+);
+router.delete(
+  "/admin/business/:id",
+  AdminAuthMiddleware,
+  validate({ params: adminBusinessIdParamSchema }),
+  AdminController.deleteBusiness,
+);
+router.get(
+  "/admin/workers",
+  AdminAuthMiddleware,
+  AdminController.listWorkers,
+);
 
 // Auth routes
 router.post(

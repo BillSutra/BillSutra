@@ -1,4 +1,5 @@
 import prisma from "../src/config/db.config.js";
+import bcrypt from "bcryptjs";
 
 type TemplateSeed = {
   name: string;
@@ -371,42 +372,58 @@ const templates: TemplateSeed[] = [
   },
 ];
 
+const SUPER_ADMIN_EMAIL = "admin@billsutra.com";
+const SUPER_ADMIN_PASSWORD = "qwerty123";
+
 const run = async () => {
-  await prisma.$transaction(async (tx) => {
-    for (const template of templates) {
-      const existing = await tx.template.findFirst({
-        where: { name: template.name },
-      });
+  for (const template of templates) {
+    const existing = await prisma.template.findFirst({
+      where: { name: template.name },
+    });
 
-      const record = existing
-        ? await tx.template.update({
-            where: { id: existing.id },
-            data: {
-              description: template.description,
-              layout_config: template.layoutConfig,
-            },
-          })
-        : await tx.template.create({
-            data: {
-              name: template.name,
-              description: template.description,
-              layout_config: template.layoutConfig,
-            },
-          });
+    const record = existing
+      ? await prisma.template.update({
+          where: { id: existing.id },
+          data: {
+            description: template.description,
+            layout_config: template.layoutConfig,
+          },
+        })
+      : await prisma.template.create({
+          data: {
+            name: template.name,
+            description: template.description,
+            layout_config: template.layoutConfig,
+          },
+        });
 
-      await tx.templateSection.deleteMany({
-        where: { template_id: record.id },
-      });
+    await prisma.templateSection.deleteMany({
+      where: { template_id: record.id },
+    });
 
-      await tx.templateSection.createMany({
-        data: template.sections.map((section) => ({
-          template_id: record.id,
-          section_key: section.key,
-          section_order: section.order,
-          is_default: section.isDefault,
-        })),
-      });
-    }
+    await prisma.templateSection.createMany({
+      data: template.sections.map((section) => ({
+        template_id: record.id,
+        section_key: section.key,
+        section_order: section.order,
+        is_default: section.isDefault,
+      })),
+    });
+  }
+
+  const hashedPassword = await bcrypt.hash(SUPER_ADMIN_PASSWORD, 12);
+
+  await prisma.admin.upsert({
+    where: { email: SUPER_ADMIN_EMAIL },
+    update: {
+      password: hashedPassword,
+      role: "SUPER_ADMIN",
+    },
+    create: {
+      email: SUPER_ADMIN_EMAIL,
+      password: hashedPassword,
+      role: "SUPER_ADMIN",
+    },
   });
 };
 

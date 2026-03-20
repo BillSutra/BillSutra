@@ -734,11 +734,13 @@ const fetchTotalsSnapshot = async (params: {
   endExclusive: Date;
 }) => {
   const { userId, start, endExclusive } = params;
-  const [totals, salesMetrics, expenses] = await Promise.all([
-    sumSalesPurchases({ userId, start, endExclusive }),
-    fetchSalesMetricSnapshot({ userId, start, endExclusive }),
-    getExpenseTotals({ userId, from: start, to: endExclusive }),
-  ]);
+  const totals = await sumSalesPurchases({ userId, start, endExclusive });
+  const salesMetrics = await fetchSalesMetricSnapshot({
+    userId,
+    start,
+    endExclusive,
+  });
+  const expenses = await getExpenseTotals({ userId, from: start, to: endExclusive });
 
   return {
     bookedSales: roundMetric(totals.salesBooked),
@@ -1767,18 +1769,16 @@ export const buildDashboardCardMetrics = async (params: {
   const { userId, filters } = params;
   const resolved = resolveDashboardFilters(filters);
 
-  const [currentTotals, previousTotals] = await Promise.all([
-    fetchTotalsSnapshot({
-      userId,
-      start: resolved.start,
-      endExclusive: resolved.endExclusive,
-    }),
-    fetchTotalsSnapshot({
-      userId,
-      start: resolved.previousStart,
-      endExclusive: resolved.previousEndExclusive,
-    }),
-  ]);
+  const currentTotals = await fetchTotalsSnapshot({
+    userId,
+    start: resolved.start,
+    endExclusive: resolved.endExclusive,
+  });
+  const previousTotals = await fetchTotalsSnapshot({
+    userId,
+    start: resolved.previousStart,
+    endExclusive: resolved.previousEndExclusive,
+  });
 
   const now = new Date();
   const todayStart = startOfDayUtc(now);
@@ -1809,41 +1809,46 @@ export const buildDashboardCardMetrics = async (params: {
   const prevYearStart = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1));
   const prevYearEnd = addDaysUtc(prevYearStart, yearSpanDays);
 
-  const [
-    todaySnapshot,
-    yesterdaySnapshot,
-    weekSnapshot,
-    prevWeekSnapshot,
-    monthSnapshot,
-    prevMonthSnapshot,
-    yearSnapshot,
-    prevYearSnapshot,
-  ] = await Promise.all([
-    fetchTotalsSnapshot({ userId, start: todayStart, endExclusive: todayEnd }),
-    fetchTotalsSnapshot({
-      userId,
-      start: addDaysUtc(todayStart, -1),
-      endExclusive: todayStart,
-    }),
-    fetchTotalsSnapshot({ userId, start: weekStart, endExclusive: todayEnd }),
-    fetchTotalsSnapshot({
-      userId,
-      start: addDaysUtc(weekStart, -7),
-      endExclusive: weekStart,
-    }),
-    fetchTotalsSnapshot({ userId, start: monthStart, endExclusive: todayEnd }),
-    fetchTotalsSnapshot({
-      userId,
-      start: prevMonthStart,
-      endExclusive: prevMonthEnd,
-    }),
-    fetchTotalsSnapshot({ userId, start: yearStart, endExclusive: todayEnd }),
-    fetchTotalsSnapshot({
-      userId,
-      start: prevYearStart,
-      endExclusive: prevYearEnd,
-    }),
-  ]);
+  const todaySnapshot = await fetchTotalsSnapshot({
+    userId,
+    start: todayStart,
+    endExclusive: todayEnd,
+  });
+  const yesterdaySnapshot = await fetchTotalsSnapshot({
+    userId,
+    start: addDaysUtc(todayStart, -1),
+    endExclusive: todayStart,
+  });
+  const weekSnapshot = await fetchTotalsSnapshot({
+    userId,
+    start: weekStart,
+    endExclusive: todayEnd,
+  });
+  const prevWeekSnapshot = await fetchTotalsSnapshot({
+    userId,
+    start: addDaysUtc(weekStart, -7),
+    endExclusive: weekStart,
+  });
+  const monthSnapshot = await fetchTotalsSnapshot({
+    userId,
+    start: monthStart,
+    endExclusive: todayEnd,
+  });
+  const prevMonthSnapshot = await fetchTotalsSnapshot({
+    userId,
+    start: prevMonthStart,
+    endExclusive: prevMonthEnd,
+  });
+  const yearSnapshot = await fetchTotalsSnapshot({
+    userId,
+    start: yearStart,
+    endExclusive: todayEnd,
+  });
+  const prevYearSnapshot = await fetchTotalsSnapshot({
+    userId,
+    start: prevYearStart,
+    endExclusive: prevYearEnd,
+  });
 
   const calcProfit = (snapshot: TotalsSnapshot) =>
     roundMetric(snapshot.totalSales - snapshot.bookedPurchases - snapshot.expenses);

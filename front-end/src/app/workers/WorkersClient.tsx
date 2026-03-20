@@ -11,7 +11,7 @@ import {
   useUpdateWorkerMutation,
   useWorkersQuery,
 } from "@/hooks/useInventoryQueries";
-import { validateEmail, validateName } from "@/lib/validation";
+import { validateEmail, validateName, validatePhone } from "@/lib/validation";
 import { useI18n } from "@/providers/LanguageProvider";
 
 type WorkersClientProps = {
@@ -28,12 +28,14 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
   const [form, setForm] = useState({
     name: "",
     email: "",
+    phone: "",
     password: "",
   });
   const [createError, setCreateError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingForm, setEditingForm] = useState({
     name: "",
+    phone: "",
     password: "",
   });
   const [updateError, setUpdateError] = useState("");
@@ -46,6 +48,8 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
         return t("validation.validName");
       case "Enter a valid email address":
         return t("validation.validEmail");
+      case "Enter a valid phone number":
+        return "Enter a valid phone number";
       case "Password must be at least 6 characters":
         return "Password must be at least 6 characters";
       default:
@@ -72,9 +76,10 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
       await createWorker.mutateAsync({
         name: form.name.trim(),
         email: form.email.trim(),
+        phone: form.phone.trim(),
         password: form.password,
       });
-      setForm({ name: "", email: "", password: "" });
+      setForm({ name: "", email: "", phone: "", password: "" });
     } catch (error) {
       if (isAxiosError<{ message?: string }>(error)) {
         setCreateError(
@@ -94,6 +99,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
     setEditingId(workerId);
     setEditingForm({
       name: worker.name,
+      phone: worker.phone ?? "",
       password: "",
     });
   };
@@ -108,12 +114,13 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
         id: editingId,
         payload: {
           name: editingForm.name.trim(),
+          phone: editingForm.phone.trim(),
           password: editingForm.password.trim() || undefined,
         },
       });
 
       setEditingId(null);
-      setEditingForm({ name: "", password: "" });
+      setEditingForm({ name: "", phone: "", password: "" });
     } catch (error) {
       if (isAxiosError<{ message?: string }>(error)) {
         setUpdateError(
@@ -177,6 +184,20 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                   }
                   required
                   placeholder="riya@company.com"
+                  success
+                />
+                <ValidationField
+                  id="worker-phone"
+                  label="Phone number"
+                  value={form.phone}
+                  onChange={(value) =>
+                    setForm((prev) => ({ ...prev, phone: value.replace(/\D/g, "") }))
+                  }
+                  validate={(value) =>
+                    translateValidationMessage(validatePhone(value))
+                  }
+                  required
+                  placeholder="9876543210"
                   success
                 />
                 <div className="grid gap-2">
@@ -255,6 +276,23 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                             success
                           />
                           <ValidationField
+                            id={`edit-worker-phone-${worker.id}`}
+                            label="Phone number"
+                            value={editingForm.phone}
+                            onChange={(value) =>
+                              setEditingForm((prev) => ({
+                                ...prev,
+                                phone: value.replace(/\D/g, ""),
+                              }))
+                            }
+                            validate={(value) =>
+                              translateValidationMessage(validatePhone(value))
+                            }
+                            required
+                            placeholder="9876543210"
+                            success
+                          />
+                          <ValidationField
                             id={`edit-worker-password-${worker.id}`}
                             label="New password"
                             type="password"
@@ -279,7 +317,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                               variant="outline"
                               onClick={() => {
                                 setEditingId(null);
-                                setEditingForm({ name: "", password: "" });
+                                setEditingForm({ name: "", phone: "", password: "" });
                               }}
                             >
                               {t("common.cancel")}
@@ -294,6 +332,9 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                           <div>
                             <p className="text-base font-semibold">{worker.name}</p>
                             <p className="text-sm text-[#5c4b3b]">{worker.email}</p>
+                            <p className="text-sm text-[#5c4b3b]">
+                              {worker.phone || "No phone number"}
+                            </p>
                             <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                               {worker.role} - Added {formatCreatedAt(worker.createdAt)}
                             </p>
