@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import axios from "axios";
+import AsyncProductSelect from "@/components/products/AsyncProductSelect";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,11 +20,11 @@ import {
   useCreateSaleMutation,
   useCustomersQuery,
   useDeleteSaleMutation,
-  useProductsQuery,
   useSalesQuery,
   useUpdateSaleMutation,
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
+import type { Product } from "@/lib/apiClient";
 import { useI18n } from "@/providers/LanguageProvider";
 
 const humanizeEnum = (value: string) =>
@@ -45,11 +46,26 @@ type SaleLineItemError = {
   tax_rate?: string;
 };
 
+type SaleFormItem = {
+  product_id: string;
+  product_label: string;
+  quantity: string;
+  unit_price: string;
+  tax_rate: string;
+};
+
+const createEmptySaleItem = (): SaleFormItem => ({
+  product_id: "",
+  product_label: "",
+  quantity: "1",
+  unit_price: "",
+  tax_rate: "",
+});
+
 const SalesClient = ({ name, image }: SalesClientProps) => {
   const { t, formatCurrency, formatDate } = useI18n();
   const { data, isLoading, isError } = useSalesQuery();
   const { data: customers } = useCustomersQuery();
-  const { data: products } = useProductsQuery();
   const { data: warehouses } = useWarehousesQuery();
   const createSale = useCreateSaleMutation();
   const updateSale = useUpdateSaleMutation();
@@ -65,9 +81,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
     payment_method: "",
     notes: "",
   });
-  const [items, setItems] = useState([
-    { product_id: "", quantity: "1", unit_price: "", tax_rate: "" },
-  ]);
+  const [items, setItems] = useState<SaleFormItem[]>([createEmptySaleItem()]);
   const [lineItemErrors, setLineItemErrors] = useState<SaleLineItemError[]>([]);
   const [lineItemSummary, setLineItemSummary] = useState<string[]>([]);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -122,31 +136,48 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
 
   const sales = useMemo(() => data ?? [], [data]);
   const customerList = customers ?? [];
-  const productList = products ?? [];
   const warehouseList = warehouses ?? [];
 
   const handleItemChange = (
     index: number,
-    key: "product_id" | "quantity" | "unit_price" | "tax_rate",
+    key: "quantity" | "unit_price" | "tax_rate",
     value: string,
   ) => {
+    setItems((prev) =>
+      prev.map((item, idx) =>
+        idx === index ? { ...item, [key]: value } : item,
+      ),
+    );
+    setLineItemSummary([]);
+    setLineItemErrors([]);
+    setServerError(null);
+  };
+
+  const handleProductSelect = (index: number, product: Product | null) => {
     setItems((prev) =>
       prev.map((item, idx) => {
         if (idx !== index) return item;
 
-        if (key === "product_id") {
-          const selectedProduct = productList.find(
-            (product) => String(product.id) === value,
-          );
-
+        if (!product) {
           return {
             ...item,
-            product_id: value,
-            unit_price: selectedProduct?.price ?? item.unit_price,
+            product_id: "",
+            product_label: "",
           };
         }
 
-        return { ...item, [key]: value };
+        return {
+          ...item,
+          product_id: String(product.id),
+          product_label: product.sku
+            ? `${product.name} - ${product.sku}`
+            : product.name,
+          unit_price: product.price ?? item.unit_price,
+          tax_rate:
+            product.gst_rate !== undefined && product.gst_rate !== null
+              ? String(product.gst_rate)
+              : item.tax_rate,
+        };
       }),
     );
     setLineItemSummary([]);
@@ -155,10 +186,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
   };
 
   const addItem = () => {
-    setItems((prev) => [
-      ...prev,
-      { product_id: "", quantity: "1", unit_price: "", tax_rate: "" },
-    ]);
+    setItems((prev) => [...prev, createEmptySaleItem()]);
     setLineItemSummary([]);
     setLineItemErrors([]);
     setServerError(null);
@@ -295,9 +323,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
         payment_method: "",
         notes: "",
       });
-      setItems([
-        { product_id: "", quantity: "1", unit_price: "", tax_rate: "" },
-      ]);
+      setItems([createEmptySaleItem()]);
       setLineItemErrors([]);
       setLineItemSummary([]);
     } catch (error) {
@@ -722,25 +748,12 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                   >
                     <div className="grid gap-2">
                       <Label>{t("salesPage.lineItems.fields.product")}</Label>
-                      <select
-                        className="h-9 w-full rounded-md border border-[#e4d6ca] bg-white px-3 text-sm"
+                      <AsyncProductSelect
                         value={item.product_id}
-                        onChange={(event) =>
-                          handleItemChange(
-                            index,
-                            "product_id",
-                            event.target.value,
-                          )
-                        }
-                        required
-                      >
-                        <option value="">{t("salesPage.lineItems.selectProduct")}</option>
-                        {productList.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name} - {product.sku}
-                          </option>
-                        ))}
-                      </select>
+                        selectedLabel={item.product_label}
+                        onSelect={(product) => handleProductSelect(index, product)}
+                        variant="warm"
+                      />
                       {lineItemErrors[index]?.product_id && (
                         <p className="text-xs text-[#b45309]">
                           {lineItemErrors[index]?.product_id}

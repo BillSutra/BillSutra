@@ -65,12 +65,16 @@ import {
   userTemplateUpsertSchema,
   userSavedTemplateCreateSchema,
   userSavedTemplateUpdateSchema,
+  exportPreviewRequestSchema,
+  exportRequestSchema,
+  exportResourceParamSchema,
 } from "../validations/apiValidations.js";
 import invoiceRoutes from "../modules/invoice/invoice.routes.js";
 import importRoutes from "../modules/import/import.routes.js";
 import forecastRoutes from "../modules/forecast/forecast.routes.js";
 import inventoryDemandRoutes from "../modules/inventory-demand/inventoryDemand.routes.js";
 import assistantRoutes from "../modules/assistant/assistant.routes.js";
+import ExportController from "../modules/export/export.controller.js";
 
 const router = Router();
 
@@ -241,6 +245,23 @@ router.get("/logo", AuthMiddleware, LogoController.get);
 router.post("/logo", AuthMiddleware, logoUploadMiddleware, LogoController.upload);
 router.put("/logo", AuthMiddleware, logoUploadMiddleware, LogoController.update);
 router.delete("/logo", AuthMiddleware, LogoController.remove);
+
+router.post(
+  "/exports/:resource/preview",
+  AuthMiddleware,
+  validate({
+    params: exportResourceParamSchema,
+    body: exportPreviewRequestSchema,
+  }),
+  ExportController.preview,
+);
+
+router.post(
+  "/exports/:resource",
+  AuthMiddleware,
+  validate({ params: exportResourceParamSchema, body: exportRequestSchema }),
+  ExportController.run,
+);
 
 // Templates
 router.get("/templates", AuthMiddleware, TemplatesController.index);

@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import axios from "axios";
+import AsyncProductSelect from "@/components/products/AsyncProductSelect";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,12 +28,12 @@ import { Label } from "@/components/ui/label";
 import {
   useCreatePurchaseMutation,
   useCreateSupplierMutation,
-  useProductsQuery,
   usePurchasesQuery,
   useSuppliersQuery,
   useUpdatePurchaseMutation,
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
+import type { Product } from "@/lib/apiClient";
 import { useI18n } from "@/providers/LanguageProvider";
 
 const humanizeEnum = (value: string) =>
@@ -54,10 +55,25 @@ type PurchaseLineItemError = {
   tax_rate?: string;
 };
 
+type PurchaseFormItem = {
+  product_id: string;
+  product_label: string;
+  quantity: string;
+  unit_cost: string;
+  tax_rate: string;
+};
+
+const createEmptyPurchaseItem = (): PurchaseFormItem => ({
+  product_id: "",
+  product_label: "",
+  quantity: "1",
+  unit_cost: "",
+  tax_rate: "",
+});
+
 const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
   const { t, formatCurrency, formatDate } = useI18n();
   const { data, isLoading, isError } = usePurchasesQuery();
-  const { data: products } = useProductsQuery();
   const { data: suppliers } = useSuppliersQuery();
   const { data: warehouses } = useWarehousesQuery();
   const createPurchase = useCreatePurchaseMutation();
@@ -73,8 +89,8 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     payment_method: "",
     notes: "",
   });
-  const [items, setItems] = useState([
-    { product_id: "", quantity: "1", unit_cost: "", tax_rate: "" },
+  const [items, setItems] = useState<PurchaseFormItem[]>([
+    createEmptyPurchaseItem(),
   ]);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [lineItemErrors, setLineItemErrors] = useState<PurchaseLineItemError[]>(
@@ -144,45 +160,58 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
   };
 
   const purchases = useMemo(() => data ?? [], [data]);
-  const productsList = products ?? [];
   const supplierList = suppliers ?? [];
   const warehouseList = warehouses ?? [];
 
   const handleItemChange = (
     index: number,
-    key: "product_id" | "quantity" | "unit_cost" | "tax_rate",
+    key: "quantity" | "unit_cost" | "tax_rate",
     value: string,
   ) => {
     setItems((prev) =>
-      prev.map((item, idx) => {
-        if (idx !== index) return item;
-
-        if (key === "product_id") {
-          const selectedProduct = productsList.find(
-            (product) => String(product.id) === value,
-          );
-
-          return {
-            ...item,
-            product_id: value,
-            unit_cost:
-              selectedProduct?.cost ?? selectedProduct?.price ?? item.unit_cost,
-          };
-        }
-
-        return { ...item, [key]: value };
-      }),
+      prev.map((item, idx) =>
+        idx === index ? { ...item, [key]: value } : item,
+      ),
     );
     setLineItemSummary([]);
     setLineItemErrors([]);
     setServerError(null);
   };
 
+  const handleProductSelect = (index: number, product: Product | null) => {
+    setItems((prev) =>
+      prev.map((item, idx) => {
+        if (idx !== index) return item;
+
+        if (!product) {
+          return {
+            ...item,
+            product_id: "",
+            product_label: "",
+          };
+        }
+
+        return {
+          ...item,
+          product_id: String(product.id),
+          product_label: product.sku
+            ? `${product.name} - ${product.sku}`
+            : product.name,
+          unit_cost: product.cost ?? product.price ?? item.unit_cost,
+          tax_rate:
+            product.gst_rate !== undefined && product.gst_rate !== null
+              ? String(product.gst_rate)
+              : item.tax_rate,
+        };
+      }),
+    );
+    setLineItemErrors([]);
+    setLineItemSummary([]);
+    setServerError(null);
+  };
+
   const addItem = () => {
-    setItems((prev) => [
-      ...prev,
-      { product_id: "", quantity: "1", unit_cost: "", tax_rate: "" },
-    ]);
+    setItems((prev) => [...prev, createEmptyPurchaseItem()]);
     setLineItemErrors([]);
     setLineItemSummary([]);
   };
@@ -204,7 +233,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
       payment_method: "",
       notes: "",
     });
-    setItems([{ product_id: "", quantity: "1", unit_cost: "", tax_rate: "" }]);
+    setItems([createEmptyPurchaseItem()]);
     setEditingId(null);
     setLineItemErrors([]);
     setLineItemSummary([]);
@@ -311,6 +340,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     setItems(
       purchase.items.map((item) => ({
         product_id: item.product_id ? String(item.product_id) : "",
+        product_label: item.name ?? "",
         quantity: String(item.quantity),
         unit_cost: String(item.unit_cost),
         tax_rate: item.tax_rate ? String(item.tax_rate) : "",
@@ -599,27 +629,12 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                   >
                     <div className="grid gap-2">
                       <Label>{t("purchasesPage.lineItems.fields.product")}</Label>
-                      <select
-                        className="h-9 w-full rounded-md border border-[#e4d6ca] bg-white px-3 text-sm"
+                      <AsyncProductSelect
                         value={item.product_id}
-                        onChange={(event) =>
-                          handleItemChange(
-                            index,
-                            "product_id",
-                            event.target.value,
-                          )
-                        }
-                        required
-                      >
-                        <option value="">
-                          {t("purchasesPage.lineItems.selectProduct")}
-                        </option>
-                        {productsList.map((product) => (
-                          <option key={product.id} value={product.id}>
-                            {product.name} - {product.sku}
-                          </option>
-                        ))}
-                      </select>
+                        selectedLabel={item.product_label}
+                        onSelect={(product) => handleProductSelect(index, product)}
+                        variant="warm"
+                      />
                       {lineItemErrors[index]?.product_id && (
                         <p className="text-xs text-[#b45309]">
                           {lineItemErrors[index]?.product_id}

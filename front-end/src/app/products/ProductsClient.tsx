@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import DataExportDialog from "@/components/export/DataExportDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -96,6 +97,7 @@ export default function ProductsClient({
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
 
   const { data, isLoading, isError, isFetching } = useProductsPageQuery({
     page: currentPage,
@@ -251,6 +253,14 @@ export default function ProductsClient({
       },
     });
     setEditingId(null);
+  };
+
+  const toggleProductSelection = (productId: number) => {
+    setSelectedProductIds((prev) =>
+      prev.includes(productId)
+        ? prev.filter((id) => id !== productId)
+        : [...prev, productId],
+    );
   };
 
   const handleImportFileChange = (
@@ -844,9 +854,22 @@ export default function ProductsClient({
                 </p>
               </div>
               {!isLoading && !isError && totalProducts > 0 ? (
-                <span className="app-chip">
-                  {t("productsPage.count", { count: totalProducts })}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="app-chip">
+                    {t("productsPage.count", { count: totalProducts })}
+                  </span>
+                  <DataExportDialog
+                    resource="products"
+                    title="Products"
+                    selectedIds={selectedProductIds}
+                    disabled={!canManageProducts || isLoading || isError}
+                    categoryOptions={categoryOptions}
+                    initialFilters={{
+                      search: debouncedSearch || undefined,
+                      category: selectedCategoryFilter || undefined,
+                    }}
+                  />
+                </div>
               ) : null}
             </div>
             <div className="mt-5">
@@ -1005,31 +1028,40 @@ export default function ProductsClient({
                           </form>
                         ) : (
                           <div className="flex flex-wrap items-center justify-between gap-4">
-                            <div className="min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <p className="text-base font-semibold text-foreground">
-                                  {product.name}
-                                </p>
-                                <span className="app-chip">{product.sku}</span>
-                              </div>
-                              <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                <span className="app-chip">
-                                  {t("productsPage.categoryLabel", {
-                                    name:
-                                      product.category?.name ??
-                                      t("productsPage.uncategorized"),
-                                  })}
-                                </span>
-                                <span className="app-chip">
-                                  {t("productsPage.stockLabel", {
-                                    count: product.stock_on_hand,
-                                  })}
-                                </span>
-                                <span className="app-chip">
-                                  {t("productsPage.priceLabel", {
-                                    amount: formatCurrency(Number(product.price)),
-                                  })}
-                                </span>
+                            <div className="flex min-w-0 flex-1 items-start gap-3">
+                              <input
+                                type="checkbox"
+                                className="mt-1"
+                                checked={selectedProductIds.includes(product.id)}
+                                onChange={() => toggleProductSelection(product.id)}
+                                aria-label={`Select ${product.name}`}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-base font-semibold text-foreground">
+                                    {product.name}
+                                  </p>
+                                  <span className="app-chip">{product.sku}</span>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                  <span className="app-chip">
+                                    {t("productsPage.categoryLabel", {
+                                      name:
+                                        product.category?.name ??
+                                        t("productsPage.uncategorized"),
+                                    })}
+                                  </span>
+                                  <span className="app-chip">
+                                    {t("productsPage.stockLabel", {
+                                      count: product.stock_on_hand,
+                                    })}
+                                  </span>
+                                  <span className="app-chip">
+                                    {t("productsPage.priceLabel", {
+                                      amount: formatCurrency(Number(product.price)),
+                                    })}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                             <div className="flex flex-wrap items-center gap-2">

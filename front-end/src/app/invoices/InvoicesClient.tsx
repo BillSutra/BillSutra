@@ -45,9 +45,9 @@ import type {
 import {
   useCreateInvoiceMutation,
   useCustomersQuery,
-  useProductsQuery,
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
+import type { Product } from "@/lib/apiClient";
 
 type InvoiceClientProps = {
   name: string;
@@ -110,7 +110,6 @@ const DEFAULT_INVOICE_THEME: InvoiceTheme = {
 const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const { formatDate, locale, t } = useI18n();
   const { data: customers } = useCustomersQuery();
-  const { data: products } = useProductsQuery();
   const { data: warehouses } = useWarehousesQuery();
   const { data: businessProfile } = useQuery({
     queryKey: ["business-profile"],
@@ -314,17 +313,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   );
 
   const handleProductSelect = useCallback(
-    (index: number, productId: string) => {
-      const product = (products ?? []).find(
-        (item) => String(item.id) === productId,
-      );
+    (index: number, product: Product | null) => {
       setItems((prev) =>
         prev.map((item, idx) =>
           idx === index
             ? {
                 ...item,
-                product_id: productId,
-                name: product?.name ?? item.name,
+                product_id: product ? String(product.id) : "",
+                name: product?.name ?? "",
                 price:
                   product?.price !== undefined && product?.price !== null
                     ? String(product.price)
@@ -343,7 +339,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       setServerError(null);
       markDirty();
     },
-    [markDirty, products],
+    [markDirty],
   );
 
   const addItem = useCallback(() => {
@@ -594,7 +590,6 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             <InvoiceTable
               items={items}
               errors={itemErrors}
-              products={products ?? []}
               onItemChange={handleItemChange}
               onProductSelect={handleProductSelect}
               onAddItem={addItem}

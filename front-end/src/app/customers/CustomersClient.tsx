@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import DataExportDialog from "@/components/export/DataExportDialog";
 import { Button } from "@/components/ui/button";
 import { ValidationField } from "@/components/ui/ValidationField";
 import {
@@ -43,6 +44,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     phone: "",
     address: "",
   });
+  const [selectedCustomerIds, setSelectedCustomerIds] = useState<number[]>([]);
 
   const isMutating =
     createCustomer.isPending ||
@@ -104,6 +106,14 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     setEditingId(null);
   };
 
+  const toggleCustomerSelection = (customerId: number) => {
+    setSelectedCustomerIds((prev) =>
+      prev.includes(customerId)
+        ? prev.filter((id) => id !== customerId)
+        : [...prev, customerId],
+    );
+  };
+
   return (
     <DashboardLayout
       name={name}
@@ -150,7 +160,15 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                   {t("customers.listDescription")}
                 </p>
               </div>
-              {!isLoading && !isError && customers.length > 0 ? <span className="app-chip">{t("customers.count", { count: customers.length })}</span> : null}
+              <div className="flex flex-wrap items-center gap-2">
+                {!isLoading && !isError && customers.length > 0 ? <span className="app-chip">{t("customers.count", { count: customers.length })}</span> : null}
+                <DataExportDialog
+                  resource="customers"
+                  title="Customers"
+                  selectedIds={selectedCustomerIds}
+                  disabled={isLoading || isError}
+                />
+              </div>
             </div>
             <div className="mt-5">
               {isLoading && <div className="app-loading-skeleton h-64 w-full" />}
@@ -173,12 +191,21 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                         </form>
                       ) : (
                         <div className="flex flex-wrap items-center justify-between gap-4">
-                          <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 flex-1 items-start gap-3">
+                            <input
+                              type="checkbox"
+                              className="mt-1"
+                              checked={selectedCustomerIds.includes(customer.id)}
+                              onChange={() => toggleCustomerSelection(customer.id)}
+                              aria-label={`Select ${customer.name}`}
+                            />
+                            <div className="min-w-0 flex-1">
                             <p className="text-base font-semibold text-foreground">{customer.name}</p>
                             <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                               <span className="app-chip">{customer.email ?? t("customers.fallbacks.email")}</span>
                               <span className="app-chip">{customer.phone ?? t("customers.fallbacks.phone")}</span>
                               <span className="app-chip">{customer.address ?? t("customers.fallbacks.address")}</span>
+                            </div>
                             </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">

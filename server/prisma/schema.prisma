@@ -35,6 +35,7 @@ model User {
   business_profile            BusinessProfile?
   user_templates              UserTemplate[]
   user_saved_templates        UserSavedTemplate[]
+  export_logs                 ExportLog[]
 
   @@map("users")
 }
@@ -553,6 +554,28 @@ model PasswordResetToken {
 
   @@index([user_id])
   @@map("password_reset_tokens")
+}
+
+model ExportLog {
+  id Int @id @default(autoincrement())
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  actor_id String  @db.VarChar(191)
+  resource String  @db.VarChar(64)
+  format   String  @db.VarChar(16)
+  scope    String  @db.VarChar(16)
+  delivery String  @default("download") @db.VarChar(16)
+  email    String?
+
+  filters        Json?
+  selected_count Int      @default(0)
+  exported_count Int      @default(0)
+  created_at     DateTime @default(now())
+
+  @@index([user_id, created_at])
+  @@map("export_logs")
 }
 
 enum InvoiceStatus {

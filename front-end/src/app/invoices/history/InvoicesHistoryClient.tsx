@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import DataExportDialog from "@/components/export/DataExportDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -52,6 +53,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
   const [selectedStatus, setSelectedStatus] = useState<string>("SENT");
   const [paidAmount, setPaidAmount] = useState("");
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<number[]>([]);
 
   const formatCurrencyValue = (value: string | number) =>
     formatCurrency(Number(value || 0), "INR");
@@ -114,6 +116,14 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
     setSelectedStatus("SENT");
     setPaidAmount("");
     setStatusError(null);
+  };
+
+  const toggleInvoiceSelection = (invoiceId: number) => {
+    setSelectedInvoiceIds((prev) =>
+      prev.includes(invoiceId)
+        ? prev.filter((id) => id !== invoiceId)
+        : [...prev, invoiceId],
+    );
   };
 
   const handleSaveStatus = async () => {
@@ -249,6 +259,15 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                 >
                   {t("invoiceHistory.quickActions")}
                 </Button>
+                <DataExportDialog
+                  resource="invoices"
+                  title="Invoices"
+                  selectedIds={selectedInvoiceIds}
+                  initialFilters={{
+                    search: query.trim() || undefined,
+                  }}
+                  disabled={isLoading || isError}
+                />
               </div>
             </div>
           </div>
@@ -283,6 +302,14 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                 <DataTable
                   rows={filtered.map((invoice) => ({
                     id: invoice.id,
+                    select: (
+                      <input
+                        type="checkbox"
+                        checked={selectedInvoiceIds.includes(invoice.id)}
+                        onChange={() => toggleInvoiceSelection(invoice.id)}
+                        aria-label={`Select ${invoice.invoice_number}`}
+                      />
+                    ),
                     invoice_number: (
                       <span className="font-semibold">
                         {invoice.invoice_number}
@@ -326,6 +353,10 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                   searchPlaceholder={t("invoiceHistory.tableSearchPlaceholder")}
                   searchKeys={["invoice_number", "customer", "date", "total"]}
                   columns={[
+                    {
+                      key: "select",
+                      header: "Select",
+                    },
                     {
                       key: "invoice_number",
                       header: t("invoiceHistory.columns.invoiceNumber"),

@@ -14,6 +14,7 @@ type ModalProps = {
   description?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  contentClassName?: string;
 };
 
 const Modal = ({
@@ -23,17 +24,20 @@ const Modal = ({
   description,
   children,
   footer,
+  contentClassName,
 }: ModalProps) => {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-xl border-gray-200 bg-white shadow-md dark:border-gray-700 dark:bg-gray-800">
+      <DialogContent
+        className={`rounded-xl border-gray-200 bg-white shadow-md dark:border-gray-700 dark:bg-gray-800 ${contentClassName ?? ""}`}
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description ? (
             <DialogDescription>{description}</DialogDescription>
           ) : null}
         </DialogHeader>
-        <div className="pt-1">{children}</div>
+        <div className="min-h-0 pt-1">{children}</div>
         {footer ? <DialogFooter>{footer}</DialogFooter> : null}
       </DialogContent>
     </Dialog>

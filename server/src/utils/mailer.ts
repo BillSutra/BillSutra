@@ -5,6 +5,11 @@ type MailInput = {
   subject: string;
   html: string;
   text?: string;
+  attachments?: Array<{
+    filename: string;
+    content: Buffer;
+    contentType?: string;
+  }>;
 };
 
 let transporter: nodemailer.Transporter | null = null;
@@ -33,7 +38,13 @@ const getTransporter = () => {
   return transporter;
 };
 
-export const sendMail = async ({ to, subject, html, text }: MailInput) => {
+export const sendMail = async ({
+  to,
+  subject,
+  html,
+  text,
+  attachments,
+}: MailInput) => {
   const from = process.env.SMTP_FROM || process.env.SMTP_USER;
   if (!from) {
     throw new Error("SMTP_FROM or SMTP_USER is required");
@@ -47,5 +58,6 @@ export const sendMail = async ({ to, subject, html, text }: MailInput) => {
     subject,
     html,
     text,
+    attachments,
   });
 };

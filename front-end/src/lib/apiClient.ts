@@ -158,6 +158,52 @@ export type ProductListResponse = {
   totalPages: number;
 };
 
+export type ExportResource = "products" | "customers" | "invoices";
+export type ExportFormat = "csv" | "xlsx" | "pdf" | "json";
+export type ExportScope = "all" | "filtered" | "selected";
+export type ExportDelivery = "download" | "email";
+
+export type ExportFilters = {
+  start_date?: string;
+  end_date?: string;
+  category?: string;
+  payment_status?: string;
+  customer_name?: string;
+  search?: string;
+};
+
+export type ExportRequest = {
+  resource: ExportResource;
+  format: ExportFormat;
+  scope: ExportScope;
+  delivery: ExportDelivery;
+  email?: string;
+  fields: string[];
+  selected_ids?: number[];
+  filters?: ExportFilters;
+};
+
+export type ExportResponse =
+  | {
+      delivery: "download";
+      blob: Blob;
+      fileName: string;
+    }
+  | {
+      delivery: "email";
+      fileName: string;
+      email: string;
+      exportedCount: number;
+      message: string;
+    };
+
+export type ExportPreviewResponse = {
+  totalCount: number;
+  previewCount: number;
+  columns: Array<{ id: string; label: string }>;
+  rows: string[][];
+};
+
 export type Customer = {
   id: number;
   name: string;
@@ -1307,6 +1353,25 @@ const extractBlobErrorMessage = async (error: unknown) => {
     }
   }
 
+  if (responseData instanceof ArrayBuffer) {
+    try {
+      const text = new TextDecoder().decode(responseData);
+
+      if (!text) {
+        return null;
+      }
+
+      try {
+        const parsed = JSON.parse(text) as { message?: string };
+        return parsed.message?.trim() || null;
+      } catch {
+        return text.trim() || null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
   if (
     responseData &&
     typeof responseData === "object" &&
@@ -1317,6 +1382,81 @@ const extractBlobErrorMessage = async (error: unknown) => {
   }
 
   return null;
+};
+
+export const runDataExport = async (
+  payload: ExportRequest,
+): Promise<ExportResponse> => {
+  try {
+    const response = await apiClient.post(
+      `/exports/${payload.resource}`,
+      payload,
+      {
+        responseType: "arraybuffer",
+      },
+    );
+
+    const contentType = String(response.headers?.["content-type"] || "");
+    const disposition = response.headers?.["content-disposition"] as
+      | string
+      | undefined;
+
+    if (contentType.includes("application/json")) {
+      const text = new TextDecoder().decode(response.data as ArrayBuffer);
+      const parsed = JSON.parse(text) as {
+        message?: string;
+        data?: {
+          delivery: "email";
+          fileName: string;
+          email: string;
+          exportedCount: number;
+        };
+      };
+
+      return {
+        delivery: "email",
+        fileName: parsed.data?.fileName ?? `${payload.resource}.${payload.format}`,
+        email: parsed.data?.email ?? payload.email ?? "",
+        exportedCount: parsed.data?.exportedCount ?? 0,
+        message: parsed.message ?? "Export sent successfully.",
+      };
+    }
+
+    const fileName = parseDownloadFileName(
+      disposition,
+      `${payload.resource}.${payload.format}`,
+    );
+
+    return {
+      delivery: "download",
+      blob: new Blob([response.data as ArrayBuffer], { type: contentType }),
+      fileName,
+    };
+  } catch (error) {
+    const message =
+      (await extractBlobErrorMessage(error)) || "Unable to export data.";
+    throw new Error(message);
+  }
+};
+
+export const previewDataExport = async (
+  payload: Pick<
+    ExportRequest,
+    "resource" | "scope" | "fields" | "selected_ids" | "filters"
+  >,
+): Promise<ExportPreviewResponse> => {
+  try {
+    const response = await apiClient.post(
+      `/exports/${payload.resource}/preview`,
+      payload,
+    );
+
+    return response.data.data as ExportPreviewResponse;
+  } catch (error) {
+    const message =
+      (await extractBlobErrorMessage(error)) || "Unable to preview export.";
+    throw new Error(message);
+  }
 };
 
 export const fetchInvoicePdfFile = async (

@@ -336,3 +336,33 @@ export const stockAdjustSchema = z.object({
   reason: z.nativeEnum(StockReason).optional(),
   note: z.string().optional(),
 });
+
+const exportFilterSchema = z.object({
+  start_date: z.coerce.date().optional(),
+  end_date: z.coerce.date().optional(),
+  category: z.string().min(1).optional(),
+  payment_status: z.string().min(1).optional(),
+  customer_name: z.string().min(1).optional(),
+  search: z.string().min(1).optional(),
+});
+
+export const exportResourceParamSchema = z.object({
+  resource: z.enum(["products", "customers", "invoices"]),
+});
+
+export const exportRequestSchema = z.object({
+  format: z.enum(["csv", "xlsx", "pdf", "json"]),
+  scope: z.enum(["all", "filtered", "selected"]).default("all"),
+  delivery: z.enum(["download", "email"]).default("download"),
+  email: z.string().email().optional(),
+  fields: z.array(z.string().min(1)).min(1),
+  selected_ids: z.array(z.coerce.number().int().positive()).optional(),
+  filters: exportFilterSchema.optional(),
+});
+
+export const exportPreviewRequestSchema = z.object({
+  scope: z.enum(["all", "filtered", "selected"]).default("all"),
+  fields: z.array(z.string().min(1)).min(1),
+  selected_ids: z.array(z.coerce.number().int().positive()).optional(),
+  filters: exportFilterSchema.optional(),
+});
