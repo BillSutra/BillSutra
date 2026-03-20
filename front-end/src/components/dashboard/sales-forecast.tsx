@@ -15,6 +15,7 @@ import { formatCurrency, formatNumber } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 import { useDashboardForecast } from "@/components/dashboard/use-dashboard-forecast";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const formatTooltipValue = (value: unknown) => {
   if (typeof value === "number") return formatCurrency(value);
@@ -26,6 +27,7 @@ const formatTooltipValue = (value: unknown) => {
 };
 
 const SalesForecast = ({ className }: { className?: string }) => {
+  const { t } = useI18n();
   const { data, isLoading, isError, dataUpdatedAt, isFetching } = useDashboardForecast();
 
   const chartData = useMemo(() => {
@@ -49,15 +51,15 @@ const SalesForecast = ({ className }: { className?: string }) => {
   const stats = data
     ? [
         {
-          label: "Avg daily receipts",
+          label: t("dashboard.salesForecast.avgDailyReceipts"),
           value: formatCurrency(data.sales.trailing30Days.averageDailyReceipts),
         },
         {
-          label: "Projected next 30 days",
+          label: t("dashboard.salesForecast.projectedNext30Days"),
           value: formatCurrency(data.sales.projectedNext30Days),
         },
         {
-          label: "Trend vs last period",
+          label: t("dashboard.salesForecast.trendVsLastPeriod"),
           value: `${data.sales.trailing30Days.trendPercent >= 0 ? "+" : ""}${formatNumber(
             data.sales.trailing30Days.trendPercent,
           )}%`,
@@ -72,14 +74,13 @@ const SalesForecast = ({ className }: { className?: string }) => {
       <div className="dashboard-chart-content flex min-h-0 flex-1 flex-col gap-5">
         <div>
           <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
-            Forecast studio
+            {t("dashboard.salesForecast.kicker")}
           </p>
           <p className="mt-2 text-2xl font-semibold text-[#1f1b16]">
-            Sales forecast
+            {t("dashboard.salesForecast.title")}
           </p>
           <p className="mt-2 text-sm text-[#8a6d56]">
-            Monthly sales forecast uses real cash receipts from paid sales and invoice
-            collections.
+            {t("dashboard.salesForecast.receiptsDescription")}
           </p>
         </div>
         <DashboardCardStatus
@@ -104,15 +105,15 @@ const SalesForecast = ({ className }: { className?: string }) => {
         <div className="flex-1 min-h-[320px] min-w-0">
           {isLoading ? (
             <div className="flex h-full items-center justify-center rounded-2xl bg-[#fff9f2]">
-              <p className="text-sm text-[#8a6d56]">Loading forecast...</p>
+              <p className="text-sm text-[#8a6d56]">{t("dashboard.salesForecast.loading")}</p>
             </div>
           ) : isError ? (
             <div className="flex h-full items-center justify-center rounded-2xl bg-[#fff9f2]">
-              <p className="text-sm text-[#b45309]">Failed to load forecast data</p>
+              <p className="text-sm text-[#b45309]">{t("dashboard.salesForecast.loadError")}</p>
             </div>
           ) : chartData.length === 0 ? (
             <div className="flex h-full items-center justify-center rounded-2xl bg-[#fff9f2]">
-              <p className="text-sm text-[#8a6d56]">No receipt history available yet</p>
+              <p className="text-sm text-[#8a6d56]">{t("dashboard.salesForecast.empty")}</p>
             </div>
           ) : (
             <DashboardResponsiveChart>
@@ -125,7 +126,7 @@ const SalesForecast = ({ className }: { className?: string }) => {
                 <Line
                   type="monotone"
                   dataKey="actualReceipts"
-                  name="Actual receipts"
+                  name={t("dashboard.salesForecast.actualReceipts")}
                   stroke="#10b981"
                   strokeWidth={3}
                   dot={{ r: 3 }}
@@ -134,7 +135,7 @@ const SalesForecast = ({ className }: { className?: string }) => {
                 <Line
                   type="monotone"
                   dataKey="projectedReceipts"
-                  name="Projected receipts"
+                  name={t("dashboard.salesForecast.projectedReceipts")}
                   stroke="#f59e0b"
                   strokeWidth={3}
                   strokeDasharray="5 5"

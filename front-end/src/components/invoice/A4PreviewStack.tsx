@@ -58,6 +58,8 @@ const A4PreviewStack = ({
   }, []);
 
   useEffect(() => {
+    let animationFrameId = 0;
+
     const measurePages = () => {
       const target = measureRef.current;
       if (!target) return;
@@ -72,23 +74,29 @@ const A4PreviewStack = ({
       );
     };
 
-    measurePages();
+    const scheduleMeasure = () => {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = window.requestAnimationFrame(measurePages);
+    };
+
+    scheduleMeasure();
 
     const observer =
       typeof ResizeObserver !== "undefined"
-        ? new ResizeObserver(measurePages)
+        ? new ResizeObserver(scheduleMeasure)
         : null;
 
     if (observer && measureRef.current) {
       observer.observe(measureRef.current);
     }
 
-    window.addEventListener("resize", measurePages);
+    window.addEventListener("resize", scheduleMeasure);
     return () => {
+      cancelAnimationFrame(animationFrameId);
       observer?.disconnect();
-      window.removeEventListener("resize", measurePages);
+      window.removeEventListener("resize", scheduleMeasure);
     };
-  }, [stackKey, children]);
+  }, []);
 
   const pages = useMemo(
     () => Array.from({ length: pageCount }, (_, index) => index),

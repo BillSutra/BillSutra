@@ -22,6 +22,7 @@ import {
 } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const INFLOW_COLOR = "#15803d";
 const OUTFLOW_COLOR = "#f97316";
@@ -79,6 +80,7 @@ const legendFormatter = (value: string) => (
 );
 
 const CashFlowChart = ({ className }: { className?: string }) => {
+  const { t } = useI18n();
   const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "cashflow"],
     queryFn: fetchDashboardCashflow,
@@ -94,10 +96,10 @@ const CashFlowChart = ({ className }: { className?: string }) => {
 
   const inflowModeLabel =
     data?.inflowSourceMode === "payments"
-      ? "Invoice payments"
+      ? t("dashboard.cashflow.inflowModePayments")
       : data?.inflowSourceMode === "sales"
-        ? "Direct sale receipts"
-        : "Sales receipts + invoice payments";
+        ? t("dashboard.cashflow.inflowModeSales")
+        : t("dashboard.cashflow.inflowModeHybrid");
 
   return (
     <Card
@@ -107,14 +109,13 @@ const CashFlowChart = ({ className }: { className?: string }) => {
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 flex-1">
             <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
-              Cash movement
+              {t("dashboard.cashflow.kicker")}
             </p>
             <CardTitle className="mt-2 text-2xl text-[#1f1b16]">
-              Cash flow summary
+              {t("dashboard.cashflow.title")}
             </CardTitle>
             <p className="mt-2 max-w-xl text-sm text-[#8a6d56]">
-              Current-month collections versus outgoing purchase payments and
-              expenses.
+              {t("dashboard.cashflow.description")}
             </p>
             <div className="mt-3">
               <DashboardCardStatus
@@ -128,7 +129,7 @@ const CashFlowChart = ({ className }: { className?: string }) => {
           </div>
           <div className="dashboard-chart-metric rounded-2xl px-4 py-3 xl:max-w-[220px]">
             <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
-              Inflow source
+              {t("dashboard.cashflow.inflowSource")}
             </p>
             <p className="mt-1 text-sm font-semibold leading-6 text-[#1f1b16]">
               {inflowModeLabel}
@@ -141,19 +142,32 @@ const CashFlowChart = ({ className }: { className?: string }) => {
           <div className="h-32 rounded-xl bg-[#fdf7f1] animate-pulse" />
         )}
         {isError && (
-          <p className="text-sm text-[#b45309]">Unable to load cash flow.</p>
+          <p className="text-sm text-[#b45309]">{t("dashboard.cashflow.unableToLoad")}</p>
         )}
         {!isLoading && !isError && data && (
           <>
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {[
-                { label: "Cash inflow", value: formatCurrency(data.inflow) },
-                { label: "Cash outflow", value: formatCurrency(data.outflow) },
                 {
-                  label: "Net cash flow",
-                  value: formatCurrency(data.netCashFlow),
+                  label: t("dashboard.cashflow.cashInflow"),
+                  value: formatCurrency(data.inflow),
+                  isNet: false,
                 },
-                { label: "Source mode", value: inflowModeLabel },
+                {
+                  label: t("dashboard.cashflow.cashOutflow"),
+                  value: formatCurrency(data.outflow),
+                  isNet: false,
+                },
+                {
+                  label: t("dashboard.cashflow.netCashFlow"),
+                  value: formatCurrency(data.netCashFlow),
+                  isNet: true,
+                },
+                {
+                  label: t("dashboard.cashflow.sourceMode"),
+                  value: inflowModeLabel,
+                  isNet: false,
+                },
               ].map((item) => (
                 <div
                   key={item.label}
@@ -164,7 +178,7 @@ const CashFlowChart = ({ className }: { className?: string }) => {
                   </p>
                   <p
                     className={`mt-3 text-lg font-semibold ${
-                      item.label === "Net cash flow"
+                      item.isNet
                         ? netClass
                         : "text-[#1f1b16]"
                     }`}
@@ -224,7 +238,7 @@ const CashFlowChart = ({ className }: { className?: string }) => {
                     <Area
                       type="monotone"
                       dataKey="inflow"
-                      name="Cash Inflow"
+                      name={t("dashboard.cashflow.legendCashInflow")}
                       stroke={INFLOW_COLOR}
                       fillOpacity={1}
                       fill="url(#colorInflow)"
@@ -234,7 +248,7 @@ const CashFlowChart = ({ className }: { className?: string }) => {
                     <Area
                       type="monotone"
                       dataKey="outflow"
-                      name="Cash Outflow"
+                      name={t("dashboard.cashflow.legendCashOutflow")}
                       stroke={OUTFLOW_COLOR}
                       fillOpacity={1}
                       fill="url(#colorOutflow)"
@@ -246,12 +260,11 @@ const CashFlowChart = ({ className }: { className?: string }) => {
               </div>
             ) : (
               <div className="flex h-[280px] items-center justify-center rounded-2xl border border-dashed border-[#ecdccf] bg-[#fffaf5] px-4 text-center text-sm text-[#5f5144]">
-                No cash flow activity recorded for this period yet.
+                {t("dashboard.cashflow.empty")}
               </div>
             )}
             <p className="text-xs text-[#8a6d56]">
-              Includes direct sale receipts, invoice collections, paid purchase
-              amounts, and recorded expenses.
+              {t("dashboard.cashflow.footnote")}
             </p>
           </>
         )}

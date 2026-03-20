@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { useBusinessLogo } from "@/hooks/useBusinessLogo";
+import { useI18n } from "@/providers/LanguageProvider";
 
 /** Max upload size: 2 MB */
 const MAX_SIZE_BYTES = 2 * 1024 * 1024;
@@ -26,6 +27,7 @@ interface LogoUploaderProps {
  * - Remove: deletes the logo from localStorage
  */
 const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
+  const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -51,12 +53,12 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
     if (!file) return;
 
     if (!ALLOWED_TYPES.includes(file.type)) {
-      toast.error("Only PNG, JPG, JPEG, and WebP files are allowed.");
+      toast.error(t("businessProfilePage.logo.messages.fileType"));
       return;
     }
 
     if (file.size > MAX_SIZE_BYTES) {
-      toast.error("File size must not exceed 2 MB.");
+      toast.error(t("businessProfilePage.logo.messages.fileSize"));
       return;
     }
 
@@ -68,9 +70,13 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
       setLogo(base64);
       onLogoChange?.(base64);
 
-      toast.success(hasLogo ? "Logo replaced successfully." : "Logo uploaded successfully.");
+      toast.success(
+        hasLogo
+          ? t("businessProfilePage.logo.messages.replaced")
+          : t("businessProfilePage.logo.messages.uploaded"),
+      );
     } catch {
-      toast.error("Failed to process the image.");
+      toast.error(t("businessProfilePage.logo.messages.processError"));
     } finally {
       setIsProcessing(false);
     }
@@ -81,7 +87,7 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
   const handleRemove = () => {
     removeLogo();
     onLogoChange?.(null);
-    toast.success("Logo removed.");
+    toast.success(t("businessProfilePage.logo.messages.removed"));
   };
 
   // ── Drag-and-drop handlers ──────────────────────────────────────────────
@@ -101,13 +107,15 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
 
   return (
     <div className="space-y-3">
-      <p className="text-sm font-medium text-foreground">Business Logo</p>
+      <p className="text-sm font-medium text-foreground">
+        {t("businessProfilePage.logo.title")}
+      </p>
 
       {/* Drop zone / preview */}
       <div
         role="button"
         tabIndex={0}
-        aria-label="Upload logo"
+        aria-label={t("businessProfilePage.logo.uploadAriaLabel")}
         onClick={() => !isProcessing && inputRef.current?.click()}
         onKeyDown={(e) => e.key === "Enter" && !isProcessing && inputRef.current?.click()}
         onDrop={handleDrop}
@@ -130,11 +138,11 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={logo}
-              alt="Business logo"
+              alt={t("businessProfilePage.logo.imageAlt")}
               className="max-h-24 max-w-[200px] rounded-xl object-contain shadow-sm"
             />
             <p className="text-[11px] text-muted-foreground">
-              Click or drag to replace
+              {t("businessProfilePage.logo.replaceHint")}
             </p>
           </div>
         ) : (
@@ -157,10 +165,10 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
               </svg>
             </div>
             <p className="text-sm font-medium text-[#5c4b3b]">
-              Upload a logo
+              {t("businessProfilePage.logo.uploadTitle")}
             </p>
             <p className="text-xs text-muted-foreground">
-              PNG, JPG, JPEG or WebP · max 2 MB
+              {t("businessProfilePage.logo.uploadDescription")}
             </p>
           </div>
         )}
@@ -206,7 +214,7 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
               d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
             />
           </svg>
-          Remove logo
+          {t("businessProfilePage.logo.remove")}
         </button>
       )}
     </div>

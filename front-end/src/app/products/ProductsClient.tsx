@@ -7,11 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ValidationField } from "@/components/ui/ValidationField";
 import {
-  validateName,
-  validateNumber,
-  validateRequired,
-} from "@/lib/validation";
-import {
   useCategoriesQuery,
   useCreateCategoryMutation,
   useCreateProductMutation,
@@ -19,6 +14,7 @@ import {
   useProductsQuery,
   useUpdateProductMutation,
 } from "@/hooks/useInventoryQueries";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type ProductsClientProps = {
   name: string;
@@ -26,6 +22,7 @@ type ProductsClientProps = {
 };
 
 const ProductsClient = ({ name, image }: ProductsClientProps) => {
+  const { t, formatCurrency } = useI18n();
   const { data, isLoading, isError } = useProductsQuery();
   const { data: categories } = useCategoriesQuery();
   const createCategory = useCreateCategoryMutation();
@@ -72,15 +69,35 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
 
   const toNumber = (value: string) => (value ? Number(value) : undefined);
 
+  const validateProductNameField = (value: string) => {
+    if (!value.trim()) return t("validation.required");
+    if (
+      !/^[\p{L}\p{N}\s\-&().,/'"]+$/u.test(value) ||
+      value.trim().length < 2
+    ) {
+      return t("productsPage.validation.invalidName");
+    }
+    return "";
+  };
+
+  const validateRequiredField = (value: string) =>
+    value.trim() ? "" : t("validation.required");
+
+  const validateNumberField = (value: string) => {
+    if (!value.trim()) return t("validation.required");
+    if (!/^\d+(\.\d+)?$/.test(value)) return t("validation.validNumber");
+    return "";
+  };
+
   const validateAll = () => {
     return (
-      !validateName(form.name) &&
-      !validateRequired(form.sku) &&
-      !validateNumber(form.price) &&
-      !validateNumber(form.cost, true) &&
-      !validateNumber(form.gst_rate, true) &&
-      !validateNumber(form.stock_on_hand, true) &&
-      !validateNumber(form.reorder_level, true)
+      !validateProductNameField(form.name) &&
+      !validateRequiredField(form.sku) &&
+      !validateNumberField(form.price) &&
+      !validateNumberField(form.cost) &&
+      !validateNumberField(form.gst_rate) &&
+      !validateNumberField(form.stock_on_hand) &&
+      !validateNumberField(form.reorder_level)
     );
   };
 
@@ -154,65 +171,176 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title="Products"
-      subtitle="Manage SKUs, pricing, and stock levels in one place."
+      title={t("productsPage.title")}
+      subtitle={t("productsPage.subtitle")}
     >
       <div className="mx-auto w-full max-w-6xl space-y-6">
         <div className="app-page-intro">
-          <p className="app-kicker">Catalog</p>
+          <p className="app-kicker">{t("productsPage.kicker")}</p>
           <h1 className="text-3xl font-black tracking-tight text-foreground">
-            Products
+            {t("productsPage.title")}
           </h1>
-          <p className="app-lead">
-            Add products, maintain stock thresholds, and keep pricing current
-            without bouncing between screens.
-          </p>
+          <p className="app-lead">{t("productsPage.lead")}</p>
         </div>
 
         <section className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
           <div className="app-panel rounded-3xl p-6">
-            <h2 className="text-lg font-semibold text-foreground">Add product</h2>
+            <h2 className="text-lg font-semibold text-foreground">
+              {t("productsPage.addTitle")}
+            </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Create clean SKUs with category, pricing, and reorder details in
-              one step.
+              {t("productsPage.addDescription")}
             </p>
             <form className="mt-5 grid gap-4" onSubmit={handleCreate} noValidate>
-              <ValidationField id="name" label="Product name" value={form.name} onChange={(value) => setForm((prev) => ({ ...prev, name: value }))} validate={validateName} required placeholder="Product name" success />
-              <ValidationField id="sku" label="SKU" value={form.sku} onChange={(value) => setForm((prev) => ({ ...prev, sku: value }))} validate={validateRequired} required placeholder="SKU" success />
-              <ValidationField id="barcode" label="Barcode" value={form.barcode} onChange={(value) => setForm((prev) => ({ ...prev, barcode: value }))} validate={() => ""} placeholder="Barcode" success />
-              <ValidationField id="price" label="Selling price" type="number" value={form.price} onChange={(value) => setForm((prev) => ({ ...prev, price: value }))} validate={validateNumber} required placeholder="0" success />
-              <ValidationField id="cost" label="Cost price" type="number" value={form.cost} onChange={(value) => setForm((prev) => ({ ...prev, cost: value }))} validate={(v) => validateNumber(v, true)} placeholder="0" success />
-              <ValidationField id="gst" label="GST rate" type="number" value={form.gst_rate} onChange={(value) => setForm((prev) => ({ ...prev, gst_rate: value }))} validate={(v) => validateNumber(v, true)} placeholder="18" success />
+              <ValidationField
+                id="name"
+                label={t("productsPage.fields.name")}
+                value={form.name}
+                onChange={(value) => setForm((prev) => ({ ...prev, name: value }))}
+                validate={validateProductNameField}
+                required
+                placeholder={t("productsPage.placeholders.name")}
+                success
+              />
+              <ValidationField
+                id="sku"
+                label={t("productsPage.fields.sku")}
+                value={form.sku}
+                onChange={(value) => setForm((prev) => ({ ...prev, sku: value }))}
+                validate={validateRequiredField}
+                required
+                placeholder={t("productsPage.placeholders.sku")}
+                success
+              />
+              <ValidationField
+                id="barcode"
+                label={t("productsPage.fields.barcode")}
+                value={form.barcode}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, barcode: value }))
+                }
+                validate={() => ""}
+                placeholder={t("productsPage.placeholders.barcode")}
+                success
+              />
+              <ValidationField
+                id="price"
+                label={t("productsPage.fields.sellingPrice")}
+                type="number"
+                value={form.price}
+                onChange={(value) => setForm((prev) => ({ ...prev, price: value }))}
+                validate={validateNumberField}
+                required
+                placeholder={t("productsPage.placeholders.zero")}
+                success
+              />
+              <ValidationField
+                id="cost"
+                label={t("productsPage.fields.costPrice")}
+                type="number"
+                value={form.cost}
+                onChange={(value) => setForm((prev) => ({ ...prev, cost: value }))}
+                validate={validateNumberField}
+                placeholder={t("productsPage.placeholders.zero")}
+                success
+              />
+              <ValidationField
+                id="gst"
+                label={t("productsPage.fields.gstRate")}
+                type="number"
+                value={form.gst_rate}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, gst_rate: value }))
+                }
+                validate={validateNumberField}
+                placeholder={t("productsPage.placeholders.gstRate")}
+                success
+              />
               <div className="grid gap-4 sm:grid-cols-2">
-                <ValidationField id="stock" label="Opening stock" type="number" value={form.stock_on_hand} onChange={(value) => setForm((prev) => ({ ...prev, stock_on_hand: value }))} validate={(v) => validateNumber(v, true)} placeholder="0" success />
-                <ValidationField id="reorder" label="Reorder level" type="number" value={form.reorder_level} onChange={(value) => setForm((prev) => ({ ...prev, reorder_level: value }))} validate={(v) => validateNumber(v, true)} placeholder="0" success />
+                <ValidationField
+                  id="stock"
+                  label={t("productsPage.fields.openingStock")}
+                  type="number"
+                  value={form.stock_on_hand}
+                  onChange={(value) =>
+                    setForm((prev) => ({ ...prev, stock_on_hand: value }))
+                  }
+                  validate={validateNumberField}
+                  placeholder={t("productsPage.placeholders.zero")}
+                  success
+                />
+                <ValidationField
+                  id="reorder"
+                  label={t("productsPage.fields.reorderLevel")}
+                  type="number"
+                  value={form.reorder_level}
+                  onChange={(value) =>
+                    setForm((prev) => ({ ...prev, reorder_level: value }))
+                  }
+                  validate={validateNumberField}
+                  placeholder={t("productsPage.placeholders.zero")}
+                  success
+                />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="category" className="text-foreground">Category</Label>
-                <select id="category" className="app-field h-10 px-3 text-sm text-foreground" value={form.category_id} onChange={(event) => setForm((prev) => ({ ...prev, category_id: event.target.value }))}>
-                  <option value="">Uncategorized</option>
+                <Label htmlFor="category" className="text-foreground">
+                  {t("productsPage.fields.category")}
+                </Label>
+                <select
+                  id="category"
+                  className="app-field h-10 px-3 text-sm text-foreground"
+                  value={form.category_id}
+                  onChange={(event) =>
+                    setForm((prev) => ({ ...prev, category_id: event.target.value }))
+                  }
+                >
+                  <option value="">{t("productsPage.uncategorized")}</option>
                   {categoryOptions.map((category) => (
-                    <option key={category.id} value={category.id}>{category.name}</option>
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
                   ))}
                 </select>
               </div>
               <div className="app-panel-muted rounded-2xl p-4">
-                <Label htmlFor="new-category" className="text-foreground">Add new category</Label>
+                <Label htmlFor="new-category" className="text-foreground">
+                  {t("productsPage.fields.newCategory")}
+                </Label>
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Input id="new-category" value={newCategoryName} onChange={(event) => setNewCategoryName(event.target.value)} placeholder="e.g. Electronics" />
-                  <Button type="button" variant="outline" onClick={handleCreateCategory} disabled={createCategory.isPending}>
-                    {createCategory.isPending ? "Adding..." : "Add"}
+                  <Input
+                    id="new-category"
+                    value={newCategoryName}
+                    onChange={(event) => setNewCategoryName(event.target.value)}
+                    placeholder={t("productsPage.placeholders.categoryName")}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCreateCategory}
+                    disabled={createCategory.isPending}
+                  >
+                    {createCategory.isPending
+                      ? t("productsPage.actions.adding")
+                      : t("productsPage.actions.addCategory")}
                   </Button>
                 </div>
                 {createCategory.isError && (
-                  <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">Unable to create category.</p>
+                  <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                    {t("productsPage.createCategoryError")}
+                  </p>
                 )}
               </div>
-              <Button type="submit" disabled={isMutating || (formTouched && !validateAll())} aria-disabled={isMutating || (formTouched && !validateAll())}>
-                Add product
+              <Button
+                type="submit"
+                disabled={isMutating || (formTouched && !validateAll())}
+                aria-disabled={isMutating || (formTouched && !validateAll())}
+              >
+                {t("productsPage.actions.add")}
               </Button>
               {createProduct.isError && (
-                <p className="text-sm text-amber-700 dark:text-amber-300">Unable to save product right now.</p>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  {t("productsPage.saveError")}
+                </p>
               )}
             </form>
           </div>
@@ -220,17 +348,31 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
           <div className="app-panel rounded-3xl p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-foreground">Product list</h2>
+                <h2 className="text-lg font-semibold text-foreground">
+                  {t("productsPage.listTitle")}
+                </h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Update stock and pricing from a single, scan-friendly list.
+                  {t("productsPage.listDescription")}
                 </p>
               </div>
-              {!isLoading && !isError && products.length > 0 ? <span className="app-chip">{products.length} items</span> : null}
+              {!isLoading && !isError && products.length > 0 ? (
+                <span className="app-chip">
+                  {t("productsPage.count", { count: products.length })}
+                </span>
+              ) : null}
             </div>
             <div className="mt-5">
               {isLoading && <div className="app-loading-skeleton h-64 w-full" />}
-              {isError && <p className="text-sm text-amber-700 dark:text-amber-300">Failed to load products.</p>}
-              {!isLoading && !isError && products.length === 0 && <div className="app-empty-state text-sm">No products yet.</div>}
+              {isError && (
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  {t("productsPage.loadError")}
+                </p>
+              )}
+              {!isLoading && !isError && products.length === 0 && (
+                <div className="app-empty-state text-sm">
+                  {t("productsPage.empty")}
+                </div>
+              )}
               {!isLoading && !isError && products.length > 0 && (
                 <div className="grid gap-3">
                   {products.map((product) => (
@@ -238,42 +380,153 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
                       {editingId === product.id ? (
                         <form className="grid gap-3" onSubmit={handleUpdate}>
                           <div className="grid gap-3 sm:grid-cols-2">
-                            <div className="grid gap-2"><Label>Name</Label><Input value={editingForm.name} onChange={(event) => setEditingForm((prev) => ({ ...prev, name: event.target.value }))} required /></div>
-                            <div className="grid gap-2"><Label>SKU</Label><Input value={editingForm.sku} onChange={(event) => setEditingForm((prev) => ({ ...prev, sku: event.target.value }))} required /></div>
-                            <div className="grid gap-2"><Label>Price</Label><Input type="number" value={editingForm.price} onChange={(event) => setEditingForm((prev) => ({ ...prev, price: event.target.value }))} required /></div>
-                            <div className="grid gap-2"><Label>Stock</Label><Input type="number" value={editingForm.stock_on_hand} onChange={(event) => setEditingForm((prev) => ({ ...prev, stock_on_hand: event.target.value }))} /></div>
-                            <div className="grid gap-2"><Label>Reorder level</Label><Input type="number" value={editingForm.reorder_level} onChange={(event) => setEditingForm((prev) => ({ ...prev, reorder_level: event.target.value }))} /></div>
                             <div className="grid gap-2">
-                              <Label>Category</Label>
-                              <select className="app-field h-10 px-3 text-sm text-foreground" value={editingForm.category_id} onChange={(event) => setEditingForm((prev) => ({ ...prev, category_id: event.target.value }))}>
-                                <option value="">Uncategorized</option>
+                              <Label>{t("productsPage.fields.name")}</Label>
+                              <Input
+                                value={editingForm.name}
+                                onChange={(event) =>
+                                  setEditingForm((prev) => ({
+                                    ...prev,
+                                    name: event.target.value,
+                                  }))
+                                }
+                                required
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label>{t("productsPage.fields.sku")}</Label>
+                              <Input
+                                value={editingForm.sku}
+                                onChange={(event) =>
+                                  setEditingForm((prev) => ({
+                                    ...prev,
+                                    sku: event.target.value,
+                                  }))
+                                }
+                                required
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label>{t("productsPage.fields.sellingPrice")}</Label>
+                              <Input
+                                type="number"
+                                value={editingForm.price}
+                                onChange={(event) =>
+                                  setEditingForm((prev) => ({
+                                    ...prev,
+                                    price: event.target.value,
+                                  }))
+                                }
+                                required
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label>{t("productsPage.fields.openingStock")}</Label>
+                              <Input
+                                type="number"
+                                value={editingForm.stock_on_hand}
+                                onChange={(event) =>
+                                  setEditingForm((prev) => ({
+                                    ...prev,
+                                    stock_on_hand: event.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label>{t("productsPage.fields.reorderLevel")}</Label>
+                              <Input
+                                type="number"
+                                value={editingForm.reorder_level}
+                                onChange={(event) =>
+                                  setEditingForm((prev) => ({
+                                    ...prev,
+                                    reorder_level: event.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                            <div className="grid gap-2">
+                              <Label>{t("productsPage.fields.category")}</Label>
+                              <select
+                                className="app-field h-10 px-3 text-sm text-foreground"
+                                value={editingForm.category_id}
+                                onChange={(event) =>
+                                  setEditingForm((prev) => ({
+                                    ...prev,
+                                    category_id: event.target.value,
+                                  }))
+                                }
+                              >
+                                <option value="">
+                                  {t("productsPage.uncategorized")}
+                                </option>
                                 {categoryOptions.map((category) => (
-                                  <option key={category.id} value={category.id}>{category.name}</option>
+                                  <option key={category.id} value={category.id}>
+                                    {category.name}
+                                  </option>
                                 ))}
                               </select>
                             </div>
                           </div>
                           <div className="flex flex-wrap gap-2">
-                            <Button type="submit" disabled={isMutating}>Save</Button>
-                            <Button type="button" variant="outline" onClick={() => setEditingId(null)}>Cancel</Button>
+                            <Button type="submit" disabled={isMutating}>
+                              {t("productsPage.actions.save")}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setEditingId(null)}
+                            >
+                              {t("productsPage.actions.cancel")}
+                            </Button>
                           </div>
                         </form>
                       ) : (
                         <div className="flex flex-wrap items-center justify-between gap-4">
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <p className="text-base font-semibold text-foreground">{product.name}</p>
+                              <p className="text-base font-semibold text-foreground">
+                                {product.name}
+                              </p>
                               <span className="app-chip">{product.sku}</span>
                             </div>
                             <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                              <span className="app-chip">Category: {product.category?.name ?? "Uncategorized"}</span>
-                              <span className="app-chip">Stock: {product.stock_on_hand}</span>
-                              <span className="app-chip">Price: Rs {Number(product.price).toFixed(2)}</span>
+                              <span className="app-chip">
+                                {t("productsPage.categoryLabel", {
+                                  name:
+                                    product.category?.name ??
+                                    t("productsPage.uncategorized"),
+                                })}
+                              </span>
+                              <span className="app-chip">
+                                {t("productsPage.stockLabel", {
+                                  count: product.stock_on_hand,
+                                })}
+                              </span>
+                              <span className="app-chip">
+                                {t("productsPage.priceLabel", {
+                                  amount: formatCurrency(Number(product.price)),
+                                })}
+                              </span>
                             </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
-                            <Button type="button" variant="outline" onClick={() => handleEdit(product.id)}>Edit</Button>
-                            <Button type="button" variant="destructive" onClick={() => deleteProduct.mutate(product.id)} disabled={deleteProduct.isPending}>Delete</Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => handleEdit(product.id)}
+                            >
+                              {t("productsPage.actions.edit")}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              onClick={() => deleteProduct.mutate(product.id)}
+                              disabled={deleteProduct.isPending}
+                            >
+                              {t("productsPage.actions.delete")}
+                            </Button>
                           </div>
                         </div>
                       )}

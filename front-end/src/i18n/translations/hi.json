@@ -20,8 +20,112 @@
     "currencyCode": "INR",
     "currencySymbol": "रु"
   },
+  "productsPage": {
+    "title": "प्रोडक्ट्स",
+    "subtitle": "एक ही जगह पर SKU, प्राइसिंग और स्टॉक लेवल संभालें।",
+    "kicker": "कैटलॉग",
+    "lead": "प्रोडक्ट जोड़ें, स्टॉक थ्रेशोल्ड बनाए रखें और बिना स्क्रीन बदलते प्राइसिंग अपडेट करें।",
+    "addTitle": "प्रोडक्ट जोड़ें",
+    "addDescription": "कैटेगरी, प्राइसिंग और रीऑर्डर डिटेल्स के साथ साफ SKU एक ही स्टेप में बनाएं।",
+    "listTitle": "प्रोडक्ट सूची",
+    "listDescription": "एक ही आसान सूची से स्टॉक और प्राइसिंग अपडेट करें।",
+    "count": "{count} आइटम",
+    "loadError": "प्रोडक्ट्स लोड नहीं हो सके।",
+    "empty": "अभी कोई प्रोडक्ट नहीं है।",
+    "saveError": "अभी प्रोडक्ट सेव नहीं हो सका।",
+    "createCategoryError": "कैटेगरी बनाई नहीं जा सकी।",
+    "uncategorized": "बिना कैटेगरी",
+    "categoryLabel": "कैटेगरी: {name}",
+    "stockLabel": "स्टॉक: {count}",
+    "priceLabel": "कीमत: {amount}",
+    "actions": {
+      "add": "प्रोडक्ट जोड़ें",
+      "addCategory": "जोड़ें",
+      "adding": "जोड़ा जा रहा है...",
+      "save": "सेव करें",
+      "edit": "एडिट करें",
+      "delete": "डिलीट करें",
+      "cancel": "रद्द करें"
+    },
+    "fields": {
+      "name": "प्रोडक्ट नाम",
+      "sku": "SKU",
+      "barcode": "बारकोड",
+      "sellingPrice": "बिक्री मूल्य",
+      "costPrice": "लागत मूल्य",
+      "gstRate": "GST रेट",
+      "openingStock": "शुरुआती स्टॉक",
+      "reorderLevel": "रीऑर्डर लेवल",
+      "category": "कैटेगरी",
+      "newCategory": "नई कैटेगरी जोड़ें"
+    },
+    "placeholders": {
+      "name": "प्रोडक्ट नाम",
+      "sku": "SKU",
+      "barcode": "बारकोड",
+      "zero": "0",
+      "gstRate": "18",
+      "categoryName": "जैसे इलेक्ट्रॉनिक्स"
+    },
+    "validation": {
+      "invalidName": "कृपया सही प्रोडक्ट नाम दर्ज करें"
+    }
+  },
+  "warehousesPage": {
+    "title": "वेयरहाउस",
+    "subtitle": "वेयरहाउस लोकेशन और उपलब्ध स्टॉक एक नज़र में देखें।",
+    "kicker": "स्टोरेज",
+    "lead": "वेयरहाउस लोकेशन और उपलब्ध स्टॉक एक नज़र में देखें।",
+    "createTitle": "वेयरहाउस बनाएं",
+    "createDescription": "इन्वेंटरी रखने से पहले स्टोरेज लोकेशन जोड़ें।",
+    "listTitle": "वेयरहाउस सूची",
+    "listDescription": "लोकेशन को व्यवस्थित रखें और स्टॉक मूवमेंट के लिए तैयार रखें।",
+    "loading": "वेयरहाउस लोड हो रहे हैं...",
+    "loadError": "वेयरहाउस लोड नहीं हो सके।",
+    "empty": "अभी कोई वेयरहाउस नहीं है।",
+    "createError": "अभी वेयरहाउस बनाया नहीं जा सका।",
+    "updateError": "अभी वेयरहाउस अपडेट नहीं हो सका।",
+    "deleteError": "अभी वेयरहाउस डिलीट नहीं हो सका।",
+    "created": "वेयरहाउस बन गया",
+    "updated": "वेयरहाउस अपडेट हो गया",
+    "deleted": "वेयरहाउस डिलीट हो गया",
+    "confirmDelete": "क्या इस वेयरहाउस को डिलीट करना है?",
+    "locationNotSet": "लोकेशन सेट नहीं है",
+    "actions": {
+      "add": "वेयरहाउस जोड़ें",
+      "viewStock": "स्टॉक देखें",
+      "save": "सेव करें",
+      "edit": "एडिट करें",
+      "delete": "डिलीट करें",
+      "cancel": "रद्द करें"
+    },
+    "fields": {
+      "name": "नाम",
+      "location": "लोकेशन"
+    },
+    "placeholders": {
+      "location": "शहर, बिल्डिंग या ज़ोन"
+    },
+    "validation": {
+      "nameMin": "वेयरहाउस का नाम कम से कम 2 अक्षरों का होना चाहिए।"
+    },
+    "detail": {
+      "titleFallback": "वेयरहाउस",
+      "backToWarehouses": "वेयरहाउस पर वापस जाएं",
+      "quickAdjustTitle": "त्वरित समायोजन",
+      "quickAdjustDescription": "इस वेयरहाउस के लिए सीधे स्टॉक बदलाव लागू करें।",
+      "stockTitle": "बचा हुआ स्टॉक",
+      "stockDescription": "इस वेयरहाउस के लिए प्रोडक्ट के अनुसार बाकी स्टॉक।",
+      "itemCount": "{count} आइटम",
+      "empty": "अभी यहां कोई आइटम स्टोर नहीं है।",
+      "stockLeft": "बचा स्टॉक: {count}",
+      "reorderLevel": "रीऑर्डर लेवल: {count}"
+    }
+  },
   "navigation": {
     "dashboard": "डैशबोर्ड",
+    "insights": "जानकारी",
+    "assistant": "सहायक",
     "products": "प्रोडक्ट्स",
     "inventory": "इन्वेंटरी",
     "warehouses": "वेयरहाउस",
@@ -294,6 +398,12 @@
       "avgMargin": "औसत मार्जिन: {value}"
     },
     "salesForecast": {
+      "receiptsDescription": "मासिक बिक्री पूर्वानुमान भुगतान की गई बिक्री और इनवॉइस कलेक्शन की वास्तविक नकद प्राप्तियों का उपयोग करता है।",
+      "avgDailyReceipts": "औसत दैनिक प्राप्तियां",
+      "projectedNext30Days": "अगले 30 दिनों का अनुमान",
+      "trendVsLastPeriod": "पिछली अवधि के मुकाबले रुझान",
+      "actualReceipts": "वास्तविक प्राप्तियां",
+      "projectedReceipts": "अनुमानित प्राप्तियां",
       "kicker": "फोरकास्ट स्टूडियो",
       "title": "बिक्री पूर्वानुमान",
       "description": "चुनी गई अवधि के लिए ऐतिहासिक बिक्री बनाम अनुमानित चाल।",
@@ -412,6 +522,10 @@
       "next": "अगला"
     },
     "inventoryRisk": {
+      "critical": "गंभीर",
+      "warning": "चेतावनी",
+      "normal": "सामान्य",
+      "notAvailable": "उपलब्ध नहीं",
       "kicker": "स्टॉक वॉच",
       "title": "इन्वेंटरी जोखिम अलर्ट",
       "description": "वे प्रोडक्ट जिन्हें ध्यान की जरूरत है",
@@ -539,10 +653,448 @@
     "discountPercentage": "छूट ({{value}}%)",
     "total": "कुल"
   },
+  "invoiceHistory": {
+    "title": "इनवॉइस हिस्ट्री",
+    "subtitle": "पूरा हुए इनवॉइस उनके यूनिक इनवॉइस नंबर से खोजें।",
+    "kicker": "इनवॉइस",
+    "searchTitle": "इनवॉइस खोजें",
+    "searchDescription": "INV-0001 जैसा इनवॉइस नंबर लिखें।",
+    "searchPlaceholder": "इनवॉइस नंबर से खोजें",
+    "clear": "साफ करें",
+    "quickActions": "क्विक एक्शन",
+    "resultsTitle": "परिणाम",
+    "resultsShown": "{count} दिखाए गए",
+    "loading": "इनवॉइस लोड हो रहे हैं...",
+    "loadError": "इनवॉइस लोड नहीं हो सके।",
+    "empty": "कोई इनवॉइस नहीं मिला।",
+    "updateStatus": "स्थिति अपडेट करें",
+    "view": "देखें",
+    "tableSearchPlaceholder": "इनवॉइस नंबर खोजें",
+    "columns": {
+      "invoiceNumber": "इनवॉइस नं.",
+      "customer": "ग्राहक",
+      "date": "तारीख",
+      "status": "स्थिति",
+      "total": "कुल",
+      "actions": "एक्शन"
+    },
+    "statusModalTitle": "इनवॉइस स्थिति अपडेट करें",
+    "statusModalDescription": "स्थिति बदलने को स्पष्ट रूप से सेव करें। आंशिक और पूरा भुगतान डेटाबेस में दर्ज किया जाएगा।",
+    "summary": {
+      "total": "कुल: {amount}",
+      "paid": "भुगतान: {amount}",
+      "balance": "बकाया: {amount}"
+    },
+    "paidAmount": "भुगतान राशि",
+    "paidAmountPlaceholder": "भुगतान राशि दर्ज करें",
+    "paidRemainingHint": "सेव करने पर बची हुई राशि को भुगतान के रूप में दर्ज किया जाएगा।",
+    "save": "सेव करें",
+    "quickActionsTitle": "क्विक एक्शन",
+    "quickActionsDescription": "सामान्य बिलिंग कार्य एक ही जगह से शुरू करें।",
+    "quickCreateInvoice": "इनवॉइस बनाएं",
+    "quickCreateClient": "ग्राहक बनाएं",
+    "quickEditProduct": "प्रोडक्ट संपादित करें",
+    "messages": {
+      "paidAmountPositive": "0 से अधिक भुगतान राशि दर्ज करें।",
+      "partialLessThanRemaining": "आंशिक भुगतान बची हुई राशि {amount} से कम होना चाहिए।",
+      "partialRecorded": "आंशिक भुगतान दर्ज कर दिया गया।",
+      "partialRecordError": "आंशिक भुगतान दर्ज नहीं हो सका।",
+      "markedPaid": "इनवॉइस को भुगतान किया हुआ चिन्हित किया गया।",
+      "statusUpdateError": "इनवॉइस स्थिति अपडेट नहीं हो सकी।",
+      "remainingPaymentRecorded": "बाकी भुगतान दर्ज कर दिया गया।",
+      "paymentRecordError": "भुगतान दर्ज नहीं हो सका।",
+      "markedStatus": "इनवॉइस को {status} चिन्हित किया गया।"
+    },
+    "status": {
+      "DRAFT": "ड्राफ्ट",
+      "SENT": "भेजा गया",
+      "PARTIALLY_PAID": "आंशिक भुगतान",
+      "PAID": "भुगतान हो चुका",
+      "OVERDUE": "देरी से",
+      "VOID": "रद्द"
+    }
+  },
+  "suppliersPage": {
+    "title": "सप्लायर्स",
+    "subtitle": "वेंडर कॉन्टैक्ट और खरीद साझेदारों को ट्रैक करें।",
+    "kicker": "सप्लाई चेन",
+    "formTitle": "सप्लायर जोड़ें",
+    "formDescription": "वेंडर कॉन्टैक्ट और पसंदीदा चैनल दर्ज करें।",
+    "fields": {
+      "name": "नाम",
+      "email": "ईमेल",
+      "phone": "फ़ोन",
+      "address": "पता"
+    },
+    "placeholders": {
+      "name": "सप्लायर का नाम",
+      "email": "vendor@example.com",
+      "phone": "+91 98765 43210",
+      "address": "शहर, राज्य"
+    },
+    "addSupplier": "सप्लायर जोड़ें",
+    "saveError": "अभी सप्लायर सेव नहीं हो सका।",
+    "listTitle": "सप्लायर सूची",
+    "listDescription": "अपने सबसे सक्रिय साझेदारों को पास रखें।",
+    "loading": "सप्लायर्स लोड हो रहे हैं...",
+    "loadError": "सप्लायर्स लोड नहीं हो सके।",
+    "empty": "अभी कोई सप्लायर नहीं है।",
+    "save": "सेव करें",
+    "edit": "संपादित करें",
+    "noEmail": "कोई ईमेल नहीं",
+    "noAddress": "कोई पता नहीं",
+    "noPhone": "कोई फ़ोन नहीं"
+  },
+  "purchasesPage": {
+    "title": "खरीद",
+    "subtitle": "आने वाला स्टॉक और सप्लायर इनवॉइस दर्ज करें।",
+    "kicker": "प्रोक्योरमेंट",
+    "formTitle": "खरीद दर्ज करें",
+    "editTitle": "खरीद संपादित करें",
+    "formDescription": "सप्लायर इनवॉइस और आने वाला स्टॉक जोड़ें।",
+    "editingNotice": "PO-{id} संपादित हो रहा है। स्टॉक अपडेट करने के लिए मात्रा समायोजित करें।",
+    "fields": {
+      "supplier": "सप्लायर",
+      "warehouse": "वेयरहाउस",
+      "purchaseDate": "खरीद तारीख",
+      "notes": "नोट्स",
+      "paymentStatus": "भुगतान स्थिति",
+      "amountPaid": "भुगतान राशि",
+      "paymentDate": "भुगतान तारीख",
+      "paymentMethod": "भुगतान तरीका"
+    },
+    "placeholders": {
+      "notes": "इनवॉइस रेफ़रेंस",
+      "amountPaid": "0"
+    },
+    "validation": {
+      "selectSupplier": "कृपया एक सप्लायर चुनें",
+      "selectWarehouse": "कृपया एक वेयरहाउस चुनें"
+    },
+    "directPurchase": "सीधी खरीद",
+    "defaultStock": "डिफ़ॉल्ट स्टॉक",
+    "selectMethod": "तरीका चुनें",
+    "optional": "वैकल्पिक",
+    "lineItems": {
+      "title": "लाइन आइटम",
+      "addItem": "आइटम जोड़ें",
+      "fixTitle": "नीचे दिए गए बिंदु ठीक करें:",
+      "selectProduct": "प्रोडक्ट चुनें",
+      "removeItem": "आइटम हटाएं",
+      "fields": {
+        "product": "प्रोडक्ट",
+        "quantity": "मात्रा",
+        "unitCost": "यूनिट लागत",
+        "taxRate": "टैक्स रेट"
+      },
+      "errors": {
+        "product": "एक प्रोडक्ट चुनें।",
+        "quantity": "मात्रा 0 से अधिक होनी चाहिए।",
+        "unitCost": "यूनिट लागत 0 से अधिक होनी चाहिए।",
+        "taxRate": "टैक्स रेट 0 या उससे अधिक होना चाहिए।"
+      },
+      "summary": {
+        "product": "हर लाइन आइटम के लिए एक प्रोडक्ट चुनें।",
+        "quantity": "सुनिश्चित करें कि मात्राएं 0 से अधिक मान्य संख्याएं हों।",
+        "unitCost": "हर आइटम के लिए 0 से अधिक मान्य यूनिट लागत दर्ज करें।",
+        "taxRate": "जहां दिया गया हो, टैक्स रेट 0 या उससे अधिक होना चाहिए।"
+      }
+    },
+    "savePurchase": "खरीद सेव करें",
+    "updatePurchase": "खरीद अपडेट करें",
+    "cancelEdit": "संपादन रद्द करें",
+    "saveError": "अभी खरीद सेव नहीं हो सकी।",
+    "listTitle": "हाल की खरीद",
+    "listDescription": "नवीनतम सप्लायर इनवॉइस और आने वाला स्टॉक।",
+    "loading": "खरीद लोड हो रही है...",
+    "loadError": "खरीद लोड नहीं हो सकी।",
+    "empty": "अभी कोई खरीद नहीं है।",
+    "purchaseCode": "PO-{id}",
+    "direct": "सीधा",
+    "itemsCount": "आइटम: {count}",
+    "warehouseName": "वेयरहाउस: {name}",
+    "totals": {
+      "total": "कुल {amount}",
+      "paid": "भुगतान {amount}",
+      "pending": "बकाया {amount}"
+    },
+    "edit": "संपादित करें",
+    "supplierForm": {
+      "saveError": "अभी सप्लायर बनाया नहीं जा सका।",
+      "errors": {
+        "name": "सप्लायर का नाम कम से कम 2 अक्षरों का होना चाहिए।",
+        "phone": "फ़ोन नंबर कम से कम 6 अक्षरों का होना चाहिए।"
+      }
+    }
+  },
+  "salesPage": {
+    "title": "बिक्री",
+    "subtitle": "जारी किए गए इनवॉइस और प्राप्त राजस्व को ट्रैक करें।",
+    "kicker": "बिलिंग",
+    "formTitle": "बिक्री बनाएं",
+    "formDescription": "ग्राहक इनवॉइस और बाहर जाने वाला स्टॉक दर्ज करें।",
+    "fields": {
+      "customer": "ग्राहक",
+      "warehouse": "वेयरहाउस",
+      "saleDate": "बिक्री तारीख",
+      "notes": "नोट्स",
+      "paymentStatus": "भुगतान स्थिति",
+      "amountPaid": "भुगतान राशि",
+      "paymentDate": "भुगतान तारीख",
+      "paymentMethod": "भुगतान तरीका",
+      "status": "स्थिति"
+    },
+    "placeholders": {
+      "notes": "इनवॉइस रेफ़रेंस",
+      "amountPaid": "0"
+    },
+    "defaultStock": "डिफ़ॉल्ट स्टॉक",
+    "selectMethod": "तरीका चुनें",
+    "optional": "वैकल्पिक",
+    "saveSale": "बिक्री सेव करें",
+    "save": "सेव करें",
+    "edit": "संपादित करें",
+    "recentTitle": "हाल की बिक्री",
+    "recentDescription": "स्थिति अपडेट करें और निपटे हुए इनवॉइस ट्रैक करें।",
+    "loading": "बिक्री लोड हो रही है...",
+    "loadError": "बिक्री लोड नहीं हो सकी।",
+    "empty": "अभी कोई बिक्री नहीं है।",
+    "invoiceCode": "INV-{id}",
+    "itemsCount": "आइटम: {count}",
+    "totals": {
+      "total": "कुल {amount}",
+      "paid": "भुगतान {amount}",
+      "pending": "बकाया {amount}"
+    },
+    "status": {
+      "DRAFT": "ड्राफ्ट",
+      "COMPLETED": "पूर्ण",
+      "VOID": "रद्द"
+    },
+    "customer": {
+      "quickAdd": "क्विक ऐड",
+      "addTitle": "ग्राहक जोड़ें",
+      "addDescription": "इस स्क्रीन से बाहर जाए बिना ग्राहक बनाएं।",
+      "save": "ग्राहक सेव करें",
+      "walkIn": "वॉक-इन ग्राहक",
+      "fields": {
+        "name": "नाम",
+        "email": "ईमेल",
+        "phone": "फ़ोन",
+        "address": "पता"
+      },
+      "errors": {
+        "name": "ग्राहक का नाम कम से कम 2 अक्षरों का होना चाहिए।",
+        "phone": "फ़ोन नंबर कम से कम 6 अक्षरों का होना चाहिए।"
+      }
+    },
+    "lineItems": {
+      "title": "लाइन आइटम",
+      "addItem": "आइटम जोड़ें",
+      "fixTitle": "नीचे दिए गए बिंदु ठीक करें:",
+      "selectProduct": "प्रोडक्ट चुनें",
+      "removeItem": "आइटम हटाएं",
+      "fields": {
+        "product": "प्रोडक्ट",
+        "quantity": "मात्रा",
+        "unitPrice": "यूनिट कीमत",
+        "taxRate": "टैक्स रेट"
+      },
+      "errors": {
+        "product": "एक प्रोडक्ट चुनें।",
+        "quantity": "मात्रा 0 से अधिक होनी चाहिए।",
+        "unitPrice": "यूनिट कीमत 0 से अधिक होनी चाहिए।",
+        "taxRate": "टैक्स रेट 0 या उससे अधिक होना चाहिए।"
+      },
+      "summary": {
+        "product": "हर लाइन आइटम के लिए एक प्रोडक्ट चुनें।",
+        "quantity": "सुनिश्चित करें कि मात्राएं 0 से अधिक मान्य संख्याएं हों।",
+        "unitPrice": "हर आइटम के लिए 0 से अधिक मान्य यूनिट कीमत दर्ज करें।",
+        "taxRate": "जहां दिया गया हो, टैक्स रेट 0 या उससे अधिक होना चाहिए।"
+      }
+    },
+    "messages": {
+      "saveError": "अभी बिक्री सेव नहीं हो सकी।",
+      "createCustomerError": "अभी ग्राहक बनाया नहीं जा सका।",
+      "updateError": "अभी बिक्री अपडेट नहीं हो सकी।",
+      "deleteError": "अभी बिक्री हटाई नहीं जा सकी।",
+      "deleteConfirm": "क्या यह बिक्री हटानी है? प्रोडक्ट स्टॉक वापस जोड़ दिया जाएगा।"
+    }
+  },
+  "templatesPage": {
+    "title": "टेम्पलेट्स",
+    "subtitle": "इनवॉइस सेक्शन, स्टाइलिंग और दोबारा इस्तेमाल होने वाले लेआउट को कस्टमाइज़ करें।",
+    "kicker": "टेम्पलेट स्टूडियो",
+    "heading": "इनवॉइस टेम्पलेट्स",
+    "description": "बिज़नेस टाइप चुनें, सेक्शन सक्षम करें, और बदलावों का लाइव प्रीव्यू देखें।",
+    "copySuffix": "कॉपी",
+    "live": "लाइव",
+    "mockData": "मॉक डेटा",
+    "loading": "टेम्पलेट्स लोड हो रहे हैं...",
+    "savedTemplates": "मेरे सेव किए गए टेम्पलेट्स",
+    "featured": "फ़ीचर्ड",
+    "allTemplates": "सभी टेम्पलेट्स",
+    "active": "सक्रिय",
+    "updated": "अपडेट किया गया {value}",
+    "previewTitle": "टेम्पलेट प्रीव्यू",
+    "previewSettings": "प्रीव्यू सेटिंग्स",
+    "previewSections": "सेक्शन",
+    "searchPlaceholder": "सेव किए गए टेम्पलेट खोजें",
+    "sections": {
+      "businessType": "1. बिज़नेस टाइप",
+      "customize": "2. सेक्शन कस्टमाइज़ करें",
+      "styling": "3. टेम्पलेट स्टाइलिंग",
+      "livePreview": "लाइव प्रीव्यू",
+      "selection": "4. टेम्पलेट चयन"
+    },
+    "filters": {
+      "allTemplates": "सभी टेम्पलेट्स",
+      "currentBase": "वर्तमान बेस"
+    },
+    "actions": {
+      "remove": "हटाएं",
+      "moveUp": "ऊपर ले जाएं",
+      "moveDown": "नीचे ले जाएं",
+      "up": "ऊपर",
+      "down": "नीचे",
+      "addSections": "सेक्शन जोड़ें",
+      "themeColor": "थीम रंग",
+      "backgroundColor": "बैकग्राउंड रंग",
+      "textColor": "टेक्स्ट रंग",
+      "fontFamily": "फ़ॉन्ट परिवार",
+      "fontSize": "फ़ॉन्ट आकार ({value}px)",
+      "sectionPadding": "सेक्शन पैडिंग ({value}px)",
+      "sectionMargin": "सेक्शन मार्जिन ({value}px)",
+      "borderRadius": "बॉर्डर रेडियस ({value}px)",
+      "sectionWidth": "सेक्शन चौड़ाई",
+      "widthContained": "कंटेन्ड",
+      "widthFull": "पूरी चौड़ाई",
+      "backgroundImage": "बैकग्राउंड इमेज",
+      "removeBackgroundImage": "बैकग्राउंड इमेज हटाएं",
+      "apply": "लागू करें",
+      "showLogo": "लोगो दिखाएं",
+      "saving": "सेव हो रहा है...",
+      "saveSettings": "सेटिंग्स सेव करें",
+      "savingTemplate": "टेम्पलेट सेव हो रहा है...",
+      "saveAsTemplate": "टेम्पलेट के रूप में सेव करें",
+      "resetSection": "सेक्शन रीसेट करें",
+      "resetAll": "सब रीसेट करें",
+      "saveDesign": "डिज़ाइन सेव करें",
+      "loadDesign": "डिज़ाइन लोड करें",
+      "saveCurrent": "वर्तमान सेव करें",
+      "applyTemplate": "लागू करें",
+      "update": "अपडेट करें",
+      "rename": "नाम बदलें",
+      "preview": "प्रीव्यू",
+      "useTemplate": "टेम्पलेट उपयोग करें",
+      "downloadPdf": "PDF डाउनलोड करें",
+      "close": "बंद करें"
+    },
+    "prompts": {
+      "saveName": "अपने सेव किए गए टेम्पलेट के लिए नाम दर्ज करें",
+      "renameName": "सेव किए गए टेम्पलेट का नाम बदलें",
+      "deleteConfirm": "क्या इस सेव किए गए टेम्पलेट को हटाना है?"
+    },
+    "empty": {
+      "filtered": "आपकी खोज/फ़िल्टर से मेल खाने वाला कोई सेव टेम्पलेट नहीं मिला।",
+      "none": "अभी कोई सेव टेम्पलेट नहीं है। एक बनाने के लिए अपनी वर्तमान सेटअप सेव करें।"
+    },
+    "toasts": {
+      "settingsSaved": "टेम्पलेट सेटिंग्स सेव हो गईं",
+      "settingsSaveError": "टेम्पलेट सेटिंग्स सेव नहीं हो सकीं",
+      "savedCreated": "सेव किया गया टेम्पलेट बन गया",
+      "savedCreateError": "सेव किया गया टेम्पलेट नहीं बन सका",
+      "savedUpdated": "सेव किया गया टेम्पलेट अपडेट हो गया",
+      "savedUpdateError": "सेव किया गया टेम्पलेट अपडेट नहीं हो सका",
+      "savedDeleted": "सेव किया गया टेम्पलेट हट गया",
+      "savedDeleteError": "सेव किया गया टेम्पलेट हटाया नहीं जा सका",
+      "validThemeHex": "#2563eb जैसा मान्य 6-अंकों का हेक्स रंग उपयोग करें",
+      "validSectionHex": "#334155 जैसा मान्य 6-अंकों का हेक्स रंग उपयोग करें",
+      "previewPdfError": "प्रीव्यू से PDF नहीं बन सकी"
+    },
+    "aria": {
+      "dragToReorder": "क्रम बदलने के लिए खींचें",
+      "setThemeColor": "थीम रंग {color} सेट करें",
+      "setBackgroundColor": "बैकग्राउंड रंग {color} सेट करें",
+      "setTextColor": "टेक्स्ट रंग {color} सेट करें"
+    }
+  },
+  "businessProfilePage": {
+    "title": "बिजनेस प्रोफाइल",
+    "subtitle": "बिजनेस पहचान और इनवॉइस डिफ़ॉल्ट सेट करें।",
+    "kicker": "इनवॉइस ऑनबोर्डिंग",
+    "heading": "अपना बिलिंग प्रोफाइल सेट करें",
+    "steps": {
+      "businessType": "बिज़नेस टाइप",
+      "businessDetails": "बिज़नेस विवरण",
+      "template": "टेम्पलेट"
+    },
+    "stepTitles": {
+      "businessType": "चरण 1: बिज़नेस टाइप चुनें",
+      "businessProfile": "चरण 2: बिज़नेस प्रोफाइल",
+      "templateSelection": "चरण 3: टेम्पलेट चयन"
+    },
+    "enabledSections": "सक्षम सेक्शन",
+    "fields": {
+      "businessName": "बिज़नेस नाम",
+      "phone": "फ़ोन",
+      "address": "पता",
+      "email": "ईमेल",
+      "website": "वेबसाइट",
+      "taxId": "टैक्स आईडी / GSTIN",
+      "currency": "करेंसी"
+    },
+    "placeholders": {
+      "businessName": "बिज़नेस नाम",
+      "phone": "9876543210",
+      "address": "बिज़नेस पता",
+      "email": "name@example.com",
+      "website": "https://example.com",
+      "taxId": "GSTIN या टैक्स आईडी",
+      "currency": "INR"
+    },
+    "toggles": {
+      "showLogoOnInvoice": "इनवॉइस पर लोगो दिखाएं",
+      "showTaxNumber": "टैक्स नंबर दिखाएं",
+      "showPaymentQr": "पेमेंट QR दिखाएं"
+    },
+    "actions": {
+      "back": "वापस",
+      "next": "अगला",
+      "finish": "पूरा करें",
+      "saving": "सेव हो रहा है..."
+    },
+    "previewTitle": "प्रीव्यू",
+    "previewDescription": "यह चुने गए टेम्पलेट और बिज़नेस प्रोफाइल से मेल खाता है।",
+    "messages": {
+      "saved": "बिजनेस प्रोफाइल सेव हो गया",
+      "saveError": "बिजनेस प्रोफाइल सेव नहीं हो सका"
+    },
+    "logo": {
+      "title": "बिज़नेस लोगो",
+      "uploadAriaLabel": "लोगो अपलोड करें",
+      "imageAlt": "बिज़नेस लोगो",
+      "replaceHint": "बदलने के लिए क्लिक करें या खींचें",
+      "uploadTitle": "लोगो अपलोड करें",
+      "uploadDescription": "PNG, JPG, JPEG या WebP · अधिकतम 2 MB",
+      "remove": "लोगो हटाएं",
+      "messages": {
+        "fileType": "केवल PNG, JPG, JPEG और WebP फाइलें मान्य हैं।",
+        "fileSize": "फाइल का आकार 2 MB से अधिक नहीं होना चाहिए।",
+        "replaced": "लोगो सफलतापूर्वक बदल दिया गया।",
+        "uploaded": "लोगो सफलतापूर्वक अपलोड हो गया।",
+        "processError": "इमेज प्रोसेस नहीं हो सकी।",
+        "removed": "लोगो हटा दिया गया।"
+      }
+    }
+  },
   "validation": {
     "required": "यह फ़ील्ड आवश्यक है",
     "validDate": "मान्य तारीख चुनें",
     "validNumber": "मान्य संख्या दर्ज करें",
+    "validName": "कृपया मान्य नाम दर्ज करें (केवल अक्षर)",
+    "validEmail": "मान्य ईमेल पता दर्ज करें",
+    "validPhone": "मान्य फ़ोन नंबर दर्ज करें",
     "invoiceSelectCustomer": "ग्राहक चुनें।",
     "invoiceSelectWarehouse": "इन्वेंटरी सिंक के लिए वेयरहाउस चुनें।",
     "invoiceSelectProduct": "प्रोडक्ट चुनें।",

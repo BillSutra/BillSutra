@@ -11,6 +11,7 @@ import { UsersRound } from "lucide-react";
 import { formatCurrency, formatNumber } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const getSegmentColor = (segment: string): string => {
   switch (segment) {
@@ -25,28 +26,29 @@ const getSegmentColor = (segment: string): string => {
   }
 };
 
-const getSegmentLabel = (segment: string): string => {
-  switch (segment) {
-    case "PREMIUM":
-      return "Premium";
-    case "REGULAR":
-      return "Regular";
-    case "NEW_LOW":
-      return "New / Low";
-    default:
-      return "Unknown";
-  }
-};
-
 type CustomerClvEntry =
   DashboardCustomers["clvAnalytics"]["premiumCustomers"][number];
 
 const CustomerInsights = ({ className }: { className?: string }) => {
+  const { t } = useI18n();
   const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "customers"],
     queryFn: fetchDashboardCustomers,
     ...dashboardQueryDefaults,
   });
+
+  const getSegmentLabel = (segment: string) => {
+    switch (segment) {
+      case "PREMIUM":
+        return t("dashboard.customerInsights.premium");
+      case "REGULAR":
+        return t("dashboard.customerInsights.regular");
+      case "NEW_LOW":
+        return t("dashboard.customerInsights.newLow");
+      default:
+        return segment;
+    }
+  };
 
   return (
     <Card
@@ -59,15 +61,15 @@ const CustomerInsights = ({ className }: { className?: string }) => {
           </div>
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-[#8a6d56]">
-              Customer pulse
+              {t("dashboard.customerInsights.kicker")}
             </p>
             <CardTitle className="mt-1 text-lg text-[#1f1b16]">
-              Customer insights
+              {t("dashboard.customerInsights.title")}
             </CardTitle>
           </div>
         </div>
         <p className="text-sm text-[#8a6d56]">
-          Loyalty, churn risk, and visit cadence across your customer base.
+          {t("dashboard.customerInsights.description")}
         </p>
         <DashboardCardStatus
           isLoading={isLoading}
@@ -82,19 +84,22 @@ const CustomerInsights = ({ className }: { className?: string }) => {
           <div className="h-24 rounded-xl bg-[#fdf7f1] animate-pulse" />
         )}
         {isError && (
-          <p className="text-sm text-[#b45309]">Unable to load customers.</p>
+          <p className="text-sm text-[#b45309]">{t("dashboard.customerInsights.loadError")}</p>
         )}
         {!isLoading && !isError && data && (
           <>
             <div className="grid gap-3 sm:grid-cols-3">
               {[
                 {
-                  label: "Total Registered Customers",
+                  label: t("dashboard.customerInsights.totalRegisteredCustomers"),
                   value: formatNumber(data.totalRegisteredCustomers),
                 },
-                { label: "Top customers", value: formatNumber(data.topCustomers.length) },
                 {
-                  label: "Pending payments",
+                  label: t("dashboard.customerInsights.topCustomers"),
+                  value: formatNumber(data.topCustomers.length),
+                },
+                {
+                  label: t("dashboard.customerInsights.pendingPayments"),
                   value: formatCurrency(data.pendingPayments),
                 },
               ].map((item) => (
@@ -115,7 +120,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-2xl border border-green-200 bg-[linear-gradient(135deg,rgba(220,252,231,0.9),rgba(255,255,255,0.95))] p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-green-700 dark:text-green-400">
-                  Premium
+                  {t("dashboard.customerInsights.premium")}
                 </p>
                 <p className="mt-2 text-2xl font-semibold text-green-900 dark:text-green-100">
                   {formatNumber(data.clvAnalytics.premiumCount)}
@@ -123,7 +128,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
               </div>
               <div className="rounded-2xl border border-sky-200 bg-[linear-gradient(135deg,rgba(224,242,254,0.9),rgba(255,255,255,0.95))] p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-blue-700 dark:text-blue-400">
-                  Regular
+                  {t("dashboard.customerInsights.regular")}
                 </p>
                 <p className="mt-2 text-2xl font-semibold text-blue-900 dark:text-blue-100">
                   {formatNumber(data.clvAnalytics.regularCount)}
@@ -131,7 +136,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
               </div>
               <div className="rounded-2xl border border-[#e7ddd2] bg-[linear-gradient(135deg,rgba(255,249,242,0.96),rgba(255,255,255,0.95))] p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-gray-700 dark:text-gray-400">
-                  New / Low
+                  {t("dashboard.customerInsights.newLow")}
                 </p>
                 <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">
                   {formatNumber(data.clvAnalytics.newLowCount)}
@@ -141,11 +146,11 @@ const CustomerInsights = ({ className }: { className?: string }) => {
 
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                Top 5 customers by total purchase amount
+                {t("dashboard.customerInsights.topCustomersTitle")}
               </p>
               {data.topCustomers.length === 0 ? (
                 <p className="mt-3 text-sm text-[#8a6d56]">
-                  No customer data available yet.
+                  {t("dashboard.customerInsights.empty")}
                 </p>
               ) : (
                 <div className="mt-3 grid gap-2">
@@ -194,7 +199,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                           </div>
                           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-[#8a6d56]">
                             <p>
-                              Lifetime Value:{" "}
+                              {t("dashboard.customerInsights.lifetimeValue")}:{" "}
                               <span className="font-semibold text-[#1f1b16]">
                                 {clvData
                                   ? formatCurrency(clvData.lifetimeValue)
@@ -202,7 +207,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                               </span>
                             </p>
                             <p>
-                              Predicted (6mo):{" "}
+                              {t("dashboard.customerInsights.predictedSixMonths")}:{" "}
                               <span className="font-semibold text-[#1f1b16]">
                                 {clvData
                                   ? formatCurrency(clvData.predicatedFutureValue)
@@ -211,7 +216,9 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                             </p>
                           </div>
                           <p className="mt-1 text-xs text-[#8a6d56]">
-                            Orders: {formatNumber(customer.numberOfOrders)}
+                            {t("dashboard.customerInsights.orders", {
+                              count: formatNumber(customer.numberOfOrders),
+                            })}
                           </p>
                         </div>
                       </div>
@@ -224,12 +231,12 @@ const CustomerInsights = ({ className }: { className?: string }) => {
             {data.churnAnalytics && (
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                  Customers at risk
+                  {t("dashboard.customerInsights.customersAtRisk")}
                 </p>
                 <div className="mt-3 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-2xl border border-red-200 bg-[linear-gradient(135deg,rgba(254,226,226,0.9),rgba(255,255,255,0.95))] p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-red-700 dark:text-red-400">
-                      High Risk
+                      {t("dashboard.customerInsights.highRisk")}
                     </p>
                     <p className="mt-2 text-2xl font-semibold text-red-900 dark:text-red-100">
                       {formatNumber(data.churnAnalytics.highRiskCount)}
@@ -237,7 +244,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                   </div>
                   <div className="rounded-2xl border border-yellow-200 bg-[linear-gradient(135deg,rgba(254,249,195,0.78),rgba(255,255,255,0.95))] p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-yellow-700 dark:text-yellow-400">
-                      Medium Risk
+                      {t("dashboard.customerInsights.mediumRisk")}
                     </p>
                     <p className="mt-2 text-2xl font-semibold text-yellow-900 dark:text-yellow-100">
                       {formatNumber(data.churnAnalytics.mediumRiskCount)}
@@ -245,7 +252,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                   </div>
                   <div className="rounded-2xl border border-green-200 bg-[linear-gradient(135deg,rgba(220,252,231,0.9),rgba(255,255,255,0.95))] p-4">
                     <p className="text-xs uppercase tracking-[0.2em] text-green-700 dark:text-green-400">
-                      Low Risk
+                      {t("dashboard.customerInsights.lowRisk")}
                     </p>
                     <p className="mt-2 text-2xl font-semibold text-green-900 dark:text-green-100">
                       {formatNumber(data.churnAnalytics.lowRiskCount)}
@@ -274,13 +281,15 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                                     : "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
                               }`}
                             >
-                              {(customer.churnProbability * 100).toFixed(0)}% churn
-                              risk
+                              {t("dashboard.customerInsights.churnRisk", {
+                                value: (customer.churnProbability * 100).toFixed(0),
+                              })}
                             </span>
                           </div>
                           <p className="mt-1 text-xs text-[#8a6d56]">
-                            Last Purchase: {formatNumber(customer.daysSinceLastPurchase)} days
-                            ago
+                            {t("dashboard.customerInsights.lastPurchase", {
+                              count: formatNumber(customer.daysSinceLastPurchase),
+                            })}
                           </p>
                         </div>
                       </div>
@@ -292,13 +301,22 @@ const CustomerInsights = ({ className }: { className?: string }) => {
 
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                Daily / Weekly / Monthly customers
+                {t("dashboard.customerInsights.visitsTitle")}
               </p>
               <div className="mt-3 grid gap-2">
                 {[
-                  { label: "Daily", value: data.customerVisits.daily },
-                  { label: "Weekly", value: data.customerVisits.weekly },
-                  { label: "Monthly", value: data.customerVisits.monthly },
+                  {
+                    label: t("dashboard.customerInsights.daily"),
+                    value: data.customerVisits.daily,
+                  },
+                  {
+                    label: t("dashboard.customerInsights.weekly"),
+                    value: data.customerVisits.weekly,
+                  },
+                  {
+                    label: t("dashboard.customerInsights.monthly"),
+                    value: data.customerVisits.monthly,
+                  },
                 ].map((period) => (
                   <div
                     key={period.label}
@@ -308,9 +326,11 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                       {period.label}
                     </p>
                     <p className="text-xs text-[#8a6d56]">
-                      Registered: {formatNumber(period.value.registeredCustomers)} | Walk-in:{" "}
-                      {formatNumber(period.value.walkInCustomers)} | Total:{" "}
-                      {formatNumber(period.value.totalCustomers)}
+                      {t("dashboard.customerInsights.visitsSummary", {
+                        registered: formatNumber(period.value.registeredCustomers),
+                        walkIn: formatNumber(period.value.walkInCustomers),
+                        total: formatNumber(period.value.totalCustomers),
+                      })}
                     </p>
                   </div>
                 ))}

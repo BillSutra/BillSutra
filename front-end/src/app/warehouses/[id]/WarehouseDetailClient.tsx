@@ -9,13 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ValidationField } from "@/components/ui/ValidationField";
-import { validateNumber } from "@/lib/validation";
 import {
   useAdjustInventoryMutation,
   useInventoriesQuery,
   useProductsQuery,
   useWarehouseQuery,
 } from "@/hooks/useInventoryQueries";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type WarehouseDetailClientProps = {
   name: string;
@@ -28,6 +28,7 @@ const WarehouseDetailClient = ({
   image,
   warehouseId,
 }: WarehouseDetailClientProps) => {
+  const { t } = useI18n();
   const { data, isLoading, isError } = useWarehouseQuery(warehouseId);
   const {
     data: inventories,
@@ -73,10 +74,17 @@ const WarehouseDetailClient = ({
     return fallback;
   };
 
+  const validateQuantityChange = (value: string) => {
+    if (!value.trim()) return t("validation.required");
+    if (Number.isNaN(Number(value))) return t("validation.validNumber");
+    if (Number(value) === 0) return t("inventory.nonZeroQuantity");
+    return "";
+  };
+
   const validateAll = () => {
     return (
       form.product_id &&
-      !validateNumber(form.change, true) &&
+      !validateQuantityChange(form.change) &&
       form.change.trim() &&
       Number(form.change) !== 0
     );
@@ -102,17 +110,17 @@ const WarehouseDetailClient = ({
         note: form.note.trim() || undefined,
       });
 
-      toast.success("Inventory updated", {
-        description: `Change: ${form.change} units`,
+      toast.success(t("inventory.updateSuccess"), {
+        description: t("inventory.updateSuccessDescription", {
+          change: form.change,
+        }),
       });
 
       setForm({ product_id: "", change: "", reason: "ADJUSTMENT", note: "" });
       setFieldErrors({});
       setFormTouched(false);
     } catch (error) {
-      setServerError(
-        parseServerErrors(error, "Unable to adjust inventory right now."),
-      );
+      setServerError(parseServerErrors(error, t("inventory.updateError")));
     }
   };
 
@@ -120,24 +128,26 @@ const WarehouseDetailClient = ({
     <DashboardLayout
       name={name}
       image={image}
-      title={data?.name ?? "Warehouse"}
-      subtitle={data?.location ?? "Location not set"}
+      title={data?.name ?? t("warehousesPage.detail.titleFallback")}
+      subtitle={data?.location ?? t("warehousesPage.locationNotSet")}
     >
       <div className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-2">
           <Link href="/warehouses" className="text-sm text-primary">
-            ← Back to warehouses
+            {t("warehousesPage.detail.backToWarehouses")}
           </Link>
           <p className="max-w-2xl text-base text-muted-foreground">
-            {data?.location ?? "Location not set"}
+            {data?.location ?? t("warehousesPage.locationNotSet")}
           </p>
         </div>
 
         <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
           <div className="rounded-2xl border border-border bg-card p-6">
-            <h2 className="text-lg font-semibold">Quick adjust</h2>
+            <h2 className="text-lg font-semibold">
+              {t("warehousesPage.detail.quickAdjustTitle")}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Apply a stock change directly to this warehouse.
+              {t("warehousesPage.detail.quickAdjustDescription")}
             </p>
             <form
               className="mt-4 grid gap-4"
@@ -145,7 +155,7 @@ const WarehouseDetailClient = ({
               noValidate
             >
               <div className="grid gap-2">
-                <Label htmlFor="product_select">Product</Label>
+                <Label htmlFor="product_select">{t("inventory.fields.product")}</Label>
                 <select
                   id="product_select"
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -165,10 +175,10 @@ const WarehouseDetailClient = ({
                       : undefined
                   }
                 >
-                  <option value="">Select product</option>
+                  <option value="">{t("inventory.selectProduct")}</option>
                   {(products ?? []).map((product) => (
                     <option key={product.id} value={product.id}>
-                      {product.name} • {product.sku}
+                      {product.name} - {product.sku}
                     </option>
                   ))}
                 </select>
@@ -178,13 +188,13 @@ const WarehouseDetailClient = ({
                     className="text-xs text-destructive block"
                     role="alert"
                   >
-                    Please select an option
+                    {t("validation.selectOptionError")}
                   </span>
                 )}
               </div>
               <ValidationField
                 id="change"
-                label="Quantity change"
+                label={t("inventory.fields.quantityChange")}
                 type="number"
                 value={form.change}
                 onChange={(value) => {
@@ -192,19 +202,13 @@ const WarehouseDetailClient = ({
                   setFieldErrors((prev) => ({ ...prev, change: "" }));
                   setServerError(null);
                 }}
-                validate={(value) => {
-                  if (!value.trim()) return "This field is required";
-                  if (isNaN(Number(value))) return "Enter a valid number";
-                  if (Number(value) === 0)
-                    return "Enter a non-zero quantity change.";
-                  return "";
-                }}
+                validate={validateQuantityChange}
                 required
-                placeholder="Use negative values to remove stock"
+                placeholder={t("inventory.placeholders.quantityChange")}
                 success
               />
               <div className="grid gap-2">
-                <Label htmlFor="reason">Reason</Label>
+                <Label htmlFor="reason">{t("inventory.fields.reason")}</Label>
                 <select
                   id="reason"
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -216,22 +220,26 @@ const WarehouseDetailClient = ({
                     }))
                   }
                 >
-                  <option value="ADJUSTMENT">Adjustment</option>
-                  <option value="PURCHASE">Purchase</option>
-                  <option value="SALE">Sale</option>
-                  <option value="RETURN">Return</option>
-                  <option value="DAMAGE">Damage</option>
+                  <option value="ADJUSTMENT">
+                    {t("inventory.reasons.ADJUSTMENT")}
+                  </option>
+                  <option value="PURCHASE">
+                    {t("inventory.reasons.PURCHASE")}
+                  </option>
+                  <option value="SALE">{t("inventory.reasons.SALE")}</option>
+                  <option value="RETURN">{t("inventory.reasons.RETURN")}</option>
+                  <option value="DAMAGE">{t("inventory.reasons.DAMAGE")}</option>
                 </select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="note">Note</Label>
+                <Label htmlFor="note">{t("inventory.fields.note")}</Label>
                 <Input
                   id="note"
                   value={form.note}
                   onChange={(event) =>
                     setForm((prev) => ({ ...prev, note: event.target.value }))
                   }
-                  placeholder="Optional context"
+                  placeholder={t("inventory.placeholders.note")}
                 />
               </div>
               <Button
@@ -244,11 +252,11 @@ const WarehouseDetailClient = ({
                   adjustInventory.isPending || (formTouched && !validateAll())
                 }
               >
-                Apply adjustment
+                {t("inventory.applyAdjustment")}
               </Button>
               {(adjustInventory.isError || serverError) && (
                 <p className="text-sm text-destructive">
-                  {serverError ?? "Unable to adjust inventory right now."}
+                  {serverError ?? t("inventory.updateError")}
                 </p>
               )}
             </form>
@@ -257,23 +265,29 @@ const WarehouseDetailClient = ({
           <div className="rounded-2xl border border-border bg-card p-6">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold">Stock left</h2>
+                <h2 className="text-lg font-semibold">
+                  {t("warehousesPage.detail.stockTitle")}
+                </h2>
                 <p className="text-sm text-muted-foreground">
-                  Remaining stock by product for this warehouse.
+                  {t("warehousesPage.detail.stockDescription")}
                 </p>
               </div>
               <div className="text-sm text-muted-foreground">
-                {inventories ? `${stockItems.length} items` : ""}
+                {inventories
+                  ? t("warehousesPage.detail.itemCount", {
+                      count: stockItems.length,
+                    })
+                  : ""}
               </div>
             </div>
             {(isLoading || isLoadingInventory) && (
               <p className="text-sm text-muted-foreground">
-                Loading inventory...
+                {t("inventory.loading")}
               </p>
             )}
             {(isError || isInventoryError) && (
               <p className="text-sm text-destructive">
-                Failed to load inventory.
+                {t("inventory.loadError")}
               </p>
             )}
             {!isLoading &&
@@ -282,7 +296,7 @@ const WarehouseDetailClient = ({
               !isInventoryError &&
               (!inventories || stockItems.length === 0) && (
                 <p className="text-sm text-muted-foreground">
-                  No items stored here yet.
+                  {t("warehousesPage.detail.empty")}
                 </p>
               )}
             {!isLoading &&
@@ -299,14 +313,18 @@ const WarehouseDetailClient = ({
                     >
                       <div>
                         <p className="text-base font-semibold">
-                          {item.product.name} • {item.product.sku}
+                          {item.product.name} - {item.product.sku}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Stock left: {item.quantity}
+                          {t("warehousesPage.detail.stockLeft", {
+                            count: item.quantity,
+                          })}
                         </p>
                       </div>
                       <div className="text-sm text-muted-foreground">
-                        Reorder level: {item.product.reorder_level}
+                        {t("warehousesPage.detail.reorderLevel", {
+                          count: item.product.reorder_level,
+                        })}
                       </div>
                     </div>
                   ))}

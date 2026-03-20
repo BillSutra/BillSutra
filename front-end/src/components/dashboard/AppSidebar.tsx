@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
@@ -19,7 +20,38 @@ type AppSidebarProps = {
 const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
   const pathname = usePathname();
   const { logo } = useBusinessLogo();
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+
+  const translatedNavItems = useMemo(
+    () =>
+      dashboardNavItems.map((item) => ({
+        ...item,
+        label: t(item.labelKey),
+      })),
+    [language, t],
+  );
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+
+    const unresolvedKeys = translatedNavItems
+      .filter((item) => item.label === item.labelKey)
+      .map((item) => item.labelKey);
+
+    console.debug("[AppSidebar] current language:", language);
+    console.debug(
+      "[AppSidebar] resolved navigation labels:",
+      translatedNavItems.map(({ href, labelKey, label }) => ({
+        href,
+        labelKey,
+        label,
+      })),
+    );
+
+    if (unresolvedKeys.length > 0) {
+      console.warn("[AppSidebar] unresolved navigation keys:", unresolvedKeys);
+    }
+  }, [language, translatedNavItems]);
 
   return (
     <div className="flex h-full flex-col gap-6 p-3">
@@ -39,7 +71,7 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
       </div>
 
       <nav className="grid gap-1">
-        {dashboardNavItems.map((item) => {
+        {translatedNavItems.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
@@ -55,10 +87,10 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
                   ? "bg-primary/10 text-primary shadow-sm"
                   : "text-muted-foreground",
               )}
-              title={collapsed ? t(item.labelKey) : undefined}
+              title={collapsed ? item.label : undefined}
             >
               <Icon className="h-4 w-4" />
-              {!collapsed && <span className="truncate">{t(item.labelKey)}</span>}
+              {!collapsed && <span className="truncate">{item.label}</span>}
             </Link>
           );
         })}

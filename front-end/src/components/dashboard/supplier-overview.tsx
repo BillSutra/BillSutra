@@ -11,6 +11,7 @@ import { Truck } from "lucide-react";
 import { formatCurrency, formatNumber } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const getSegmentColor = (segment: string): string => {
   switch (segment) {
@@ -31,6 +32,7 @@ type SupplierLtvEntry =
     : never;
 
 const SupplierOverview = ({ className }: { className?: string }) => {
+  const { t } = useI18n();
   const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "suppliers"],
     queryFn: fetchDashboardSuppliers,
@@ -48,15 +50,15 @@ const SupplierOverview = ({ className }: { className?: string }) => {
           </div>
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-[#8a6d56]">
-              Vendor desk
+              {t("dashboard.supplierOverview.kicker")}
             </p>
             <CardTitle className="mt-1 text-lg text-[#1f1b16]">
-              Supplier overview
+              {t("dashboard.supplierOverview.title")}
             </CardTitle>
           </div>
         </div>
         <p className="text-sm text-[#8a6d56]">
-          Purchase concentration, payables, and top supplier relationships.
+          {t("dashboard.supplierOverview.description")}
         </p>
         <DashboardCardStatus
           isLoading={isLoading}
@@ -71,19 +73,22 @@ const SupplierOverview = ({ className }: { className?: string }) => {
           <div className="h-24 rounded-xl bg-[#fdf7f1] animate-pulse" />
         )}
         {isError && (
-          <p className="text-sm text-[#b45309]">Unable to load suppliers.</p>
+          <p className="text-sm text-[#b45309]">{t("dashboard.supplierOverview.loadError")}</p>
         )}
         {!isLoading && !isError && data && (
           <>
             <div className="grid gap-3 sm:grid-cols-3">
               {[
-                { label: "Total Suppliers", value: formatNumber(data.total) },
                 {
-                  label: "Recent Purchases",
+                  label: t("dashboard.supplierOverview.totalSuppliers"),
+                  value: formatNumber(data.total),
+                },
+                {
+                  label: t("dashboard.supplierOverview.recentPurchases"),
                   value: formatNumber(data.recentPurchases),
                 },
                 {
-                  label: "Outstanding Payables",
+                  label: t("dashboard.supplierOverview.outstandingPayables"),
                   value: formatCurrency(data.outstandingPayables),
                 },
               ].map((item) => (
@@ -105,7 +110,7 @@ const SupplierOverview = ({ className }: { className?: string }) => {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="rounded-2xl border border-green-200 bg-[linear-gradient(135deg,rgba(220,252,231,0.9),rgba(255,255,255,0.95))] p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-green-700 dark:text-green-400">
-                    High Value
+                    {t("dashboard.supplierOverview.highValue")}
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-green-900 dark:text-green-100">
                     {formatNumber(data.supplierAnalytics.highValueCount)}
@@ -113,7 +118,7 @@ const SupplierOverview = ({ className }: { className?: string }) => {
                 </div>
                 <div className="rounded-2xl border border-[#e7ddd2] bg-[linear-gradient(135deg,rgba(255,249,242,0.96),rgba(255,255,255,0.95))] p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-gray-700 dark:text-gray-400">
-                    Low Value
+                    {t("dashboard.supplierOverview.lowValue")}
                   </p>
                   <p className="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">
                     {formatNumber(data.supplierAnalytics.lowValueCount)}
@@ -124,11 +129,11 @@ const SupplierOverview = ({ className }: { className?: string }) => {
 
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                Top 5 suppliers by total purchase amount
+                {t("dashboard.supplierOverview.topSuppliersTitle")}
               </p>
               {data.topSuppliers && data.topSuppliers.length === 0 ? (
                 <p className="mt-3 text-sm text-[#8a6d56]">
-                  No supplier data available yet.
+                  {t("dashboard.supplierOverview.empty")}
                 </p>
               ) : (
                 <div className="mt-3 grid gap-2">
@@ -168,12 +173,14 @@ const SupplierOverview = ({ className }: { className?: string }) => {
                                 segment,
                               )}`}
                             >
-                              {segment === "HIGH_VALUE" ? "High Value" : "Low Value"}
+                              {segment === "HIGH_VALUE"
+                                ? t("dashboard.supplierOverview.highValue")
+                                : t("dashboard.supplierOverview.lowValue")}
                             </span>
                           </div>
                           <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-[#8a6d56]">
                             <p>
-                              Lifetime Value:{" "}
+                              {t("dashboard.supplierOverview.lifetimeValue")}:{" "}
                               <span className="font-semibold text-[#1f1b16]">
                                 {ltvData
                                   ? formatCurrency(ltvData.lifetimeValue)
@@ -181,7 +188,7 @@ const SupplierOverview = ({ className }: { className?: string }) => {
                               </span>
                             </p>
                             <p>
-                              Predicted (6mo):{" "}
+                              {t("dashboard.supplierOverview.predictedSixMonths")}:{" "}
                               <span className="font-semibold text-[#1f1b16]">
                                 {ltvData
                                   ? formatCurrency(ltvData.predictedFutureValue)
@@ -190,7 +197,9 @@ const SupplierOverview = ({ className }: { className?: string }) => {
                             </p>
                           </div>
                           <p className="mt-1 text-xs text-[#8a6d56]">
-                            Orders: {formatNumber(supplier.numberOfOrders)}
+                            {t("dashboard.supplierOverview.orders", {
+                              count: formatNumber(supplier.numberOfOrders),
+                            })}
                           </p>
                         </div>
                       </div>

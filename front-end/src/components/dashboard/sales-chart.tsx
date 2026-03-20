@@ -31,6 +31,7 @@ import {
 } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const fallbackSales: DashboardSales = {
   last7Days: [],
@@ -115,6 +116,7 @@ const CustomTooltip = ({
 };
 
 const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
+  const { t } = useI18n();
   const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "sales", filters],
     queryFn: () => fetchDashboardSales(filters),
@@ -137,14 +139,13 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
-                Trade pulse
+                {t("dashboard.salesChart.kicker")}
               </p>
               <CardTitle className="mt-2 text-2xl text-[#1f1b16]">
-                Sales and purchase analytics
+                {t("dashboard.salesChart.title")}
               </CardTitle>
               <p className="mt-2 max-w-xl text-sm text-[#8a6d56]">
-                Compare booked sales against purchase activity to spot demand
-                bursts and stocking pressure.
+                {t("dashboard.salesChart.description")}
               </p>
             </div>
             <DashboardCardStatus
@@ -158,24 +159,32 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="dashboard-chart-metric rounded-2xl px-4 py-3">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
-                  Last 7 days
+                  {t("dashboard.salesChart.last7Days")}
                 </p>
                 <p className="mt-1 text-sm font-semibold text-emerald-700">
-                  {formatCurrency(sales7Total)} sales
+                  {t("dashboard.salesChart.salesSuffix", {
+                    amount: formatCurrency(sales7Total),
+                  })}
                 </p>
                 <p className="text-xs text-orange-600">
-                  {formatCurrency(purchases7Total)} purchases
+                  {t("dashboard.salesChart.purchasesSuffix", {
+                    amount: formatCurrency(purchases7Total),
+                  })}
                 </p>
               </div>
               <div className="dashboard-chart-metric rounded-2xl px-4 py-3">
                 <p className="text-[11px] uppercase tracking-[0.22em] text-[#8a6d56]">
-                  Last 30 days
+                  {t("dashboard.salesChart.last30Days")}
                 </p>
                 <p className="mt-1 text-sm font-semibold text-emerald-700">
-                  {formatCurrency(sales30Total)} sales
+                  {t("dashboard.salesChart.salesSuffix", {
+                    amount: formatCurrency(sales30Total),
+                  })}
                 </p>
                 <p className="text-xs text-orange-600">
-                  {formatCurrency(purchases30Total)} purchases
+                  {t("dashboard.salesChart.purchasesSuffix", {
+                    amount: formatCurrency(purchases30Total),
+                  })}
                 </p>
               </div>
             </div>
@@ -186,13 +195,13 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
             <div className="h-48 rounded-xl bg-[#fdf7f1] animate-pulse" />
           )}
           {isError && (
-            <p className="text-sm text-[#b45309]">Unable to load sales data.</p>
+            <p className="text-sm text-[#b45309]">{t("dashboard.salesChart.loadError")}</p>
           )}
           {!isLoading && !isError && (
             <div className="grid gap-6">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                  Last 7 days
+                  {t("dashboard.salesChart.last7Days")}
                 </p>
                 <div className="h-48 min-w-0">
                   <DashboardResponsiveChart>
@@ -216,7 +225,7 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
                       <Line
                         type="monotone"
                         dataKey="sales"
-                        name="Sales"
+                        name={t("dashboard.salesChart.legendSales")}
                         stroke={SALES_COLOR}
                         strokeWidth={3}
                         strokeLinecap="round"
@@ -236,7 +245,7 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
                       <Line
                         type="monotone"
                         dataKey="purchases"
-                        name="Purchases"
+                        name={t("dashboard.salesChart.legendPurchases")}
                         stroke={PURCHASES_COLOR}
                         strokeWidth={3}
                         strokeLinecap="round"
@@ -259,7 +268,7 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                  Last 30 days
+                  {t("dashboard.salesChart.last30Days")}
                 </p>
                 <div className="h-48 min-w-0">
                   <DashboardResponsiveChart>
@@ -283,7 +292,7 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
                       <Line
                         type="monotone"
                         dataKey="sales"
-                        name="Sales"
+                        name={t("dashboard.salesChart.legendSales")}
                         stroke={SALES_COLOR}
                         strokeWidth={3}
                         strokeLinecap="round"
@@ -298,7 +307,7 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
                       <Line
                         type="monotone"
                         dataKey="purchases"
-                        name="Purchases"
+                        name={t("dashboard.salesChart.legendPurchases")}
                         stroke={PURCHASES_COLOR}
                         strokeWidth={3}
                         strokeLinecap="round"
@@ -323,10 +332,10 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
         <Card className="dashboard-chart-surface rounded-[1.75rem]">
           <CardHeader className="dashboard-chart-content">
             <CardTitle className="text-base text-[#1f1b16]">
-              Six-month trade balance
+              {t("dashboard.salesChart.balanceTitle")}
             </CardTitle>
             <p className="text-sm text-[#8a6d56]">
-              Monthly sales and purchase movement across the latest six months.
+              {t("dashboard.salesChart.balanceDescription")}
             </p>
             <DashboardCardStatus
               isLoading={isLoading}
@@ -368,10 +377,10 @@ const SalesChart = ({ filters }: { filters?: DashboardOverviewFilters }) => {
         <Card className="dashboard-chart-surface rounded-[1.75rem]">
           <CardHeader className="dashboard-chart-content">
             <CardTitle className="text-base text-[#1f1b16]">
-              Category revenue mix
+              {t("dashboard.salesChart.categoryMixTitle")}
             </CardTitle>
             <p className="text-sm text-[#8a6d56]">
-              Top categories ranked by booked sales value.
+              {t("dashboard.salesChart.categoryMixDescription")}
             </p>
             <DashboardCardStatus
               isLoading={isLoading}

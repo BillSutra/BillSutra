@@ -29,12 +29,7 @@ import {
   fetchTemplates,
   saveBusinessProfile,
 } from "@/lib/apiClient";
-
-const steps = [
-  { id: 1, label: "Business type" },
-  { id: 2, label: "Business details" },
-  { id: 3, label: "Template" },
-];
+import { useI18n } from "@/providers/LanguageProvider";
 
 const BusinessProfileClient = ({
   name,
@@ -43,6 +38,7 @@ const BusinessProfileClient = ({
   name: string;
   image?: string;
 }) => {
+  const { t } = useI18n();
   const [currentStep, setCurrentStep] = useState(1);
   const [businessTypeId, setBusinessTypeId] = useState("retail");
   const [enabledSections, setEnabledSections] = useState<SectionKey[]>(
@@ -65,6 +61,12 @@ const BusinessProfileClient = ({
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [profileTouched, setProfileTouched] = useState(false);
 
+  const steps = [
+    { id: 1, label: t("businessProfilePage.steps.businessType") },
+    { id: 2, label: t("businessProfilePage.steps.businessDetails") },
+    { id: 3, label: t("businessProfilePage.steps.template") },
+  ];
+
   const { data: templateRecords = [] } = useQuery({
     queryKey: ["templates"],
     queryFn: fetchTemplates,
@@ -78,10 +80,10 @@ const BusinessProfileClient = ({
   const saveProfileMutation = useMutation({
     mutationFn: saveBusinessProfile,
     onSuccess: () => {
-      toast.success("Business profile saved");
+      toast.success(t("businessProfilePage.messages.saved"));
     },
     onError: () => {
-      toast.error("Unable to save business profile");
+      toast.error(t("businessProfilePage.messages.saveError"));
     },
   });
 
@@ -204,17 +206,17 @@ const BusinessProfileClient = ({
     <DashboardLayout
       name={name}
       image={image}
-      title="Business Profile"
-      subtitle="Set up business identity and invoice defaults."
+      title={t("businessProfilePage.title")}
+      subtitle={t("businessProfilePage.subtitle")}
     >
       <div className="mx-auto w-full max-w-6xl">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-              Invoice onboarding
+              {t("businessProfilePage.kicker")}
             </p>
             <h1 className="mt-2 text-3xl font-semibold">
-              Set up your billing profile
+              {t("businessProfilePage.heading")}
             </h1>
           </div>
           <ol className="grid w-full gap-2 text-xs sm:w-auto sm:grid-cols-3 sm:gap-3">
@@ -267,7 +269,7 @@ const BusinessProfileClient = ({
             {currentStep === 1 && (
               <div>
                 <h2 className="text-sm font-semibold">
-                  Step 1: Choose business type
+                  {t("businessProfilePage.stepTitles.businessType")}
                 </h2>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   {BUSINESS_TYPES.map((type) => (
@@ -286,7 +288,9 @@ const BusinessProfileClient = ({
                   ))}
                 </div>
                 <div className="mt-6 rounded-2xl border border-border bg-[#faf6f1] p-4 text-sm text-[#5c4b3b]">
-                  <p className="font-semibold">Enabled sections</p>
+                  <p className="font-semibold">
+                    {t("businessProfilePage.enabledSections")}
+                  </p>
                   <p className="mt-2 text-xs">
                     {enabledSections
                       .map((section) => SECTION_LABELS[section])
@@ -299,57 +303,57 @@ const BusinessProfileClient = ({
             {currentStep === 2 && (
               <div>
                 <h2 className="text-sm font-semibold">
-                  Step 2: Business profile
+                  {t("businessProfilePage.stepTitles.businessProfile")}
                 </h2>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   <ValidationField
                     id="businessName"
-                    label="Business name"
+                    label={t("businessProfilePage.fields.businessName")}
                     value={profile.businessName}
                     onChange={(value) => updateProfile("businessName", value)}
                     validate={validateName}
                     required
-                    placeholder="Business name"
+                    placeholder={t("businessProfilePage.placeholders.businessName")}
                     success
                   />
                   <ValidationField
                     id="phone"
-                    label="Phone"
+                    label={t("businessProfilePage.fields.phone")}
                     value={profile.phone}
                     onChange={(value) => updateProfile("phone", value)}
                     validate={validatePhone}
                     required
-                    placeholder="9876543210"
+                    placeholder={t("businessProfilePage.placeholders.phone")}
                     success
                   />
                   <ValidationField
                     id="address"
-                    label="Address"
+                    label={t("businessProfilePage.fields.address")}
                     value={profile.address}
                     onChange={(value) => updateProfile("address", value)}
                     validate={validateRequired}
                     required
-                    placeholder="Business address"
+                    placeholder={t("businessProfilePage.placeholders.address")}
                     success
                     className="sm:col-span-2"
                   />
                   <ValidationField
                     id="email"
-                    label="Email"
+                    label={t("businessProfilePage.fields.email")}
                     value={profile.email}
                     onChange={(value) => updateProfile("email", value)}
                     validate={validateEmail}
                     required
-                    placeholder="name@example.com"
+                    placeholder={t("businessProfilePage.placeholders.email")}
                     success
                   />
                   <ValidationField
                     id="website"
-                    label="Website"
+                    label={t("businessProfilePage.fields.website")}
                     value={profile.website}
                     onChange={(value) => updateProfile("website", value)}
                     validate={() => ""}
-                    placeholder="https://example.com"
+                    placeholder={t("businessProfilePage.placeholders.website")}
                     success
                   />
                   <div className="sm:col-span-2">
@@ -360,21 +364,21 @@ const BusinessProfileClient = ({
                   </div>
                   <ValidationField
                     id="taxId"
-                    label="Tax ID / GSTIN"
+                    label={t("businessProfilePage.fields.taxId")}
                     value={profile.taxId}
                     onChange={(value) => updateProfile("taxId", value)}
                     validate={() => ""}
-                    placeholder="GSTIN or Tax ID"
+                    placeholder={t("businessProfilePage.placeholders.taxId")}
                     success
                   />
                   <ValidationField
                     id="currency"
-                    label="Currency"
+                    label={t("businessProfilePage.fields.currency")}
                     value={profile.currency}
                     onChange={(value) => updateProfile("currency", value)}
                     validate={validateRequired}
                     required
-                    placeholder="INR"
+                    placeholder={t("businessProfilePage.placeholders.currency")}
                     success
                   />
                 </div>
@@ -391,7 +395,7 @@ const BusinessProfileClient = ({
                       }
                       className="h-4 w-4 rounded border-[#d6c8b8] text-primary"
                     />
-                    Show logo on invoice
+                    {t("businessProfilePage.toggles.showLogoOnInvoice")}
                   </label>
                   <label className="flex items-center gap-2">
                     <input
@@ -402,7 +406,7 @@ const BusinessProfileClient = ({
                       }
                       className="h-4 w-4 rounded border-[#d6c8b8] text-primary"
                     />
-                    Show tax number
+                    {t("businessProfilePage.toggles.showTaxNumber")}
                   </label>
                   <label className="flex items-center gap-2">
                     <input
@@ -413,7 +417,7 @@ const BusinessProfileClient = ({
                       }
                       className="h-4 w-4 rounded border-[#d6c8b8] text-primary"
                     />
-                    Show payment QR
+                    {t("businessProfilePage.toggles.showPaymentQr")}
                   </label>
                 </div>
               </div>
@@ -422,7 +426,7 @@ const BusinessProfileClient = ({
             {currentStep === 3 && (
               <div>
                 <h2 className="text-sm font-semibold">
-                  Step 3: Template selection
+                  {t("businessProfilePage.stepTitles.templateSelection")}
                 </h2>
                 <div className="mt-4 grid gap-4 sm:grid-cols-2">
                   {templates.map((template) => (
@@ -458,7 +462,7 @@ const BusinessProfileClient = ({
                 onClick={() => setCurrentStep((prev) => Math.max(prev - 1, 1))}
                 className="rounded-full border border-border px-4 py-2 text-sm"
               >
-                Back
+                {t("businessProfilePage.actions.back")}
               </button>
               <button
                 type="button"
@@ -481,17 +485,19 @@ const BusinessProfileClient = ({
               >
                 {currentStep === 3
                   ? saveProfileMutation.isPending
-                    ? "Saving..."
-                    : "Finish"
-                  : "Next"}
+                    ? t("businessProfilePage.actions.saving")
+                    : t("businessProfilePage.actions.finish")
+                  : t("businessProfilePage.actions.next")}
               </button>
             </div>
           </section>
 
           <section className="rounded-3xl border border-border bg-white p-6">
-            <h2 className="text-sm font-semibold">Preview</h2>
+            <h2 className="text-sm font-semibold">
+              {t("businessProfilePage.previewTitle")}
+            </h2>
             <p className="mt-2 text-xs text-[#8a6d56]">
-              Matches the selected template and business profile.
+              {t("businessProfilePage.previewDescription")}
             </p>
             <div className="mt-5 rounded-2xl border border-border bg-white p-2.5">
               <A4PreviewStack

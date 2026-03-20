@@ -33,11 +33,14 @@ import {
   useUpdatePurchaseMutation,
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
+import { useI18n } from "@/providers/LanguageProvider";
 
-const formatDate = (value: string) =>
-  new Intl.DateTimeFormat("en-IN", {
-    dateStyle: "medium",
-  }).format(new Date(value));
+const humanizeEnum = (value: string) =>
+  value
+    .toLowerCase()
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
 
 type PurchasesClientProps = {
   name: string;
@@ -52,6 +55,7 @@ type PurchaseLineItemError = {
 };
 
 const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
+  const { t, formatCurrency, formatDate } = useI18n();
   const { data, isLoading, isError } = usePurchasesQuery();
   const { data: products } = useProductsQuery();
   const { data: suppliers } = useSuppliersQuery();
@@ -89,6 +93,49 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     Partial<Record<keyof typeof supplierForm, string>>
   >({});
   const [supplierError, setSupplierError] = useState<string | null>(null);
+
+  const translateValidationMessage = (message: string) => {
+    switch (message) {
+      case "This field is required":
+        return t("validation.required");
+      case "Please enter a valid name (letters only)":
+        return t("validation.validName");
+      case "Enter a valid email address":
+        return t("validation.validEmail");
+      case "Enter a valid phone number":
+        return t("validation.validPhone");
+      case "Enter a valid number":
+        return t("validation.validNumber");
+      case "Select a valid date":
+        return t("validation.validDate");
+      case "Please select an option":
+        return t("common.selectOption");
+      default:
+        return message;
+    }
+  };
+
+  const withTranslatedValidation =
+    (validator: (value: string) => string) => (value: string) =>
+      translateValidationMessage(validator(value));
+
+  const formatPurchaseDate = (value: string) =>
+    formatDate(new Date(value), { dateStyle: "medium" });
+
+  const formatAmount = (value: string | number) =>
+    formatCurrency(Number(value || 0), "INR");
+
+  const translatePaymentStatus = (status: string) => {
+    const key = `dashboard.enums.paymentStatus.${status}`;
+    const translated = t(key);
+    return translated === key ? humanizeEnum(status) : translated;
+  };
+
+  const translatePaymentMethod = (value: string) => {
+    const key = `dashboard.enums.paymentMethod.${value}`;
+    const translated = t(key);
+    return translated === key ? humanizeEnum(value) : translated;
+  };
 
   const paymentStatusBadgeClass = (status: string) => {
     if (status === "PAID") return "bg-emerald-100 text-emerald-700";
@@ -184,13 +231,13 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
   const validateSupplierForm = () => {
     const errors: Partial<Record<keyof typeof supplierForm, string>> = {};
     if (supplierForm.name.trim().length < 2) {
-      errors.name = "Supplier name must be at least 2 characters.";
+      errors.name = t("purchasesPage.supplierForm.errors.name");
     }
     if (supplierForm.email && !/\S+@\S+\.\S+/.test(supplierForm.email)) {
-      errors.email = "Enter a valid email address.";
+      errors.email = t("validation.validEmail");
     }
     if (supplierForm.phone && supplierForm.phone.trim().length < 6) {
-      errors.phone = "Phone number should be at least 6 characters.";
+      errors.phone = t("purchasesPage.supplierForm.errors.phone");
     }
 
     setSupplierFieldErrors(errors);
@@ -207,38 +254,38 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
 
     items.forEach((item, index) => {
       if (!item.product_id) {
-        errors[index].product_id = "Select a product.";
+        errors[index].product_id = t("purchasesPage.lineItems.errors.product");
         missingProduct = true;
       }
 
       const quantity = Number(item.quantity);
       if (!Number.isFinite(quantity) || quantity <= 0) {
-        errors[index].quantity = "Quantity must be greater than 0.";
+        errors[index].quantity = t("purchasesPage.lineItems.errors.quantity");
         invalidQuantity = true;
       }
 
       const unitCost = Number(item.unit_cost);
       if (!Number.isFinite(unitCost) || unitCost <= 0) {
-        errors[index].unit_cost = "Unit cost must be greater than 0.";
+        errors[index].unit_cost = t("purchasesPage.lineItems.errors.unitCost");
         invalidCost = true;
       }
 
       if (item.tax_rate) {
         const taxRate = Number(item.tax_rate);
         if (!Number.isFinite(taxRate) || taxRate < 0) {
-          errors[index].tax_rate = "Tax rate must be 0 or higher.";
+          errors[index].tax_rate = t("purchasesPage.lineItems.errors.taxRate");
           invalidTax = true;
         }
       }
     });
 
-    if (missingProduct) summary.push("Select a product for each line item.");
+    if (missingProduct) summary.push(t("purchasesPage.lineItems.summary.product"));
     if (invalidQuantity)
-      summary.push("Ensure quantities are valid numbers greater than 0.");
+      summary.push(t("purchasesPage.lineItems.summary.quantity"));
     if (invalidCost)
-      summary.push("Enter a valid unit cost greater than 0 for each item.");
+      summary.push(t("purchasesPage.lineItems.summary.unitCost"));
     if (invalidTax)
-      summary.push("Tax rates must be 0 or higher when provided.");
+      summary.push(t("purchasesPage.lineItems.summary.taxRate"));
 
     setLineItemErrors(errors);
     setLineItemSummary(summary);
@@ -316,7 +363,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
       resetForm();
     } catch (error) {
       setServerError(
-        parseServerErrors(error, "Unable to save purchase right now."),
+        parseServerErrors(error, t("purchasesPage.saveError")),
       );
     }
   };
@@ -340,7 +387,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
       setForm((prev) => ({ ...prev, supplier_id: String(created.id) }));
     } catch (error) {
       setSupplierError(
-        parseServerErrors(error, "Unable to create supplier right now."),
+        parseServerErrors(error, t("purchasesPage.supplierForm.saveError")),
       );
     }
   };
@@ -349,53 +396,57 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title="Purchases"
-      subtitle="Record incoming stock and supplier invoices."
+      title={t("purchasesPage.title")}
+      subtitle={t("purchasesPage.subtitle")}
     >
       <div className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-2">
           <p className="text-sm uppercase tracking-[0.2em] text-[#8a6d56]">
-            Procurement
+            {t("purchasesPage.kicker")}
           </p>
           <p className="max-w-2xl text-base text-[#5c4b3b]">
-            Record incoming stock and supplier invoices.
+            {t("purchasesPage.subtitle")}
           </p>
         </div>
 
         <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.1fr]">
           <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
             <h2 className="text-lg font-semibold">
-              {editingId ? "Edit purchase" : "Record purchase"}
+              {editingId
+                ? t("purchasesPage.editTitle")
+                : t("purchasesPage.formTitle")}
             </h2>
             <p className="text-sm text-[#8a6d56]">
-              Add supplier invoices and incoming stock.
+              {t("purchasesPage.formDescription")}
             </p>
             {editingId && (
               <div className="mt-2 rounded-xl border border-[#f2e6dc] bg-[#fff9f2] px-3 py-2 text-xs text-[#8a6d56]">
-                Editing PO-{editingId}. Adjust quantities to update stock.
+                {t("purchasesPage.editingNotice", { id: editingId })}
               </div>
             )}
             <form className="mt-4 grid gap-4" onSubmit={handleSubmit}>
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="supplier">Supplier</Label>
+                  <Label htmlFor="supplier">
+                    {t("purchasesPage.fields.supplier")}
+                  </Label>
                   {/* ...existing code for Dialog (Quick add) remains unchanged... */}
                 </div>
                 <ValidationField
                   id="supplier"
-                  label="Supplier"
+                  label={t("purchasesPage.fields.supplier")}
                   as="select"
                   value={form.supplier_id}
                   onChange={(value) =>
                     setForm((prev) => ({ ...prev, supplier_id: value }))
                   }
                   validate={(value) =>
-                    value ? "" : "Please select a supplier"
+                    value ? "" : t("purchasesPage.validation.selectSupplier")
                   }
                   required
                   success
                 >
-                  <option value="">Direct purchase</option>
+                  <option value="">{t("purchasesPage.directPurchase")}</option>
                   {supplierList.map((supplier) => (
                     <option key={supplier.id} value={supplier.id}>
                       {supplier.name}
@@ -404,22 +455,24 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                 </ValidationField>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="warehouse">Warehouse</Label>
+                <Label htmlFor="warehouse">
+                  {t("purchasesPage.fields.warehouse")}
+                </Label>
                 <ValidationField
                   id="warehouse"
-                  label="Warehouse"
+                  label={t("purchasesPage.fields.warehouse")}
                   as="select"
                   value={form.warehouse_id}
                   onChange={(value) =>
                     setForm((prev) => ({ ...prev, warehouse_id: value }))
                   }
                   validate={(value) =>
-                    value ? "" : "Please select a warehouse"
+                    value ? "" : t("purchasesPage.validation.selectWarehouse")
                   }
                   required
                   success
                 >
-                  <option value="">Default stock</option>
+                  <option value="">{t("purchasesPage.defaultStock")}</option>
                   {warehouseList.map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name}
@@ -429,97 +482,109 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
               </div>
               <ValidationField
                 id="purchase_date"
-                label="Purchase date"
+                label={t("purchasesPage.fields.purchaseDate")}
                 type="date"
                 value={form.purchase_date}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, purchase_date: value }))
                 }
-                validate={validateDate}
+                validate={withTranslatedValidation(validateDate)}
                 required
                 success
               />
               <ValidationField
                 id="notes"
-                label="Notes"
+                label={t("purchasesPage.fields.notes")}
                 value={form.notes}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, notes: value }))
                 }
                 validate={() => ""}
-                placeholder="Invoice reference"
+                placeholder={t("purchasesPage.placeholders.notes")}
                 success
               />
               <ValidationField
                 id="payment_status"
-                label="Payment status"
+                label={t("purchasesPage.fields.paymentStatus")}
                 as="select"
                 value={form.payment_status}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, payment_status: value }))
                 }
-                validate={validateRequired}
+                validate={withTranslatedValidation(validateRequired)}
                 required
                 success
               >
-                <option value="UNPAID">UNPAID</option>
-                <option value="PARTIALLY_PAID">PARTIALLY PAID</option>
-                <option value="PAID">PAID</option>
+                <option value="UNPAID">
+                  {translatePaymentStatus("UNPAID")}
+                </option>
+                <option value="PARTIALLY_PAID">
+                  {translatePaymentStatus("PARTIALLY_PAID")}
+                </option>
+                <option value="PAID">{translatePaymentStatus("PAID")}</option>
               </ValidationField>
               <ValidationField
                 id="amount_paid"
-                label="Paid amount"
+                label={t("purchasesPage.fields.amountPaid")}
                 type="number"
                 value={form.amount_paid}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, amount_paid: value }))
                 }
-                validate={(value) => (value ? validateNumber(value) : "")}
-                placeholder="0"
+                validate={(value) =>
+                  value
+                    ? translateValidationMessage(validateNumber(value))
+                    : ""
+                }
+                placeholder={t("purchasesPage.placeholders.amountPaid")}
                 success
               />
               <ValidationField
                 id="payment_date"
-                label="Payment date"
+                label={t("purchasesPage.fields.paymentDate")}
                 type="date"
                 value={form.payment_date}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, payment_date: value }))
                 }
-                validate={validateDate}
+                validate={withTranslatedValidation(validateDate)}
                 success
               />
               <ValidationField
                 id="payment_method"
-                label="Payment method"
+                label={t("purchasesPage.fields.paymentMethod")}
                 as="select"
                 value={form.payment_method}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, payment_method: value }))
                 }
-                validate={validateRequired}
+                validate={withTranslatedValidation(validateRequired)}
                 required
                 success
               >
-                <option value="">Select method</option>
-                <option value="CASH">CASH</option>
-                <option value="CARD">CARD</option>
-                <option value="BANK_TRANSFER">BANK TRANSFER</option>
-                <option value="UPI">UPI</option>
-                <option value="CHEQUE">CHEQUE</option>
-                <option value="OTHER">OTHER</option>
+                <option value="">{t("purchasesPage.selectMethod")}</option>
+                <option value="CASH">{translatePaymentMethod("CASH")}</option>
+                <option value="CARD">{translatePaymentMethod("CARD")}</option>
+                <option value="BANK_TRANSFER">
+                  {translatePaymentMethod("BANK_TRANSFER")}
+                </option>
+                <option value="UPI">{translatePaymentMethod("UPI")}</option>
+                <option value="CHEQUE">{translatePaymentMethod("CHEQUE")}</option>
+                <option value="OTHER">{translatePaymentMethod("OTHER")}</option>
               </ValidationField>
 
               <div className="grid gap-3">
                 <div className="flex items-center justify-between">
-                  <Label>Line items</Label>
+                  <Label>{t("purchasesPage.lineItems.title")}</Label>
                   <Button type="button" variant="outline" onClick={addItem}>
-                    Add item
+                    {t("purchasesPage.lineItems.addItem")}
                   </Button>
                 </div>
                 {lineItemSummary.length > 0 && (
                   <div className="rounded-xl border border-[#f2e6dc] bg-white px-3 py-2 text-xs text-[#b45309]">
-                    <p className="font-semibold">Fix the following:</p>
+                    <p className="font-semibold">
+                      {t("purchasesPage.lineItems.fixTitle")}
+                    </p>
                     <ul className="mt-1 list-disc pl-4">
                       {lineItemSummary.map((message) => (
                         <li key={message}>{message}</li>
@@ -533,7 +598,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                     className="grid gap-3 rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-3"
                   >
                     <div className="grid gap-2">
-                      <Label>Product</Label>
+                      <Label>{t("purchasesPage.lineItems.fields.product")}</Label>
                       <select
                         className="h-9 w-full rounded-md border border-[#e4d6ca] bg-white px-3 text-sm"
                         value={item.product_id}
@@ -546,10 +611,12 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                         }
                         required
                       >
-                        <option value="">Select product</option>
+                        <option value="">
+                          {t("purchasesPage.lineItems.selectProduct")}
+                        </option>
                         {productsList.map((product) => (
                           <option key={product.id} value={product.id}>
-                            {product.name} • {product.sku}
+                            {product.name} - {product.sku}
                           </option>
                         ))}
                       </select>
@@ -560,7 +627,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                       )}
                     </div>
                     <div className="grid gap-2">
-                      <Label>Quantity</Label>
+                      <Label>{t("purchasesPage.lineItems.fields.quantity")}</Label>
                       <Input
                         type="number"
                         value={item.quantity}
@@ -580,7 +647,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                       )}
                     </div>
                     <div className="grid gap-2">
-                      <Label>Unit cost</Label>
+                      <Label>{t("purchasesPage.lineItems.fields.unitCost")}</Label>
                       <Input
                         type="number"
                         value={item.unit_cost}
@@ -600,7 +667,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                       )}
                     </div>
                     <div className="grid gap-2">
-                      <Label>Tax rate</Label>
+                      <Label>{t("purchasesPage.lineItems.fields.taxRate")}</Label>
                       <Input
                         type="number"
                         value={item.tax_rate}
@@ -611,7 +678,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                             event.target.value,
                           )
                         }
-                        placeholder="Optional"
+                        placeholder={t("purchasesPage.optional")}
                       />
                       {lineItemErrors[index]?.tax_rate && (
                         <p className="text-xs text-[#b45309]">
@@ -625,7 +692,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                         variant="destructive"
                         onClick={() => removeItem(index)}
                       >
-                        Remove item
+                        {t("purchasesPage.lineItems.removeItem")}
                       </Button>
                     )}
                   </div>
@@ -637,39 +704,47 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                 className="bg-[#1f1b16] text-white hover:bg-[#2c2520]"
                 disabled={createPurchase.isPending || updatePurchase.isPending}
               >
-                {editingId ? "Update purchase" : "Save purchase"}
+                {editingId
+                  ? t("purchasesPage.updatePurchase")
+                  : t("purchasesPage.savePurchase")}
               </Button>
               {editingId && (
                 <Button type="button" variant="outline" onClick={resetForm}>
-                  Cancel edit
+                  {t("purchasesPage.cancelEdit")}
                 </Button>
               )}
               {(createPurchase.isError ||
                 updatePurchase.isError ||
                 serverError) && (
                 <p className="text-sm text-[#b45309]">
-                  {serverError ?? "Unable to save purchase right now."}
+                  {serverError ?? t("purchasesPage.saveError")}
                 </p>
               )}
             </form>
           </div>
 
           <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
-            <h2 className="text-lg font-semibold">Recent purchases</h2>
+            <h2 className="text-lg font-semibold">
+              {t("purchasesPage.listTitle")}
+            </h2>
             <p className="text-sm text-[#8a6d56]">
-              Latest supplier invoices and incoming stock.
+              {t("purchasesPage.listDescription")}
             </p>
             <div className="mt-4">
               {isLoading && (
-                <p className="text-sm text-[#8a6d56]">Loading purchases...</p>
+                <p className="text-sm text-[#8a6d56]">
+                  {t("purchasesPage.loading")}
+                </p>
               )}
               {isError && (
                 <p className="text-sm text-[#b45309]">
-                  Failed to load purchases.
+                  {t("purchasesPage.loadError")}
                 </p>
               )}
               {!isLoading && !isError && purchases.length === 0 && (
-                <p className="text-sm text-[#8a6d56]">No purchases yet.</p>
+                <p className="text-sm text-[#8a6d56]">
+                  {t("purchasesPage.empty")}
+                </p>
               )}
               {!isLoading && !isError && purchases.length > 0 && (
                 <div className="grid gap-3">
@@ -680,14 +755,18 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                     >
                       <div>
                         <p className="text-base font-semibold">
-                          PO-{purchase.id} •{" "}
-                          {purchase.supplier?.name ?? "Direct"}
+                          {t("purchasesPage.purchaseCode", { id: purchase.id })} -{" "}
+                          {purchase.supplier?.name ?? t("purchasesPage.direct")}
                         </p>
                         <p className="text-xs text-[#8a6d56]">
-                          {formatDate(purchase.purchase_date)} • Items:{" "}
-                          {purchase.items.length}
+                          {formatPurchaseDate(purchase.purchase_date)} -{" "}
+                          {t("purchasesPage.itemsCount", {
+                            count: purchase.items.length,
+                          })}
                           {purchase.warehouse?.name
-                            ? ` • Warehouse: ${purchase.warehouse.name}`
+                            ? ` - ${t("purchasesPage.warehouseName", {
+                                name: purchase.warehouse.name,
+                              })}`
                             : ""}
                         </p>
                       </div>
@@ -697,23 +776,29 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                             purchase.paymentStatus,
                           )}`}
                         >
-                          {purchase.paymentStatus.replace("_", " ")}
+                          {translatePaymentStatus(purchase.paymentStatus)}
                         </span>
                         <span>
-                          Total ₹{Number(purchase.totalAmount).toFixed(2)}
+                          {t("purchasesPage.totals.total", {
+                            amount: formatAmount(purchase.totalAmount),
+                          })}
                         </span>
                         <span>
-                          Paid ₹{Number(purchase.paidAmount).toFixed(2)}
+                          {t("purchasesPage.totals.paid", {
+                            amount: formatAmount(purchase.paidAmount),
+                          })}
                         </span>
                         <span>
-                          Pending ₹{Number(purchase.pendingAmount).toFixed(2)}
+                          {t("purchasesPage.totals.pending", {
+                            amount: formatAmount(purchase.pendingAmount),
+                          })}
                         </span>
                         <Button
                           type="button"
                           variant="outline"
                           onClick={() => handleEditPurchase(purchase)}
                         >
-                          Edit
+                          {t("purchasesPage.edit")}
                         </Button>
                       </div>
                     </div>

@@ -254,6 +254,108 @@
       "DAMAGE": "Damage"
     }
   },
+  "productsPage": {
+    "title": "Products",
+    "subtitle": "Manage SKUs, pricing, and stock levels in one place.",
+    "kicker": "Catalog",
+    "lead": "Add products, maintain stock thresholds, and keep pricing current without bouncing between screens.",
+    "addTitle": "Add product",
+    "addDescription": "Create clean SKUs with category, pricing, and reorder details in one step.",
+    "listTitle": "Product list",
+    "listDescription": "Update stock and pricing from a single, scan-friendly list.",
+    "count": "{count} items",
+    "loadError": "Failed to load products.",
+    "empty": "No products yet.",
+    "saveError": "Unable to save product right now.",
+    "createCategoryError": "Unable to create category.",
+    "uncategorized": "Uncategorized",
+    "categoryLabel": "Category: {name}",
+    "stockLabel": "Stock: {count}",
+    "priceLabel": "Price: {amount}",
+    "actions": {
+      "add": "Add product",
+      "addCategory": "Add",
+      "adding": "Adding...",
+      "save": "Save",
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel"
+    },
+    "fields": {
+      "name": "Product name",
+      "sku": "SKU",
+      "barcode": "Barcode",
+      "sellingPrice": "Selling price",
+      "costPrice": "Cost price",
+      "gstRate": "GST rate",
+      "openingStock": "Opening stock",
+      "reorderLevel": "Reorder level",
+      "category": "Category",
+      "newCategory": "Add new category"
+    },
+    "placeholders": {
+      "name": "Product name",
+      "sku": "SKU",
+      "barcode": "Barcode",
+      "zero": "0",
+      "gstRate": "18",
+      "categoryName": "e.g. Electronics"
+    },
+    "validation": {
+      "invalidName": "Please enter a valid product name"
+    }
+  },
+  "warehousesPage": {
+    "title": "Warehouses",
+    "subtitle": "Monitor warehouse footprints and available stock at a glance.",
+    "kicker": "Storage",
+    "lead": "Monitor warehouse footprints and available stock at a glance.",
+    "createTitle": "Create warehouse",
+    "createDescription": "Add storage locations before stocking inventory.",
+    "listTitle": "Warehouse list",
+    "listDescription": "Keep locations organized and ready for stock moves.",
+    "loading": "Loading warehouses...",
+    "loadError": "Failed to load warehouses.",
+    "empty": "No warehouses yet.",
+    "createError": "Unable to create warehouse right now.",
+    "updateError": "Unable to update warehouse right now.",
+    "deleteError": "Unable to delete warehouse right now.",
+    "created": "Warehouse created",
+    "updated": "Warehouse updated",
+    "deleted": "Warehouse deleted",
+    "confirmDelete": "Delete this warehouse?",
+    "locationNotSet": "Location not set",
+    "actions": {
+      "add": "Add warehouse",
+      "viewStock": "View stock",
+      "save": "Save",
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel"
+    },
+    "fields": {
+      "name": "Name",
+      "location": "Location"
+    },
+    "placeholders": {
+      "location": "City, building, or zone"
+    },
+    "validation": {
+      "nameMin": "Warehouse name must be at least 2 characters."
+    },
+    "detail": {
+      "titleFallback": "Warehouse",
+      "backToWarehouses": "Back to warehouses",
+      "quickAdjustTitle": "Quick adjust",
+      "quickAdjustDescription": "Apply a stock change directly to this warehouse.",
+      "stockTitle": "Stock left",
+      "stockDescription": "Remaining stock by product for this warehouse.",
+      "itemCount": "{count} items",
+      "empty": "No items stored here yet.",
+      "stockLeft": "Stock left: {count}",
+      "reorderLevel": "Reorder level: {count}"
+    }
+  },
   "navigation": {
     "dashboard": "Dashboard",
     "insights": "Insights",
@@ -599,6 +701,12 @@
       "avgMargin": "Avg margin: {value}"
     },
     "salesForecast": {
+      "receiptsDescription": "Monthly sales forecast uses real cash receipts from paid sales and invoice collections.",
+      "avgDailyReceipts": "Avg daily receipts",
+      "projectedNext30Days": "Projected next 30 days",
+      "trendVsLastPeriod": "Trend vs last period",
+      "actualReceipts": "Actual receipts",
+      "projectedReceipts": "Projected receipts",
       "kicker": "Forecast studio",
       "title": "Sales forecast",
       "description": "Historical sales against projected movement for the selected period.",
@@ -717,6 +825,10 @@
       "next": "Next"
     },
     "inventoryRisk": {
+      "critical": "Critical",
+      "warning": "Warning",
+      "normal": "Normal",
+      "notAvailable": "N/A",
       "kicker": "Stock watch",
       "title": "Inventory risk alerts",
       "description": "Products that need attention",
@@ -844,10 +956,448 @@
     "discountPercentage": "Discount ({{value}}%)",
     "total": "Total"
   },
+  "invoiceHistory": {
+    "title": "Invoice history",
+    "subtitle": "Search completed invoices by their unique invoice number.",
+    "kicker": "Invoices",
+    "searchTitle": "Search invoices",
+    "searchDescription": "Type an invoice number like INV-0001.",
+    "searchPlaceholder": "Search by invoice number",
+    "clear": "Clear",
+    "quickActions": "Quick actions",
+    "resultsTitle": "Results",
+    "resultsShown": "{count} shown",
+    "loading": "Loading invoices...",
+    "loadError": "Failed to load invoices.",
+    "empty": "No invoices found.",
+    "updateStatus": "Update status",
+    "view": "View",
+    "tableSearchPlaceholder": "Search invoice number",
+    "columns": {
+      "invoiceNumber": "Invoice No.",
+      "customer": "Customer",
+      "date": "Date",
+      "status": "Status",
+      "total": "Total",
+      "actions": "Actions"
+    },
+    "statusModalTitle": "Update invoice status",
+    "statusModalDescription": "Save a status change explicitly. Partial and full payments will be recorded in the database.",
+    "summary": {
+      "total": "Total: {amount}",
+      "paid": "Paid: {amount}",
+      "balance": "Balance: {amount}"
+    },
+    "paidAmount": "Paid amount",
+    "paidAmountPlaceholder": "Enter paid amount",
+    "paidRemainingHint": "Saving will record the remaining balance as paid.",
+    "save": "Save",
+    "quickActionsTitle": "Quick actions",
+    "quickActionsDescription": "Start common billing tasks from one place.",
+    "quickCreateInvoice": "Create invoice",
+    "quickCreateClient": "Create client",
+    "quickEditProduct": "Edit product",
+    "messages": {
+      "paidAmountPositive": "Enter a paid amount greater than 0.",
+      "partialLessThanRemaining": "Partial payment must be less than the remaining balance of {amount}.",
+      "partialRecorded": "Partial payment recorded.",
+      "partialRecordError": "Unable to record partial payment.",
+      "markedPaid": "Invoice marked as paid.",
+      "statusUpdateError": "Unable to update invoice status.",
+      "remainingPaymentRecorded": "Remaining payment recorded.",
+      "paymentRecordError": "Unable to record payment.",
+      "markedStatus": "Invoice marked as {status}."
+    },
+    "status": {
+      "DRAFT": "Draft",
+      "SENT": "Sent",
+      "PARTIALLY_PAID": "Partially paid",
+      "PAID": "Paid",
+      "OVERDUE": "Overdue",
+      "VOID": "Void"
+    }
+  },
+  "suppliersPage": {
+    "title": "Suppliers",
+    "subtitle": "Track vendor contacts and procurement partners.",
+    "kicker": "Supply chain",
+    "formTitle": "Add supplier",
+    "formDescription": "Capture vendor contacts and preferred channels.",
+    "fields": {
+      "name": "Name",
+      "email": "Email",
+      "phone": "Phone",
+      "address": "Address"
+    },
+    "placeholders": {
+      "name": "Supplier name",
+      "email": "vendor@example.com",
+      "phone": "+91 98765 43210",
+      "address": "City, State"
+    },
+    "addSupplier": "Add supplier",
+    "saveError": "Unable to save supplier right now.",
+    "listTitle": "Supplier list",
+    "listDescription": "Keep your most active partners handy.",
+    "loading": "Loading suppliers...",
+    "loadError": "Failed to load suppliers.",
+    "empty": "No suppliers yet.",
+    "save": "Save",
+    "edit": "Edit",
+    "noEmail": "No email",
+    "noAddress": "No address",
+    "noPhone": "No phone"
+  },
+  "purchasesPage": {
+    "title": "Purchases",
+    "subtitle": "Record incoming stock and supplier invoices.",
+    "kicker": "Procurement",
+    "formTitle": "Record purchase",
+    "editTitle": "Edit purchase",
+    "formDescription": "Add supplier invoices and incoming stock.",
+    "editingNotice": "Editing PO-{id}. Adjust quantities to update stock.",
+    "fields": {
+      "supplier": "Supplier",
+      "warehouse": "Warehouse",
+      "purchaseDate": "Purchase date",
+      "notes": "Notes",
+      "paymentStatus": "Payment status",
+      "amountPaid": "Paid amount",
+      "paymentDate": "Payment date",
+      "paymentMethod": "Payment method"
+    },
+    "placeholders": {
+      "notes": "Invoice reference",
+      "amountPaid": "0"
+    },
+    "validation": {
+      "selectSupplier": "Please select a supplier",
+      "selectWarehouse": "Please select a warehouse"
+    },
+    "directPurchase": "Direct purchase",
+    "defaultStock": "Default stock",
+    "selectMethod": "Select method",
+    "optional": "Optional",
+    "lineItems": {
+      "title": "Line items",
+      "addItem": "Add item",
+      "fixTitle": "Fix the following:",
+      "selectProduct": "Select product",
+      "removeItem": "Remove item",
+      "fields": {
+        "product": "Product",
+        "quantity": "Quantity",
+        "unitCost": "Unit cost",
+        "taxRate": "Tax rate"
+      },
+      "errors": {
+        "product": "Select a product.",
+        "quantity": "Quantity must be greater than 0.",
+        "unitCost": "Unit cost must be greater than 0.",
+        "taxRate": "Tax rate must be 0 or higher."
+      },
+      "summary": {
+        "product": "Select a product for each line item.",
+        "quantity": "Ensure quantities are valid numbers greater than 0.",
+        "unitCost": "Enter a valid unit cost greater than 0 for each item.",
+        "taxRate": "Tax rates must be 0 or higher when provided."
+      }
+    },
+    "savePurchase": "Save purchase",
+    "updatePurchase": "Update purchase",
+    "cancelEdit": "Cancel edit",
+    "saveError": "Unable to save purchase right now.",
+    "listTitle": "Recent purchases",
+    "listDescription": "Latest supplier invoices and incoming stock.",
+    "loading": "Loading purchases...",
+    "loadError": "Failed to load purchases.",
+    "empty": "No purchases yet.",
+    "purchaseCode": "PO-{id}",
+    "direct": "Direct",
+    "itemsCount": "Items: {count}",
+    "warehouseName": "Warehouse: {name}",
+    "totals": {
+      "total": "Total {amount}",
+      "paid": "Paid {amount}",
+      "pending": "Pending {amount}"
+    },
+    "edit": "Edit",
+    "supplierForm": {
+      "saveError": "Unable to create supplier right now.",
+      "errors": {
+        "name": "Supplier name must be at least 2 characters.",
+        "phone": "Phone number should be at least 6 characters."
+      }
+    }
+  },
+  "salesPage": {
+    "title": "Sales",
+    "subtitle": "Track outgoing invoices and realized revenue.",
+    "kicker": "Billing",
+    "formTitle": "Create sale",
+    "formDescription": "Record customer invoices and outgoing stock.",
+    "fields": {
+      "customer": "Customer",
+      "warehouse": "Warehouse",
+      "saleDate": "Sale date",
+      "notes": "Notes",
+      "paymentStatus": "Payment status",
+      "amountPaid": "Paid amount",
+      "paymentDate": "Payment date",
+      "paymentMethod": "Payment method",
+      "status": "Status"
+    },
+    "placeholders": {
+      "notes": "Invoice reference",
+      "amountPaid": "0"
+    },
+    "defaultStock": "Default stock",
+    "selectMethod": "Select method",
+    "optional": "Optional",
+    "saveSale": "Save sale",
+    "save": "Save",
+    "edit": "Edit",
+    "recentTitle": "Recent sales",
+    "recentDescription": "Update status and track settled invoices.",
+    "loading": "Loading sales...",
+    "loadError": "Failed to load sales.",
+    "empty": "No sales yet.",
+    "invoiceCode": "INV-{id}",
+    "itemsCount": "Items: {count}",
+    "totals": {
+      "total": "Total {amount}",
+      "paid": "Paid {amount}",
+      "pending": "Pending {amount}"
+    },
+    "status": {
+      "DRAFT": "Draft",
+      "COMPLETED": "Completed",
+      "VOID": "Void"
+    },
+    "customer": {
+      "quickAdd": "Quick add",
+      "addTitle": "Add customer",
+      "addDescription": "Create a customer without leaving this screen.",
+      "save": "Save customer",
+      "walkIn": "Walk-in customer",
+      "fields": {
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "address": "Address"
+      },
+      "errors": {
+        "name": "Customer name must be at least 2 characters.",
+        "phone": "Phone number should be at least 6 characters."
+      }
+    },
+    "lineItems": {
+      "title": "Line items",
+      "addItem": "Add item",
+      "fixTitle": "Fix the following:",
+      "selectProduct": "Select product",
+      "removeItem": "Remove item",
+      "fields": {
+        "product": "Product",
+        "quantity": "Quantity",
+        "unitPrice": "Unit price",
+        "taxRate": "Tax rate"
+      },
+      "errors": {
+        "product": "Select a product.",
+        "quantity": "Quantity must be greater than 0.",
+        "unitPrice": "Unit price must be greater than 0.",
+        "taxRate": "Tax rate must be 0 or higher."
+      },
+      "summary": {
+        "product": "Select a product for each line item.",
+        "quantity": "Ensure quantities are valid numbers greater than 0.",
+        "unitPrice": "Enter a valid unit price greater than 0 for each item.",
+        "taxRate": "Tax rates must be 0 or higher when provided."
+      }
+    },
+    "messages": {
+      "saveError": "Unable to save sale right now.",
+      "createCustomerError": "Unable to create customer right now.",
+      "updateError": "Unable to update sale right now.",
+      "deleteError": "Unable to delete sale right now.",
+      "deleteConfirm": "Delete this sale? Product stock will be restored."
+    }
+  },
+  "templatesPage": {
+    "title": "Templates",
+    "subtitle": "Customize invoice sections, styling, and reusable layouts.",
+    "kicker": "Template studio",
+    "heading": "Invoice templates",
+    "description": "Choose a business type, enable sections, and preview updates in real time.",
+    "copySuffix": "copy",
+    "live": "Live",
+    "mockData": "Mock data",
+    "loading": "Loading templates...",
+    "savedTemplates": "My saved templates",
+    "featured": "Featured",
+    "allTemplates": "All templates",
+    "active": "Active",
+    "updated": "Updated {value}",
+    "previewTitle": "Template preview",
+    "previewSettings": "Preview settings",
+    "previewSections": "Sections",
+    "searchPlaceholder": "Search saved templates",
+    "sections": {
+      "businessType": "1. Business type",
+      "customize": "2. Customize sections",
+      "styling": "3. Template styling",
+      "livePreview": "Live preview",
+      "selection": "4. Template selection"
+    },
+    "filters": {
+      "allTemplates": "All templates",
+      "currentBase": "Current base"
+    },
+    "actions": {
+      "remove": "Remove",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "up": "Up",
+      "down": "Down",
+      "addSections": "Add sections",
+      "themeColor": "Theme color",
+      "backgroundColor": "Background color",
+      "textColor": "Text color",
+      "fontFamily": "Font family",
+      "fontSize": "Font size ({value}px)",
+      "sectionPadding": "Section padding ({value}px)",
+      "sectionMargin": "Section margin ({value}px)",
+      "borderRadius": "Border radius ({value}px)",
+      "sectionWidth": "Section width",
+      "widthContained": "Contained",
+      "widthFull": "Full width",
+      "backgroundImage": "Background image",
+      "removeBackgroundImage": "Remove background image",
+      "apply": "Apply",
+      "showLogo": "Show logo",
+      "saving": "Saving...",
+      "saveSettings": "Save settings",
+      "savingTemplate": "Saving template...",
+      "saveAsTemplate": "Save as template",
+      "resetSection": "Reset section",
+      "resetAll": "Reset all",
+      "saveDesign": "Save design",
+      "loadDesign": "Load design",
+      "saveCurrent": "Save current",
+      "applyTemplate": "Apply",
+      "update": "Update",
+      "rename": "Rename",
+      "preview": "Preview",
+      "useTemplate": "Use template",
+      "downloadPdf": "Download PDF",
+      "close": "Close"
+    },
+    "prompts": {
+      "saveName": "Enter a name for your saved template",
+      "renameName": "Rename saved template",
+      "deleteConfirm": "Delete this saved template?"
+    },
+    "empty": {
+      "filtered": "No saved templates match your search/filter.",
+      "none": "No saved templates yet. Save your current setup to create one."
+    },
+    "toasts": {
+      "settingsSaved": "Template settings saved",
+      "settingsSaveError": "Unable to save template settings",
+      "savedCreated": "Saved template created",
+      "savedCreateError": "Unable to create saved template",
+      "savedUpdated": "Saved template updated",
+      "savedUpdateError": "Unable to update saved template",
+      "savedDeleted": "Saved template deleted",
+      "savedDeleteError": "Unable to delete saved template",
+      "validThemeHex": "Use a valid 6-digit hex color like #2563eb",
+      "validSectionHex": "Use a valid 6-digit hex color like #334155",
+      "previewPdfError": "Unable to generate PDF from preview"
+    },
+    "aria": {
+      "dragToReorder": "Drag to reorder",
+      "setThemeColor": "Set theme color {color}",
+      "setBackgroundColor": "Set background color {color}",
+      "setTextColor": "Set text color {color}"
+    }
+  },
+  "businessProfilePage": {
+    "title": "Business Profile",
+    "subtitle": "Set up business identity and invoice defaults.",
+    "kicker": "Invoice onboarding",
+    "heading": "Set up your billing profile",
+    "steps": {
+      "businessType": "Business type",
+      "businessDetails": "Business details",
+      "template": "Template"
+    },
+    "stepTitles": {
+      "businessType": "Step 1: Choose business type",
+      "businessProfile": "Step 2: Business profile",
+      "templateSelection": "Step 3: Template selection"
+    },
+    "enabledSections": "Enabled sections",
+    "fields": {
+      "businessName": "Business name",
+      "phone": "Phone",
+      "address": "Address",
+      "email": "Email",
+      "website": "Website",
+      "taxId": "Tax ID / GSTIN",
+      "currency": "Currency"
+    },
+    "placeholders": {
+      "businessName": "Business name",
+      "phone": "9876543210",
+      "address": "Business address",
+      "email": "name@example.com",
+      "website": "https://example.com",
+      "taxId": "GSTIN or Tax ID",
+      "currency": "INR"
+    },
+    "toggles": {
+      "showLogoOnInvoice": "Show logo on invoice",
+      "showTaxNumber": "Show tax number",
+      "showPaymentQr": "Show payment QR"
+    },
+    "actions": {
+      "back": "Back",
+      "next": "Next",
+      "finish": "Finish",
+      "saving": "Saving..."
+    },
+    "previewTitle": "Preview",
+    "previewDescription": "Matches the selected template and business profile.",
+    "messages": {
+      "saved": "Business profile saved",
+      "saveError": "Unable to save business profile"
+    },
+    "logo": {
+      "title": "Business Logo",
+      "uploadAriaLabel": "Upload logo",
+      "imageAlt": "Business logo",
+      "replaceHint": "Click or drag to replace",
+      "uploadTitle": "Upload a logo",
+      "uploadDescription": "PNG, JPG, JPEG or WebP · max 2 MB",
+      "remove": "Remove logo",
+      "messages": {
+        "fileType": "Only PNG, JPG, JPEG, and WebP files are allowed.",
+        "fileSize": "File size must not exceed 2 MB.",
+        "replaced": "Logo replaced successfully.",
+        "uploaded": "Logo uploaded successfully.",
+        "processError": "Failed to process the image.",
+        "removed": "Logo removed."
+      }
+    }
+  },
   "validation": {
     "required": "This field is required",
     "validDate": "Select a valid date",
     "validNumber": "Enter a valid number",
+    "validName": "Please enter a valid name (letters only)",
+    "validEmail": "Enter a valid email address",
+    "validPhone": "Enter a valid phone number",
     "invoiceSelectCustomer": "Select a customer.",
     "invoiceSelectWarehouse": "Select a warehouse to sync inventory.",
     "invoiceSelectProduct": "Select a product.",

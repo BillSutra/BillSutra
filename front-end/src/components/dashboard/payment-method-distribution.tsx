@@ -19,6 +19,7 @@ import {
 } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type DistributionItem = DashboardPaymentMethods["sales"][number];
 type PaymentMethodPeriod = DashboardPaymentMethods["period"];
@@ -32,27 +33,16 @@ const chartColors = [
   "#2563eb",
 ];
 
-const paymentMethodLabels: Record<DistributionItem["method"], string> = {
-  CASH: "Cash",
-  CARD: "Card",
-  BANK_TRANSFER: "Bank transfer",
-  UPI: "UPI",
-  CHEQUE: "Cheque",
-  OTHER: "Other",
-};
-
-const periodLabels: Record<PaymentMethodPeriod, string> = {
-  week: "This Week",
-  month: "This Month",
-  year: "This Year",
-};
-
 const PaymentMethodTooltip = ({
   active,
   payload,
+  labels,
+  t,
 }: {
   active?: boolean;
   payload?: Array<{ payload: DistributionItem }>;
+  labels: Record<DistributionItem["method"], string>;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) => {
   if (!active || !payload?.length) {
     return null;
@@ -66,13 +56,17 @@ const PaymentMethodTooltip = ({
   return (
     <div className="rounded-lg border border-[#ecdccf] bg-white p-3 shadow-xl ring-1 ring-black/5">
       <p className="text-sm font-semibold text-[#1f1b16]">
-        {paymentMethodLabels[item.method]}
+        {labels[item.method]}
       </p>
       <p className="mt-1 text-xs text-[#8a6d56]">
-        Amount: {formatCurrency(item.amount)}
+        {t("dashboard.paymentMethods.amountLabel", {
+          amount: formatCurrency(item.amount),
+        })}
       </p>
       <p className="text-xs text-[#8a6d56]">
-        Transactions: {formatNumber(item.count)}
+        {t("dashboard.paymentMethods.transactionsLabel", {
+          count: formatNumber(item.count),
+        })}
       </p>
     </div>
   );
@@ -86,6 +80,8 @@ const DistributionCard = ({
   isLoading,
   isError,
   status,
+  paymentMethodLabels,
+  t,
 }: {
   title: string;
   description: string;
@@ -100,6 +96,8 @@ const DistributionCard = ({
     dataUpdatedAt?: number;
     refreshIntervalMs?: number;
   };
+  paymentMethodLabels: Record<DistributionItem["method"], string>;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) => {
   const totals = useMemo(() => {
     return {
@@ -131,7 +129,7 @@ const DistributionCard = ({
           <div className="h-[280px] rounded-xl bg-[#fdf7f1] animate-pulse" />
         ) : isError ? (
           <div className="flex min-h-[280px] items-center justify-center rounded-xl border border-dashed border-[#ecdccf] bg-[#fff9f2] px-4 text-center text-sm text-[#b45309]">
-            Unable to load payment method data.
+            {t("dashboard.paymentMethods.loadError")}
           </div>
         ) : data.length === 0 ? (
           <div className="flex min-h-[280px] items-center justify-center rounded-xl border border-dashed border-[#ecdccf] bg-[#fff9f2] px-4 text-center text-sm text-[#8a6d56]">
@@ -142,7 +140,7 @@ const DistributionCard = ({
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="dashboard-chart-metric rounded-2xl p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                  Total amount
+                  {t("dashboard.paymentMethods.totalAmount")}
                 </p>
                 <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
                   {formatCurrency(totals.totalAmount)}
@@ -150,7 +148,7 @@ const DistributionCard = ({
               </div>
               <div className="dashboard-chart-metric rounded-2xl p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                  Transactions
+                  {t("dashboard.paymentMethods.transactions")}
                 </p>
                 <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
                   {formatNumber(totals.totalTransactions)}
@@ -158,14 +156,17 @@ const DistributionCard = ({
               </div>
               <div className="dashboard-chart-metric rounded-2xl p-4 sm:col-span-2 xl:col-span-1">
                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                  Top method
+                  {t("dashboard.paymentMethods.topMethod")}
                 </p>
                 <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
-                  {topMethod ? paymentMethodLabels[topMethod.method] : "None"}
+                  {topMethod
+                    ? paymentMethodLabels[topMethod.method]
+                    : t("dashboard.paymentMethods.none")}
                 </p>
                 <p className="mt-1 text-xs text-[#5f5144]">
-                  {topMethod ? formatPercent(topMethodShare) : "0.0%"} of collected
-                  amount
+                  {t("dashboard.paymentMethods.topMethodShare", {
+                    share: topMethod ? formatPercent(topMethodShare) : "0.0%",
+                  })}
                 </p>
               </div>
             </div>
@@ -189,7 +190,14 @@ const DistributionCard = ({
                         />
                       ))}
                     </Pie>
-                    <Tooltip content={<PaymentMethodTooltip />} />
+                    <Tooltip
+                      content={
+                        <PaymentMethodTooltip
+                          labels={paymentMethodLabels}
+                          t={t}
+                        />
+                      }
+                    />
                   </PieChart>
                 </DashboardResponsiveChart>
               </div>
@@ -197,10 +205,10 @@ const DistributionCard = ({
               <div className="grid content-start gap-2.5">
                 <div className="flex items-center justify-between gap-3 px-1">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
-                    Payment mix
+                    {t("dashboard.paymentMethods.paymentMix")}
                   </p>
                   <p className="shrink-0 text-[11px] font-medium uppercase tracking-[0.14em] text-[#6f6257]">
-                    Share of amount
+                    {t("dashboard.paymentMethods.shareOfAmount")}
                   </p>
                 </div>
                 {data.map((item, index) => {
@@ -234,7 +242,9 @@ const DistributionCard = ({
                           {formatCurrency(item.amount)}
                         </p>
                         <p className="text-xs text-[#5f5144]">
-                          {formatNumber(item.count)} transaction(s)
+                          {t("dashboard.paymentMethods.transactionCount", {
+                            count: formatNumber(item.count),
+                          })}
                         </p>
                       </div>
                       <div className="mt-2 h-1.5 rounded-full bg-[#f2e6dc]">
@@ -259,7 +269,23 @@ const DistributionCard = ({
 };
 
 const PaymentMethodDistribution = ({ className }: { className?: string }) => {
+  const { t } = useI18n();
   const [period, setPeriod] = useState<PaymentMethodPeriod>("month");
+
+  const paymentMethodLabels: Record<DistributionItem["method"], string> = {
+    CASH: t("dashboard.enums.paymentMethod.CASH"),
+    CARD: t("dashboard.enums.paymentMethod.CARD"),
+    BANK_TRANSFER: t("dashboard.enums.paymentMethod.BANK_TRANSFER"),
+    UPI: t("dashboard.enums.paymentMethod.UPI"),
+    CHEQUE: t("dashboard.enums.paymentMethod.CHEQUE"),
+    OTHER: t("dashboard.enums.paymentMethod.OTHER"),
+  };
+
+  const periodLabels: Record<PaymentMethodPeriod, string> = {
+    week: t("dashboard.paymentMethods.periodWeek"),
+    month: t("dashboard.paymentMethods.periodMonth"),
+    year: t("dashboard.paymentMethods.periodYear"),
+  };
 
   const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "paymentMethods", period],
@@ -272,10 +298,10 @@ const PaymentMethodDistribution = ({ className }: { className?: string }) => {
       <div className="flex flex-col gap-3 rounded-[1.5rem] border border-[#ecdccf] bg-[linear-gradient(135deg,rgba(255,250,244,0.92),rgba(255,255,255,0.88))] px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
-            Payment method distribution
+            {t("dashboard.paymentMethods.sectionKicker")}
           </p>
           <p className="mt-1 max-w-xl text-sm leading-6 text-[#5f5144]">
-            Breakdown of paid sales and purchases by payment type.
+            {t("dashboard.paymentMethods.sectionDescription")}
           </p>
         </div>
         <div className="flex w-full rounded-lg border border-[#ecdccf] bg-[#fdf7f1] p-1 sm:w-fit">
@@ -300,11 +326,11 @@ const PaymentMethodDistribution = ({ className }: { className?: string }) => {
 
       <div className="grid gap-4 xl:grid-cols-2">
         <DistributionCard
-          title="Sales payment methods"
-          description={`Collected amount distribution for ${periodLabels[
-            period
-          ].toLowerCase()}.`}
-          emptyMessage="No recorded sale payments in this period."
+          title={t("dashboard.paymentMethods.salesTitle")}
+          description={t("dashboard.paymentMethods.salesDescription", {
+            period: periodLabels[period],
+          })}
+          emptyMessage={t("dashboard.paymentMethods.salesEmpty")}
           data={data?.sales ?? []}
           isLoading={isLoading}
           isError={isError}
@@ -315,13 +341,15 @@ const PaymentMethodDistribution = ({ className }: { className?: string }) => {
             dataUpdatedAt,
             refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
           }}
+          paymentMethodLabels={paymentMethodLabels}
+          t={t}
         />
         <DistributionCard
-          title="Purchase payment methods"
-          description={`Paid amount distribution for ${periodLabels[
-            period
-          ].toLowerCase()}.`}
-          emptyMessage="No recorded purchase payments in this period."
+          title={t("dashboard.paymentMethods.purchasesTitle")}
+          description={t("dashboard.paymentMethods.purchasesDescription", {
+            period: periodLabels[period],
+          })}
+          emptyMessage={t("dashboard.paymentMethods.purchasesEmpty")}
           data={data?.purchases ?? []}
           isLoading={isLoading}
           isError={isError}
@@ -332,6 +360,8 @@ const PaymentMethodDistribution = ({ className }: { className?: string }) => {
             dataUpdatedAt,
             refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
           }}
+          paymentMethodLabels={paymentMethodLabels}
+          t={t}
         />
       </div>
     </section>

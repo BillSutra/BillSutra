@@ -8,6 +8,7 @@ import { PackageSearch } from "lucide-react";
 import { formatCurrency, formatNumber } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type RiskAlert = {
   product_id: number;
@@ -50,14 +51,19 @@ const getAlertBadgeColor = (
   }
 };
 
-const getAlertLabel = (alert: RiskAlert): string => {
+const getAlertLabel = (
+  alert: RiskAlert,
+  labels: Record<"critical" | "warning" | "normal", string>,
+  outOfStockLabel: string,
+): string => {
   if (alert.stock_left === 0) {
-    return "Out of Stock";
+    return outOfStockLabel;
   }
-  return alert.alert_level;
+  return labels[alert.alert_level];
 };
 
 const InventoryRiskAlerts = ({ className }: { className?: string }) => {
+  const { t } = useI18n();
   const { data: inventoryData } = useQuery({
     queryKey: ["dashboard", "inventory"],
     queryFn: fetchDashboardInventory,
@@ -78,6 +84,11 @@ const InventoryRiskAlerts = ({ className }: { className?: string }) => {
   const alerts = data?.data.alerts || [];
   const outOfStockCount = alerts.filter((alert) => alert.stock_left === 0).length;
   const lowStockCount = alerts.filter((alert) => alert.stock_left > 0).length;
+  const alertLevelLabels = {
+    critical: t("dashboard.inventoryRisk.critical"),
+    warning: t("dashboard.inventoryRisk.warning"),
+    normal: t("dashboard.inventoryRisk.normal"),
+  } as const;
 
   return (
     <Card
@@ -90,14 +101,14 @@ const InventoryRiskAlerts = ({ className }: { className?: string }) => {
           </div>
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-[#8a6d56]">
-              Stock watch
+              {t("dashboard.inventoryRisk.kicker")}
             </p>
             <CardTitle className="mt-1 text-lg text-[#1f1b16]">
-              Inventory risk alerts
+              {t("dashboard.inventoryRisk.title")}
             </CardTitle>
           </div>
         </div>
-        <p className="text-sm text-[#8a6d56]">Products that need attention</p>
+        <p className="text-sm text-[#8a6d56]">{t("dashboard.inventoryRisk.description")}</p>
         <DashboardCardStatus
           isLoading={isLoading}
           isFetching={isFetching}
@@ -111,25 +122,25 @@ const InventoryRiskAlerts = ({ className }: { className?: string }) => {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
               {
-                label: "Total products",
+                label: t("dashboard.inventoryRisk.totalProducts"),
                 value: formatNumber(inventoryData.totalProducts),
               },
               {
-                label: "Low stock",
+                label: t("dashboard.inventoryRisk.lowStock"),
                 value:
                   alerts.length > 0
                     ? formatNumber(lowStockCount)
                     : formatNumber(inventoryData.lowStock),
               },
               {
-                label: "Out of stock",
+                label: t("dashboard.inventoryRisk.outOfStock"),
                 value:
                   alerts.length > 0
                     ? formatNumber(outOfStockCount)
                     : formatNumber(inventoryData.outOfStock),
               },
               {
-                label: "Inventory value",
+                label: t("dashboard.inventoryRisk.inventoryValue"),
                 value: formatCurrency(inventoryData.inventoryValue),
               },
             ].map((item) => (
@@ -160,13 +171,13 @@ const InventoryRiskAlerts = ({ className }: { className?: string }) => {
         )}
 
         {isError && (
-          <p className="text-sm text-[#b45309]">Failed to load inventory alerts</p>
+          <p className="text-sm text-[#b45309]">{t("dashboard.inventoryRisk.loadError")}</p>
         )}
 
         {!isLoading && !isError && alerts.length === 0 && (
           <div className="rounded-2xl border border-[#f2e6dc] bg-white/85 px-4 py-6 text-center">
             <p className="text-sm text-[#8a6d56]">
-              No products at risk. Inventory levels are healthy.
+              {t("dashboard.inventoryRisk.empty")}
             </p>
           </div>
         )}
@@ -191,42 +202,54 @@ const InventoryRiskAlerts = ({ className }: { className?: string }) => {
                           alert.alert_level,
                         )}`}
                       >
-                        {getAlertLabel(alert)}
+                        {getAlertLabel(
+                          alert,
+                          alertLevelLabels,
+                          t("dashboard.inventoryRisk.outOfStockBadge"),
+                        )}
                       </span>
                     </div>
                     <div className="mt-3 grid gap-2 sm:grid-cols-2">
                       <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
-                          Stock Left
+                          {t("dashboard.inventoryRisk.stockLeft")}
                         </p>
                         <p className="mt-1 font-semibold text-[#1f1b16]">
-                          {formatNumber(alert.stock_left)} units
+                          {t("dashboard.inventoryRisk.units", {
+                            count: formatNumber(alert.stock_left),
+                          })}
                         </p>
                       </div>
                       <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
-                          Daily Sales
+                          {t("dashboard.inventoryRisk.dailySales")}
                         </p>
                         <p className="mt-1 font-semibold text-[#1f1b16]">
-                          {alert.predicted_daily_sales.toFixed(1)} units
+                          {t("dashboard.inventoryRisk.units", {
+                            count: alert.predicted_daily_sales.toFixed(1),
+                          })}
                         </p>
                       </div>
                       <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
-                          Days Until Stockout
+                          {t("dashboard.inventoryRisk.daysUntilStockout")}
                         </p>
                         <p className="mt-1 font-semibold text-[#1f1b16]">
                           {alert.days_until_stockout === 999
-                            ? "N/A"
-                            : `${formatNumber(alert.days_until_stockout)} days`}
+                            ? t("dashboard.inventoryRisk.notAvailable")
+                            : t("dashboard.inventoryRisk.days", {
+                                count: formatNumber(alert.days_until_stockout),
+                              })}
                         </p>
                       </div>
                       <div className="rounded-xl border border-white/70 bg-white/70 px-3 py-2">
                         <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
-                          Reorder Qty
+                          {t("dashboard.inventoryRisk.reorderQty")}
                         </p>
                         <p className="mt-1 font-semibold text-[#1f1b16]">
-                          {formatNumber(alert.recommended_reorder_quantity)} units
+                          {t("dashboard.inventoryRisk.units", {
+                            count: formatNumber(alert.recommended_reorder_quantity),
+                          })}
                         </p>
                       </div>
                     </div>
