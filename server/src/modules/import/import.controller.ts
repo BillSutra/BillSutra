@@ -1,11 +1,13 @@
 import type { Request, Response } from "express";
 import { sendResponse } from "../../utils/sendResponse.js";
 import {
+  confirmProductImport,
+  createProductImportPreview,
   getImportTemplateCsv,
+  getProductImportTemplateWorkbook,
   importClients,
   importInvoiceItems,
   importInvoices,
-  importProducts,
   parseImportFile,
 } from "./import.service.js";
 
@@ -59,7 +61,22 @@ export const downloadClientTemplateController = (req: Request, res: Response) =>
 export const downloadProductTemplateController = (
   req: Request,
   res: Response,
-) => sendTemplateCsv(req, res, "products");
+) => {
+  const userId = getUserId(req, res);
+  if (!userId) {
+    return;
+  }
+
+  const template = getProductImportTemplateWorkbook();
+
+  res.setHeader("Content-Type", template.contentType);
+  res.setHeader(
+    "Content-Disposition",
+    `attachment; filename="${template.fileName}"`,
+  );
+
+  return res.status(200).send(template.content);
+};
 
 export const downloadInvoiceTemplateController = (
   req: Request,
@@ -110,14 +127,36 @@ export const importProductsController = async (req: Request, res: Response) => {
   }
 
   try {
-    const rows = await parseImportFile(file);
-    const result = await importProducts(userId, rows);
+    const preview = await createProductImportPreview(userId, file);
 
-    return res.status(200).json({
-      success: true,
-      imported: result.imported,
-      failed: result.failed,
-      errors: result.errors,
+    return sendResponse(res, 200, {
+      message: "Product import preview generated",
+      data: preview,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Import failed";
+    return sendResponse(res, 400, { message });
+  }
+};
+
+export const confirmProductImportController = async (
+  req: Request,
+  res: Response,
+) => {
+  const userId = getUserId(req, res);
+  if (!userId) {
+    return;
+  }
+
+  const previewToken =
+    typeof req.body?.preview_token === "string" ? req.body.preview_token : "";
+
+  try {
+    const result = await confirmProductImport(userId, previewToken);
+
+    return sendResponse(res, 200, {
+      message: "Product import completed",
+      data: result,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Import failed";

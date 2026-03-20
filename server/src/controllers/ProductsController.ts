@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
 import { getTotalPages, parsePagination } from "../utils/pagination.js";
+import type { Prisma } from "@prisma/client";
 import type { z } from "zod";
 import {
   productCreateSchema,
@@ -21,25 +22,85 @@ class ProductsController {
     const { page, limit, skip } = parsePagination({
       page: req.query.page,
       limit: req.query.limit,
+    }, {
+      defaultLimit: 20,
+      maxLimit: 200,
     });
 
-    const where = { user_id: userId };
+    const search =
+      typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const category =
+      typeof req.query.category === "string" ? req.query.category.trim() : "";
+
+    const where: Prisma.ProductWhereInput = {
+      user_id: userId,
+    };
+
+    if (category) {
+      const parsedCategoryId = Number(category);
+      if (Number.isInteger(parsedCategoryId) && parsedCategoryId > 0) {
+        where.category_id = parsedCategoryId;
+      } else {
+        where.category = {
+          name: {
+            equals: category,
+            mode: "insensitive",
+          },
+        };
+      }
+    }
+
+    if (search) {
+      where.OR = [
+        {
+          name: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          sku: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          barcode: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+      ];
+    }
+
+    const dbQuery = {
+      where,
+      include: { category: true },
+      orderBy: { created_at: "desc" as const },
+      skip,
+      take: limit,
+    };
+
+    console.info("[products.index] query params", {
+      page: req.query.page ?? null,
+      limit: req.query.limit ?? null,
+      search: search || null,
+      category: category || null,
+    });
+    console.info("[products.index] db query", dbQuery);
+
     const [items, total] = await prisma.$transaction([
-      prisma.product.findMany({
-        where,
-        include: { category: true },
-        orderBy: { created_at: "desc" },
-        skip,
-        take: limit,
-      }),
+      prisma.product.findMany(dbQuery),
       prisma.product.count({ where }),
     ]);
 
     return sendResponse(res, 200, {
       data: {
+        products: items,
         items,
         total,
         page,
+        limit,
         totalPages: getTotalPages(total, limit),
       },
     });

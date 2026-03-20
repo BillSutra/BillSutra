@@ -13,6 +13,7 @@ import {
   deleteCustomer,
   fetchCategories,
   fetchCustomers,
+  fetchProductOptions,
   fetchProducts,
   fetchPurchases,
   fetchSales,
@@ -39,6 +40,7 @@ import {
   updateCustomer,
   createWorker,
   deleteWorker,
+  type ProductListParams,
   updateWorker,
 } from "@/lib/apiClient";
 import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
@@ -47,8 +49,35 @@ const invalidateDashboard = (
   queryClient: ReturnType<typeof useQueryClient>,
 ) => invalidateDashboardQueries(queryClient);
 
-export const useProductsQuery = () =>
-  useQuery({ queryKey: ["products"], queryFn: fetchProducts });
+export const useProductsQuery = (params?: ProductListParams) =>
+  useQuery({
+    queryKey: ["products", "options", params],
+    queryFn: () => fetchProductOptions(params),
+  });
+
+export const useProductsPageQuery = (params: ProductListParams) =>
+  useQuery({
+    queryKey: ["products", "page", params],
+    queryFn: () => fetchProducts(params),
+    placeholderData: (previousData) => previousData,
+  });
+
+export const useProductSearchQuery = (
+  search: string,
+  options?: { limit?: number; category?: string | null },
+) =>
+  useQuery({
+    queryKey: ["products", "search", search, options],
+    queryFn: () =>
+      fetchProductOptions({
+        page: 1,
+        limit: options?.limit ?? 20,
+        category: options?.category ?? null,
+        search,
+      }),
+    enabled: search.trim().length > 0,
+    placeholderData: (previousData) => previousData,
+  });
 
 export const useCategoriesQuery = () =>
   useQuery({ queryKey: ["categories"], queryFn: fetchCategories });

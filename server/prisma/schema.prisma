@@ -231,9 +231,9 @@ model Product {
   category    Category? @relation(fields: [category_id], references: [id], onDelete: SetNull)
   category_id Int?
 
-  name    String
-  sku     String
-  barcode String?
+  name        String
+  sku         String
+  barcode     String?
 
   price Decimal  @db.Decimal(12, 2)
   cost  Decimal? @db.Decimal(12, 2)
@@ -256,6 +256,8 @@ model Product {
   @@unique([user_id, sku])
   @@index([user_id])
   @@index([category_id])
+  @@index([user_id, name])
+  @@index([user_id, category_id])
   @@map("products")
 }
 

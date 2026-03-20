@@ -79,6 +79,58 @@ export type Category = {
   name: string;
 };
 
+export type ProductImportValidRow = {
+  rowNumber: number;
+  name: string;
+  sku: string;
+  barcode?: string;
+  price: number;
+  cost?: number;
+  gstRate: number;
+  stock: number;
+  reorderLevel: number;
+  category?: string;
+};
+
+export type ProductImportInvalidRow = {
+  rowNumber: number;
+  values: {
+    name: string;
+    sku: string;
+    barcode: string;
+    sellingPrice: string;
+    costPrice: string;
+    gstRate: string;
+    openingStock: string;
+    reorderLevel: string;
+    category: string;
+  };
+  errors: string[];
+};
+
+export type ProductImportPreview = {
+  previewToken: string;
+  fileName: string;
+  totalRows: number;
+  validRows: ProductImportValidRow[];
+  invalidRows: ProductImportInvalidRow[];
+  summary: {
+    totalRows: number;
+    validRows: number;
+    invalidRows: number;
+    expiresAt: string;
+  };
+};
+
+export type ProductImportConfirmResult = {
+  importedCount: number;
+  skippedCount: number;
+  errors: Array<{
+    rowNumber: number;
+    message: string;
+  }>;
+};
+
 export type ProductInput = {
   name: string;
   sku: string;
@@ -89,6 +141,21 @@ export type ProductInput = {
   stock_on_hand?: number | null;
   reorder_level?: number | null;
   category_id?: number | null;
+};
+
+export type ProductListParams = {
+  page?: number;
+  limit?: number;
+  category?: string | null;
+  search?: string | null;
+};
+
+export type ProductListResponse = {
+  products: Product[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 };
 
 export type Customer = {
@@ -856,9 +923,58 @@ export const fetchReportsSummary = async (): Promise<ReportsSummary> => {
   return response.data.data as ReportsSummary;
 };
 
-export const fetchProducts = async (): Promise<Product[]> => {
-  const response = await apiClient.get("/products");
-  return normalizeListResponse<Product>(response.data?.data);
+export const fetchProducts = async (
+  params?: ProductListParams,
+): Promise<ProductListResponse> => {
+  const searchParams = new URLSearchParams();
+
+  if (params?.page) {
+    searchParams.set("page", String(params.page));
+  }
+  if (params?.limit) {
+    searchParams.set("limit", String(params.limit));
+  }
+  if (params?.category) {
+    searchParams.set("category", params.category);
+  }
+  if (params?.search) {
+    searchParams.set("search", params.search);
+  }
+
+  const query = searchParams.toString();
+  const response = await apiClient.get(query ? `/products?${query}` : "/products");
+  const payload = response.data?.data;
+  const products = normalizeListResponse<Product>(
+    payload?.products ?? payload?.items ?? payload,
+  );
+
+  return {
+    products,
+    total:
+      typeof payload?.total === "number" ? payload.total : products.length,
+    page: typeof payload?.page === "number" ? payload.page : params?.page ?? 1,
+    limit:
+      typeof payload?.limit === "number"
+        ? payload.limit
+        : params?.limit ?? products.length,
+    totalPages:
+      typeof payload?.totalPages === "number"
+        ? payload.totalPages
+        : 1,
+  };
+};
+
+export const fetchProductOptions = async (
+  params?: ProductListParams,
+): Promise<Product[]> => {
+  const response = await fetchProducts({
+    page: params?.page ?? 1,
+    limit: params?.limit ?? 1000,
+    category: params?.category ?? null,
+    search: params?.search ?? null,
+  });
+
+  return response.products;
 };
 
 export const createProduct = async (
@@ -877,6 +993,87 @@ export const updateProduct = async (
 
 export const deleteProduct = async (id: number): Promise<void> => {
   await apiClient.delete(`/products/${id}`);
+};
+
+export const previewProductImport = async (
+  file: File,
+  options?: {
+    onUploadProgress?: (progress: number) => void;
+  },
+): Promise<ProductImportPreview> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const response = await apiClient.post("/import/products/preview", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: (event) => {
+        if (!options?.onUploadProgress || !event.total) {
+          return;
+        }
+
+        const progress = Math.min(
+          100,
+          Math.round((event.loaded / event.total) * 100),
+        );
+        options.onUploadProgress(progress);
+      },
+    });
+
+    return response.data.data as ProductImportPreview;
+  } catch (error) {
+    const message =
+      (await extractBlobErrorMessage(error)) ||
+      "Unable to validate the uploaded file.";
+
+    throw new Error(message);
+  }
+};
+
+export const confirmProductImport = async (
+  previewToken: string,
+): Promise<ProductImportConfirmResult> => {
+  try {
+    const response = await apiClient.post("/import/products/confirm", {
+      preview_token: previewToken,
+    });
+
+    return response.data.data as ProductImportConfirmResult;
+  } catch (error) {
+    const message =
+      (await extractBlobErrorMessage(error)) || "Unable to confirm import.";
+
+    throw new Error(message);
+  }
+};
+
+export const downloadProductImportTemplate = async (): Promise<{
+  blob: Blob;
+  fileName: string;
+}> => {
+  try {
+    const response = await apiClient.get("/import/templates/products", {
+      responseType: "blob",
+    });
+
+    const disposition = response.headers?.["content-disposition"] as
+      | string
+      | undefined;
+
+    return {
+      blob: response.data as Blob,
+      fileName: parseDownloadFileName(
+        disposition,
+        "products-import-template.xlsx",
+      ),
+    };
+  } catch (error) {
+    const message =
+      (await extractBlobErrorMessage(error)) ||
+      "Unable to download the product import template.";
+
+    throw new Error(message);
+  }
 };
 
 export const fetchCustomers = async (): Promise<Customer[]> => {
@@ -1068,7 +1265,7 @@ export const sendInvoiceReminder = async (
   return (response.data?.data ?? { invoiceId }) as { invoiceId: number };
 };
 
-const parsePdfFileName = (
+const parseDownloadFileName = (
   contentDisposition: string | undefined,
   fallback: string,
 ) => {
@@ -1082,6 +1279,44 @@ const parsePdfFileName = (
     return basicMatch[1];
   }
   return fallback;
+};
+
+const extractBlobErrorMessage = async (error: unknown) => {
+  if (!axios.isAxiosError(error)) {
+    return null;
+  }
+
+  const responseData = error.response?.data;
+
+  if (responseData instanceof Blob) {
+    try {
+      const text = await responseData.text();
+
+      if (!text) {
+        return null;
+      }
+
+      try {
+        const parsed = JSON.parse(text) as { message?: string };
+        return parsed.message?.trim() || null;
+      } catch {
+        return text.trim() || null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  if (
+    responseData &&
+    typeof responseData === "object" &&
+    "message" in responseData &&
+    typeof responseData.message === "string"
+  ) {
+    return responseData.message.trim() || null;
+  }
+
+  return null;
 };
 
 export const fetchInvoicePdfFile = async (
@@ -1099,7 +1334,7 @@ export const fetchInvoicePdfFile = async (
 
   return {
     blob: response.data as Blob,
-    fileName: parsePdfFileName(disposition, fallback),
+    fileName: parseDownloadFileName(disposition, fallback),
   };
 };
 

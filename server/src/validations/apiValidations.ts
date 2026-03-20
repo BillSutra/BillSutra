@@ -209,6 +209,10 @@ export const productCreateSchema = z.object({
 
 export const productUpdateSchema = productCreateSchema.partial();
 
+export const productImportConfirmSchema = z.object({
+  preview_token: z.string().min(1),
+});
+
 const invoiceItemSchema = z.object({
   product_id: z.coerce.number().int().positive().optional(),
   name: z.string().min(1),
