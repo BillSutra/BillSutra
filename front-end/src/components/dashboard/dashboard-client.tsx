@@ -34,6 +34,7 @@ import {
   DASHBOARD_REFRESH_INTERVAL_MS,
   dashboardQueryDefaults,
 } from "@/lib/dashboardRefresh";
+import { useHydrated } from "@/hooks/useHydrated";
 import { useI18n } from "@/providers/LanguageProvider";
 import { useDashboardFormatters } from "@/components/dashboard/use-dashboard-formatters";
 
@@ -133,7 +134,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   const { t } = useI18n();
   const { currency, dateLabel, dateWithYear, timeLabel, translateEnum } =
     useDashboardFormatters();
-  const [hydrated, setHydrated] = useState(false);
+  const hydrated = useHydrated();
   const [filters, setFilters] = useState<DashboardFilterState>({
     range: "30d",
     granularity: "day",
@@ -148,8 +149,6 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     token !== "null";
 
   useEffect(() => {
-    setHydrated(true);
-
     if (!hasValidSessionToken) {
       window.localStorage.removeItem("token");
       return;
@@ -171,7 +170,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     ...dashboardQueryDefaults,
   });
 
-  const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
+  const { data, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "overview", deferredFilters],
     queryFn: () => fetchDashboardOverview(deferredFilters),
     enabled: hydrated && hasValidSessionToken,

@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Modal from "@/components/ui/modal";
 import Link from "next/link";
+import PasskeySettingsCard from "@/components/profile/PasskeySettingsCard";
 
 type ProfileClientProps = {
   initialProfile: UserProfile;
@@ -108,7 +109,7 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
       setName(updated.name);
       setEmail(updated.email);
       setProfileMessage("Profile updated successfully.");
-    } catch (error) {
+    } catch {
       setProfileError("Unable to update profile.");
     } finally {
       setProfileSaving(false);
@@ -141,7 +142,7 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
       setNewPassword("");
       setConfirmPassword("");
       setPasswordMessage("Password updated successfully.");
-    } catch (error) {
+    } catch {
       setPasswordError("Unable to update password.");
     } finally {
       setPasswordSaving(false);
@@ -394,6 +395,8 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
                 </Button>
               </CardContent>
             </Card>
+
+            <PasskeySettingsCard />
 
             <Card className="border-red-200 bg-white/90">
               <CardHeader>

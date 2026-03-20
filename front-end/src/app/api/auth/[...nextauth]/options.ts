@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { JWT } from "next-auth/jwt";
 import axios, { AxiosError } from "axios";
 import {
+  API_URL,
   LOGIN_URL,
   WORKER_LOGIN_URL,
   check_credential,
@@ -27,8 +28,29 @@ export type CustomUser = User & {
   ownerUserId?: number | null;
 };
 
+type AuthPayloadUser = {
+  id?: number | string | null;
+  name?: string | null;
+  email?: string | null;
+  provider?: string | null;
+  image?: string | null;
+  role?: "ADMIN" | "WORKER" | null;
+  businessId?: string | null;
+  accountType?: "OWNER" | "WORKER" | null;
+  account_type?: "OWNER" | "WORKER" | null;
+  workerId?: string | null;
+  worker_id?: string | null;
+  ownerUserId?: number | null;
+  owner_user_id?: number | null;
+};
+
+type AuthPayload = {
+  user?: AuthPayloadUser;
+  token?: string | null;
+};
+
 const mapAuthPayloadToUser = (
-  authPayload: Record<string, any> | undefined,
+  authPayload: AuthPayload | undefined,
   fallbackProvider: string,
 ): CustomUser | null => {
   const user = authPayload?.user;
@@ -37,7 +59,7 @@ const mapAuthPayloadToUser = (
   const resolvedId =
     user.id !== undefined && user.id !== null
       ? String(user.id)
-      : (user.workerId ?? null);
+      : (user.workerId ?? user.worker_id ?? null);
   if (!resolvedId) return null;
 
   return {
@@ -49,10 +71,14 @@ const mapAuthPayloadToUser = (
     token: authPayload?.token ?? null,
     role: user.role ?? null,
     businessId: user.businessId ?? null,
-    accountType: user.accountType ?? null,
-    workerId: user.workerId ?? null,
+    accountType: user.accountType ?? user.account_type ?? null,
+    workerId: user.workerId ?? user.worker_id ?? null,
     ownerUserId:
-      typeof user.ownerUserId === "number" ? user.ownerUserId : null,
+      typeof user.ownerUserId === "number"
+        ? user.ownerUserId
+        : typeof user.owner_user_id === "number"
+          ? user.owner_user_id
+          : null,
   };
 };
 
@@ -128,6 +154,40 @@ export const authOptions: AuthOptions = {
           return mapAuthPayloadToUser(authPayload, "worker");
         } catch (error) {
           console.error("Worker credentials login error:", error);
+          return null;
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: "auth-token",
+      name: "Auth Token",
+      credentials: {
+        token: { label: "Token", type: "text" },
+      },
+      async authorize(credentials) {
+        const rawToken = credentials?.token?.trim();
+        if (!rawToken) return null;
+
+        const bearerToken = rawToken.startsWith("Bearer ")
+          ? rawToken
+          : `Bearer ${rawToken}`;
+
+        try {
+          const { data } = await axios.get(`${API_URL}/users/me`, {
+            headers: {
+              Authorization: bearerToken,
+            },
+          });
+
+          return mapAuthPayloadToUser(
+            {
+              user: data?.data as AuthPayloadUser | undefined,
+              token: bearerToken,
+            },
+            "token",
+          );
+        } catch (error) {
+          console.error("Token login error:", error);
           return null;
         }
       },

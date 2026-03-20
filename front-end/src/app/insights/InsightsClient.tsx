@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
 import dynamic from "next/dynamic";
 import { Activity, Sparkles, TrendingUp, Wallet } from "lucide-react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
+import { useHydrated } from "@/hooks/useHydrated";
 import {
   DASHBOARD_REALTIME_ENABLED,
   DASHBOARD_REFRESH_INTERVAL_MS,
@@ -51,7 +52,7 @@ const SectionIntro = ({ kicker, title, description }: SectionIntroProps) => (
 const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
   const { t } = useI18n();
   const { currency, number } = useDashboardFormatters();
-  const [hydrated, setHydrated] = useState(false);
+  const hydrated = useHydrated();
 
   const displayName = name.trim() || t("common.guest");
   const hasValidSessionToken =
@@ -61,8 +62,6 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
     token !== "null";
 
   useEffect(() => {
-    setHydrated(true);
-
     if (!hasValidSessionToken) {
       window.localStorage.removeItem("token");
       return;

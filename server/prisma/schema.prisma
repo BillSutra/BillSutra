@@ -36,6 +36,10 @@ model User {
   user_templates              UserTemplate[]
   user_saved_templates        UserSavedTemplate[]
   export_logs                 ExportLog[]
+  passkey_credentials         PasskeyCredential[]
+  auth_challenges             AuthChallenge[]
+  otp_codes                   OtpCode[]
+  auth_events                 AuthEvent[]
 
   @@map("users")
 }
@@ -578,6 +582,82 @@ model ExportLog {
   @@map("export_logs")
 }
 
+model PasskeyCredential {
+  id Int @id @default(autoincrement())
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  label         String   @db.VarChar(191)
+  credential_id String   @unique @db.VarChar(512)
+  public_key    String
+  counter       Int      @default(0)
+  device_type   String   @default("multiDevice") @db.VarChar(32)
+  backed_up     Boolean  @default(false)
+  transports    String[]
+  last_used_at  DateTime?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@index([user_id, created_at])
+  @@map("passkey_credentials")
+}
+
+model AuthChallenge {
+  id Int @id @default(autoincrement())
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  flow        AuthChallengeFlow
+  challenge   String   @unique @db.VarChar(255)
+  expires_at  DateTime
+  consumed_at DateTime?
+  created_at  DateTime @default(now())
+
+  @@index([user_id, flow, created_at])
+  @@map("auth_challenges")
+}
+
+model OtpCode {
+  id Int @id @default(autoincrement())
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  purpose              OtpPurpose @default(LOGIN)
+  channel              OtpChannel @default(EMAIL)
+  code_hash            String     @db.VarChar(191)
+  expires_at           DateTime
+  resend_available_at  DateTime
+  attempts             Int        @default(0)
+  max_attempts         Int        @default(3)
+  consumed_at          DateTime?
+  created_at           DateTime   @default(now())
+
+  @@index([user_id, purpose, created_at])
+  @@map("otp_codes")
+}
+
+model AuthEvent {
+  id Int @id @default(autoincrement())
+
+  user    User? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  user_id Int?
+
+  actor_type String     @db.VarChar(32)
+  method     AuthMethod
+  success    Boolean    @default(true)
+  ip_address String?    @db.VarChar(64)
+  user_agent String?    @db.VarChar(512)
+  metadata   Json?
+  created_at DateTime   @default(now())
+
+  @@index([user_id, created_at])
+  @@index([method, created_at])
+  @@map("auth_events")
+}
+
 enum InvoiceStatus {
   DRAFT
   SENT
@@ -626,4 +706,25 @@ enum RecurrenceFrequency {
 enum WorkerRole {
   ADMIN
   WORKER
+}
+
+enum AuthChallengeFlow {
+  PASSKEY_REGISTRATION
+  PASSKEY_AUTHENTICATION
+}
+
+enum OtpPurpose {
+  LOGIN
+}
+
+enum OtpChannel {
+  EMAIL
+}
+
+enum AuthMethod {
+  PASSWORD
+  GOOGLE
+  OTP
+  PASSKEY
+  WORKER_PASSWORD
 }

@@ -68,6 +68,69 @@ export const authForgotSchema = z.object({
   email: z.string().email(),
 });
 
+const webAuthnRegistrationResponseSchema = z.object({
+  id: z.string().min(1),
+  rawId: z.string().min(1),
+  type: z.literal("public-key"),
+  authenticatorAttachment: z.string().optional(),
+  clientExtensionResults: z.record(z.string(), z.unknown()),
+  response: z.object({
+    clientDataJSON: z.string().min(1),
+    attestationObject: z.string().min(1),
+    transports: z.array(z.string()).optional(),
+    publicKeyAlgorithm: z.number().optional(),
+    publicKey: z.string().optional(),
+    authenticatorData: z.string().optional(),
+  }),
+});
+
+const webAuthnAuthenticationResponseSchema = z.object({
+  id: z.string().min(1),
+  rawId: z.string().min(1),
+  type: z.literal("public-key"),
+  authenticatorAttachment: z.string().optional(),
+  clientExtensionResults: z.record(z.string(), z.unknown()),
+  response: z.object({
+    clientDataJSON: z.string().min(1),
+    authenticatorData: z.string().min(1),
+    signature: z.string().min(1),
+    userHandle: z.string().optional(),
+  }),
+});
+
+export const authTokenSchema = z.object({
+  token: z.string().min(10),
+});
+
+export const authOtpSendSchema = z.object({
+  email: z.string().email(),
+});
+
+export const authOtpVerifySchema = z.object({
+  email: z.string().email(),
+  code: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+});
+
+export const passkeyAuthenticateOptionsSchema = z.object({
+  email: z.string().email(),
+});
+
+export const passkeyAuthenticateVerifySchema = z.object({
+  email: z.string().email(),
+  challenge_id: z.coerce.number().int().positive(),
+  response: webAuthnAuthenticationResponseSchema,
+});
+
+export const passkeyRegisterOptionsSchema = z.object({
+  label: z.string().min(1).max(191).optional(),
+});
+
+export const passkeyRegisterVerifySchema = z.object({
+  challenge_id: z.coerce.number().int().positive(),
+  label: z.string().min(1).max(191).optional(),
+  response: webAuthnRegistrationResponseSchema,
+});
+
 export const authResetSchema = z
   .object({
     email: z.string().email(),

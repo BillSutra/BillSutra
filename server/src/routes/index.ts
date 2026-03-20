@@ -35,9 +35,15 @@ import {
   adminBusinessIdParamSchema,
   authOauthSchema,
   authLoginSchema,
+  authOtpSendSchema,
+  authOtpVerifySchema,
   authRegisterSchema,
   authForgotSchema,
   authResetSchema,
+  passkeyAuthenticateOptionsSchema,
+  passkeyAuthenticateVerifySchema,
+  passkeyRegisterOptionsSchema,
+  passkeyRegisterVerifySchema,
   workerLoginSchema,
   workerCreateSchema,
   workerIdParamSchema,
@@ -121,6 +127,7 @@ router.post(
 );
 router.post(
   "/auth/logincheck",
+  authRateLimiter,
   validate({ body: authLoginSchema }),
   AuthController.loginCheck,
 );
@@ -137,8 +144,52 @@ router.post(
 );
 router.post(
   "/auth/worker/login",
+  authRateLimiter,
   validate({ body: workerLoginSchema }),
   AuthController.workerLogin,
+);
+router.post(
+  "/auth/otp/send",
+  authRateLimiter,
+  validate({ body: authOtpSendSchema }),
+  AuthController.sendOtp,
+);
+router.post(
+  "/auth/otp/verify",
+  authRateLimiter,
+  validate({ body: authOtpVerifySchema }),
+  AuthController.verifyOtp,
+);
+router.post(
+  "/auth/passkeys/authenticate/options",
+  authRateLimiter,
+  validate({ body: passkeyAuthenticateOptionsSchema }),
+  AuthController.passkeyAuthenticateOptions,
+);
+router.post(
+  "/auth/passkeys/authenticate/verify",
+  authRateLimiter,
+  validate({ body: passkeyAuthenticateVerifySchema }),
+  AuthController.passkeyAuthenticateVerify,
+);
+router.get("/auth/passkeys", AuthMiddleware, AuthController.listPasskeys);
+router.post(
+  "/auth/passkeys/register/options",
+  AuthMiddleware,
+  validate({ body: passkeyRegisterOptionsSchema }),
+  AuthController.passkeyRegisterOptions,
+);
+router.post(
+  "/auth/passkeys/register/verify",
+  AuthMiddleware,
+  validate({ body: passkeyRegisterVerifySchema }),
+  AuthController.passkeyRegisterVerify,
+);
+router.delete(
+  "/auth/passkeys/:id",
+  AuthMiddleware,
+  validate({ params: idParamSchema }),
+  AuthController.deletePasskey,
 );
 router.post(
   "/auth/reset-password",
