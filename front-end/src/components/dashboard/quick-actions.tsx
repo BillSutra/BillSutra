@@ -1,77 +1,998 @@
-import React from "react";
-import Link from "next/link";
+"use client";
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import axios from "axios";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import {
+  ArrowRight,
+  Barcode,
+  CheckCircle2,
+  Clock3,
+  PackagePlus,
+  Plus,
+  ReceiptText,
+  ScanLine,
+  Sparkles,
+  UserRoundPlus,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Modal from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Bolt } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  useCategoriesQuery,
+  useCreateCustomerMutation,
+  useCreateProductMutation,
+} from "@/hooks/useInventoryQueries";
+import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
 import { cn } from "@/lib/utils";
 
-const actions = [
-  { label: "Create Invoice", href: "/invoices", tone: "sales" },
-  { label: "Add Product", href: "/products", tone: "neutral" },
-  { label: "Add Customer", href: "/customers", tone: "sales" },
-  { label: "Record Payment", href: "/invoices", tone: "sales" },
-  { label: "Add Purchase", href: "/purchases", tone: "purchase" },
-] as const;
+const QUICK_ACTION_USAGE_KEY = "billsutra.quick-actions.usage.v1";
+const QUICK_ACTION_RECENT_KEY = "billsutra.quick-actions.recent.v1";
+const QUICK_ACTION_DEFAULTS_KEY = "billsutra.quick-actions.defaults.v1";
 
-const toneClassName: Record<(typeof actions)[number]["tone"], string> = {
-  sales:
-    "border-emerald-200/70 bg-emerald-50/70 text-emerald-900 hover:bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100",
-  purchase:
-    "border-orange-200/70 bg-orange-50/70 text-orange-900 hover:bg-orange-50 dark:border-orange-900/50 dark:bg-orange-950/30 dark:text-orange-100",
-  neutral:
-    "border-border/80 bg-card/90 text-foreground hover:bg-accent/50 dark:bg-card/70",
+type QuickActionId = "add-product" | "new-bill" | "add-customer";
+
+type QuickActionUsage = Record<QuickActionId, number>;
+
+type QuickActionDefaults = {
+  product: {
+    price: string;
+    categoryId: string;
+  };
+  customer: {
+    phone: string;
+  };
 };
 
+type QuickActionRecentItem = {
+  id: string;
+  actionId: QuickActionId;
+  label: string;
+  meta: string;
+  timestamp: number;
+};
+
+type ProductQuickForm = {
+  name: string;
+  price: string;
+  barcode: string;
+  categoryId: string;
+};
+
+type CustomerQuickForm = {
+  name: string;
+  phone: string;
+};
+
+const DEFAULT_USAGE: QuickActionUsage = {
+  "add-product": 0,
+  "new-bill": 0,
+  "add-customer": 0,
+};
+
+const DEFAULT_DEFAULTS: QuickActionDefaults = {
+  product: {
+    price: "",
+    categoryId: "",
+  },
+  customer: {
+    phone: "",
+  },
+};
+
+const readStoredJson = <T,>(key: string, fallback: T) => {
+  if (typeof window === "undefined") return fallback;
+
+  try {
+    const rawValue = window.localStorage.getItem(key);
+    if (!rawValue) return fallback;
+    return JSON.parse(rawValue) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeStoredJson = (key: string, value: unknown) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore write failures in restricted browser contexts.
+  }
+};
+
+const buildProductSku = (name: string, barcode: string) => {
+  const base = name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 12);
+  const suffix =
+    barcode.trim().replace(/\D+/g, "").slice(-4) ||
+    Date.now().toString().slice(-4);
+
+  return `${base || "ITEM"}-${suffix}`;
+};
+
+const formatRecentTime = (timestamp: number) => {
+  const elapsedMs = Date.now() - timestamp;
+  const minutes = Math.floor(elapsedMs / 60000);
+
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+};
+
+const getMutationErrorMessage = (error: unknown, fallback: string) => {
+  if (axios.isAxiosError(error)) {
+    const data = error.response?.data as
+      | { message?: string; errors?: Record<string, string[] | string> }
+      | undefined;
+    const messages = new Set<string>();
+
+    if (data?.message) messages.add(data.message);
+
+    if (data?.errors) {
+      Object.values(data.errors).forEach((value) => {
+        const list = Array.isArray(value) ? value : [value];
+        list.forEach((item) => messages.add(item));
+      });
+    }
+
+    if (messages.size > 0) {
+      return Array.from(messages).join(" ");
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
+const playSuccessFeedback = () => {
+  if (typeof window === "undefined") return;
+
+  if ("vibrate" in navigator) {
+    navigator.vibrate([20, 16, 28]);
+  }
+
+  try {
+    const audioContext = new window.AudioContext();
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.type = "triangle";
+    oscillator.frequency.setValueAtTime(880, audioContext.currentTime);
+    oscillator.frequency.exponentialRampToValueAtTime(
+      1320,
+      audioContext.currentTime + 0.08,
+    );
+    gainNode.gain.setValueAtTime(0.0001, audioContext.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(
+      0.045,
+      audioContext.currentTime + 0.015,
+    );
+    gainNode.gain.exponentialRampToValueAtTime(
+      0.0001,
+      audioContext.currentTime + 0.16,
+    );
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.start();
+    oscillator.stop(audioContext.currentTime + 0.16);
+
+    window.setTimeout(() => {
+      void audioContext.close();
+    }, 240);
+  } catch {
+    // Audio feedback is optional.
+  }
+};
+
+const productActionTone =
+  "border-emerald-200/80 bg-[linear-gradient(180deg,rgba(236,253,245,0.96),rgba(209,250,229,0.9))] text-emerald-950 hover:border-emerald-300 hover:shadow-[0_22px_40px_-30px_rgba(5,150,105,0.55)] dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-100";
+const billActionTone =
+  "border-amber-200/80 bg-[linear-gradient(180deg,rgba(255,251,235,0.96),rgba(254,243,199,0.92))] text-amber-950 hover:border-amber-300 hover:shadow-[0_22px_40px_-30px_rgba(217,119,6,0.55)] dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-100";
+const customerActionTone =
+  "border-sky-200/80 bg-[linear-gradient(180deg,rgba(240,249,255,0.96),rgba(224,242,254,0.92))] text-sky-950 hover:border-sky-300 hover:shadow-[0_22px_40px_-30px_rgba(2,132,199,0.55)] dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-100";
+
+const actionDetails = [
+  {
+    id: "add-product" as const,
+    label: "Add Product",
+    description: "Name, price, and barcode-ready entry.",
+    meta: "SKU is generated automatically",
+    icon: PackagePlus,
+    toneClassName: productActionTone,
+  },
+  {
+    id: "new-bill" as const,
+    label: "New Bill",
+    description: "Launch billing with product search focused.",
+    meta: "Barcode and keyboard input ready",
+    icon: ReceiptText,
+    toneClassName: billActionTone,
+  },
+  {
+    id: "add-customer" as const,
+    label: "Add Customer",
+    description: "Capture name and phone in a tiny form.",
+    meta: "Save in one or two taps",
+    icon: UserRoundPlus,
+    toneClassName: customerActionTone,
+  },
+];
+
 const QuickActions = ({ className }: { className?: string }) => {
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const { data: categories = [] } = useCategoriesQuery();
+  const createProduct = useCreateProductMutation();
+  const createCustomer = useCreateCustomerMutation();
+  const productNameRef = useRef<HTMLInputElement | null>(null);
+  const productBarcodeRef = useRef<HTMLInputElement | null>(null);
+  const customerNameRef = useRef<HTMLInputElement | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  const successBannerTimerRef = useRef<number | null>(null);
+
+  const [usage, setUsage] = useState<QuickActionUsage>(DEFAULT_USAGE);
+  const [recentActions, setRecentActions] = useState<QuickActionRecentItem[]>([]);
+  const [defaults, setDefaults] = useState<QuickActionDefaults>(DEFAULT_DEFAULTS);
+  const [activeAction, setActiveAction] = useState<QuickActionId | null>(null);
+  const [fabOpen, setFabOpen] = useState(false);
+  const [pressedAction, setPressedAction] = useState<QuickActionId | null>(null);
+  const [successBanner, setSuccessBanner] = useState<string | null>(null);
+  const [productForm, setProductForm] = useState<ProductQuickForm>({
+    name: "",
+    price: "",
+    barcode: "",
+    categoryId: "",
+  });
+  const [customerForm, setCustomerForm] = useState<CustomerQuickForm>({
+    name: "",
+    phone: "",
+  });
+
+  useEffect(() => {
+    const storedDefaults = readStoredJson<QuickActionDefaults>(
+      QUICK_ACTION_DEFAULTS_KEY,
+      DEFAULT_DEFAULTS,
+    );
+
+    setUsage(
+      {
+        ...DEFAULT_USAGE,
+        ...readStoredJson<Partial<QuickActionUsage>>(
+          QUICK_ACTION_USAGE_KEY,
+          DEFAULT_USAGE,
+        ),
+      },
+    );
+    setRecentActions(
+      readStoredJson<QuickActionRecentItem[]>(QUICK_ACTION_RECENT_KEY, []).slice(
+        0,
+        6,
+      ),
+    );
+    setDefaults({
+      product: {
+        ...DEFAULT_DEFAULTS.product,
+        ...storedDefaults.product,
+      },
+      customer: {
+        ...DEFAULT_DEFAULTS.customer,
+        ...storedDefaults.customer,
+      },
+    });
+  }, []);
+
+  useEffect(() => {
+    if (activeAction === "add-product") {
+      setProductForm({
+        name: "",
+        price: defaults.product.price,
+        barcode: "",
+        categoryId: defaults.product.categoryId,
+      });
+    }
+
+    if (activeAction === "add-customer") {
+      setCustomerForm({
+        name: "",
+        phone: defaults.customer.phone,
+      });
+    }
+  }, [activeAction, defaults]);
+
+  useEffect(() => {
+    if (activeAction !== "add-product") return;
+
+    const timeoutId = window.setTimeout(() => {
+      productNameRef.current?.focus();
+      productNameRef.current?.select();
+    }, 170);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeAction]);
+
+  useEffect(() => {
+    if (activeAction !== "add-customer") return;
+
+    const timeoutId = window.setTimeout(() => {
+      customerNameRef.current?.focus();
+      customerNameRef.current?.select();
+    }, 170);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeAction]);
+
+  useEffect(() => {
+    return () => {
+      if (successBannerTimerRef.current) {
+        window.clearTimeout(successBannerTimerRef.current);
+      }
+    };
+  }, []);
+
+  const orderedActions = useMemo(() => {
+    return [...actionDetails].sort((left, right) => {
+      const usageDifference = usage[right.id] - usage[left.id];
+      if (usageDifference !== 0) return usageDifference;
+
+      return (
+        actionDetails.findIndex((item) => item.id === left.id) -
+        actionDetails.findIndex((item) => item.id === right.id)
+      );
+    });
+  }, [usage]);
+
+  const mostUsedActionLabel = orderedActions[0]?.label ?? "Quick actions";
+  const recentProducts = recentActions.filter(
+    (item) => item.actionId === "add-product",
+  );
+  const recentCustomers = recentActions.filter(
+    (item) => item.actionId === "add-customer",
+  );
+
+  const persistUsage = (actionId: QuickActionId) => {
+    setUsage((currentUsage) => {
+      const nextUsage = {
+        ...currentUsage,
+        [actionId]: currentUsage[actionId] + 1,
+      };
+      writeStoredJson(QUICK_ACTION_USAGE_KEY, nextUsage);
+      return nextUsage;
+    });
+  };
+
+  const pushRecentAction = (
+    actionId: QuickActionId,
+    label: string,
+    meta: string,
+  ) => {
+    setRecentActions((currentRecentActions) => {
+      const nextRecentActions = [
+        {
+          id: `${actionId}-${Date.now()}`,
+          actionId,
+          label,
+          meta,
+          timestamp: Date.now(),
+        },
+        ...currentRecentActions,
+      ].slice(0, 6);
+
+      writeStoredJson(QUICK_ACTION_RECENT_KEY, nextRecentActions);
+      return nextRecentActions;
+    });
+  };
+
+  const setSuccessState = (message: string) => {
+    setSuccessBanner(message);
+
+    if (successBannerTimerRef.current) {
+      window.clearTimeout(successBannerTimerRef.current);
+    }
+
+    successBannerTimerRef.current = window.setTimeout(() => {
+      setSuccessBanner(null);
+    }, 2400);
+  };
+
+  const handleActionPress = (actionId: QuickActionId) => {
+    setPressedAction(actionId);
+    window.setTimeout(() => setPressedAction(null), 420);
+    persistUsage(actionId);
+    setFabOpen(false);
+
+    if (actionId === "new-bill") {
+      pushRecentAction("new-bill", "Billing desk opened", "Barcode search armed");
+      setSuccessState("New Bill opened");
+      toast.success("Billing desk ready.", {
+        description: "Product search is focused for barcode or keyboard input.",
+      });
+      playSuccessFeedback();
+      router.push("/invoices?quickAction=new-bill");
+      return;
+    }
+
+    setActiveAction(actionId);
+  };
+
+  const handleProductSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const trimmedName = productForm.name.trim();
+    const trimmedPrice = productForm.price.trim();
+    const trimmedBarcode = productForm.barcode.trim();
+
+    if (!trimmedName) {
+      toast.error("Enter a product name.");
+      productNameRef.current?.focus();
+      return;
+    }
+
+    if (!trimmedPrice || Number.isNaN(Number(trimmedPrice)) || Number(trimmedPrice) < 0) {
+      toast.error("Enter a valid selling price.");
+      return;
+    }
+
+    try {
+      const createdProduct = await createProduct.mutateAsync({
+        name: trimmedName,
+        sku: buildProductSku(trimmedName, trimmedBarcode),
+        price: Number(trimmedPrice),
+        barcode: trimmedBarcode || undefined,
+        gst_rate: 18,
+        stock_on_hand: 0,
+        reorder_level: 0,
+        category_id: productForm.categoryId
+          ? Number(productForm.categoryId)
+          : undefined,
+      });
+
+      await invalidateDashboardQueries(queryClient);
+
+      const nextDefaults: QuickActionDefaults = {
+        product: {
+          price: trimmedPrice,
+          categoryId: productForm.categoryId,
+        },
+        customer: defaults.customer,
+      };
+
+      setDefaults(nextDefaults);
+      writeStoredJson(QUICK_ACTION_DEFAULTS_KEY, nextDefaults);
+      pushRecentAction(
+        "add-product",
+        createdProduct.name,
+        trimmedBarcode ? `Barcode ${trimmedBarcode}` : `Price ${trimmedPrice}`,
+      );
+      setSuccessState("Product saved");
+      playSuccessFeedback();
+      toast.success("Product added.", {
+        description: trimmedBarcode
+          ? "Saved and ready for the next barcode."
+          : "Saved with an auto-generated SKU.",
+      });
+      setActiveAction(null);
+    } catch (error) {
+      toast.error(
+        getMutationErrorMessage(error, "Unable to add the product right now."),
+      );
+    }
+  };
+
+  const handleCustomerSubmit = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+
+    const trimmedName = customerForm.name.trim();
+    const trimmedPhone = customerForm.phone.trim();
+
+    if (!trimmedName) {
+      toast.error("Enter a customer name.");
+      customerNameRef.current?.focus();
+      return;
+    }
+
+    if (trimmedPhone && !/^\d{10,15}$/.test(trimmedPhone)) {
+      toast.error("Enter a valid phone number.");
+      return;
+    }
+
+    try {
+      const createdCustomer = await createCustomer.mutateAsync({
+        name: trimmedName,
+        phone: trimmedPhone || undefined,
+      });
+
+      await invalidateDashboardQueries(queryClient);
+
+      const nextDefaults: QuickActionDefaults = {
+        product: defaults.product,
+        customer: {
+          phone: trimmedPhone,
+        },
+      };
+
+      setDefaults(nextDefaults);
+      writeStoredJson(QUICK_ACTION_DEFAULTS_KEY, nextDefaults);
+      pushRecentAction(
+        "add-customer",
+        createdCustomer.name,
+        trimmedPhone || "Saved without a phone number",
+      );
+      setSuccessState("Customer saved");
+      playSuccessFeedback();
+      toast.success("Customer added.", {
+        description: trimmedPhone
+          ? "Saved and ready for the next entry."
+          : "Saved with the minimum details.",
+      });
+      setActiveAction(null);
+    } catch (error) {
+      toast.error(
+        getMutationErrorMessage(error, "Unable to add the customer right now."),
+      );
+    }
+  };
+
+  const modalContentClassName =
+    "top-auto right-0 bottom-0 left-0 max-h-[92vh] max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-t-[1.9rem] rounded-b-none border-border/80 bg-background/98 p-0 sm:top-[50%] sm:right-auto sm:bottom-auto sm:left-[50%] sm:max-w-xl sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-[1.75rem]";
+
   return (
-    <Card
-      className={cn(
-        "dashboard-chart-surface h-fit self-start gap-0 rounded-[1.75rem] py-6",
-        className,
-      )}
-    >
-      <CardHeader className="dashboard-chart-content gap-2">
-        <div className="flex items-center gap-3">
-          <div className="rounded-2xl border border-border/70 bg-card/80 p-2 text-primary shadow-sm">
-            <Bolt size={18} />
+    <>
+      <Card
+        className={cn(
+          "dashboard-chart-surface h-fit self-start gap-0 rounded-[1.75rem] py-6",
+          className,
+        )}
+      >
+        <CardHeader className="dashboard-chart-content gap-3">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="max-w-2xl">
+              <div className="flex items-center gap-3">
+                <div className="rounded-2xl border border-border/70 bg-card/80 p-2 text-primary shadow-sm">
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <p className="app-kicker">Speed desk</p>
+                  <CardTitle className="mt-1 text-lg text-foreground">
+                    Quick actions
+                  </CardTitle>
+                </div>
+              </div>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Keep the three highest-frequency tasks one tap away, with smart
+                defaults, recent history, and barcode-first billing entry.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="app-chip">Most used: {mostUsedActionLabel}</span>
+              <span className="app-chip">Swipe up on mobile to open</span>
+            </div>
           </div>
-          <div>
-            <p className="app-kicker">Shortcuts</p>
-            <CardTitle className="mt-1 text-lg text-foreground">
-              Quick actions
-            </CardTitle>
+
+          {successBanner ? (
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-800 animate-in fade-in zoom-in-95 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
+              <CheckCircle2 size={16} />
+              <span>{successBanner}</span>
+            </div>
+          ) : null}
+        </CardHeader>
+
+        <CardContent className="dashboard-chart-content space-y-4">
+          <div className="grid gap-3 lg:grid-cols-3">
+            {orderedActions.map((action) => {
+              const Icon = action.icon;
+              const isPressed = pressedAction === action.id;
+
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  onClick={() => handleActionPress(action.id)}
+                  className={cn(
+                    "group relative overflow-hidden rounded-[1.5rem] border p-4 text-left transition duration-200 hover:-translate-y-1",
+                    action.toneClassName,
+                    isPressed && "scale-[0.98]",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "pointer-events-none absolute -right-6 -bottom-6 h-20 w-20 rounded-full bg-white/35 opacity-0",
+                      isPressed && "animate-ping opacity-100",
+                    )}
+                  />
+                  <div className="relative flex h-full items-start justify-between gap-4">
+                    <div className="min-w-0 space-y-3">
+                      <div className="inline-flex rounded-2xl border border-current/15 bg-white/55 p-3 shadow-sm dark:bg-white/10">
+                        <Icon size={20} />
+                      </div>
+                      <div>
+                        <p className="text-base font-semibold">{action.label}</p>
+                        <p className="mt-1 text-sm opacity-80">{action.description}</p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] opacity-70">
+                        <span>{action.meta}</span>
+                        <span className="rounded-full border border-current/15 px-2 py-1">
+                          {usage[action.id] > 0
+                            ? `${usage[action.id]} taps`
+                            : "Ready"}
+                        </span>
+                      </div>
+                    </div>
+                    <ArrowRight
+                      size={16}
+                      className="mt-1 shrink-0 transition-transform group-hover:translate-x-1"
+                    />
+                  </div>
+                </button>
+              );
+            })}
           </div>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          Jump into common billing, catalog, and purchasing flows without extra
-          navigation.
-        </p>
-      </CardHeader>
-      <CardContent className="dashboard-chart-content grid gap-3">
-        {actions.map((action) => (
-          <Button
-            key={action.label}
-            asChild
-            variant="outline"
+
+          <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+            <section className="rounded-[1.4rem] border border-border/70 bg-card/70 p-4 shadow-[0_14px_34px_-26px_rgba(31,27,22,0.2)]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Clock3 size={16} />
+                <span>Recent actions</span>
+              </div>
+              {recentActions.length > 0 ? (
+                <div className="mt-4 grid gap-3">
+                  {recentActions.slice(0, 4).map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-start justify-between gap-3 rounded-2xl border border-border/70 bg-background/75 px-4 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {item.label}
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {item.meta}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        {formatRecentTime(item.timestamp)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Your latest quick adds will appear here for easy repeat flows.
+                </p>
+              )}
+            </section>
+
+            <section className="rounded-[1.4rem] border border-border/70 bg-card/70 p-4 shadow-[0_14px_34px_-26px_rgba(31,27,22,0.2)]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <ScanLine size={16} />
+                <span>Smart defaults</span>
+              </div>
+              <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
+                <div className="rounded-2xl border border-border/70 bg-background/75 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
+                    Product
+                  </p>
+                  <p className="mt-2">
+                    Last price: {defaults.product.price || "Not set"}
+                  </p>
+                  <p className="mt-1">
+                    Category:{" "}
+                    {categories.find(
+                      (category) =>
+                        String(category.id) === defaults.product.categoryId,
+                    )?.name ?? "No category default"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-border/70 bg-background/75 px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
+                    Customer
+                  </p>
+                  <p className="mt-2">
+                    Last phone: {defaults.customer.phone || "Not set"}
+                  </p>
+                  <p className="mt-1">
+                    Recent products: {recentProducts.length} | Recent customers:{" "}
+                    {recentCustomers.length}
+                  </p>
+                </div>
+              </div>
+            </section>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="fixed right-4 bottom-5 z-40 sm:hidden">
+        <div
+          className="flex flex-col items-end gap-3"
+          onTouchStart={(event) => {
+            const touch = event.touches[0];
+            touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+          }}
+          onTouchEnd={(event) => {
+            const initialTouch = touchStartRef.current;
+            const touch = event.changedTouches[0];
+            touchStartRef.current = null;
+
+            if (!initialTouch) return;
+
+            const deltaX = touch.clientX - initialTouch.x;
+            const deltaY = touch.clientY - initialTouch.y;
+
+            if (Math.abs(deltaY) > Math.abs(deltaX) && deltaY < -48) {
+              setFabOpen(true);
+            }
+
+            if (Math.abs(deltaY) > Math.abs(deltaX) && deltaY > 48) {
+              setFabOpen(false);
+            }
+          }}
+        >
+          <div
             className={cn(
-              "group h-auto justify-between rounded-2xl px-4 py-3 text-left shadow-[0_16px_34px_-26px_rgba(31,27,22,0.22)] transition hover:-translate-y-0.5",
-              toneClassName[action.tone],
+              "flex flex-col items-end gap-2 transition duration-200",
+              fabOpen
+                ? "translate-y-0 opacity-100"
+                : "pointer-events-none translate-y-3 opacity-0",
             )}
           >
-            <Link
-              href={action.href}
-              className="flex w-full items-center justify-between gap-3"
-            >
-              <span className="font-medium">{action.label}</span>
-              <ArrowRight
-                size={16}
-                className="shrink-0 transition-transform group-hover:translate-x-1"
-              />
-            </Link>
+            {orderedActions.map((action) => {
+              const Icon = action.icon;
+
+              return (
+                <button
+                  key={`fab-${action.id}`}
+                  type="button"
+                  onClick={() => handleActionPress(action.id)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-full border px-4 py-3 text-sm font-semibold shadow-[0_18px_40px_-24px_rgba(15,23,42,0.35)] backdrop-blur",
+                    action.toneClassName,
+                  )}
+                >
+                  <Icon size={16} />
+                  <span>{action.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <Button
+            type="button"
+            size="icon-lg"
+            className={cn(
+              "rounded-full bg-[#1f1b16] text-white shadow-[0_22px_50px_-24px_rgba(31,27,22,0.55)] hover:bg-[#2b251f]",
+              fabOpen && "scale-105",
+            )}
+            onClick={() => setFabOpen((currentOpen) => !currentOpen)}
+            aria-label="Toggle quick actions"
+          >
+            <Plus
+              size={22}
+              className={cn(
+                "transition-transform duration-200",
+                fabOpen && "rotate-45",
+              )}
+            />
           </Button>
-        ))}
-      </CardContent>
-    </Card>
+        </div>
+      </div>
+
+      <Modal
+        open={activeAction === "add-product"}
+        onOpenChange={(open) => setActiveAction(open ? "add-product" : null)}
+        title="Quick add product"
+        description="Capture a sellable item in seconds."
+        contentClassName={modalContentClassName}
+      >
+        <form className="grid gap-5 p-6" onSubmit={handleProductSubmit} noValidate>
+          <div className="rounded-[1.4rem] border border-emerald-200/80 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100">
+            Name and price are all you need. Barcode is ready for scanner input,
+            and SKU is auto-generated to keep the form fast.
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-2 sm:col-span-2">
+              <Label htmlFor="quick-product-name">Name</Label>
+              <Input
+                ref={productNameRef}
+                id="quick-product-name"
+                value={productForm.name}
+                onChange={(event) =>
+                  setProductForm((currentForm) => ({
+                    ...currentForm,
+                    name: event.target.value,
+                  }))
+                }
+                placeholder="e.g. Fresh milk 500ml"
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="quick-product-price">Price</Label>
+              <Input
+                id="quick-product-price"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={productForm.price}
+                onChange={(event) =>
+                  setProductForm((currentForm) => ({
+                    ...currentForm,
+                    price: event.target.value,
+                  }))
+                }
+                placeholder="0.00"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="quick-product-barcode">Barcode</Label>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground transition hover:text-foreground"
+                  onClick={() => productBarcodeRef.current?.focus()}
+                >
+                  <Barcode size={14} />
+                  <span>Scan next</span>
+                </button>
+              </div>
+              <Input
+                ref={productBarcodeRef}
+                id="quick-product-barcode"
+                value={productForm.barcode}
+                onChange={(event) =>
+                  setProductForm((currentForm) => ({
+                    ...currentForm,
+                    barcode: event.target.value,
+                  }))
+                }
+                placeholder="Scan or type barcode"
+                inputMode="numeric"
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="grid gap-2 sm:col-span-2">
+              <Label htmlFor="quick-product-category">Category</Label>
+              <select
+                id="quick-product-category"
+                className="app-field h-10 px-3 text-sm text-foreground"
+                value={productForm.categoryId}
+                onChange={(event) =>
+                  setProductForm((currentForm) => ({
+                    ...currentForm,
+                    categoryId: event.target.value,
+                  }))
+                }
+              >
+                <option value="">No category</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-[1.3rem] border border-border/70 bg-card/70 px-4 py-3 text-sm text-muted-foreground">
+            <span>Smart default price: {defaults.product.price || "Not set"}</span>
+            <span>
+              Last category:{" "}
+              {categories.find(
+                (category) => String(category.id) === defaults.product.categoryId,
+              )?.name ?? "Not set"}
+            </span>
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setActiveAction(null)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={createProduct.isPending}>
+              {createProduct.isPending ? "Saving..." : "Save product"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={activeAction === "add-customer"}
+        onOpenChange={(open) => setActiveAction(open ? "add-customer" : null)}
+        title="Quick add customer"
+        description="Create a customer record without leaving the dashboard."
+        contentClassName={modalContentClassName}
+      >
+        <form className="grid gap-5 p-6" onSubmit={handleCustomerSubmit} noValidate>
+          <div className="rounded-[1.4rem] border border-sky-200/80 bg-sky-50/80 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100">
+            The form keeps only the essentials so you can capture a customer in a
+            couple of taps and jump straight back into billing.
+          </div>
+
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="quick-customer-name">Name</Label>
+              <Input
+                ref={customerNameRef}
+                id="quick-customer-name"
+                value={customerForm.name}
+                onChange={(event) =>
+                  setCustomerForm((currentForm) => ({
+                    ...currentForm,
+                    name: event.target.value,
+                  }))
+                }
+                placeholder="e.g. Ravi Kumar"
+                autoComplete="off"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="quick-customer-phone">Phone</Label>
+              <Input
+                id="quick-customer-phone"
+                value={customerForm.phone}
+                onChange={(event) =>
+                  setCustomerForm((currentForm) => ({
+                    ...currentForm,
+                    phone: event.target.value.replace(/[^\d]/g, ""),
+                  }))
+                }
+                placeholder="Optional phone number"
+                inputMode="tel"
+                autoComplete="tel"
+              />
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 rounded-[1.3rem] border border-border/70 bg-card/70 px-4 py-3 text-sm text-muted-foreground">
+            <span>Last phone default: {defaults.customer.phone || "Not set"}</span>
+            <span>
+              Recent quick saves: {recentCustomers.length > 0 ? recentCustomers.length : 0}
+            </span>
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setActiveAction(null)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={createCustomer.isPending}>
+              {createCustomer.isPending ? "Saving..." : "Save customer"}
+            </Button>
+          </div>
+        </form>
+      </Modal>
+    </>
   );
 };
 

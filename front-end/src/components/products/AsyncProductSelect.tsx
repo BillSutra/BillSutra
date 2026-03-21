@@ -1,6 +1,14 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Input } from "@/components/ui/input";
 import { useProductSearchQuery } from "@/hooks/useInventoryQueries";
 import type { Product } from "@/lib/apiClient";
@@ -19,36 +27,93 @@ type AsyncProductSelectProps = {
   value: string;
   selectedLabel?: string;
   onSelect: (product: Product | null) => void;
+  onSubmitSelection?: (
+    product: Product | null,
+    context: { query: string; matches: Product[] },
+  ) => void;
   placeholder?: string;
+  autoFocus?: boolean;
   disabled?: boolean;
   excludeProductIds?: string[];
   variant?: "default" | "warm";
 };
 
-const AsyncProductSelect = ({
-  value,
-  selectedLabel = "",
-  onSelect,
-  placeholder,
-  disabled = false,
-  excludeProductIds = [],
-  variant = "default",
-}: AsyncProductSelectProps) => {
+export type AsyncProductSelectHandle = {
+  focus: (options?: { select?: boolean }) => void;
+  clear: () => void;
+};
+
+const AsyncProductSelect = forwardRef<
+  AsyncProductSelectHandle,
+  AsyncProductSelectProps
+>(function AsyncProductSelect(
+  {
+    value,
+    selectedLabel = "",
+    onSelect,
+    onSubmitSelection,
+    placeholder,
+    autoFocus = false,
+    disabled = false,
+    excludeProductIds = [],
+    variant = "default",
+  },
+  ref,
+) {
   const { t } = useI18n();
   const listboxId = useId();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const searchPlaceholder = "Search products by name, SKU, or barcode";
   const typeToSearchMessage = "Type to search products";
   const noProductsFoundMessage = "No matching products found";
   const [isOpen, setIsOpen] = useState(false);
   const [inputValue, setInputValue] = useState(selectedLabel);
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
 
   useEffect(() => {
     if (!isOpen) {
       setInputValue(selectedLabel);
     }
   }, [isOpen, selectedLabel]);
+
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [debouncedSearch, isOpen]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: (options) => {
+        inputRef.current?.focus();
+        if (options?.select) {
+          inputRef.current?.select();
+        }
+        setIsOpen(true);
+      },
+      clear: () => {
+        setInputValue("");
+        setDebouncedSearch("");
+        setHighlightedIndex(0);
+        setIsOpen(true);
+        onSelect(null);
+      },
+    }),
+    [onSelect],
+  );
+
+  useEffect(() => {
+    if (!autoFocus || disabled) return;
+
+    const timeoutId = window.setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+      setIsOpen(true);
+    }, 160);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [autoFocus, disabled]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -87,6 +152,39 @@ const AsyncProductSelect = ({
     });
   }, [excludeProductIds, searchResults, value]);
 
+  const selectProduct = (product: Product | null) => {
+    if (product) {
+      setInputValue(formatProductLabel(product));
+      setIsOpen(false);
+    }
+    onSelect(product);
+  };
+
+  const resolveEnterCandidate = () => {
+    const normalizedQuery = inputValue.trim().toLowerCase();
+    if (!normalizedQuery) return null;
+
+    const highlightedProduct = filteredResults[highlightedIndex] ?? null;
+    if (highlightedProduct) return highlightedProduct;
+
+    const exactMatch =
+      filteredResults.find((product) => {
+        const barcode = product.barcode?.trim().toLowerCase();
+        const sku = product.sku?.trim().toLowerCase();
+        const name = product.name.trim().toLowerCase();
+
+        return (
+          barcode === normalizedQuery ||
+          sku === normalizedQuery ||
+          name === normalizedQuery
+        );
+      }) ?? null;
+
+    if (exactMatch) return exactMatch;
+    if (filteredResults.length === 1) return filteredResults[0];
+    return null;
+  };
+
   const inputClassName =
     variant === "warm"
       ? "h-9 rounded-md border border-[#e4d6ca] bg-white px-3 text-sm focus-visible:border-[#d8b89c] focus-visible:ring-[#f2e6dc]"
@@ -115,8 +213,10 @@ const AsyncProductSelect = ({
   return (
     <div className="relative" ref={containerRef}>
       <Input
+        ref={inputRef}
         value={inputValue}
         placeholder={placeholder ?? searchPlaceholder}
+        autoFocus={autoFocus}
         autoComplete="off"
         disabled={disabled}
         aria-expanded={isOpen}
@@ -125,6 +225,39 @@ const AsyncProductSelect = ({
         onKeyDown={(event) => {
           if (event.key === "Escape") {
             setIsOpen(false);
+            return;
+          }
+
+          if (event.key === "ArrowDown") {
+            event.preventDefault();
+            setIsOpen(true);
+            setHighlightedIndex((currentIndex) =>
+              Math.min(currentIndex + 1, Math.max(filteredResults.length - 1, 0)),
+            );
+            return;
+          }
+
+          if (event.key === "ArrowUp") {
+            event.preventDefault();
+            setHighlightedIndex((currentIndex) => Math.max(currentIndex - 1, 0));
+            return;
+          }
+
+          if (event.key === "Enter") {
+            const candidate = resolveEnterCandidate();
+
+            if (candidate) {
+              event.preventDefault();
+              selectProduct(candidate);
+            }
+
+            if (onSubmitSelection) {
+              event.preventDefault();
+              onSubmitSelection(candidate, {
+                query: inputValue.trim(),
+                matches: filteredResults,
+              });
+            }
           }
         }}
         onChange={(event) => {
@@ -132,7 +265,7 @@ const AsyncProductSelect = ({
           setInputValue(nextValue);
           setIsOpen(true);
 
-          if (!nextValue.trim() && value) {
+          if (value && nextValue.trim() !== selectedLabel.trim()) {
             onSelect(null);
           }
         }}
@@ -167,13 +300,19 @@ const AsyncProductSelect = ({
                 type="button"
                 className={cn(
                   "flex w-full flex-col items-start gap-1 px-3 py-2 text-left text-sm",
+                  highlightedIndex === filteredResults.findIndex(
+                    (item) => item.id === product.id,
+                  ) && "bg-gray-50 dark:bg-gray-700/70",
                   itemClassName,
                 )}
                 onMouseDown={(event) => event.preventDefault()}
+                onMouseEnter={() =>
+                  setHighlightedIndex(
+                    filteredResults.findIndex((item) => item.id === product.id),
+                  )
+                }
                 onClick={() => {
-                  setInputValue(formatProductLabel(product));
-                  setIsOpen(false);
-                  onSelect(product);
+                  selectProduct(product);
                 }}
               >
                 <span className="font-medium">{product.name}</span>
@@ -188,6 +327,6 @@ const AsyncProductSelect = ({
       ) : null}
     </div>
   );
-};
+});
 
 export default AsyncProductSelect;

@@ -37,6 +37,10 @@ export const useInvoiceValidation = (
       summary.push(t("validation.invoiceSelectWarehouse"));
     }
 
+    if (items.length === 0) {
+      missingProduct = true;
+    }
+
     items.forEach((item, index) => {
       if (!item.product_id) {
         errors[index].product_id = t("validation.invoiceSelectProduct");
