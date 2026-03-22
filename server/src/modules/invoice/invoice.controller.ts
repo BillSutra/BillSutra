@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { InvoiceStatus } from "@prisma/client";
+import prisma from "../../config/db.config.js";
 import type { z } from "zod";
 import {
   invoiceCreateSchema,
@@ -16,6 +17,8 @@ import {
   updateInvoice,
 } from "./invoice.service.js";
 import { emitDashboardUpdate } from "../../services/dashboardRealtime.js";
+import { sendEmail } from "../../emails/index.js";
+import { buildPublicInvoiceUrl } from "../../lib/appUrls.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
@@ -281,12 +284,62 @@ export const send = async (req: Request, res: Response) => {
 
   try {
     const id = Number(req.params.id);
+    const requestedEmail =
+      typeof req.body?.email === "string" ? req.body.email.trim() : "";
+    const invoiceDetails = await getInvoice(userId, id);
+    if (!invoiceDetails) {
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    const recipientEmail =
+      requestedEmail || invoiceDetails.customer?.email?.trim() || "";
+    if (!recipientEmail) {
+      return res.status(422).json({
+        message: "Customer email is required to send this invoice",
+        errors: { email: ["Customer email is required"] },
+      });
+    }
+
+    const businessProfile = await prisma.businessProfile.findUnique({
+      where: { user_id: userId },
+      select: {
+        business_name: true,
+        email: true,
+        phone: true,
+        currency: true,
+      },
+    });
+
+    await sendEmail("invoice_sent", {
+      email: recipientEmail,
+      customer_name: invoiceDetails.customer?.name ?? "Customer",
+      invoice_id: invoiceDetails.invoice_number,
+      amount: Number(invoiceDetails.total ?? 0),
+      date: invoiceDetails.date,
+      due_date: invoiceDetails.due_date,
+      business_name: businessProfile?.business_name ?? "BillSutra",
+      business_email: businessProfile?.email ?? null,
+      business_phone: businessProfile?.phone ?? null,
+      notes: invoiceDetails.notes ?? null,
+      invoice_url: buildPublicInvoiceUrl(
+        invoiceDetails.id,
+        invoiceDetails.invoice_number,
+      ),
+      currency: businessProfile?.currency ?? "INR",
+      items: invoiceDetails.items.map((item) => ({
+        name: item.name,
+        quantity: Number(item.quantity ?? 0),
+        unit_price: Number(item.price ?? 0),
+        line_total: Number(item.total ?? 0),
+      })),
+    });
+
     const invoice = await markInvoiceAsSent(userId, id);
     emitDashboardUpdate({ userId, source: "invoice.sent" });
 
     return res.status(200).json({
-      message: "Invoice status updated to sent",
-      data: { invoiceId: invoice.id, status: invoice.status },
+      message: `Invoice email sent to ${recipientEmail}`,
+      data: { invoiceId: invoice.id, status: invoice.status, email: recipientEmail },
     });
   } catch (error) {
     const err = error as Error & { status?: number };
@@ -308,14 +361,43 @@ export const reminder = async (req: Request, res: Response) => {
 
   try {
     const id = Number(req.params.id);
+    const requestedEmail =
+      typeof req.body?.email === "string" ? req.body.email.trim() : "";
     const invoice = await getInvoice(userId, id);
     if (!invoice) {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
+    const recipientEmail = requestedEmail || invoice.customer?.email?.trim() || "";
+    if (!recipientEmail) {
+      return res.status(422).json({
+        message: "Customer email is required to send this reminder",
+        errors: { email: ["Customer email is required"] },
+      });
+    }
+
+    const businessProfile = await prisma.businessProfile.findUnique({
+      where: { user_id: userId },
+      select: {
+        business_name: true,
+        currency: true,
+      },
+    });
+
+    await sendEmail("invoice_reminder", {
+      email: recipientEmail,
+      customer_name: invoice.customer?.name ?? "Customer",
+      invoice_id: invoice.invoice_number,
+      amount: Number(invoice.total ?? 0),
+      due_date: invoice.due_date,
+      business_name: businessProfile?.business_name ?? "BillSutra",
+      invoice_url: buildPublicInvoiceUrl(invoice.id, invoice.invoice_number),
+      currency: businessProfile?.currency ?? "INR",
+    });
+
     return res.status(200).json({
-      message: "Invoice reminder payload ready for client email delivery",
-      data: { invoiceId: invoice.id },
+      message: `Invoice reminder sent to ${recipientEmail}`,
+      data: { invoiceId: invoice.id, email: recipientEmail },
     });
   } catch (error) {
     const err = error as Error & { status?: number };

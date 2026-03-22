@@ -14,10 +14,6 @@ import {
   updateUserProfile,
   type UserProfile,
 } from "@/lib/apiClient";
-import {
-  sendDeleteAccountConfirmationEmail,
-  sendDeleteDataConfirmationEmail,
-} from "@/lib/emailService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import Modal from "@/components/ui/modal";
 import Link from "next/link";
 import PasskeySettingsCard from "@/components/profile/PasskeySettingsCard";
+import PlanManagementCard from "@/components/pricing/PlanManagementCard";
 
 type ProfileClientProps = {
   initialProfile: UserProfile;
@@ -167,22 +164,17 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
     setDeleteDataLoading(true);
     setDeleteDataError(null);
     try {
-      await sendDeleteDataConfirmationEmail({
-        user_email: profile.email,
-        user_name: profile.name,
-      });
-      toast.success("Email sent successfully");
       await deleteUserData();
-      toast.success("Your data has been deleted.");
+      toast.success("Your data has been deleted. A confirmation email was requested.");
       closeDeleteDataModal();
     } catch (error) {
       setDeleteDataError(
         parseApiError(
           error,
-          "Failed to send email or delete your data right now.",
+          "Failed to delete your data right now.",
         ),
       );
-      toast.error("Failed to send email");
+      toast.error("Failed to delete data");
     } finally {
       setDeleteDataLoading(false);
     }
@@ -194,11 +186,6 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
     setDeleteAccountLoading(true);
     setDeleteAccountError(null);
     try {
-      await sendDeleteAccountConfirmationEmail({
-        user_email: profile.email,
-        user_name: profile.name,
-      });
-      toast.success("Email sent successfully");
       await deleteUserAccount();
       if (typeof window !== "undefined") {
         window.localStorage.removeItem("token");
@@ -214,10 +201,10 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
       setDeleteAccountError(
         parseApiError(
           error,
-          "Failed to send email or delete your account right now.",
+          "Failed to delete your account right now.",
         ),
       );
-      toast.error("Failed to send email");
+      toast.error("Failed to delete account");
       setDeleteAccountLoading(false);
     }
   };
@@ -355,6 +342,11 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
           </div>
 
           <div className="grid gap-4">
+            <PlanManagementCard
+              title="Manage your plan from your profile"
+              description="Review Billsutra pricing alongside your account details so upgrading feels predictable and easy when your business grows."
+            />
+
             <Card className="border-[#ecdccf] bg-white/90">
               <CardHeader>
                 <CardTitle className="text-lg">Account status</CardTitle>
@@ -387,6 +379,9 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
                 <CardTitle className="text-lg">Quick actions</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3">
+                <Button asChild variant="outline" className="justify-start">
+                  <Link href="/pricing">Open pricing</Link>
+                </Button>
                 <Button asChild variant="outline" className="justify-start">
                   <Link href="/dashboard">Back to dashboard</Link>
                 </Button>

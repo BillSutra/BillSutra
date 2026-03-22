@@ -54,7 +54,7 @@ Each sub-project has its own `README.md` with full setup instructions:
 - **Node.js** + **Express 5** + **TypeScript** (ESM modules)
 - **Prisma ORM 6** + **PostgreSQL**
 - **Puppeteer** for server-side PDF generation
-- **Nodemailer** for email notifications
+- **Resend** for transactional email delivery
 - **node-cron** for recurring invoice automation
 - **Multer** + **csv-parser** + **xlsx** for bulk file import
 - **JWT** + **bcryptjs** for auth security
@@ -95,7 +95,7 @@ npm run dev                        # runs on http://localhost:3000
 | `DATABASE_URL` | PostgreSQL connection string |
 | `JWT_SECRET` | Secret key for JWT signing |
 | `PORT` | Server port (default: 5000) |
-| `MAIL_*` | Nodemailer SMTP config for email notifications |
+| `RESEND_API_KEY` | Resend API key for email delivery |
 
 ### Front-End (`front-end/.env.local`)
 | Variable | Description |

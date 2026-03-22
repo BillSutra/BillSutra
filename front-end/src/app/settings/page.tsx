@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth";
 import { authOptions, CustomSession } from "../api/auth/[...nextauth]/options";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import PasskeySettingsCard from "@/components/profile/PasskeySettingsCard";
+import PlanManagementCard from "@/components/pricing/PlanManagementCard";
 
 const SettingsPage = async () => {
   const session: CustomSession | null = await getServerSession(authOptions);
@@ -28,6 +29,12 @@ const SettingsPage = async () => {
         </section>
 
         <PasskeySettingsCard />
+
+        <PlanManagementCard
+          title="Pricing where account decisions happen"
+          description="Review Free, Pro, and Pro Plus from Settings so subscription decisions sit next to your security, branding, and invoice preferences."
+          compact
+        />
 
         <section className="app-panel rounded-3xl p-6">
           <p className="app-kicker">Preferences</p>

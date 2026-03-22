@@ -36,7 +36,7 @@
 - **File Handling**: Multer v2 (multipart uploads)
 - **Data Import**: csv-parser + xlsx (CSV/Excel parsing)
 - **Automation**: node-cron v4.2 (recurring task scheduling)
-- **Email**: Nodemailer v8 (SMTP-based notifications)
+- **Email**: Resend SDK (server-side transactional email)
 - **PDF Generation**: Puppeteer v24 (server-side headless Chrome)
 - **HTTP Utilities**: CORS v2.8.5, morgan v1.10 (request logging)
 - **Rate Limiting**: express-rate-limit v8 (brute-force protection)
@@ -227,7 +227,7 @@ class AppError extends Error {
 ✅ Public share link: unauthenticated `/api/public/invoice/:id`
 ✅ Duplicate invoice: creates new DRAFT copy with new number
 ✅ Mark as sent: DRAFT → SENT status
-✅ Email notification: send invoice via Nodemailer
+✅ Email notification: send invoice via Resend
 ✅ Inventory sync: validates stock, auto-decrements warehouse inventory
 
 ### J. Recurring Invoices

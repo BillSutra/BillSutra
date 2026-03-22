@@ -47,6 +47,8 @@ const normalizeToken = (rawToken: unknown) => {
   return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
 };
 
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
 export default function Login({ mode = "owner" }: LoginProps) {
   const router = useRouter();
   const { t } = useI18n();
@@ -68,11 +70,13 @@ export default function Login({ mode = "owner" }: LoginProps) {
   const [isOtpSending, setIsOtpSending] = useState(false);
   const [isOtpVerifying, setIsOtpVerifying] = useState(false);
   const [otpCooldown, setOtpCooldown] = useState(0);
+  const [otpExpiresIn, setOtpExpiresIn] = useState(0);
   const [otpStarted, setOtpStarted] = useState(false);
   const [otpDigits, setOtpDigits] = useState<string[]>(
     Array.from({ length: OTP_LENGTH }, () => ""),
   );
   const otpInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const lastSubmittedOtpRef = useRef<string | null>(null);
   const hydrated = useHydrated();
 
   const supportsPasskeys = useMemo(
@@ -140,6 +144,16 @@ export default function Login({ mode = "owner" }: LoginProps) {
     return () => window.clearInterval(interval);
   }, [otpCooldown]);
 
+  useEffect(() => {
+    if (otpExpiresIn <= 0) return;
+
+    const interval = window.setInterval(() => {
+      setOtpExpiresIn((current) => (current <= 1 ? 0 : current - 1));
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [otpExpiresIn]);
+
   const handleGoogleLogin = () => {
     signIn("google", { callbackUrl: "/dashboard", redirect: true });
   };
@@ -193,7 +207,7 @@ export default function Login({ mode = "owner" }: LoginProps) {
   };
 
   const handleSendOtp = async () => {
-    const normalizedEmail = email.trim();
+    const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail) {
       toast.error("Enter your email first to receive a login code.");
       return;
@@ -205,9 +219,28 @@ export default function Login({ mode = "owner" }: LoginProps) {
       setOtpStarted(true);
       setOtpDigits(Array.from({ length: OTP_LENGTH }, () => ""));
       setOtpCooldown(response.retryAfter ?? 60);
+      setOtpExpiresIn(response.expiresIn ?? 300);
+      lastSubmittedOtpRef.current = null;
       toast.success("Login code sent to your email.");
       window.setTimeout(() => focusOtpInput(0), 60);
     } catch (error) {
+      if (
+        error instanceof Error &&
+        "retryAfter" in error &&
+        typeof error.retryAfter === "number" &&
+        error.retryAfter > 0
+      ) {
+        setOtpStarted(true);
+        setOtpCooldown(error.retryAfter);
+      }
+      if (
+        error instanceof Error &&
+        "expiresIn" in error &&
+        typeof error.expiresIn === "number" &&
+        error.expiresIn > 0
+      ) {
+        setOtpExpiresIn(error.expiresIn);
+      }
       const message =
         error instanceof Error && error.message.trim()
           ? error.message
@@ -220,8 +253,8 @@ export default function Login({ mode = "owner" }: LoginProps) {
 
   const handleVerifyOtp = useCallback(
     async (codeOverride?: string) => {
-      const normalizedEmail = email.trim();
-      const code = codeOverride ?? otpDigits.join("");
+      const normalizedEmail = normalizeEmail(email);
+      const code = (codeOverride ?? otpDigits.join("")).trim();
 
       if (!normalizedEmail) {
         toast.error("Enter your email first.");
@@ -233,6 +266,11 @@ export default function Login({ mode = "owner" }: LoginProps) {
         return;
       }
 
+      if (lastSubmittedOtpRef.current === code && isOtpVerifying) {
+        return;
+      }
+
+      lastSubmittedOtpRef.current = code;
       setIsOtpVerifying(true);
       try {
         const authPayload = await verifyOtpLoginCode(normalizedEmail, code);
@@ -243,6 +281,7 @@ export default function Login({ mode = "owner" }: LoginProps) {
           error instanceof Error && error.message.trim()
             ? error.message
             : "Unable to verify the login code.";
+        lastSubmittedOtpRef.current = null;
         setOtpDigits(Array.from({ length: OTP_LENGTH }, () => ""));
         toast.error(message);
         window.setTimeout(() => focusOtpInput(0), 60);
@@ -378,7 +417,12 @@ export default function Login({ mode = "owner" }: LoginProps) {
                   variant="outline"
                   className="border-[#ecdccf] bg-white"
                   onClick={handleSendOtp}
-                  disabled={isOtpSending || isOtpVerifying || isSigningIn}
+                  disabled={
+                    isOtpSending ||
+                    isOtpVerifying ||
+                    isSigningIn ||
+                    otpCooldown > 0
+                  }
                 >
                   {isOtpSending
                     ? "Sending..."
@@ -432,6 +476,11 @@ export default function Login({ mode = "owner" }: LoginProps) {
                         ? `You can request a new code in ${otpCooldown}s.`
                         : "You can request a fresh code now."}
                     </span>
+                    {otpExpiresIn > 0 ? (
+                      <span className="text-xs text-[#8a6d56]">
+                        {`Code expires in ${Math.max(1, Math.ceil(otpExpiresIn / 60))} minute(s).`}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

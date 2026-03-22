@@ -3,6 +3,7 @@ import {
   Bot,
   Boxes,
   Building2,
+  CircleDollarSign,
   FileText,
   LayoutDashboard,
   Package,
@@ -100,6 +101,11 @@ export const dashboardNavItems: DashboardNavItem[] = [
     labelKey: "navigation.businessProfile",
     href: "/business-profile",
     icon: Building2,
+  },
+  {
+    labelKey: "landing.nav.pricing",
+    href: "/pricing",
+    icon: CircleDollarSign,
   },
   {
     labelKey: "navigation.settings",

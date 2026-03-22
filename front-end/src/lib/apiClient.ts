@@ -210,6 +210,23 @@ export type Customer = {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  totalBilled?: number;
+  totalPaid?: number;
+  outstandingBalance?: number;
+  openInvoiceCount?: number;
+  settled?: boolean;
+  lastPaymentDate?: string | null;
+  lastActivityDate?: string | null;
+  openInvoices?: Array<{
+    id: number;
+    invoiceNumber: string;
+    issueDate: string;
+    dueDate?: string | null;
+    status: string;
+    total: number;
+    paid: number;
+    remaining: number;
+  }>;
 };
 
 export type CustomerInput = {
@@ -217,6 +234,43 @@ export type CustomerInput = {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+};
+
+export type CustomerLedgerEntry = {
+  id: string;
+  type: "invoice" | "payment";
+  invoiceId?: number | null;
+  paymentId?: number | null;
+  date: string;
+  description: string;
+  note?: string | null;
+  debit: number;
+  credit: number;
+  balance: number;
+};
+
+export type CustomerLedger = {
+  customer: Customer;
+  summary: {
+    totalBilled: number;
+    totalPaid: number;
+    outstandingBalance: number;
+    openInvoiceCount: number;
+    settled: boolean;
+    lastPaymentDate?: string | null;
+    lastActivityDate?: string | null;
+    openInvoices: Array<{
+      id: number;
+      invoiceNumber: string;
+      issueDate: string;
+      dueDate?: string | null;
+      status: string;
+      total: number;
+      paid: number;
+      remaining: number;
+    }>;
+  };
+  entries: CustomerLedgerEntry[];
 };
 
 export type Supplier = {
@@ -382,6 +436,7 @@ export type Invoice = {
   tax: string;
   discount: string;
   total: string;
+  notes?: string | null;
   customer?: Customer | null;
   payments: Array<{
     id: number;
@@ -1127,6 +1182,13 @@ export const fetchCustomers = async (): Promise<Customer[]> => {
   return normalizeListResponse<Customer>(response.data?.data);
 };
 
+export const fetchCustomerLedger = async (
+  customerId: number,
+): Promise<CustomerLedger> => {
+  const response = await apiClient.get(`/customers/${customerId}/ledger`);
+  return response.data.data as CustomerLedger;
+};
+
 export const fetchCategories = async (): Promise<Category[]> => {
   const response = await apiClient.get("/categories");
   return response.data.data as Category[];
@@ -1296,19 +1358,28 @@ export const createPayment = async (payload: PaymentInput): Promise<void> => {
 
 export const sendInvoiceEmail = async (
   invoiceId: number,
-): Promise<{ invoiceId: number; status?: string }> => {
-  const response = await apiClient.post(`/invoices/${invoiceId}/send`);
+  payload: { email?: string } = {},
+): Promise<{ invoiceId: number; status?: string; email?: string }> => {
+  const response = await apiClient.post(`/invoices/${invoiceId}/send`, payload);
   return (response.data?.data ?? { invoiceId }) as {
     invoiceId: number;
     status?: string;
+    email?: string;
   };
 };
 
 export const sendInvoiceReminder = async (
   invoiceId: number,
-): Promise<{ invoiceId: number }> => {
-  const response = await apiClient.post(`/invoices/${invoiceId}/reminder`);
-  return (response.data?.data ?? { invoiceId }) as { invoiceId: number };
+  payload: { email?: string } = {},
+): Promise<{ invoiceId: number; email?: string }> => {
+  const response = await apiClient.post(
+    `/invoices/${invoiceId}/reminder`,
+    payload,
+  );
+  return (response.data?.data ?? { invoiceId }) as {
+    invoiceId: number;
+    email?: string;
+  };
 };
 
 const parseDownloadFileName = (

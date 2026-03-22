@@ -5,6 +5,10 @@ import puppeteer from "puppeteer";
 import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
 import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
+import {
+  buildPublicInvoiceReference,
+  buildPublicInvoiceUrl,
+} from "../../lib/appUrls.js";
 
 type ListInvoiceFilters = {
   status?: InvoiceStatus;
@@ -12,6 +16,59 @@ type ListInvoiceFilters = {
   from?: Date;
   to?: Date;
 };
+
+export type PublicInvoiceViewData = {
+  id: number;
+  public_id: string;
+  invoice_id: string;
+  amount: number;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  currency: string;
+  status: InvoiceStatus;
+  date: string;
+  due_date: string | null;
+  notes: string | null;
+  customer_name: string;
+  email: string | null;
+  customer_phone: string | null;
+  customer_address: string | null;
+  business_name: string;
+  business_email: string | null;
+  business_phone: string | null;
+  business_address: string | null;
+  public_url: string;
+  items: Array<{
+    name: string;
+    quantity: number;
+    unit_price: number;
+    tax_rate: number | null;
+    line_total: number;
+  }>;
+};
+
+const publicInvoiceInclude = {
+  customer: true,
+  items: true,
+  user: {
+    select: {
+      business_profile: {
+        select: {
+          business_name: true,
+          address: true,
+          phone: true,
+          email: true,
+          currency: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.InvoiceInclude;
+
+type PublicInvoiceRecord = Prisma.InvoiceGetPayload<{
+  include: typeof publicInvoiceInclude;
+}>;
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 
@@ -249,6 +306,94 @@ const syncOverdueInvoices = async (userId: number) => {
   });
 };
 
+const markPublicInvoiceOverdueIfNeeded = async (invoice: {
+  id: number;
+  due_date: Date | null;
+  status: InvoiceStatus;
+}) => {
+  if (
+    invoice.due_date &&
+    invoice.due_date < new Date() &&
+    invoice.status !== InvoiceStatus.PAID &&
+    invoice.status !== InvoiceStatus.OVERDUE
+  ) {
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: InvoiceStatus.OVERDUE },
+    });
+
+    invoice.status = InvoiceStatus.OVERDUE;
+  }
+};
+
+const mapPublicInvoice = (invoice: {
+  id: number;
+  invoice_number: string;
+  status: InvoiceStatus;
+  date: Date;
+  due_date: Date | null;
+  notes: string | null;
+  subtotal: unknown;
+  tax: unknown;
+  discount: unknown;
+  total: unknown;
+  customer: {
+    name: string;
+    email: string | null;
+    phone: string | null;
+    address: string | null;
+  };
+  items: Array<{
+    name: string;
+    quantity: number;
+    price: unknown;
+    tax_rate: unknown;
+    total: unknown;
+  }>;
+  user: {
+    business_profile: {
+      business_name: string;
+      address: string | null;
+      phone: string | null;
+      email: string | null;
+      currency: string;
+    } | null;
+  };
+}): PublicInvoiceViewData => {
+  const currency = invoice.user.business_profile?.currency ?? "INR";
+
+  return {
+    id: invoice.id,
+    public_id: buildPublicInvoiceReference(invoice.id, invoice.invoice_number),
+    invoice_id: invoice.invoice_number,
+    amount: toNumber(invoice.total),
+    subtotal: toNumber(invoice.subtotal),
+    tax: toNumber(invoice.tax),
+    discount: toNumber(invoice.discount),
+    currency,
+    status: invoice.status,
+    date: invoice.date.toISOString(),
+    due_date: invoice.due_date?.toISOString() ?? null,
+    notes: invoice.notes,
+    customer_name: invoice.customer.name,
+    email: invoice.customer.email,
+    customer_phone: invoice.customer.phone,
+    customer_address: invoice.customer.address,
+    business_name: invoice.user.business_profile?.business_name ?? "BillSutra",
+    business_email: invoice.user.business_profile?.email ?? null,
+    business_phone: invoice.user.business_profile?.phone ?? null,
+    business_address: invoice.user.business_profile?.address ?? null,
+    public_url: buildPublicInvoiceUrl(invoice.id, invoice.invoice_number),
+    items: invoice.items.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      unit_price: toNumber(item.price),
+      tax_rate: item.tax_rate == null ? null : toNumber(item.tax_rate),
+      line_total: toNumber(item.total),
+    })),
+  };
+};
+
 export const listInvoices = async (
   userId: number,
   filters: ListInvoiceFilters = {},
@@ -409,7 +554,7 @@ export const createInvoice = async (
         invoice_number: invoiceNumber,
         date: payload.date ?? undefined,
         due_date: payload.due_date ?? undefined,
-        status: payload.status ?? InvoiceStatus.DRAFT,
+        status: payload.status ?? InvoiceStatus.SENT,
         subtotal: totals.subtotal,
         tax: totals.tax,
         discount: totals.discount,
@@ -484,6 +629,49 @@ export const getInvoice = async (userId: number, id: number) => {
     where: { id, user_id: userId },
     include: { customer: true, items: true, payments: true },
   });
+};
+
+export const getPublicInvoice = async (reference: string) => {
+  const trimmedReference = reference.trim();
+  if (!trimmedReference) {
+    return null;
+  }
+
+  const idMatch = trimmedReference.match(/^(\d+)(?:[-_].+)?$/);
+
+  let invoice: PublicInvoiceRecord | null = null;
+
+  if (idMatch) {
+    invoice = await prisma.invoice.findFirst({
+      where: { id: Number(idMatch[1]) },
+      include: publicInvoiceInclude,
+    });
+  } else {
+    const matches = await prisma.invoice.findMany({
+      where: { invoice_number: trimmedReference },
+      include: publicInvoiceInclude,
+      take: 2,
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (matches.length > 1) {
+      const error = new Error(
+        "Invoice reference is ambiguous. Use the full public invoice link.",
+      ) as Error & { status?: number };
+      error.status = 409;
+      throw error;
+    }
+
+    invoice = matches[0] ?? null;
+  }
+
+  if (!invoice) {
+    return null;
+  }
+
+  await markPublicInvoiceOverdueIfNeeded(invoice);
+
+  return mapPublicInvoice(invoice);
 };
 
 export const getInvoiceForNotification = async (userId: number, id: number) => {

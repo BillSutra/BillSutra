@@ -4,6 +4,7 @@ import validate from "../../middlewares/validate.js";
 import {
   idParamSchema,
   invoiceCreateSchema,
+  invoiceEmailRequestSchema,
   invoiceUpdateSchema,
 } from "../../validations/apiValidations.js";
 import {
@@ -49,13 +50,13 @@ router.post(
 router.post(
   "/:id/send",
   AuthMiddleware,
-  validate({ params: idParamSchema }),
+  validate({ params: idParamSchema, body: invoiceEmailRequestSchema }),
   send,
 );
 router.post(
   "/:id/reminder",
   AuthMiddleware,
-  validate({ params: idParamSchema }),
+  validate({ params: idParamSchema, body: invoiceEmailRequestSchema }),
   reminder,
 );
 router.delete(

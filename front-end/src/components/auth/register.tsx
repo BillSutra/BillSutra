@@ -10,10 +10,6 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { signIn } from "next-auth/react";
 import Image from "next/image";
-import {
-  sendAccountVerificationEmail,
-  sendWelcomeEmail,
-} from "@/lib/emailService";
 import { useI18n } from "@/providers/LanguageProvider";
 
 const Register = () => {
@@ -27,34 +23,12 @@ const Register = () => {
   const [state, formAction] = useActionState(registerAction, initalState);
 
   useEffect(() => {
-    const sendSignupEmails = async () => {
-      try {
-        const payload = state.data as { email?: string; name?: string } | undefined;
-        const email = String(payload?.email ?? "");
-        const name = String(payload?.name ?? "");
-        if (!email || !name) return;
-
-        await sendAccountVerificationEmail({
-          user_email: email,
-          user_name: name,
-        });
-        await sendWelcomeEmail({
-          user_email: email,
-          user_name: name,
-        });
-        toast.success(t("auth.registerForm.emailSent"));
-      } catch {
-        toast.error(t("auth.registerForm.emailFailed"));
-      }
-    };
-
     if (state.status === 500) {
       toast.error(state.message);
     } else if (state.status === 422) {
       toast.error(state.message);
     } else if (state.status === 200) {
-      toast.success(state.message);
-      void sendSignupEmails();
+      toast.success(state.message || t("auth.registerForm.emailSent"));
     }
   }, [state, t]);
 

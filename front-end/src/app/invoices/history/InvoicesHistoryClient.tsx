@@ -2,15 +2,21 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
+import { CheckCircle2, Clock3, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import InvoicePaymentStatusBadge from "@/components/invoice/InvoicePaymentStatusBadge";
 import DataExportDialog from "@/components/export/DataExportDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/table";
 import Modal from "@/components/ui/modal";
+import { cn } from "@/lib/utils";
+import {
+  getInvoicePaymentSnapshot,
+  sumPaymentAmount,
+} from "@/lib/invoicePayments";
 import { useI18n } from "@/providers/LanguageProvider";
 import {
   useCreatePaymentMutation,
@@ -84,29 +90,15 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
     );
   }, [invoices, query]);
 
-  const statusVariant = (status: string) => {
-    const value = status.toLowerCase();
-    if (value === "paid") return "paid" as const;
-    if (
-      value === "partially_paid" ||
-      value === "sent" ||
-      value === "draft"
-    ) {
-      return "pending" as const;
-    }
-    if (value === "overdue") return "overdue" as const;
-    return "default" as const;
-  };
-
   const getPaidTotal = (invoice: Invoice) =>
-    invoice.payments.reduce(
-      (sum, payment) => sum + Number(payment.amount ?? 0),
-      0,
-    );
+    sumPaymentAmount(invoice.payments);
 
-  const openStatusEditor = (invoice: Invoice) => {
+  const openStatusEditor = (
+    invoice: Invoice,
+    options?: { status?: string },
+  ) => {
     setStatusEditorInvoice(invoice);
-    setSelectedStatus(invoice.status);
+    setSelectedStatus(options?.status ?? invoice.status);
     setPaidAmount("");
     setStatusError(null);
   };
@@ -211,6 +203,72 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
     }
   };
 
+  const handleQuickStatusUpdate = async (
+    invoice: Invoice,
+    status: "PAID" | "SENT",
+  ) => {
+    const snapshot = getInvoicePaymentSnapshot(invoice);
+
+    try {
+      if (status === "PAID") {
+        if (snapshot.remaining > 0) {
+          await createPayment.mutateAsync({
+            invoice_id: invoice.id,
+            amount: snapshot.remaining,
+            paid_at: new Date().toISOString(),
+          });
+          toast.success(t("invoiceHistory.messages.remainingPaymentRecorded"));
+        } else {
+          await updateInvoice.mutateAsync({
+            id: invoice.id,
+            payload: { status: "PAID" },
+          });
+          toast.success(t("invoiceHistory.messages.markedPaid"));
+        }
+        return;
+      }
+
+      await updateInvoice.mutateAsync({
+        id: invoice.id,
+        payload: { status },
+      });
+      toast.success(t("invoiceHistory.messages.markedStatus", { status: "Pending" }));
+    } catch {
+      toast.error(t("invoiceHistory.messages.statusUpdateError"));
+    }
+  };
+
+  const summary = useMemo(() => {
+    return filtered.reduce(
+      (accumulator, invoice) => {
+        const snapshot = getInvoicePaymentSnapshot(invoice);
+        accumulator.total += snapshot.total;
+        accumulator.paid += snapshot.paid;
+        accumulator.remaining += snapshot.remaining;
+
+        if (snapshot.paymentStatus === "PARTIAL") {
+          accumulator.partialCount += 1;
+        }
+        if (snapshot.paymentStatus === "PAID") {
+          accumulator.paidCount += 1;
+        }
+        if (snapshot.paymentStatus === "PENDING") {
+          accumulator.pendingCount += 1;
+        }
+
+        return accumulator;
+      },
+      {
+        total: 0,
+        paid: 0,
+        remaining: 0,
+        partialCount: 0,
+        paidCount: 0,
+        pendingCount: 0,
+      },
+    );
+  }, [filtered]);
+
   return (
     <DashboardLayout
       name={name}
@@ -229,6 +287,59 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
         </div>
 
         <section className="mt-6 grid gap-6">
+          <div className="grid gap-4 xl:grid-cols-3">
+            <div className="rounded-[1.5rem] border border-emerald-200 bg-emerald-50/80 p-5 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/20">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-200">
+                    Collected
+                  </p>
+                  <p className="mt-3 text-3xl font-semibold tracking-tight text-emerald-950 dark:text-emerald-50">
+                    {formatCurrencyValue(summary.paid)}
+                  </p>
+                  <p className="mt-2 text-sm text-emerald-800/80 dark:text-emerald-100/80">
+                    {summary.paidCount} invoice(s) fully settled
+                  </p>
+                </div>
+                <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-700 dark:text-emerald-200" />
+              </div>
+            </div>
+
+            <div className="rounded-[1.5rem] border border-amber-200 bg-amber-50/80 p-5 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/20">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-200">
+                    Outstanding
+                  </p>
+                  <p className="mt-3 text-3xl font-semibold tracking-tight text-amber-950 dark:text-amber-50">
+                    {formatCurrencyValue(summary.remaining)}
+                  </p>
+                  <p className="mt-2 text-sm text-amber-800/80 dark:text-amber-100/80">
+                    {summary.pendingCount} pending, {summary.partialCount} partial
+                  </p>
+                </div>
+                <Clock3 className="mt-1 h-5 w-5 text-amber-700 dark:text-amber-200" />
+              </div>
+            </div>
+
+            <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/90 p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 dark:text-slate-300">
+                    Invoice value
+                  </p>
+                  <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
+                    {formatCurrencyValue(summary.total)}
+                  </p>
+                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                    Track every bill from issue to settlement
+                  </p>
+                </div>
+                <Wallet className="mt-1 h-5 w-5 text-slate-700 dark:text-slate-200" />
+              </div>
+            </div>
+          </div>
+
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
@@ -300,7 +411,10 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
               )}
               {!isLoading && !isError && filtered.length > 0 && (
                 <DataTable
-                  rows={filtered.map((invoice) => ({
+                  rows={filtered.map((invoice) => {
+                    const snapshot = getInvoicePaymentSnapshot(invoice);
+
+                    return ({
                     id: invoice.id,
                     select: (
                       <input
@@ -318,40 +432,99 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                     customer: invoice.customer?.name || "-",
                     date: formatInvoiceDate(invoice.date),
                     status: (
-                      <div className="flex min-w-[180px] flex-col gap-2">
-                        <Badge
-                          variant={statusVariant(invoice.status)}
-                          className="w-fit"
+                      <div className="flex min-w-[220px] flex-col gap-3">
+                        <InvoicePaymentStatusBadge
+                          label={snapshot.label}
+                          variant={snapshot.badgeVariant}
+                          hint={snapshot.statusHint}
+                        />
+                        <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
+                          <div className="flex items-center justify-between gap-3">
+                            <span>Paid</span>
+                            <span className="font-semibold">
+                              {formatCurrencyValue(snapshot.paid)}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex items-center justify-between gap-3">
+                            <span>Balance</span>
+                            <span className="font-semibold">
+                              {formatCurrencyValue(snapshot.remaining)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ),
+                    total: (
+                      <div className="text-right">
+                        <p className="font-semibold">{formatCurrencyValue(invoice.total)}</p>
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          Paid {formatCurrencyValue(snapshot.paid)}
+                        </p>
+                      </div>
+                    ),
+                    quick_update: (
+                      <div className="flex min-w-[230px] flex-wrap justify-end gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className={cn(
+                            "rounded-full",
+                            snapshot.paymentStatus === "PENDING" &&
+                              "border-amber-300 bg-amber-50 text-amber-800",
+                          )}
+                          onClick={() => void handleQuickStatusUpdate(invoice, "SENT")}
                         >
-                          {formatStatusLabel(invoice.status)}
-                        </Badge>
+                          Pending
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="rounded-full"
+                          onClick={() =>
+                            openStatusEditor(invoice, { status: "PARTIALLY_PAID" })
+                          }
+                        >
+                          Partial
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => void handleQuickStatusUpdate(invoice, "PAID")}
+                        >
+                          Paid
+                        </Button>
+                      </div>
+                    ),
+                    actions: (
+                      <div className="flex justify-end gap-2">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="w-fit rounded-lg"
+                          className="rounded-lg"
                           onClick={() => openStatusEditor(invoice)}
                         >
                           {t("invoiceHistory.updateStatus")}
                         </Button>
+                        <Button
+                          asChild
+                          variant="outline"
+                          size="sm"
+                          className="rounded-lg"
+                        >
+                          <Link href={`/invoices/history/${invoice.id}`}>
+                            {t("invoiceHistory.view")}
+                          </Link>
+                        </Button>
                       </div>
                     ),
-                    total: formatCurrencyValue(invoice.total),
-                    actions: (
-                      <Button
-                        asChild
-                        variant="outline"
-                        size="sm"
-                        className="rounded-lg"
-                      >
-                        <Link href={`/invoices/history/${invoice.id}`}>
-                          {t("invoiceHistory.view")}
-                        </Link>
-                      </Button>
-                    ),
-                  }))}
+                  });
+                  })}
                   searchPlaceholder={t("invoiceHistory.tableSearchPlaceholder")}
-                  searchKeys={["invoice_number", "customer", "date", "total"]}
+                  searchKeys={["invoice_number", "customer", "date"]}
                   columns={[
                     {
                       key: "select",
@@ -372,6 +545,11 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                     {
                       key: "status",
                       header: t("invoiceHistory.columns.status"),
+                    },
+                    {
+                      key: "quick_update",
+                      header: "Quick update",
+                      className: "text-right",
                     },
                     {
                       key: "total",
@@ -401,6 +579,20 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
           {statusEditorInvoice && (
             <div className="grid gap-4">
               <div className="grid gap-1 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-700 dark:bg-gray-900/40">
+                {(() => {
+                  const snapshot = getInvoicePaymentSnapshot(statusEditorInvoice);
+                  const enteredAmount = Number(paidAmount || 0);
+                  const projectedPaid =
+                    selectedStatus === "PARTIALLY_PAID" && Number.isFinite(enteredAmount)
+                      ? snapshot.paid + Math.max(enteredAmount, 0)
+                      : snapshot.paid;
+                  const projectedBalance = Math.max(
+                    snapshot.total - projectedPaid,
+                    0,
+                  );
+
+                  return (
+                    <>
                 <span className="font-semibold">
                   {statusEditorInvoice.invoice_number}
                 </span>
@@ -425,6 +617,15 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                     ),
                   })}
                 </span>
+                      {selectedStatus === "PARTIALLY_PAID" ? (
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          After this payment: paid {formatCurrencyValue(projectedPaid)} | balance{" "}
+                          {formatCurrencyValue(projectedBalance)}
+                        </span>
+                      ) : null}
+                    </>
+                  );
+                })()}
               </div>
 
               <div className="grid gap-2">

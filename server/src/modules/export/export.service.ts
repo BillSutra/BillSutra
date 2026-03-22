@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import prisma from "../../config/db.config.js";
-import { sendMail } from "../../utils/mailer.js";
+import { sendEmail } from "../../emails/index.js";
 import XLSX from "xlsx";
 import puppeteer from "puppeteer";
 
@@ -958,24 +958,25 @@ const logExport = async (
 
 const sendExportEmail = async (
   recipientEmail: string,
+  recipientName: string,
   fileName: string,
   contentType: string,
   content: Buffer,
   payload: ExportPayload,
+  exportedCount: number,
 ) => {
-  const subject = `Your ${payload.resource} export is ready`;
-  await sendMail({
-    to: recipientEmail,
-    subject,
-    text: `Attached is your ${payload.resource} export in ${payload.format.toUpperCase()} format.`,
-    html: `<p>Your <strong>${escapeHtml(payload.resource)}</strong> export is attached.</p><p>Format: ${escapeHtml(payload.format.toUpperCase())}</p>`,
-    attachments: [
-      {
-        filename: fileName,
-        content,
-        contentType,
-      },
-    ],
+  await sendEmail("export_ready", {
+    email: recipientEmail,
+    user_name: recipientName,
+    resource: payload.resource,
+    format: payload.format,
+    exported_count: exportedCount,
+    file_name: fileName,
+    attachment: {
+      filename: fileName,
+      content,
+      contentType,
+    },
   });
 };
 
@@ -998,10 +999,12 @@ export const executeExport = async (
 
     await sendExportEmail(
       recipientEmail,
+      authUser.actorId ?? `User ${authUser.id}`,
       result.fileName,
       result.contentType,
       result.content,
       payload,
+      result.exportedCount,
     );
 
     return {

@@ -8,6 +8,7 @@ import {
   fetchDashboardCardMetrics,
   fetchDashboardOverview,
   fetchInvoices,
+  fetchProducts,
 } from "@/lib/apiClient";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import MetricCard from "@/components/dashboard/metric-card";
@@ -37,6 +38,7 @@ import {
 import { useHydrated } from "@/hooks/useHydrated";
 import { useI18n } from "@/providers/LanguageProvider";
 import { useDashboardFormatters } from "@/components/dashboard/use-dashboard-formatters";
+import DashboardPlanCard from "@/components/dashboard/dashboard-plan-card";
 
 const dashboardSectionFallback = (height: string) => (
   <div className={`app-loading-skeleton w-full ${height}`} />
@@ -181,18 +183,18 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     placeholderData: keepPreviousData,
   });
 
-  const { data: recentInvoices = [] } = useQuery({
-    queryKey: ["dashboard", "recentInvoices"],
+  const { data: allInvoices = [] } = useQuery({
+    queryKey: ["dashboard", "allInvoices"],
     queryFn: fetchInvoices,
     enabled: hydrated && hasValidSessionToken,
     placeholderData: keepPreviousData,
-    select: (invoices) =>
-      [...invoices]
-        .sort(
-          (left, right) =>
-            new Date(right.date).getTime() - new Date(left.date).getTime(),
-        )
-        .slice(0, 5),
+    ...dashboardQueryDefaults,
+  });
+  const { data: productsPage } = useQuery({
+    queryKey: ["dashboard", "productCount"],
+    queryFn: () => fetchProducts({ page: 1, limit: 1 }),
+    enabled: hydrated && hasValidSessionToken,
+    placeholderData: keepPreviousData,
     ...dashboardQueryDefaults,
   });
 
@@ -203,6 +205,21 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   const metricsError = metricsQuery.isError;
   const invoiceStats = data?.invoiceStats;
   const pendingSalesPayments = data?.pendingPayments ?? [];
+  const recentInvoices = [...allInvoices]
+    .sort(
+      (left, right) =>
+        new Date(right.date).getTime() - new Date(left.date).getTime(),
+    )
+    .slice(0, 5);
+  const currentDate = new Date();
+  const monthlyInvoiceCount = allInvoices.filter((invoice) => {
+    const invoiceDate = new Date(invoice.date);
+    return (
+      invoiceDate.getFullYear() === currentDate.getFullYear() &&
+      invoiceDate.getMonth() === currentDate.getMonth()
+    );
+  }).length;
+  const productCount = productsPage?.total ?? 0;
   const prioritizedPendingSalesPayments = [...pendingSalesPayments]
     .sort((left, right) => right.pendingAmount - left.pendingAmount)
     .slice(0, 4);
@@ -526,6 +543,10 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         </section>
 
         <QuickActions className="w-full self-auto" />
+        <DashboardPlanCard
+          monthlyInvoiceCount={monthlyInvoiceCount}
+          productCount={productCount}
+        />
       </div>
     </section>
   );

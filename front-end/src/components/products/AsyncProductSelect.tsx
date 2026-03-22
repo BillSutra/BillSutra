@@ -26,6 +26,7 @@ const formatProductLabel = (product: Product) => {
 type AsyncProductSelectProps = {
   value: string;
   selectedLabel?: string;
+  selectedProduct?: Product | null;
   onSelect: (product: Product | null) => void;
   onSubmitSelection?: (
     product: Product | null,
@@ -36,11 +37,14 @@ type AsyncProductSelectProps = {
   disabled?: boolean;
   excludeProductIds?: string[];
   variant?: "default" | "warm";
+  inputClassName?: string;
+  className?: string;
 };
 
 export type AsyncProductSelectHandle = {
   focus: (options?: { select?: boolean }) => void;
   clear: () => void;
+  submit: () => void;
 };
 
 const AsyncProductSelect = forwardRef<
@@ -50,6 +54,7 @@ const AsyncProductSelect = forwardRef<
   {
     value,
     selectedLabel = "",
+    selectedProduct = null,
     onSelect,
     onSubmitSelection,
     placeholder,
@@ -57,6 +62,8 @@ const AsyncProductSelect = forwardRef<
     disabled = false,
     excludeProductIds = [],
     variant = "default",
+    inputClassName,
+    className,
   },
   ref,
 ) {
@@ -81,27 +88,6 @@ const AsyncProductSelect = forwardRef<
   useEffect(() => {
     setHighlightedIndex(0);
   }, [debouncedSearch, isOpen]);
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      focus: (options) => {
-        inputRef.current?.focus();
-        if (options?.select) {
-          inputRef.current?.select();
-        }
-        setIsOpen(true);
-      },
-      clear: () => {
-        setInputValue("");
-        setDebouncedSearch("");
-        setHighlightedIndex(0);
-        setIsOpen(true);
-        onSelect(null);
-      },
-    }),
-    [onSelect],
-  );
 
   useEffect(() => {
     if (!autoFocus || disabled) return;
@@ -185,7 +171,44 @@ const AsyncProductSelect = forwardRef<
     return null;
   };
 
-  const inputClassName =
+  const submitSelection = () => {
+    const candidate = resolveEnterCandidate() ?? selectedProduct;
+
+    if (candidate) {
+      selectProduct(candidate);
+    }
+
+    onSubmitSelection?.(candidate, {
+      query: inputValue.trim(),
+      matches: filteredResults,
+    });
+  };
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: (options) => {
+        inputRef.current?.focus();
+        if (options?.select) {
+          inputRef.current?.select();
+        }
+        setIsOpen(true);
+      },
+      clear: () => {
+        setInputValue("");
+        setDebouncedSearch("");
+        setHighlightedIndex(0);
+        setIsOpen(true);
+        onSelect(null);
+      },
+      submit: () => {
+        submitSelection();
+      },
+    }),
+    [onSelect, submitSelection],
+  );
+
+  const baseInputClassName =
     variant === "warm"
       ? "h-9 rounded-md border border-[#e4d6ca] bg-white px-3 text-sm focus-visible:border-[#d8b89c] focus-visible:ring-[#f2e6dc]"
       : "h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus-visible:border-indigo-300 focus-visible:ring-indigo-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus-visible:border-indigo-400 dark:focus-visible:ring-indigo-500/20";
@@ -211,7 +234,7 @@ const AsyncProductSelect = forwardRef<
       : "text-gray-500 dark:text-gray-400";
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className={cn("relative min-w-0 w-full", className)} ref={containerRef}>
       <Input
         ref={inputRef}
         value={inputValue}
@@ -244,20 +267,8 @@ const AsyncProductSelect = forwardRef<
           }
 
           if (event.key === "Enter") {
-            const candidate = resolveEnterCandidate();
-
-            if (candidate) {
-              event.preventDefault();
-              selectProduct(candidate);
-            }
-
-            if (onSubmitSelection) {
-              event.preventDefault();
-              onSubmitSelection(candidate, {
-                query: inputValue.trim(),
-                matches: filteredResults,
-              });
-            }
+            event.preventDefault();
+            submitSelection();
           }
         }}
         onChange={(event) => {
@@ -269,7 +280,7 @@ const AsyncProductSelect = forwardRef<
             onSelect(null);
           }
         }}
-        className={inputClassName}
+        className={cn(baseInputClassName, inputClassName)}
       />
 
       {isOpen ? (

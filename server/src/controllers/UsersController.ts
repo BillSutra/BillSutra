@@ -14,6 +14,7 @@ import {
   ensureBusinessForUser,
   findBusinessByOwnerIdIfAvailable,
 } from "../lib/authSession.js";
+import { sendEmail } from "../emails/index.js";
 
 type UserProfileUpdateInput = z.infer<typeof userProfileUpdateSchema>;
 type UserPasswordUpdateInput = z.infer<typeof userPasswordUpdateSchema>;
@@ -276,6 +277,11 @@ class UsersController {
       });
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
+
     const business = await findBusinessByOwnerIdIfAvailable(userId);
 
     await prisma.passwordResetToken.deleteMany({ where: { user_id: userId } });
@@ -302,6 +308,17 @@ class UsersController {
     await ensureBusinessForUser(userId);
     removeUserUploads(userId);
 
+    if (user?.email) {
+      try {
+        await sendEmail("delete_data_confirmation", {
+          email: user.email,
+          user_name: user.name,
+        });
+      } catch {
+        // Data deletion should not be blocked by a confirmation email failure.
+      }
+    }
+
     return sendResponse(res, 200, { message: "User data deleted" });
   }
 
@@ -316,6 +333,11 @@ class UsersController {
         message: "Only the business admin can delete the business account",
       });
     }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, name: true },
+    });
 
     const business = await findBusinessByOwnerIdIfAvailable(userId);
 
@@ -333,6 +355,17 @@ class UsersController {
     }
 
     removeUserUploads(userId);
+
+    if (user?.email) {
+      try {
+        await sendEmail("delete_account_confirmation", {
+          email: user.email,
+          user_name: user.name,
+        });
+      } catch {
+        // Account deletion should not be blocked by a confirmation email failure.
+      }
+    }
 
     return sendResponse(res, 200, { message: "Account deleted" });
   }
