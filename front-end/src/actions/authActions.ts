@@ -10,7 +10,7 @@ import axios, { AxiosError } from "axios";
 import { resetPassword } from "../lib/apiEndPoints";
 export async function registerAction(prevState: any, formdata: FormData) {
   try {
-    await axios.post(REGISTER_URL, {
+    const response = await axios.post(REGISTER_URL, {
       name: formdata.get("name"),
       email: formdata.get("email"),
       password: formdata.get("password"),
@@ -19,12 +19,9 @@ export async function registerAction(prevState: any, formdata: FormData) {
     return {
       status: 200,
       message:
-        "You have been registered successfully ,check email to verify your account",
+        response.data?.message ?? "Registration successful. Check your inbox.",
       errors: {},
-      data: {
-        name: String(formdata.get("name") ?? ""),
-        email: String(formdata.get("email") ?? ""),
-      },
+      data: {},
     };
   } catch (error) {
     if (error instanceof AxiosError) {
@@ -48,20 +45,14 @@ export async function registerAction(prevState: any, formdata: FormData) {
 }
 export async function forgetAction(prevState: any, formData: FormData) {
   try {
-    const data = await axios.post(forgetPassword, {
+    const response = await axios.post(forgetPassword, {
       email: formData.get("email"),
     });
     return {
       status: 200,
-      message: "Credentials matched loging you shortly!",
+      message: response.data?.message ?? "Password reset email sent.",
       errors: {},
-      data: {
-        email: String(formData.get("email") ?? ""),
-        token:
-          data.data?.data?.token ??
-          data.data?.token ??
-          null,
-      },
+      data: {},
     };
   } catch (error) {
     if (error instanceof AxiosError) {

@@ -185,7 +185,7 @@ const MetricCard = ({
   return (
     <Card
       className={cn(
-        "relative min-h-[202px] overflow-hidden rounded-[1.6rem] gap-0 py-0 transition duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_32px_70px_-46px_rgba(31,27,22,0.28)]",
+        "relative min-h-[188px] overflow-hidden rounded-[1.6rem] gap-0 py-0 transition duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_28px_58px_-42px_rgba(15,23,42,0.18)]",
         palette.card,
         isProfitLoss &&
           "border-rose-200/70 bg-rose-50/70 dark:border-rose-900/40 dark:bg-rose-950/20",
@@ -209,7 +209,7 @@ const MetricCard = ({
           isProfitLoss ? "bg-rose-300/15" : palette.haze,
         )}
       />
-      <CardContent className="relative z-10 flex h-full flex-col gap-2.5 px-5 pb-6.5 pt-7 sm:px-6 sm:pb-7 sm:pt-7.5">
+      <CardContent className="relative z-10 flex h-full flex-col gap-2.5 px-5 pb-6 pt-6.5 sm:px-6 sm:pb-6.5 sm:pt-7">
         <div className="flex items-start justify-between">
           <div className="min-w-0 flex-1">
             <p

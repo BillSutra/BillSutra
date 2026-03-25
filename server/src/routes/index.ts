@@ -31,6 +31,8 @@ import validate from "../middlewares/validate.js";
 import {
   idParamSchema,
   invoiceIdParamSchema,
+  publicInvoiceParamSchema,
+  publicInvoiceQuerySchema,
   adminLoginSchema,
   adminBusinessIdParamSchema,
   authOauthSchema,
@@ -199,8 +201,34 @@ router.post(
 
 // Public invoice view
 router.get(
+  "/invoice/:id",
+  validate({
+    params: publicInvoiceParamSchema,
+    query: publicInvoiceQuerySchema,
+  }),
+  PublicInvoiceController.show,
+);
+router.get(
   "/public/invoice/:id",
-  validate({ params: idParamSchema }),
+  validate({
+    params: publicInvoiceParamSchema,
+    query: publicInvoiceQuerySchema,
+  }),
+  PublicInvoiceController.show,
+);
+router.get(
+  "/invoices/:id",
+  (req, _res, next) => {
+    if (/^\d+$/.test(req.params.id)) {
+      return next("route");
+    }
+
+    return next();
+  },
+  validate({
+    params: publicInvoiceParamSchema,
+    query: publicInvoiceQuerySchema,
+  }),
   PublicInvoiceController.show,
 );
 
@@ -218,6 +246,12 @@ router.get(
   AuthMiddleware,
   validate({ params: idParamSchema }),
   CustomersController.show,
+);
+router.get(
+  "/customers/:id/ledger",
+  AuthMiddleware,
+  validate({ params: idParamSchema }),
+  CustomersController.ledger,
 );
 router.put(
   "/customers/:id",

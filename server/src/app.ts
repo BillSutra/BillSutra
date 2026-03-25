@@ -6,11 +6,14 @@ import path from "path";
 import { fileURLToPath } from "url";
 import AppError from "./utils/AppError.js";
 import errorMiddleware from "./middlewares/error.middleware.js";
+import { requestObservabilityMiddleware } from "./lib/observability.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app: Application = express();
+
+app.use(requestObservabilityMiddleware);
 
 // Logs: METHOD route status response-time (e.g. GET /invoices 200 45ms)
 app.use(morgan(":method :url :status :response-time[0]ms"));

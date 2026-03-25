@@ -34,6 +34,11 @@ export type PasskeyOptionsResponse<TOptions> = {
   label?: string;
 };
 
+type RetryableError = Error & {
+  retryAfter?: number;
+  expiresIn?: number;
+};
+
 const extractMessage = (error: unknown, fallback: string) => {
   if (axios.isAxiosError(error)) {
     const message = (error.response?.data as { message?: string } | undefined)
@@ -53,9 +58,21 @@ const extractMessage = (error: unknown, fallback: string) => {
 export const requestOtpLoginCode = async (email: string) => {
   try {
     const response = await axios.post(`${API_URL}/auth/otp/send`, { email });
-    return response.data.data as { retryAfter: number };
+    return response.data.data as { retryAfter: number; expiresIn: number };
   } catch (error) {
-    throw new Error(extractMessage(error, "Unable to send login code."));
+    const nextError = new Error(
+      extractMessage(error, "Unable to send login code."),
+    ) as RetryableError;
+
+    if (axios.isAxiosError(error)) {
+      const data = error.response?.data as
+        | { data?: { retryAfter?: number; expiresIn?: number } }
+        | undefined;
+      nextError.retryAfter = data?.data?.retryAfter;
+      nextError.expiresIn = data?.data?.expiresIn;
+    }
+
+    throw nextError;
   }
 };
 

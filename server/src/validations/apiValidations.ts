@@ -11,6 +11,14 @@ export const idParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
+export const publicInvoiceParamSchema = z.object({
+  id: z.string().trim().min(1).max(64),
+});
+
+export const publicInvoiceQuerySchema = z.object({
+  format: z.enum(["json", "html"]).optional(),
+});
+
 export const invoiceIdParamSchema = z.object({
   invoiceId: z.coerce.number().int().positive(),
 });
@@ -301,6 +309,10 @@ export const invoiceUpdateSchema = z.object({
   status: z.nativeEnum(InvoiceStatus).optional(),
   due_date: z.coerce.date().optional(),
   notes: z.string().optional(),
+});
+
+export const invoiceEmailRequestSchema = z.object({
+  email: z.string().email().optional(),
 });
 
 export const paymentCreateSchema = z.object({

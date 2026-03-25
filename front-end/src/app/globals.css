@@ -243,8 +243,49 @@
   }
 
   .dashboard-root {
+    --primary: oklch(0.57 0.18 258);
+    --primary-foreground: oklch(0.985 0 0);
+    --ring: oklch(0.57 0.18 258);
+    --dashboard-bg: linear-gradient(180deg, #f4f7fb 0%, #f8fafc 54%, #ffffff 100%);
+    --dashboard-grid: radial-gradient(rgba(71, 85, 105, 0.1) 0.6px, transparent 0.6px);
+    --dashboard-surface: #ffffff;
+    --dashboard-surface-muted: #f8fafc;
+    --dashboard-surface-border: #dce4ef;
+    --dashboard-text: #0f172a;
+    --dashboard-text-muted: #475569;
+    --dashboard-text-subtle: #64748b;
+    --dashboard-accent: #2563eb;
+    --app-surface: rgba(255, 255, 255, 0.84);
+    --app-surface-strong: rgba(255, 255, 255, 0.96);
+    --app-surface-muted: rgba(248, 250, 252, 0.9);
+    --app-surface-border: rgba(220, 228, 239, 0.95);
+    --app-shadow: 0 28px 65px -42px rgba(15, 23, 42, 0.18);
+    --app-shadow-soft: 0 18px 40px -30px rgba(15, 23, 42, 0.12);
+    --app-kicker: #64748b;
     position: relative;
     background: var(--dashboard-bg);
+  }
+
+  .dark .dashboard-root {
+    --primary: oklch(0.67 0.15 258);
+    --primary-foreground: oklch(0.985 0 0);
+    --ring: oklch(0.67 0.15 258);
+    --dashboard-bg: linear-gradient(180deg, #09111f 0%, #0b1324 54%, #0f172a 100%);
+    --dashboard-grid: radial-gradient(rgba(148, 163, 184, 0.16) 0.6px, transparent 0.6px);
+    --dashboard-surface: #0f172a;
+    --dashboard-surface-muted: #111c31;
+    --dashboard-surface-border: #22314d;
+    --dashboard-text: #e5edf8;
+    --dashboard-text-muted: #94a3b8;
+    --dashboard-text-subtle: #cbd5e1;
+    --dashboard-accent: #60a5fa;
+    --app-surface: rgba(15, 23, 42, 0.8);
+    --app-surface-strong: rgba(15, 23, 42, 0.94);
+    --app-surface-muted: rgba(17, 28, 49, 0.9);
+    --app-surface-border: rgba(34, 49, 77, 0.92);
+    --app-shadow: 0 28px 70px -46px rgba(2, 6, 23, 0.52);
+    --app-shadow-soft: 0 18px 42px -32px rgba(2, 6, 23, 0.42);
+    --app-kicker: #94a3b8;
   }
 
   .dashboard-root::before {
@@ -254,7 +295,7 @@
     pointer-events: none;
     background-image: var(--dashboard-grid);
     background-size: 24px 24px;
-    opacity: 0.2;
+    opacity: 0.28;
   }
 
   .dashboard-grid {
@@ -266,16 +307,18 @@
     position: relative;
     overflow: hidden;
     border: 1px solid var(--app-surface-border);
-    background: linear-gradient(180deg, var(--app-surface-strong), var(--app-surface));
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent 24%),
+      linear-gradient(180deg, var(--app-surface-strong), var(--app-surface));
     box-shadow: var(--app-shadow);
-    backdrop-filter: blur(14px);
+    backdrop-filter: blur(18px);
     transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
     will-change: transform, box-shadow;
   }
 
   .dashboard-chart-surface:hover {
     transform: translateY(-2px);
-    box-shadow: 0 22px 48px -34px rgba(17, 24, 39, 0.22);
+    box-shadow: 0 24px 56px -36px rgba(15, 23, 42, 0.18);
     border-color: color-mix(in oklab, var(--dashboard-surface-border) 70%, var(--dashboard-accent));
   }
 
@@ -294,14 +337,16 @@
 
   .dashboard-chart-metric {
     border: 1px solid var(--app-surface-border);
-    background: linear-gradient(180deg, var(--app-surface-muted), var(--app-surface));
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.22), transparent 26%),
+      linear-gradient(180deg, var(--app-surface-muted), var(--app-surface));
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
     transition: transform 200ms ease, box-shadow 200ms ease;
   }
 
   .dashboard-chart-metric:hover {
     transform: translateY(-2px);
-    box-shadow: 0 18px 36px -30px rgba(31, 27, 22, 0.4);
+    box-shadow: 0 18px 36px -30px rgba(15, 23, 42, 0.16);
   }
 
   @keyframes pageFade {

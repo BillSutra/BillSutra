@@ -13,6 +13,7 @@ import {
   deleteCustomer,
   fetchCategories,
   fetchCustomers,
+  fetchCustomerLedger,
   fetchProductOptions,
   fetchProducts,
   fetchPurchases,
@@ -93,6 +94,13 @@ export const useCreateCategoryMutation = () => {
 
 export const useCustomersQuery = () =>
   useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
+
+export const useCustomerLedgerQuery = (customerId?: number) =>
+  useQuery({
+    queryKey: ["customer-ledger", customerId],
+    queryFn: () => fetchCustomerLedger(customerId ?? 0),
+    enabled: Number.isFinite(customerId) && (customerId ?? 0) > 0,
+  });
 
 export const useCreateCustomerMutation = () => {
   const queryClient = useQueryClient();
@@ -279,6 +287,8 @@ export const useCreateInvoiceMutation = () => {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-ledger"] }),
         invalidateDashboard(queryClient),
       ]),
   });
@@ -291,6 +301,8 @@ export const useDeleteInvoiceMutation = () => {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-ledger"] }),
         invalidateDashboard(queryClient),
       ]),
   });
@@ -309,6 +321,8 @@ export const useUpdateInvoiceMutation = () => {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-ledger"] }),
         invalidateDashboard(queryClient),
       ]),
   });
@@ -321,6 +335,8 @@ export const useCreatePaymentMutation = () => {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-ledger"] }),
         queryClient.invalidateQueries({ queryKey: ["payments"] }),
         invalidateDashboard(queryClient),
       ]),

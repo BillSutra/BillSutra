@@ -82,8 +82,22 @@ export type InvoicePreviewData = {
     value: number;
     label?: string;
   };
+  paymentSummary?: {
+    statusLabel: string;
+    statusTone?: "paid" | "partial" | "pending";
+    statusNote?: string;
+    paidAmount: number;
+    remainingAmount: number;
+    history?: Array<{
+      amount: number;
+      paidAt?: string | null;
+      method?: string | null;
+    }>;
+  };
   notes: string;
   paymentInfo: string;
+  closingNote?: string;
+  signatureLabel?: string;
 };
 
 export type InvoiceSectionProps = {

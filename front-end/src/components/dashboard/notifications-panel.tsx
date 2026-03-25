@@ -49,23 +49,19 @@ const NotificationsPanel = ({
 
   return (
     <Card
-      className={`dashboard-chart-surface h-fit self-start gap-0 py-6 rounded-[1.75rem] ${className}`}
+      className={`dashboard-chart-surface h-fit self-start gap-0 rounded-[1.85rem] py-6 ${className}`}
     >
       <CardHeader className="dashboard-chart-content gap-2">
         <div className="flex items-center gap-3">
-          <div className="rounded-2xl border border-[#f2e6dc] bg-white/80 p-2 text-[#b45309]">
+          <div className="rounded-2xl border border-border/70 bg-card/80 p-2 text-primary shadow-sm">
             <BellRing size={18} />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
-              Attention center
-            </p>
-            <CardTitle className="mt-1 text-lg text-[#1f1b16]">
-              Notifications & alerts
-            </CardTitle>
+            <p className="app-kicker">Attention center</p>
+            <CardTitle className="mt-1 text-xl text-foreground">Notifications & alerts</CardTitle>
           </div>
         </div>
-        <p className="text-sm text-[#5f5144]">
+        <p className="text-sm leading-6 text-muted-foreground">
           Review stock issues, unpaid invoices, and supplier reminders.
         </p>
         <DashboardCardStatus
@@ -78,15 +74,15 @@ const NotificationsPanel = ({
       </CardHeader>
       <CardContent className="dashboard-chart-content grid gap-3">
         {resolvedLoading && (
-          <div className="h-20 rounded-xl bg-white/70 animate-pulse" />
+          <div className="h-20 app-loading-skeleton" />
         )}
         {resolvedError && (
-          <p className="text-sm text-[#b45309]">Unable to load alerts.</p>
+          <p className="text-sm text-rose-600 dark:text-rose-300">Unable to load alerts.</p>
         )}
         {!resolvedLoading && !resolvedError && (
           <>
             {notifications.length === 0 ? (
-              <div className="rounded-2xl border border-[#f2e6dc] bg-white/80 px-4 py-5 text-sm text-[#5f5144]">
+              <div className="app-empty-state px-4 py-5 text-sm">
                 No alerts right now.
               </div>
             ) : (
@@ -96,20 +92,20 @@ const NotificationsPanel = ({
                     key={notification.id}
                     type="button"
                     onClick={() => router.push(notification.redirectUrl)}
-                    className="rounded-2xl border border-[#f2e6dc] bg-white/90 px-4 py-3 text-left shadow-[0_14px_30px_-24px_rgba(31,27,22,0.3)] transition hover:-translate-y-0.5 hover:bg-[#fffaf5]"
+                    className="rounded-[1.35rem] border border-border/70 bg-background/75 px-4 py-3 text-left shadow-[0_14px_30px_-24px_rgba(15,23,42,0.16)] transition hover:-translate-y-0.5 hover:bg-background"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="min-w-0 flex-1 font-semibold leading-5 text-[#1f1b16]">
+                      <p className="min-w-0 flex-1 font-semibold leading-5 text-foreground">
                         {notification.title}
                       </p>
                       <Badge variant={typeVariant(notification.type)} className="shrink-0">
                         {notification.type.replaceAll("_", " ")}
                       </Badge>
                     </div>
-                    <p className="mt-1 text-sm leading-5 text-[#5f5144]">
+                    <p className="mt-1 text-sm leading-5 text-muted-foreground">
                       {notification.message}
                     </p>
-                    <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#a06d42]">
+                    <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
                       Open details
                     </p>
                   </button>

@@ -1,3 +1,5 @@
+"use client";
+
 import React, { Dispatch, SetStateAction } from "react";
 import {
   AlertDialog,
@@ -9,8 +11,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {signOut} from 'next-auth/react'
+import { signOut } from "next-auth/react";
 import { useI18n } from "@/providers/LanguageProvider";
+import {
+  captureAnalyticsEvent,
+  resetAnalyticsUser,
+} from "@/lib/observability/client";
+
 const LogoutModal = ({
   open,
   setOpen,
@@ -18,19 +25,18 @@ const LogoutModal = ({
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
 }) => {
-const { t } = useI18n();
+  const { t } = useI18n();
 
-
-const logoutUser = ()=>{
-  signOut({
-    callbackUrl:'/login',
-    redirect:true
-  })
-  
-}
-
-
-
+  const logoutUser = () => {
+    captureAnalyticsEvent("auth_logout", {
+      source: "logout_modal",
+    });
+    resetAnalyticsUser();
+    signOut({
+      callbackUrl: "/login",
+      redirect: true,
+    });
+  };
 
   return (
     <AlertDialog open={open} onOpenChange={setOpen}>
@@ -43,7 +49,9 @@ const logoutUser = ()=>{
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-          <AlertDialogAction onClick={logoutUser} >{t("logoutModal.confirm")}</AlertDialogAction>
+          <AlertDialogAction onClick={logoutUser}>
+            {t("logoutModal.confirm")}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

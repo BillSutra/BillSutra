@@ -3,11 +3,14 @@ import type { Request } from "express";
 import { AuthMethod, Prisma } from "@prisma/client";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import prisma from "../config/db.config.js";
-import { sendMail } from "../utils/mailer.js";
+import { sendEmail } from "../emails/index.js";
 
 const DEFAULT_RP_NAME = "Billsutra";
 const DEFAULT_ORIGIN = "http://localhost:3000";
-const OTP_LENGTH = 6;
+export const OTP_LENGTH = 6;
+export const OTP_TTL_MS = 5 * 60 * 1000;
+export const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+export const OTP_MAX_ATTEMPTS = 3;
 
 const splitConfigList = (value?: string | null) =>
   (value ?? "")
@@ -51,6 +54,8 @@ export const generateOtpCode = () =>
 
 export const hashSecretValue = (value: string) =>
   crypto.createHash("sha256").update(value).digest("hex");
+
+export const normalizeEmailAddress = (value: string) => value.trim().toLowerCase();
 
 export const maskEmail = (email: string) => {
   const [localPart, domainPart] = email.split("@");
@@ -148,28 +153,20 @@ export const sendOtpLoginEmail = async ({
   email,
   name,
   code,
+  expiresInMinutes,
+  resendInSeconds,
 }: {
   email: string;
   name?: string | null;
   code: string;
+  expiresInMinutes: number;
+  resendInSeconds: number;
 }) => {
-  const recipientName = name?.trim() || "there";
-
-  await sendMail({
-    to: email,
-    subject: "Your Billsutra login code",
-    text: `Hi ${recipientName}, your Billsutra login code is ${code}. It expires in 5 minutes.`,
-    html: `
-      <div style="font-family: Arial, sans-serif; color: #1f1b16; line-height: 1.6;">
-        <h2 style="margin-bottom: 12px;">Your Billsutra login code</h2>
-        <p>Hi ${recipientName},</p>
-        <p>Use this one-time code to sign in to Billsutra:</p>
-        <div style="display: inline-block; margin: 12px 0; padding: 14px 18px; border-radius: 12px; background: #fff7ed; border: 1px solid #fed7aa; font-size: 28px; font-weight: 700; letter-spacing: 0.35em;">
-          ${code}
-        </div>
-        <p>This code expires in 5 minutes and can only be used once.</p>
-        <p>If you did not request this login code, you can ignore this email.</p>
-      </div>
-    `,
+  await sendEmail("otp_login", {
+    email,
+    user_name: name?.trim() || "there",
+    code,
+    expires_in_minutes: expiresInMinutes,
+    resend_in_seconds: resendInSeconds,
   });
 };

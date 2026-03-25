@@ -27,6 +27,8 @@ import {
   verifyOtpLoginCode,
   verifyPasskeyAuthentication,
 } from "@/lib/authClient";
+import { captureAnalyticsEvent } from "@/lib/observability/client";
+import { captureFrontendException } from "@/lib/observability/shared";
 
 type LoginProps = {
   mode?: "owner" | "worker";
@@ -46,6 +48,8 @@ const normalizeToken = (rawToken: unknown) => {
 
   return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
 };
+
+const normalizeEmail = (value: string) => value.trim().toLowerCase();
 
 export default function Login({ mode = "owner" }: LoginProps) {
   const router = useRouter();
@@ -68,11 +72,13 @@ export default function Login({ mode = "owner" }: LoginProps) {
   const [isOtpSending, setIsOtpSending] = useState(false);
   const [isOtpVerifying, setIsOtpVerifying] = useState(false);
   const [otpCooldown, setOtpCooldown] = useState(0);
+  const [otpExpiresIn, setOtpExpiresIn] = useState(0);
   const [otpStarted, setOtpStarted] = useState(false);
   const [otpDigits, setOtpDigits] = useState<string[]>(
     Array.from({ length: OTP_LENGTH }, () => ""),
   );
   const otpInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const lastSubmittedOtpRef = useRef<string | null>(null);
   const hydrated = useHydrated();
 
   const supportsPasskeys = useMemo(
@@ -107,6 +113,12 @@ export default function Login({ mode = "owner" }: LoginProps) {
         router.push(callbackUrl);
         router.refresh();
       } catch (error) {
+        captureFrontendException(error, {
+          tags: {
+            flow: "auth.complete_token_login",
+            mode,
+          },
+        });
         const message =
           error instanceof Error && error.message.trim()
             ? error.message
@@ -121,14 +133,28 @@ export default function Login({ mode = "owner" }: LoginProps) {
 
   useEffect(() => {
     if (state.status === 500) {
+      captureAnalyticsEvent("auth_login_failed", {
+        method: "password",
+        mode,
+        status: state.status,
+      });
       toast.error(state.message);
     } else if (state.status === 422) {
+      captureAnalyticsEvent("auth_login_failed", {
+        method: "password",
+        mode,
+        status: state.status,
+      });
       toast.error(state.message);
     } else if (state.status === 200) {
+      captureAnalyticsEvent("auth_login_succeeded", {
+        method: "password",
+        mode,
+      });
       toast.success(state.message);
       void completeTokenLogin(state.data?.token);
     }
-  }, [completeTokenLogin, state]);
+  }, [completeTokenLogin, mode, state]);
 
   useEffect(() => {
     if (otpCooldown <= 0) return;
@@ -140,7 +166,21 @@ export default function Login({ mode = "owner" }: LoginProps) {
     return () => window.clearInterval(interval);
   }, [otpCooldown]);
 
+  useEffect(() => {
+    if (otpExpiresIn <= 0) return;
+
+    const interval = window.setInterval(() => {
+      setOtpExpiresIn((current) => (current <= 1 ? 0 : current - 1));
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [otpExpiresIn]);
+
   const handleGoogleLogin = () => {
+    captureAnalyticsEvent("auth_login_started", {
+      method: "google",
+      mode,
+    });
     signIn("google", { callbackUrl: "/dashboard", redirect: true });
   };
 
@@ -157,6 +197,10 @@ export default function Login({ mode = "owner" }: LoginProps) {
     }
 
     setIsPasskeyLoading(true);
+    captureAnalyticsEvent("auth_login_started", {
+      method: "passkey",
+      mode,
+    });
     try {
       const optionsResponse =
         await requestPasskeyAuthenticationOptions<Record<string, unknown>>(
@@ -175,8 +219,22 @@ export default function Login({ mode = "owner" }: LoginProps) {
       );
 
       toast.success("Passkey verified.");
+      captureAnalyticsEvent("auth_login_succeeded", {
+        method: "passkey",
+        mode,
+      });
       await completeTokenLogin(authPayload.token);
     } catch (error) {
+      captureAnalyticsEvent("auth_login_failed", {
+        method: "passkey",
+        mode,
+      });
+      captureFrontendException(error, {
+        tags: {
+          flow: "auth.passkey_login",
+          mode,
+        },
+      });
       const message =
         error instanceof Error && error.message.trim()
           ? error.message
@@ -193,21 +251,55 @@ export default function Login({ mode = "owner" }: LoginProps) {
   };
 
   const handleSendOtp = async () => {
-    const normalizedEmail = email.trim();
+    const normalizedEmail = normalizeEmail(email);
     if (!normalizedEmail) {
       toast.error("Enter your email first to receive a login code.");
       return;
     }
 
     setIsOtpSending(true);
+    captureAnalyticsEvent("auth_login_otp_requested", {
+      mode,
+    });
     try {
       const response = await requestOtpLoginCode(normalizedEmail);
       setOtpStarted(true);
       setOtpDigits(Array.from({ length: OTP_LENGTH }, () => ""));
       setOtpCooldown(response.retryAfter ?? 60);
+      setOtpExpiresIn(response.expiresIn ?? 300);
+      lastSubmittedOtpRef.current = null;
+      captureAnalyticsEvent("auth_login_otp_sent", {
+        mode,
+      });
       toast.success("Login code sent to your email.");
       window.setTimeout(() => focusOtpInput(0), 60);
     } catch (error) {
+      captureAnalyticsEvent("auth_login_otp_failed", {
+        mode,
+      });
+      captureFrontendException(error, {
+        tags: {
+          flow: "auth.otp_request",
+          mode,
+        },
+      });
+      if (
+        error instanceof Error &&
+        "retryAfter" in error &&
+        typeof error.retryAfter === "number" &&
+        error.retryAfter > 0
+      ) {
+        setOtpStarted(true);
+        setOtpCooldown(error.retryAfter);
+      }
+      if (
+        error instanceof Error &&
+        "expiresIn" in error &&
+        typeof error.expiresIn === "number" &&
+        error.expiresIn > 0
+      ) {
+        setOtpExpiresIn(error.expiresIn);
+      }
       const message =
         error instanceof Error && error.message.trim()
           ? error.message
@@ -220,8 +312,8 @@ export default function Login({ mode = "owner" }: LoginProps) {
 
   const handleVerifyOtp = useCallback(
     async (codeOverride?: string) => {
-      const normalizedEmail = email.trim();
-      const code = codeOverride ?? otpDigits.join("");
+      const normalizedEmail = normalizeEmail(email);
+      const code = (codeOverride ?? otpDigits.join("")).trim();
 
       if (!normalizedEmail) {
         toast.error("Enter your email first.");
@@ -233,16 +325,36 @@ export default function Login({ mode = "owner" }: LoginProps) {
         return;
       }
 
+      if (lastSubmittedOtpRef.current === code && isOtpVerifying) {
+        return;
+      }
+
+      lastSubmittedOtpRef.current = code;
       setIsOtpVerifying(true);
       try {
         const authPayload = await verifyOtpLoginCode(normalizedEmail, code);
         toast.success("OTP verified.");
+        captureAnalyticsEvent("auth_login_succeeded", {
+          method: "otp",
+          mode,
+        });
         await completeTokenLogin(authPayload.token);
       } catch (error) {
+        captureAnalyticsEvent("auth_login_failed", {
+          method: "otp",
+          mode,
+        });
+        captureFrontendException(error, {
+          tags: {
+            flow: "auth.otp_verify",
+            mode,
+          },
+        });
         const message =
           error instanceof Error && error.message.trim()
             ? error.message
             : "Unable to verify the login code.";
+        lastSubmittedOtpRef.current = null;
         setOtpDigits(Array.from({ length: OTP_LENGTH }, () => ""));
         toast.error(message);
         window.setTimeout(() => focusOtpInput(0), 60);
@@ -378,7 +490,12 @@ export default function Login({ mode = "owner" }: LoginProps) {
                   variant="outline"
                   className="border-[#ecdccf] bg-white"
                   onClick={handleSendOtp}
-                  disabled={isOtpSending || isOtpVerifying || isSigningIn}
+                  disabled={
+                    isOtpSending ||
+                    isOtpVerifying ||
+                    isSigningIn ||
+                    otpCooldown > 0
+                  }
                 >
                   {isOtpSending
                     ? "Sending..."
@@ -432,6 +549,11 @@ export default function Login({ mode = "owner" }: LoginProps) {
                         ? `You can request a new code in ${otpCooldown}s.`
                         : "You can request a fresh code now."}
                     </span>
+                    {otpExpiresIn > 0 ? (
+                      <span className="text-xs text-[#8a6d56]">
+                        {`Code expires in ${Math.max(1, Math.ceil(otpExpiresIn / 60))} minute(s).`}
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               ) : null}

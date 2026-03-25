@@ -2,6 +2,7 @@ import axios from "axios";
 import { getSession } from "next-auth/react";
 import { API_URL } from "./apiEndPoints";
 import { normalizeListResponse } from "./normalizeListResponse";
+import { captureApiFailure } from "./observability/shared";
 
 const normalizeAuthToken = (rawToken: string | null | undefined) => {
   if (!rawToken) return null;
@@ -41,6 +42,14 @@ apiClient.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    captureApiFailure(error);
+    return Promise.reject(error);
+  },
+);
 
 export type ReportsSummary = {
   invoices: number;
@@ -210,6 +219,23 @@ export type Customer = {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  totalBilled?: number;
+  totalPaid?: number;
+  outstandingBalance?: number;
+  openInvoiceCount?: number;
+  settled?: boolean;
+  lastPaymentDate?: string | null;
+  lastActivityDate?: string | null;
+  openInvoices?: Array<{
+    id: number;
+    invoiceNumber: string;
+    issueDate: string;
+    dueDate?: string | null;
+    status: string;
+    total: number;
+    paid: number;
+    remaining: number;
+  }>;
 };
 
 export type CustomerInput = {
@@ -217,6 +243,43 @@ export type CustomerInput = {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+};
+
+export type CustomerLedgerEntry = {
+  id: string;
+  type: "invoice" | "payment";
+  invoiceId?: number | null;
+  paymentId?: number | null;
+  date: string;
+  description: string;
+  note?: string | null;
+  debit: number;
+  credit: number;
+  balance: number;
+};
+
+export type CustomerLedger = {
+  customer: Customer;
+  summary: {
+    totalBilled: number;
+    totalPaid: number;
+    outstandingBalance: number;
+    openInvoiceCount: number;
+    settled: boolean;
+    lastPaymentDate?: string | null;
+    lastActivityDate?: string | null;
+    openInvoices: Array<{
+      id: number;
+      invoiceNumber: string;
+      issueDate: string;
+      dueDate?: string | null;
+      status: string;
+      total: number;
+      paid: number;
+      remaining: number;
+    }>;
+  };
+  entries: CustomerLedgerEntry[];
 };
 
 export type Supplier = {
@@ -382,6 +445,7 @@ export type Invoice = {
   tax: string;
   discount: string;
   total: string;
+  notes?: string | null;
   customer?: Customer | null;
   payments: Array<{
     id: number;
@@ -457,6 +521,48 @@ export type InventoryAdjustInput = {
   change: number;
   reason?: "PURCHASE" | "SALE" | "ADJUSTMENT" | "RETURN" | "DAMAGE";
   note?: string | null;
+};
+
+export type InventoryDemandAlertLevel = "critical" | "warning" | "normal";
+
+export type InventoryDemandPrediction = {
+  product_id: number;
+  product_name: string;
+  warehouse_id?: number | null;
+  stock_left: number;
+  predicted_daily_sales: number;
+  days_until_stockout: number;
+  recommended_reorder_quantity: number;
+  alert_level: InventoryDemandAlertLevel;
+  unit_cost: number;
+  basis_window_days: number;
+  confidence: number;
+};
+
+export type InventoryDemandPredictionsMetadata = {
+  generatedAt: string;
+  basisWindowDays: number;
+  dataCoverageDays: number;
+  warehouseScope: {
+    warehouseId: number | null;
+    mode: "all" | "warehouse";
+  };
+};
+
+export type InventoryDemandPredictionsResponse = {
+  predictions: InventoryDemandPrediction[];
+  count: number;
+  metadata: InventoryDemandPredictionsMetadata;
+};
+
+export type InventoryDemandPredictionFilters = {
+  productId?: number;
+  warehouseId?: number;
+  productIds?: number[];
+  categoryId?: number;
+  supplierId?: number;
+  alertLevel?: InventoryDemandAlertLevel;
+  limit?: number;
 };
 
 export type DashboardOverview = {
@@ -1127,6 +1233,13 @@ export const fetchCustomers = async (): Promise<Customer[]> => {
   return normalizeListResponse<Customer>(response.data?.data);
 };
 
+export const fetchCustomerLedger = async (
+  customerId: number,
+): Promise<CustomerLedger> => {
+  const response = await apiClient.get(`/customers/${customerId}/ledger`);
+  return response.data.data as CustomerLedger;
+};
+
 export const fetchCategories = async (): Promise<Category[]> => {
   const response = await apiClient.get("/categories");
   return response.data.data as Category[];
@@ -1296,19 +1409,28 @@ export const createPayment = async (payload: PaymentInput): Promise<void> => {
 
 export const sendInvoiceEmail = async (
   invoiceId: number,
-): Promise<{ invoiceId: number; status?: string }> => {
-  const response = await apiClient.post(`/invoices/${invoiceId}/send`);
+  payload: { email?: string } = {},
+): Promise<{ invoiceId: number; status?: string; email?: string }> => {
+  const response = await apiClient.post(`/invoices/${invoiceId}/send`, payload);
   return (response.data?.data ?? { invoiceId }) as {
     invoiceId: number;
     status?: string;
+    email?: string;
   };
 };
 
 export const sendInvoiceReminder = async (
   invoiceId: number,
-): Promise<{ invoiceId: number }> => {
-  const response = await apiClient.post(`/invoices/${invoiceId}/reminder`);
-  return (response.data?.data ?? { invoiceId }) as { invoiceId: number };
+  payload: { email?: string } = {},
+): Promise<{ invoiceId: number; email?: string }> => {
+  const response = await apiClient.post(
+    `/invoices/${invoiceId}/reminder`,
+    payload,
+  );
+  return (response.data?.data ?? { invoiceId }) as {
+    invoiceId: number;
+    email?: string;
+  };
 };
 
 const parseDownloadFileName = (
@@ -1515,6 +1637,49 @@ export const fetchInventories = async (
     params: warehouseId ? { warehouse_id: warehouseId } : undefined,
   });
   return response.data.data as Inventory[];
+};
+
+const buildInventoryPredictionParams = (
+  filters?: InventoryDemandPredictionFilters,
+) => {
+  if (!filters) return undefined;
+
+  const params = new URLSearchParams();
+
+  if (filters.productId) {
+    params.set("productId", String(filters.productId));
+  }
+  if (filters.warehouseId) {
+    params.set("warehouseId", String(filters.warehouseId));
+  }
+  if (filters.categoryId) {
+    params.set("categoryId", String(filters.categoryId));
+  }
+  if (filters.supplierId) {
+    params.set("supplierId", String(filters.supplierId));
+  }
+  if (filters.alertLevel) {
+    params.set("alertLevel", filters.alertLevel);
+  }
+  if (filters.limit) {
+    params.set("limit", String(filters.limit));
+  }
+  filters.productIds?.forEach((productId) => {
+    params.append("productIds", String(productId));
+  });
+
+  const query = params.toString();
+  return query ? query : undefined;
+};
+
+export const fetchInventoryDemandPredictions = async (
+  filters?: InventoryDemandPredictionFilters,
+): Promise<InventoryDemandPredictionsResponse> => {
+  const query = buildInventoryPredictionParams(filters);
+  const response = await apiClient.get(
+    query ? `/inventory-demand/predictions?${query}` : "/inventory-demand/predictions",
+  );
+  return response.data.data as InventoryDemandPredictionsResponse;
 };
 
 export const adjustInventory = async (

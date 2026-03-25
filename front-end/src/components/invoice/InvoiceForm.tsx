@@ -19,6 +19,7 @@ export type InvoiceFormProps = {
   isSubmitting?: boolean;
   summaryErrors: string[];
   serverError?: string | null;
+  hideSubmit?: boolean;
 };
 
 const InvoiceForm = ({
@@ -32,6 +33,7 @@ const InvoiceForm = ({
   isSubmitting,
   summaryErrors,
   serverError,
+  hideSubmit = false,
 }: InvoiceFormProps) => {
   const { t } = useI18n();
   const validateRequiredDate = (value: string) =>
@@ -41,9 +43,30 @@ const InvoiceForm = ({
 
   return (
     <form
-      className="no-print rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+      className="no-print rounded-[1.9rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_22px_50px_-36px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.95)_0%,rgba(15,23,42,0.96)_100%)]"
       onSubmit={onSubmit}
     >
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
+            Billing details
+          </p>
+          <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+            Customer, tax, and invoice settings
+          </h2>
+          <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+            Keep supporting details close by while the cart and checkout stay in focus.
+          </p>
+        </div>
+        <div className="rounded-[1.4rem] border border-slate-200 bg-white/80 px-4 py-3 text-right shadow-sm dark:border-gray-700 dark:bg-gray-900/70">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+            Billing mode
+          </p>
+          <p className="mt-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+            POS workflow active
+          </p>
+        </div>
+      </div>
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="grid gap-2">
           <Label
@@ -247,14 +270,20 @@ const InvoiceForm = ({
         <div className="text-xs uppercase tracking-[0.2em] text-gray-500">
           {t("invoice.invoiceGeneratedAutomatically")}
         </div>
-        <Button
-          type="submit"
-          variant="primary"
-          disabled={isSubmitting}
-          className="h-11 rounded-xl px-5"
-        >
-          {t("invoice.createButton")}
-        </Button>
+        {!hideSubmit ? (
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={isSubmitting}
+            className="h-11 rounded-xl px-5"
+          >
+            {t("invoice.createButton")}
+          </Button>
+        ) : (
+          <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+            Checkout stays in the sticky summary rail
+          </div>
+        )}
       </div>
     </form>
   );

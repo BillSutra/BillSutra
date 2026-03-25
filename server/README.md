@@ -15,7 +15,7 @@ This is the **Express.js REST API** that powers BillSutra. It handles all busine
 | **JWT** (jsonwebtoken) | Stateless API authentication (365-day tokens) |
 | **bcryptjs** | Password hashing (cost factor 12) |
 | **Puppeteer** | Headless Chromium for server-side PDF generation |
-| **Nodemailer** | Sending invoice notification emails |
+| **Resend** | Sending transactional emails |
 | **node-cron** | Daily cron job for recurring invoices (runs at midnight) |
 | **Multer** | Multipart file upload handling for bulk imports |
 | **csv-parser** | Parsing CSV files during import |
@@ -85,7 +85,7 @@ server/
 │   │   ├── calculateTotals.ts  # Invoice/sale total computation (subtotal, tax, discount)
 │   │   └── generateInvoiceNumber.ts  # Sequential invoice number generator
 │   ├── types/                  # TypeScript type declarations
-│   └── views/                  # Email HTML templates (Nodemailer)
+│   └── emails/                 # Resend templates and sendEmail(type, data)
 ├── uploads/                    # Temp storage for imported files (Multer)
 ├── .env                        # Environment variables
 ├── package.json
@@ -135,7 +135,7 @@ All endpoints are prefixed with `/api`. Protected routes require `Authorization:
 | POST | `/auth/login` | ❌ | OAuth login / upsert |
 | POST | `/auth/logincheck` | ❌ | Credentials login |
 | POST | `/auth/register` | ❌ | Register new user |
-| POST | `/auth/forgot-password` | ❌ | Generate reset token |
+| POST | `/auth/forgot-password` | ❌ | Generate and email reset link |
 | POST | `/auth/reset-password` | ❌ | Reset password with token |
 
 ### User & Profile
@@ -178,7 +178,7 @@ Sales additionally: `DELETE /:id`
 | POST | `/invoices/:id/send` | ✅ | Mark as sent (status → SENT) |
 | POST | `/invoices/:id/duplicate` | ✅ | Duplicate invoice |
 | GET | `/invoices/:id/pdf` | ✅ | Download invoice as PDF |
-| POST | `/invoices/:id/notify` | ✅ | Send email notification to customer |
+| POST | `/invoices/:id/reminder` | ✅ | Send invoice reminder email |
 | GET | `/public/invoice/:id` | ❌ | Public invoice view (no auth) |
 
 ### Payments
@@ -236,12 +236,8 @@ JWT_SECRET=your-very-secret-jwt-key
 # Server
 PORT=5000
 
-# Email (Nodemailer)
-MAIL_HOST=smtp.example.com
-MAIL_PORT=587
-MAIL_USER=your@email.com
-MAIL_PASS=yourpassword
-MAIL_FROM="BillSutra <your@email.com>"
+# Email (Resend)
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxx
 ```
 
 ---

@@ -31,6 +31,23 @@ class Env {
   static APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
   static BACKEND_URL = normalizeBackendUrl(process.env.NEXT_PUBLIC_BACKEND_URL);
+
+  static SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN ?? "";
+
+  static SENTRY_ENVIRONMENT =
+    process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ??
+    process.env.NODE_ENV ??
+    "development";
+
+  static SENTRY_TRACES_SAMPLE_RATE =
+    process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "";
+
+  static POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY ?? "";
+
+  static POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST ?? "";
+
+  static ANALYTICS_OPT_OUT_DEFAULT =
+    process.env.NEXT_PUBLIC_ANALYTICS_OPT_OUT_DEFAULT ?? "false";
 }
 
 export default Env;

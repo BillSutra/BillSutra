@@ -39,11 +39,17 @@ import {
   getWebAuthnConfig,
   hashSecretValue,
   maskEmail,
+  normalizeEmailAddress,
+  OTP_MAX_ATTEMPTS,
+  OTP_RESEND_COOLDOWN_MS,
+  OTP_TTL_MS,
   recordAuthEvent,
   sendOtpLoginEmail,
   toPublicKeyBytes,
   toStoredPublicKey,
 } from "../lib/modernAuth.js";
+import { sendEmail } from "../emails/index.js";
+import { buildLoginUrl, buildResetPasswordUrl } from "../lib/appUrls.js";
 
 type SerializableOwnerUser = Pick<
   User,
@@ -71,9 +77,6 @@ type PasskeyRegisterVerifyPayload = z.infer<
   typeof passkeyRegisterVerifySchema
 >;
 
-const OTP_TTL_MS = 5 * 60 * 1000;
-const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
-const OTP_MAX_ATTEMPTS = 3;
 const PASSKEY_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const PASSKEY_TIMEOUT_MS = 60 * 1000;
 
@@ -176,6 +179,16 @@ class AuthController {
       });
 
       await ensureBusinessForUser(user.id, body.name);
+
+      try {
+        await sendEmail("welcome", {
+          email: user.email,
+          user_name: user.name,
+          login_url: buildLoginUrl(user.email),
+        });
+      } catch {
+        // Registration should succeed even if the welcome email fails.
+      }
 
       return sendResponse(res, 200, {
         message: "Registration successful",
@@ -343,9 +356,28 @@ class AuthController {
         },
       });
 
+      try {
+        await sendEmail("password_reset", {
+          email: user.email,
+          user_name: user.name,
+          reset_url: buildResetPasswordUrl(token, user.email),
+        });
+      } catch {
+        await prisma.passwordResetToken.deleteMany({
+          where: {
+            user_id: user.id,
+            token,
+            used_at: null,
+          },
+        });
+
+        return sendResponse(res, 503, {
+          message: "Unable to send the password reset email right now.",
+        });
+      }
+
       return sendResponse(res, 200, {
-        message: "Reset link generated",
-        token,
+        message: "Password reset email sent",
       });
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -399,8 +431,9 @@ class AuthController {
   static async sendOtp(req: Request, res: Response) {
     try {
       const body: OtpSendPayload = req.body;
-      const user = await prisma.user.findUnique({
-        where: { email: body.email },
+      const normalizedEmail = normalizeEmailAddress(body.email);
+      const user = await prisma.user.findFirst({
+        where: { email: { equals: normalizedEmail, mode: "insensitive" } },
         select: {
           id: true,
           name: true,
@@ -467,6 +500,8 @@ class AuthController {
           email: user.email,
           name: user.name,
           code,
+          expiresInMinutes: Math.ceil(OTP_TTL_MS / 60000),
+          resendInSeconds: Math.ceil(OTP_RESEND_COOLDOWN_MS / 1000),
         });
       } catch (error) {
         await prisma.otpCode.delete({
@@ -475,7 +510,7 @@ class AuthController {
 
         const message =
           error instanceof Error &&
-          (error.message.includes("SMTP") ||
+          (error.message.includes("RESEND_API_KEY") ||
             error.message.includes("configuration"))
             ? "Email login is not configured on the server yet."
             : "Unable to send the login code right now.";
@@ -486,6 +521,7 @@ class AuthController {
       return sendResponse(res, 200, {
         message: `Login code sent to ${maskEmail(user.email)}.`,
         retryAfter: Math.ceil(OTP_RESEND_COOLDOWN_MS / 1000),
+        expiresIn: Math.ceil(OTP_TTL_MS / 1000),
       });
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -495,8 +531,10 @@ class AuthController {
   static async verifyOtp(req: Request, res: Response) {
     try {
       const body: OtpVerifyPayload = req.body;
-      const user = await prisma.user.findUnique({
-        where: { email: body.email },
+      const normalizedEmail = normalizeEmailAddress(body.email);
+      const normalizedCode = body.code.trim();
+      const user = await prisma.user.findFirst({
+        where: { email: { equals: normalizedEmail, mode: "insensitive" } },
         select: {
           id: true,
           name: true,
@@ -559,7 +597,7 @@ class AuthController {
         });
       }
 
-      if (hashSecretValue(body.code) !== otp.code_hash) {
+      if (hashSecretValue(normalizedCode) !== otp.code_hash) {
         const nextAttempts = otp.attempts + 1;
         await prisma.otpCode.update({
           where: { id: otp.id },

@@ -16,6 +16,7 @@ export const dashboardQueryKeys = [
   ["dashboard", "paymentMethods"],
   ["dashboard", "forecast"],
   ["inventory-demand", "alerts"],
+  ["inventory-demand", "predictions"],
 ] as const;
 
 export const invalidateDashboardQueries = (queryClient: QueryClient) =>

@@ -110,7 +110,7 @@ const PdfPreviewClient = ({ encodedPayload }: { encodedPayload: string }) => {
           </A4PreviewStack>
         </DesignConfigProvider>
       </div>
-      <style jsx global>{`
+      <style>{`
         .pdf-export,
         .pdf-export body {
           margin: 0;

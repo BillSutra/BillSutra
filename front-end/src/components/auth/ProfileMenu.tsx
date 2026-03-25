@@ -47,6 +47,9 @@ const ProfileMenu = ({ name, image }: { name: string; image?: string }) => {
           <DropdownMenuItem asChild>
             <Link href="/profile">{t("profileMenu.profile")}</Link>
           </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/pricing">{t("landing.nav.pricing")}</Link>
+          </DropdownMenuItem>
           <DropdownMenuLabel className="flex items-center gap-2 text-xs text-muted-foreground">
             <Languages className="h-3.5 w-3.5" />
             {t("profileMenu.languageSection")}

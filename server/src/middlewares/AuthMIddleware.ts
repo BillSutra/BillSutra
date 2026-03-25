@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 import { resolveAuthUserFromDecoded } from "../lib/authSession.js";
+import { setObservabilityUser } from "../lib/observability.js";
 
 const workerAllowedRoutes = [
   { prefix: "/sales" },
@@ -58,6 +59,7 @@ const AuthMiddleware = (
       }
 
       req.user = authUser;
+      setObservabilityUser(authUser);
 
       if (
         authUser.role === "WORKER" &&
