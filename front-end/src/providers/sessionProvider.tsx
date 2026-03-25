@@ -3,6 +3,10 @@
 import React from "react";
 import { SessionProvider as NextAuthSessionProvider } from "next-auth/react";
 
+type NextAuthSessionProviderProps = React.ComponentProps<
+  typeof NextAuthSessionProvider
+>;
+
 const SessionProvider = ({
   children,
 }: {
@@ -10,7 +14,7 @@ const SessionProvider = ({
 }) => {
   return (
     <NextAuthSessionProvider>
-      {children}
+      {children as NextAuthSessionProviderProps["children"]}
     </NextAuthSessionProvider>
   );
 };

@@ -2,30 +2,17 @@
 
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { apiClient, fetchDashboardInventory } from "@/lib/apiClient";
+import {
+  fetchDashboardInventory,
+  type InventoryDemandPrediction,
+} from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PackageSearch } from "lucide-react";
 import { formatCurrency, formatNumber } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
 import { useI18n } from "@/providers/LanguageProvider";
-
-type RiskAlert = {
-  product_id: number;
-  product_name: string;
-  stock_left: number;
-  predicted_daily_sales: number;
-  days_until_stockout: number;
-  recommended_reorder_quantity: number;
-  alert_level: "critical" | "warning" | "normal";
-};
-
-type RiskAlertsResponse = {
-  data: {
-    alerts: RiskAlert[];
-    count: number;
-  };
-};
+import { useInventoryDemandPredictions } from "@/hooks/usePredictionQueries";
 
 const getAlertColor = (alertLevel: "critical" | "warning" | "normal"): string => {
   switch (alertLevel) {
@@ -52,7 +39,7 @@ const getAlertBadgeColor = (
 };
 
 const getAlertLabel = (
-  alert: RiskAlert,
+  alert: InventoryDemandPrediction,
   labels: Record<"critical" | "warning" | "normal", string>,
   outOfStockLabel: string,
 ): string => {
@@ -70,18 +57,19 @@ const InventoryRiskAlerts = ({ className }: { className?: string }) => {
     ...dashboardQueryDefaults,
   });
 
-  const { data, isLoading, isError, dataUpdatedAt, isFetching } = useQuery({
-    queryKey: ["inventory-demand", "alerts"],
-    queryFn: async () => {
-      const response = await apiClient.get<RiskAlertsResponse>(
-        "/inventory-demand/alerts",
-      );
-      return response.data;
-    },
-    ...dashboardQueryDefaults,
-  });
+  const { data, isLoading, isError, dataUpdatedAt, isFetching } =
+    useInventoryDemandPredictions({
+      limit: 5,
+    });
 
-  const alerts = data?.data.alerts || [];
+  const alerts = (data?.predictions ?? []).filter(
+    (alert) => alert.alert_level !== "normal",
+  );
+
+  const statusUpdatedAt = dataUpdatedAt || (data?.metadata?.generatedAt
+    ? new Date(data.metadata.generatedAt).getTime()
+    : 0);
+
   const outOfStockCount = alerts.filter((alert) => alert.stock_left === 0).length;
   const lowStockCount = alerts.filter((alert) => alert.stock_left > 0).length;
   const alertLevelLabels = {
@@ -113,7 +101,7 @@ const InventoryRiskAlerts = ({ className }: { className?: string }) => {
           isLoading={isLoading}
           isFetching={isFetching}
           isError={isError}
-          dataUpdatedAt={dataUpdatedAt}
+          dataUpdatedAt={statusUpdatedAt}
           refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
         />
       </CardHeader>

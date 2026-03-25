@@ -17,21 +17,21 @@ type DashboardPlanCardProps = {
 
 const usageTone = {
   healthy: {
-    shell: "border-emerald-200/70 bg-emerald-50/80",
+    shell: "border-emerald-200/70 bg-emerald-50/80 dark:border-emerald-900/40 dark:bg-emerald-950/20",
     bar: "bg-emerald-500",
-    badge: "bg-emerald-100 text-emerald-700",
+    badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200",
     copy: "You still have room to grow on Free.",
   },
   warning: {
-    shell: "border-amber-200/70 bg-amber-50/90",
+    shell: "border-amber-200/70 bg-amber-50/90 dark:border-amber-900/40 dark:bg-amber-950/20",
     bar: "bg-amber-500",
-    badge: "bg-amber-100 text-amber-700",
+    badge: "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-200",
     copy: "You are close to your Free plan limit.",
   },
   critical: {
-    shell: "border-rose-200/70 bg-rose-50/90",
+    shell: "border-rose-200/70 bg-rose-50/90 dark:border-rose-900/40 dark:bg-rose-950/20",
     bar: "bg-rose-500",
-    badge: "bg-rose-100 text-rose-700",
+    badge: "bg-rose-100 text-rose-700 dark:bg-rose-950/30 dark:text-rose-200",
     copy: "You have reached a Free plan limit. Pro removes the cap.",
   },
 } as const;
@@ -68,14 +68,14 @@ const UsageBar = ({
   const progress = getUsageProgress(value, limit);
 
   return (
-    <div className="rounded-2xl border border-border/70 bg-white/85 p-4">
+    <div className="rounded-[1.35rem] border border-border/70 bg-background/75 p-4">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-medium text-foreground">{label}</p>
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
           {value}/{limit}
         </p>
       </div>
-      <div className="mt-3 h-2 rounded-full bg-[#ece5d9]">
+      <div className="mt-3 h-2 rounded-full bg-muted">
         <div
           className={cn("h-full rounded-full transition-all", usageTone[tone].bar)}
           style={{ width: `${progress}%` }}
@@ -105,7 +105,7 @@ const DashboardPlanCard = ({
   return (
     <section
       className={cn(
-        "dashboard-chart-surface rounded-[1.75rem] border px-6 py-6",
+        "dashboard-chart-surface rounded-[1.85rem] border px-6 py-6",
         usageTone[tone].shell,
       )}
     >
@@ -150,18 +150,18 @@ const DashboardPlanCard = ({
           return (
             <div
               key={preview.title}
-              className="relative overflow-hidden rounded-3xl border border-border/70 bg-white/85 p-4"
+              className="relative overflow-hidden rounded-[1.45rem] border border-border/70 bg-background/75 p-4"
             >
               <div className="absolute inset-x-5 top-3 h-8 rounded-full bg-gradient-to-r from-transparent via-white/75 to-transparent blur-md" />
               <div className="relative">
-                <div className="inline-flex rounded-2xl border border-border/70 bg-[#f8f4ec] p-2 text-[#8a6b45]">
+                <div className="inline-flex rounded-2xl border border-border/70 bg-card/80 p-2 text-primary shadow-sm">
                   <Icon className="size-4" />
                 </div>
                 <p className="mt-4 text-sm font-semibold text-foreground">{preview.title}</p>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   {preview.description}
                 </p>
-                <div className="mt-3 inline-flex rounded-full border border-dashed border-violet-300 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-violet-700">
+                <div className="mt-3 inline-flex rounded-full border border-dashed border-sky-300 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-200">
                   Included in Pro from Rs 499/month
                 </div>
               </div>
@@ -177,11 +177,11 @@ const DashboardPlanCard = ({
             <ArrowRight size={16} />
           </Link>
         </Button>
-        <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-border/70 bg-white/85 px-3 py-2 text-xs font-medium text-muted-foreground">
+        <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-border/70 bg-background/75 px-3 py-2 text-xs font-medium text-muted-foreground">
           <Receipt className="size-4" />
           Upgrade when billing volume grows past 50 invoices/month
         </div>
-        <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-border/70 bg-white/85 px-3 py-2 text-xs font-medium text-muted-foreground">
+        <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-border/70 bg-background/75 px-3 py-2 text-xs font-medium text-muted-foreground">
           <Package className="size-4" />
           Product storage nudges kick in as you approach 100 items
         </div>

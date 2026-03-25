@@ -19,12 +19,12 @@ const InvoiceActions = ({
   const { t } = useI18n();
 
   return (
-    <div className="no-print rounded-[1.7rem] border border-gray-200 bg-white/90 p-4 shadow-sm dark:border-gray-700 dark:bg-gray-900/80">
+    <div className="no-print rounded-[1.7rem] bg-white/90 p-4 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.18)] ring-1 ring-slate-200/80 dark:bg-slate-900/80 dark:ring-slate-700/70">
       <div className="mb-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-500">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
           Utilities
         </p>
-        <h3 className="mt-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
+        <h3 className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-100">
           Print, export, and share
         </h3>
       </div>
@@ -33,14 +33,14 @@ const InvoiceActions = ({
           type="button"
           variant="outline"
           onClick={onPrint}
-          className="h-11 rounded-xl sm:w-full"
+          className="h-11 rounded-[1rem] sm:w-full"
         >
           {t("invoiceActions.print")}
         </Button>
         <Button
           type="button"
           onClick={onDownloadPdf}
-          className="h-11 rounded-xl sm:w-full"
+          className="h-11 rounded-[1rem] sm:w-full"
         >
           {t("invoiceActions.downloadPdf")}
         </Button>
@@ -50,7 +50,7 @@ const InvoiceActions = ({
             variant="outline"
             onClick={onSendEmail}
             disabled={isSendingEmail}
-            className="h-11 rounded-xl sm:col-span-2"
+            className="h-11 rounded-[1rem] sm:col-span-2"
           >
             {isSendingEmail
               ? t("invoiceActions.sendingEmail")

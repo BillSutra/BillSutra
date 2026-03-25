@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Minus, Plus, ShoppingCart, Sparkles, Trash2 } from "lucide-react";
+import { ArrowRight, Minus, Plus, ScanLine, ShoppingCart, Sparkles, Trash2 } from "lucide-react";
 import InvoiceSmartSuggestions from "@/components/invoice/InvoiceSmartSuggestions";
 import AsyncProductSelect, {
   type AsyncProductSelectHandle,
@@ -28,6 +28,7 @@ export type InvoiceTableProps = {
   shortcutMetaLabel: string;
   entryHighlighted?: boolean;
   itemsHighlighted?: boolean;
+  onFocusEntry?: () => void;
   onQuickEntrySelect: (product: Product | null) => void;
   onQuickEntrySubmit: (product: Product | null) => void;
   onSelectItem: (index: number) => void;
@@ -41,10 +42,10 @@ export type InvoiceTableProps = {
 };
 
 const shortcutBadgeClassName =
-  "rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300";
+  "inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500 dark:bg-slate-800 dark:text-slate-300";
 
 const quantityButtonClassName =
-  "h-11 w-11 rounded-2xl border border-gray-200 bg-white text-gray-800 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-700 disabled:pointer-events-none disabled:opacity-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:border-indigo-500/40 dark:hover:bg-indigo-500/10";
+  "inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-primary/25 hover:bg-primary/5 hover:text-primary disabled:pointer-events-none disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-primary/30 dark:hover:bg-primary/10";
 
 const InvoiceTable = ({
   items,
@@ -59,6 +60,7 @@ const InvoiceTable = ({
   shortcutMetaLabel,
   entryHighlighted = false,
   itemsHighlighted = false,
+  onFocusEntry,
   onQuickEntrySelect,
   onQuickEntrySubmit,
   onSelectItem,
@@ -66,53 +68,47 @@ const InvoiceTable = ({
   onRemoveItem,
   onAddSuggestedProduct,
 }: InvoiceTableProps) => {
-  const { formatCurrency, t } = useI18n();
+  const { formatCurrency } = useI18n();
   const itemCount = items.reduce(
     (count, item) => count + Math.max(0, Number(item.quantity) || 0),
     0,
   );
 
   return (
-    <section className="grid gap-5 2xl:grid-cols-[minmax(320px,0.82fr)_minmax(0,1.18fr)]">
+    <section className="grid gap-5 xl:grid-cols-[minmax(380px,0.9fr)_minmax(0,1.1fr)] 2xl:grid-cols-[minmax(420px,0.84fr)_minmax(0,1.16fr)]">
       <div
         className={cn(
-          "rounded-[2rem] border border-[#eadfcf] bg-[linear-gradient(180deg,#fffaf5_0%,#fff4e8_100%)] p-5 shadow-[0_24px_50px_-34px_rgba(120,53,15,0.35)] transition-[box-shadow,border-color,transform] dark:border-amber-900/30 dark:bg-[linear-gradient(180deg,rgba(120,53,15,0.18)_0%,rgba(17,24,39,0.92)_100%)] dark:shadow-[0_24px_50px_-34px_rgba(0,0,0,0.48)]",
-          entryHighlighted &&
-            "border-amber-400 shadow-[0_0_0_4px_rgba(251,191,36,0.18)]",
+          "rounded-[2rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-[0_22px_52px_-36px_rgba(15,23,42,0.2)] transition-[box-shadow,border-color,transform] dark:border-slate-700 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.95)_0%,rgba(15,23,42,0.9)_100%)] dark:shadow-[0_24px_52px_-36px_rgba(0,0,0,0.48)]",
+          entryHighlighted && "border-primary/45 shadow-[0_0_0_4px_rgba(37,99,235,0.12)]",
         )}
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-[#b45309] dark:text-amber-200">
+            <p className="text-xs font-semibold uppercase tracking-[0.26em] text-slate-500 dark:text-slate-400">
               Product station
             </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[#3b2411] dark:text-gray-50">
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
               Smart billing lane
             </h2>
-            <p className="mt-2 max-w-lg text-sm leading-6 text-[#7c5a3d] dark:text-amber-100/75">
-              Scan a barcode or search products, then press Enter to drop the
-              item into the cart. Duplicate scans increase quantity instantly.
+            <p className="mt-2 max-w-lg text-sm leading-6 text-slate-600 dark:text-slate-300">
+              Keep the cursor here, scan or search, and press Enter to add the
+              next item without breaking billing flow.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <span className={shortcutBadgeClassName}>Enter add item</span>
-            <span className={shortcutBadgeClassName}>
-              {shortcutMetaLabel}+Q focus lane
-            </span>
-            <span className={shortcutBadgeClassName}>
-              {shortcutMetaLabel}+P quick product
-            </span>
-          </div>
+          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200">
+            <ScanLine size={14} />
+            Scanner ready
+          </span>
         </div>
 
-        <div className="mt-5 rounded-[1.7rem] border border-white/80 bg-white/90 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] dark:border-white/10 dark:bg-gray-900/70">
+        <div className="mt-5 rounded-[1.7rem] bg-slate-50/80 p-5 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
           <Label
             htmlFor="pos-product-search"
-            className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6d56] dark:text-gray-300"
+            className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400"
           >
             Search or scan
           </Label>
-          <div className="mt-3 grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(180px,auto)]">
+          <div className="mt-3 grid gap-3 2xl:grid-cols-[minmax(0,1fr)_minmax(188px,auto)]">
             <AsyncProductSelect
               ref={quickEntryRef}
               value={quickEntryProduct ? String(quickEntryProduct.id) : ""}
@@ -123,9 +119,9 @@ const InvoiceTable = ({
               onSubmitSelection={(candidate) =>
                 onQuickEntrySubmit(candidate ?? quickEntryProduct)
               }
-              placeholder="Search name, SKU, or scan barcode"
+              placeholder="Scan barcode or search product"
               className="min-w-0"
-              inputClassName="h-12 rounded-2xl border-[#e7d9cc] bg-white/95 pr-4 text-[15px] shadow-[0_12px_25px_-20px_rgba(120,53,15,0.35)] focus-visible:border-amber-300 focus-visible:ring-amber-100 dark:border-gray-700 dark:bg-gray-800 dark:focus-visible:border-amber-300 dark:focus-visible:ring-amber-500/20"
+              inputClassName="h-13 rounded-[1.15rem] border-slate-200 bg-white pr-4 text-[15px] shadow-[0_14px_28px_-22px_rgba(15,23,42,0.22)] focus-visible:border-primary/40 focus-visible:ring-primary/10 dark:border-slate-700 dark:bg-slate-950 dark:focus-visible:border-primary/40 dark:focus-visible:ring-primary/20"
             />
             <Button
               type="button"
@@ -136,23 +132,28 @@ const InvoiceTable = ({
                 }
                 onQuickEntrySubmit(quickEntryProduct);
               }}
-              className="h-12 w-full rounded-2xl px-6 text-sm font-semibold"
+              className="h-13 w-full rounded-[1.15rem] px-6 text-sm font-semibold"
             >
               Add to cart
             </Button>
           </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className={shortcutBadgeClassName}>Enter adds selection</span>
+            <span className={shortcutBadgeClassName}>{shortcutMetaLabel}+Q refocus</span>
+            <span className={shortcutBadgeClassName}>{shortcutMetaLabel}+P quick product</span>
+          </div>
         </div>
 
-        <div className="mt-4 grid gap-3 xl:grid-cols-2">
-          <div className="rounded-[1.5rem] border border-white/75 bg-white/80 p-4 dark:border-white/10 dark:bg-gray-900/60">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6d56] dark:text-gray-300">
+        <div className="mt-4 grid gap-3 2xl:grid-cols-2">
+          <div className="rounded-[1.45rem] bg-white p-4 ring-1 ring-slate-200/80 dark:bg-slate-950/70 dark:ring-slate-700/70">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
               Ready state
             </p>
             <div className="mt-3">
-              <p className="text-base font-semibold text-[#3b2411] dark:text-gray-100">
+              <p className="text-base font-semibold text-slate-950 dark:text-slate-100">
                 {quickEntryProduct?.name ?? "Waiting for scan"}
               </p>
-              <p className="mt-1 text-sm text-[#7c5a3d] dark:text-gray-400">
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                 {quickEntryProduct
                   ? `Unit price ${formatCurrency(Number(quickEntryProduct.price))}`
                   : "Keep the cursor here and start typing or scanning."}
@@ -160,20 +161,20 @@ const InvoiceTable = ({
             </div>
           </div>
 
-          <div className="rounded-[1.5rem] border border-white/75 bg-white/80 p-4 dark:border-white/10 dark:bg-gray-900/60">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6d56] dark:text-gray-300">
-              Throughput
+          <div className="rounded-[1.45rem] bg-white p-4 ring-1 ring-slate-200/80 dark:bg-slate-950/70 dark:ring-slate-700/70">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+              Cart volume
             </p>
-            <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="mt-3 flex flex-col gap-3">
               <div>
-                <p className="text-3xl font-semibold tracking-tight text-[#3b2411] dark:text-gray-100">
+                <p className="text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
                   {itemCount}
                 </p>
-                <p className="mt-1 text-sm text-[#7c5a3d] dark:text-gray-400">
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                   total units in the live cart
                 </p>
               </div>
-              <div className="inline-flex shrink-0 self-start items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
+              <div className="inline-flex w-fit items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-100">
                 <Sparkles size={14} />
                 <span>Live totals</span>
               </div>
@@ -190,36 +191,54 @@ const InvoiceTable = ({
 
       <div
         className={cn(
-          "rounded-[2rem] border border-gray-200 bg-white/95 p-5 shadow-[0_24px_55px_-36px_rgba(15,23,42,0.28)] transition-[box-shadow,border-color,transform] dark:border-gray-700 dark:bg-gray-900/90 dark:shadow-[0_24px_55px_-36px_rgba(0,0,0,0.48)]",
-          itemsHighlighted &&
-            "border-indigo-400 shadow-[0_0_0_4px_rgba(99,102,241,0.14)]",
+          "rounded-[2.05rem] border border-slate-200 bg-white/95 p-5 shadow-[0_26px_58px_-38px_rgba(15,23,42,0.22)] transition-[box-shadow,border-color,transform] dark:border-slate-700 dark:bg-slate-900/90 dark:shadow-[0_24px_55px_-36px_rgba(0,0,0,0.48)]",
+          itemsHighlighted && "border-primary/40 shadow-[0_0_0_4px_rgba(37,99,235,0.12)]",
         )}
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-gray-500">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
               Cart
             </p>
-            <h2 className="mt-2 flex items-center gap-2 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+            <h2 className="mt-2 flex items-center gap-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
               <ShoppingCart size={20} />
               <span>Current bill</span>
             </h2>
-            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-              Adjust quantities inline and the totals update immediately.
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+              Review line items, adjust quantity inline, and keep checkout moving.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <span className={shortcutBadgeClassName}>
-              {shortcutMetaLabel}+Delete remove selected
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              {items.length} line item{items.length === 1 ? "" : "s"}
             </span>
-            <span className={shortcutBadgeClassName}>Tap item to select</span>
+            <span className="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 dark:bg-slate-800 dark:text-slate-300 sm:inline-flex">
+              {shortcutMetaLabel}+Delete removes selected
+            </span>
           </div>
         </div>
 
         {items.length === 0 ? (
-          <div className="mt-5 rounded-[1.6rem] border border-dashed border-gray-300 bg-gray-50/70 px-5 py-8 text-center text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-400">
-            No items yet. Start scanning or searching from the product station to
-            build the cart.
+          <div className="mt-5 rounded-[1.75rem] bg-slate-50/80 px-6 py-10 text-center ring-1 ring-dashed ring-slate-300 dark:bg-slate-900/50 dark:ring-slate-700">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-primary shadow-sm dark:bg-slate-950">
+              <ShoppingCart size={24} />
+            </div>
+            <p className="mt-4 text-lg font-semibold text-slate-950 dark:text-slate-100">
+              Your cart is empty
+            </p>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600 dark:text-slate-400">
+              Scan a barcode or search for a product from the billing lane, then
+              press Enter to build the bill instantly.
+            </p>
+            <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+              <Button type="button" onClick={() => onFocusEntry?.()}>
+                Focus product search
+                <ArrowRight size={16} />
+              </Button>
+              <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                {shortcutMetaLabel}+Q
+              </span>
+            </div>
           </div>
         ) : (
           <div className="mt-5 grid gap-3">
@@ -234,10 +253,10 @@ const InvoiceTable = ({
                 <div
                   key={`item-${index}`}
                   className={cn(
-                    "rounded-[1.6rem] border p-4 transition-[box-shadow,border-color,transform] duration-200",
+                    "rounded-[1.55rem] border p-4 transition-[box-shadow,border-color,transform] duration-200",
                     isSelected
-                      ? "border-indigo-400 bg-indigo-50/60 shadow-[0_0_0_4px_rgba(99,102,241,0.1)] dark:border-indigo-500/50 dark:bg-indigo-500/10"
-                      : "border-gray-200 bg-white hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-[0_16px_32px_-28px_rgba(15,23,42,0.32)] dark:border-gray-700 dark:bg-gray-900/70",
+                      ? "border-primary/45 bg-primary/5 shadow-[0_0_0_4px_rgba(37,99,235,0.08)] dark:border-primary/40 dark:bg-primary/10"
+                      : "border-slate-200 bg-white hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_16px_32px_-28px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-slate-950/60",
                     isRecent && "animate-in fade-in zoom-in-95",
                   )}
                   onClick={() => onSelectItem(index)}
@@ -245,29 +264,24 @@ const InvoiceTable = ({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-base font-semibold text-gray-900 dark:text-gray-100">
+                        <p className="truncate text-base font-semibold text-slate-950 dark:text-slate-100">
                           {item.name || "Item"}
                         </p>
                         {isRecent ? (
-                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-100">
+                          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-100">
                             Recently added
                           </span>
                         ) : null}
                       </div>
-                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-gray-500 dark:text-gray-400">
-                        <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 dark:border-gray-700 dark:bg-gray-900">
-                          {item.tax_rate ? `GST ${item.tax_rate}%` : "No GST"}
-                        </span>
-                        <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 dark:border-gray-700 dark:bg-gray-900">
-                          Line {index + 1}
-                        </span>
-                      </div>
+                      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                        {item.tax_rate ? `GST ${item.tax_rate}%` : "No GST"} | Line {index + 1}
+                      </p>
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="rounded-full text-gray-500 hover:text-red-600"
+                      className="rounded-full text-slate-500 hover:text-red-600"
                       onClick={(event) => {
                         event.stopPropagation();
                         onRemoveItem(index);
@@ -278,10 +292,10 @@ const InvoiceTable = ({
                     </Button>
                   </div>
 
-                  <div className="mt-4 grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(170px,auto)] 2xl:items-end">
-                    <div className="grid gap-3 md:grid-cols-[minmax(130px,0.68fr)_minmax(220px,1fr)]">
+                  <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(170px,auto)] lg:items-end">
+                    <div className="grid gap-3 md:grid-cols-[minmax(150px,0.7fr)_minmax(220px,1fr)]">
                       <div className="grid gap-2">
-                        <Label className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                        <Label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                           Unit price
                         </Label>
                         <Input
@@ -293,7 +307,7 @@ const InvoiceTable = ({
                           onChange={(event) =>
                             onItemChange(index, "price", event.target.value)
                           }
-                          className="h-11 rounded-2xl border-gray-200 bg-white shadow-sm focus-visible:ring-indigo-200 dark:border-gray-700 dark:bg-gray-800 dark:focus-visible:ring-indigo-500/20"
+                          className="h-11 rounded-[1rem] border-slate-200 bg-white shadow-sm focus-visible:ring-primary/15 dark:border-slate-700 dark:bg-slate-900 dark:focus-visible:ring-primary/20"
                         />
                         {errors[index]?.price ? (
                           <p className="text-xs text-red-600 dark:text-red-300">
@@ -303,13 +317,13 @@ const InvoiceTable = ({
                       </div>
 
                       <div className="grid gap-2">
-                        <Label className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                        <Label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                           Quantity
                         </Label>
                         <div className="flex min-w-0 items-center gap-2">
                           <button
                             type="button"
-                            className={cn(quantityButtonClassName, "h-10 w-10 rounded-xl")}
+                            className={quantityButtonClassName}
                             onClick={(event) => {
                               event.stopPropagation();
                               onItemChange(
@@ -332,11 +346,11 @@ const InvoiceTable = ({
                             onChange={(event) =>
                               onItemChange(index, "quantity", event.target.value)
                             }
-                            className="h-10 w-20 flex-none rounded-xl border-gray-200 bg-white px-2 text-center text-base font-semibold shadow-sm focus-visible:ring-indigo-200 dark:border-gray-700 dark:bg-gray-800 dark:focus-visible:ring-indigo-500/20"
+                            className="h-9 w-20 flex-none rounded-xl border-slate-200 bg-white px-2 text-center text-base font-semibold shadow-sm focus-visible:ring-primary/15 dark:border-slate-700 dark:bg-slate-900 dark:focus-visible:ring-primary/20"
                           />
                           <button
                             type="button"
-                            className={cn(quantityButtonClassName, "h-10 w-10 rounded-xl")}
+                            className={quantityButtonClassName}
                             onClick={(event) => {
                               event.stopPropagation();
                               onItemChange(
@@ -359,11 +373,11 @@ const InvoiceTable = ({
                       </div>
                     </div>
 
-                    <div className="rounded-[1.4rem] border border-gray-200 bg-gray-50/80 px-4 py-3 text-left xl:text-right dark:border-gray-700 dark:bg-gray-900/60">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
+                    <div className="rounded-[1.35rem] bg-slate-50/80 px-4 py-3 text-left ring-1 ring-slate-200/80 lg:text-right dark:bg-slate-900/70 dark:ring-slate-700/70">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
                         Line subtotal
                       </p>
-                      <p className="mt-2 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
+                      <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
                         {formatCurrency(lineTotal)}
                       </p>
                     </div>

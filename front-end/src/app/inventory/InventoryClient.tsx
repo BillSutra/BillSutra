@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import Link from "next/link";
 import axios from "axios";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
@@ -15,18 +16,32 @@ import {
   useProductsQuery,
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
+import { useInventoryDemandPredictions } from "@/hooks/usePredictionQueries";
+import InventoryPredictionDrawer from "@/components/inventory/inventory-prediction-drawer";
 import { useI18n } from "@/providers/LanguageProvider";
+import type { Inventory, InventoryDemandPrediction } from "@/lib/apiClient";
 
 type InventoryClientProps = {
   name: string;
   image?: string;
 };
 
+type InventoryRow = Inventory & {
+  prediction: InventoryDemandPrediction | null;
+};
+
 const InventoryClient = ({ name, image }: InventoryClientProps) => {
   const { t } = useI18n();
-  const { data, isLoading, isError } = useInventoriesQuery();
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
+  const [alertFilter, setAlertFilter] = useState<"all" | "critical" | "warning" | "normal">("all");
+  const [selectedInventoryId, setSelectedInventoryId] = useState<number | null>(null);
+  const scopedWarehouseId = selectedWarehouseId ? Number(selectedWarehouseId) : undefined;
+  const { data, isLoading, isError } = useInventoriesQuery(scopedWarehouseId);
   const { data: products } = useProductsQuery();
   const { data: warehouses } = useWarehousesQuery();
+  const predictionsQuery = useInventoryDemandPredictions(
+    scopedWarehouseId ? { warehouseId: scopedWarehouseId } : undefined,
+  );
   const adjustInventory = useAdjustInventoryMutation();
   const [form, setForm] = useState({
     warehouse_id: "",
@@ -38,20 +53,55 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
   const [serverError, setServerError] = useState<string | null>(null);
   const [formTouched, setFormTouched] = useState(false);
 
+  const predictionByProductId = useMemo(
+    () =>
+      new Map(
+        (predictionsQuery.data?.predictions ?? []).map((prediction) => [
+          prediction.product_id,
+          prediction,
+        ]),
+      ),
+    [predictionsQuery.data?.predictions],
+  );
+
   const grouped = useMemo(() => {
-    if (!data) return [] as Array<{ name: string; items: typeof data }>;
-    const map = new Map<string, typeof data>();
+    if (!data) {
+      return [] as Array<{ name: string; items: InventoryRow[] }>;
+    }
+
+    const map = new Map<string, InventoryRow[]>();
     data.forEach((item) => {
       const key = item.warehouse.name;
       const existing = map.get(key) ?? [];
-      existing.push(item);
+      const prediction = predictionByProductId.get(item.product.id) ?? null;
+      if (alertFilter !== "all" && prediction?.alert_level !== alertFilter) {
+        return;
+      }
+      existing.push({
+        ...item,
+        prediction,
+      });
       map.set(key, existing);
     });
     return Array.from(map.entries()).map(([warehouseName, items]) => ({
       name: warehouseName,
-      items,
+      items: items.sort((left, right) => {
+        const leftDays = left.prediction?.days_until_stockout ?? 9999;
+        const rightDays = right.prediction?.days_until_stockout ?? 9999;
+        return leftDays - rightDays;
+      }),
     }));
-  }, [data]);
+  }, [alertFilter, data, predictionByProductId]);
+
+  const selectedInventoryItem = useMemo(
+    () => data?.find((item) => item.id === selectedInventoryId) ?? null,
+    [data, selectedInventoryId],
+  );
+
+  const selectedPrediction =
+    selectedInventoryItem?.product.id
+      ? predictionByProductId.get(selectedInventoryItem.product.id) ?? null
+      : null;
 
   const parseServerErrors = (error: unknown, fallback: string) => {
     if (axios.isAxiosError(error)) {
@@ -135,6 +185,71 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
             {t("inventory.lead")}
           </p>
         </div>
+
+        <section className="mt-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                Prediction view
+              </p>
+              <p className="mt-1 text-sm text-gray-500">
+                Batched demand predictions are merged into inventory rows and sorted by days until stockout.
+              </p>
+              <p className="mt-2 text-xs text-gray-500">
+                {predictionsQuery.data?.metadata
+                  ? `Generated ${new Date(
+                      predictionsQuery.data.metadata.generatedAt,
+                    ).toLocaleDateString()} | ${predictionsQuery.data.metadata.basisWindowDays}-day basis | ${
+                      predictionsQuery.data.metadata.warehouseScope.mode === "warehouse"
+                        ? "warehouse-specific stock"
+                        : "all inventory"
+                    }`
+                  : "Prediction metadata will appear here after the batch request completes."}
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-[minmax(220px,1fr)_auto]">
+              <div className="grid gap-2">
+                <Label htmlFor="inventory-warehouse-scope" className="text-xs text-gray-500">
+                  Warehouse scope
+                </Label>
+                <select
+                  id="inventory-warehouse-scope"
+                  className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800"
+                  value={selectedWarehouseId}
+                  onChange={(event) => setSelectedWarehouseId(event.target.value)}
+                >
+                  <option value="">All warehouses</option>
+                  {(warehouses ?? []).map((warehouse) => (
+                    <option key={warehouse.id} value={warehouse.id}>
+                      {warehouse.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-wrap items-end gap-2">
+                {([
+                  ["all", "All"],
+                  ["critical", "Critical"],
+                  ["warning", "Warning"],
+                  ["normal", "Normal"],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setAlertFilter(value)}
+                    className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition ${
+                      alertFilter === value
+                        ? "border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-500/70 dark:bg-indigo-500/10 dark:text-indigo-100"
+                        : "border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
 
         <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -320,9 +435,17 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
             {isLoading && (
               <p className="text-sm text-gray-500">{t("inventory.loading")}</p>
             )}
+            {predictionsQuery.isLoading && !isLoading && (
+              <p className="text-sm text-gray-500">Loading demand predictions...</p>
+            )}
             {isError && (
               <p className="text-sm text-destructive">
                 {t("inventory.loadError")}
+              </p>
+            )}
+            {predictionsQuery.isError && (
+              <p className="text-sm text-destructive">
+                Unable to load demand predictions.
               </p>
             )}
             {!isLoading && !isError && grouped.length === 0 && (
@@ -336,13 +459,25 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                     className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
                   >
                     <h2 className="text-lg font-semibold">{group.name}</h2>
+                    <div className="mt-4 hidden grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,0.9fr))_auto] gap-3 px-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 lg:grid">
+                      <span>Product</span>
+                      <span>Stock left</span>
+                      <span>Daily sales</span>
+                      <span>Days to stockout</span>
+                      <span>Reorder qty</span>
+                      <span>Action</span>
+                    </div>
                     <div className="mt-4 grid gap-3">
                       {group.items?.map((item) => (
                         <div
                           key={item.id}
-                          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 transition-colors hover:bg-indigo-50/60 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-indigo-500/10"
+                          className="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 transition-colors hover:bg-indigo-50/60 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-indigo-500/10 lg:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,0.9fr))_auto]"
                         >
-                          <div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedInventoryId(item.id)}
+                            className="text-left"
+                          >
                             <p className="text-base font-semibold">
                               {item.product.name} - {item.product.sku}
                             </p>
@@ -351,9 +486,44 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                                 level: item.product.reorder_level,
                               })}
                             </p>
+                          </button>
+                          <div className="text-sm text-gray-500">
+                            {item.prediction?.stock_left ?? item.quantity}
                           </div>
                           <div className="text-sm text-gray-500">
-                            {t("inventory.stock", { quantity: item.quantity })}
+                            {item.prediction
+                              ? item.prediction.predicted_daily_sales.toFixed(1)
+                              : "n/a"}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {item.prediction
+                              ? item.prediction.days_until_stockout >= 999
+                                ? "Not projected"
+                                : item.prediction.days_until_stockout
+                              : "n/a"}
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {item.prediction
+                              ? item.prediction.recommended_reorder_quantity
+                              : "n/a"}
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => setSelectedInventoryId(item.id)}
+                            >
+                              View insight
+                            </Button>
+                            {item.prediction ? (
+                              <Button asChild type="button" variant="outline">
+                                <Link
+                                  href={`/purchases?productId=${item.product.id}&warehouseId=${item.warehouse.id}&quantity=${item.prediction.recommended_reorder_quantity}&unitCost=${item.prediction.unit_cost}&productLabel=${encodeURIComponent(`${item.product.name} - ${item.product.sku}`)}`}
+                                >
+                                  Create Purchase from Suggestion
+                                </Link>
+                              </Button>
+                            ) : null}
                           </div>
                         </div>
                       ))}
@@ -365,6 +535,17 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
           </div>
         </section>
       </div>
+      <InventoryPredictionDrawer
+        open={selectedInventoryId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedInventoryId(null);
+          }
+        }}
+        inventoryItem={selectedInventoryItem}
+        prediction={selectedPrediction}
+        metadata={predictionsQuery.data?.metadata ?? null}
+      />
     </DashboardLayout>
   );
 };

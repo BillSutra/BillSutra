@@ -26,6 +26,8 @@ declare global {
       user?: AuthUser;
       admin?: AdminAuthUser;
       file?: Multer.File;
+      requestId?: string;
+      requestStartedAt?: number;
     }
   }
 }

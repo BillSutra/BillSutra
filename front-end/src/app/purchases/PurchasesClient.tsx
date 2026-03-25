@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import { useSearchParams } from "next/navigation";
 import AsyncProductSelect from "@/components/products/AsyncProductSelect";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -34,7 +35,10 @@ import {
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
 import type { Product } from "@/lib/apiClient";
+import SuggestedPurchasesPanel from "@/components/purchases/suggested-purchases-panel";
 import { useI18n } from "@/providers/LanguageProvider";
+import type { PurchaseSuggestionItem } from "@/hooks/usePredictionQueries";
+import { captureAnalyticsEvent } from "@/lib/observability/client";
 
 const humanizeEnum = (value: string) =>
   value
@@ -73,6 +77,7 @@ const createEmptyPurchaseItem = (): PurchaseFormItem => ({
 
 const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
   const { t, formatCurrency, formatDate } = useI18n();
+  const searchParams = useSearchParams();
   const { data, isLoading, isError } = usePurchasesQuery();
   const { data: suppliers } = useSuppliersQuery();
   const { data: warehouses } = useWarehousesQuery();
@@ -109,6 +114,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     Partial<Record<keyof typeof supplierForm, string>>
   >({});
   const [supplierError, setSupplierError] = useState<string | null>(null);
+  const [hasAppliedSearchPrefill, setHasAppliedSearchPrefill] = useState(false);
 
   const translateValidationMessage = (message: string) => {
     switch (message) {
@@ -238,6 +244,43 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     setLineItemErrors([]);
     setLineItemSummary([]);
     setServerError(null);
+  };
+
+  const loadSuggestedItemsIntoForm = (suggestedItems: PurchaseSuggestionItem[]) => {
+    if (suggestedItems.length === 0) return;
+
+    const firstWarehouseId =
+      suggestedItems.find((item) => item.warehouseId)?.warehouseId ?? null;
+    const firstSupplierId =
+      suggestedItems.find((item) => item.supplierId)?.supplierId ?? null;
+
+    setEditingId(null);
+    setForm((prev) => ({
+      ...prev,
+      supplier_id: firstSupplierId ? String(firstSupplierId) : prev.supplier_id,
+      warehouse_id: firstWarehouseId ? String(firstWarehouseId) : prev.warehouse_id,
+      notes:
+        prev.notes.trim() ||
+        "Loaded from predictive restock suggestions.",
+    }));
+    setItems(
+      suggestedItems.map((item) => ({
+        product_id: String(item.product_id),
+        product_label: item.product_name,
+        quantity: String(item.recommended_reorder_quantity),
+        unit_cost: String(item.unit_cost),
+        tax_rate: "",
+      })),
+    );
+    setLineItemErrors([]);
+    setLineItemSummary([]);
+    setServerError(null);
+    captureAnalyticsEvent("purchase_suggestions_loaded", {
+      source: "purchase_panel",
+      itemCount: suggestedItems.length,
+      warehouseId: firstWarehouseId,
+      supplierId: firstSupplierId,
+    });
   };
 
   const parseServerErrors = (error: unknown, fallback: string) => {
@@ -390,6 +433,13 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
         await createPurchase.mutateAsync(payload);
       }
 
+      captureAnalyticsEvent("purchase_saved", {
+        mode: editingId ? "update" : "create",
+        itemCount: payload.items.length,
+        supplierId: payload.supplier_id ?? null,
+        warehouseId: payload.warehouse_id ?? null,
+        paymentStatus: payload.payment_status,
+      });
       resetForm();
     } catch (error) {
       setServerError(
@@ -422,6 +472,44 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     }
   };
 
+  useEffect(() => {
+    if (hasAppliedSearchPrefill) return;
+
+    const productId = searchParams.get("productId");
+    if (!productId) return;
+
+    const warehouseId = searchParams.get("warehouseId");
+    const quantity = searchParams.get("quantity");
+    const unitCost = searchParams.get("unitCost");
+    const productLabel = searchParams.get("productLabel") ?? "Suggested product";
+
+    setEditingId(null);
+    setForm((prev) => ({
+      ...prev,
+      warehouse_id: warehouseId ?? prev.warehouse_id,
+      notes: prev.notes.trim() || "Loaded from inventory purchase suggestion.",
+    }));
+    setItems([
+      {
+        product_id: productId,
+        product_label: productLabel,
+        quantity: quantity ?? "1",
+        unit_cost: unitCost ?? "",
+        tax_rate: "",
+      },
+    ]);
+    setLineItemErrors([]);
+    setLineItemSummary([]);
+    setServerError(null);
+    setHasAppliedSearchPrefill(true);
+    captureAnalyticsEvent("purchase_suggestion_prefilled", {
+      source: "inventory_page",
+      productId,
+      warehouseId,
+      quantity,
+    });
+  }, [hasAppliedSearchPrefill, searchParams]);
+
   return (
     <DashboardLayout
       name={name}
@@ -437,6 +525,13 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
           <p className="max-w-2xl text-base text-[#5c4b3b]">
             {t("purchasesPage.subtitle")}
           </p>
+        </div>
+
+        <div className="mt-6">
+          <SuggestedPurchasesPanel
+            warehouseId={form.warehouse_id ? Number(form.warehouse_id) : undefined}
+            onLoadItems={loadSuggestedItemsIntoForm}
+          />
         </div>
 
         <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.1fr]">

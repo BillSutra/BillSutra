@@ -23,37 +23,37 @@ const InvoiceSmartSuggestions = ({
   return (
     <div className="mt-4 grid gap-4">
       {suggestedProducts.length > 0 ? (
-        <section className="rounded-[1.6rem] border border-white/75 bg-white/85 p-4 dark:border-white/10 dark:bg-gray-900/60">
+        <section className="rounded-[1.5rem] bg-white/90 p-4 ring-1 ring-slate-200/80 dark:bg-slate-950/70 dark:ring-slate-700/70">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6d56] dark:text-gray-300">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                 Suggested
               </p>
-              <p className="mt-1 text-sm text-[#7c5a3d] dark:text-gray-400">
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                 Helpful cross-sells based on this cart and past bills.
               </p>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-100">
+            <div className="inline-flex items-center gap-2 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-sky-700 dark:bg-sky-950/30 dark:text-sky-200">
               <Sparkles size={14} />
               <span>Smart picks</span>
             </div>
           </div>
 
-          <div className="mt-4 flex snap-x gap-3 overflow-x-auto pb-1">
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
             {suggestedProducts.map((entry) => (
               <div
                 key={entry.product.id}
-                className="min-w-[220px] snap-start rounded-[1.35rem] border border-[#eadfcf] bg-[linear-gradient(180deg,#fffdf8_0%,#fff5ea_100%)] p-4 shadow-[0_18px_35px_-28px_rgba(120,53,15,0.32)] dark:border-amber-900/30 dark:bg-[linear-gradient(180deg,rgba(120,53,15,0.14)_0%,rgba(17,24,39,0.92)_100%)]"
+                className="min-w-0 rounded-[1.25rem] bg-slate-50/80 p-4 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="rounded-full border border-amber-200 bg-white/80 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-700 dark:border-amber-900/40 dark:bg-gray-900/70 dark:text-amber-100">
+                  <div className="min-w-0">
+                    <p className="inline-flex rounded-full bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500 shadow-sm dark:bg-slate-950 dark:text-slate-300">
                       {entry.reasonLabel}
                     </p>
-                    <p className="mt-3 text-sm font-semibold text-[#3b2411] dark:text-gray-50">
+                    <p className="mt-3 truncate text-sm font-semibold text-slate-950 dark:text-slate-50">
                       {entry.product.name}
                     </p>
-                    <p className="mt-1 text-xs text-[#7c5a3d] dark:text-gray-400">
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-600 dark:text-slate-400">
                       {entry.reasonNote}
                     </p>
                   </div>
@@ -68,12 +68,12 @@ const InvoiceSmartSuggestions = ({
                   </Button>
                 </div>
                 <div className="mt-4 flex items-center justify-between gap-3">
-                  <p className="text-base font-semibold text-[#3b2411] dark:text-gray-100">
+                  <p className="text-base font-semibold text-slate-950 dark:text-slate-100">
                     Rs. {Number(entry.product.price ?? 0).toFixed(2)}
                   </p>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#b45309] transition hover:text-[#92400e] dark:text-amber-200"
+                    className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.16em] text-primary transition hover:text-primary/80"
                     onClick={() => onAddProduct(entry.product, "suggested")}
                   >
                     <span>Add</span>
@@ -87,17 +87,17 @@ const InvoiceSmartSuggestions = ({
       ) : null}
 
       {recentProducts.length > 0 ? (
-        <section className="rounded-[1.6rem] border border-white/75 bg-white/85 p-4 dark:border-white/10 dark:bg-gray-900/60">
+        <section className="rounded-[1.5rem] bg-white/90 p-4 ring-1 ring-slate-200/80 dark:bg-slate-950/70 dark:ring-slate-700/70">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6d56] dark:text-gray-300">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
                 Quick access
               </p>
-              <p className="mt-1 text-sm text-[#7c5a3d] dark:text-gray-400">
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                 Recently billed products for faster repeat entry.
               </p>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700 dark:bg-slate-800 dark:text-slate-200">
               <Clock3 size={14} />
               <span>Recent</span>
             </div>
@@ -108,11 +108,11 @@ const InvoiceSmartSuggestions = ({
               <button
                 key={product.id}
                 type="button"
-                className="inline-flex items-center gap-2 rounded-full border border-[#e4d6ca] bg-white px-3 py-2 text-sm font-medium text-[#3b2411] shadow-sm transition hover:-translate-y-0.5 hover:border-amber-300 hover:bg-amber-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-100 dark:hover:border-amber-400/40 dark:hover:bg-amber-500/10"
+                className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-sm font-medium text-slate-900 shadow-sm ring-1 ring-slate-200/80 transition hover:-translate-y-0.5 hover:ring-primary/25 dark:bg-slate-950 dark:text-slate-100 dark:ring-slate-700 dark:hover:ring-primary/30"
                 onClick={() => onAddProduct(product, "recent")}
               >
                 <span className="max-w-[140px] truncate">{product.name}</span>
-                <span className="text-xs text-[#8a6d56] dark:text-gray-400">
+                <span className="text-xs text-slate-500 dark:text-slate-400">
                   Rs. {Number(product.price ?? 0).toFixed(0)}
                 </span>
                 <Plus size={14} />

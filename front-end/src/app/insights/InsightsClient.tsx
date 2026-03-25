@@ -1,9 +1,29 @@
 "use client";
 
-import React, { useEffect, useMemo } from "react";
+import React, {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import dynamic from "next/dynamic";
-import { Activity, Sparkles, TrendingUp, Wallet } from "lucide-react";
+import Link from "next/link";
+import {
+  Activity,
+  ArrowRight,
+  Sparkles,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import DashboardFilters, {
+  type DashboardFilters as DashboardFilterState,
+} from "@/components/dashboard/dashboard-filters";
+import {
+  DashboardSectionIntro,
+  dashboardSectionFallback,
+} from "@/components/dashboard/dashboard-section-shared";
 import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
 import { useHydrated } from "@/hooks/useHydrated";
 import {
@@ -14,17 +34,59 @@ import { useDashboardForecast } from "@/components/dashboard/use-dashboard-forec
 import { useDashboardFormatters } from "@/components/dashboard/use-dashboard-formatters";
 import { useI18n } from "@/providers/LanguageProvider";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
+import { Button } from "@/components/ui/button";
 
-const SalesForecast = dynamic(() => import("@/components/dashboard/sales-forecast"));
-const ProfitForecast = dynamic(() => import("@/components/dashboard/profit-forecast"));
+const SalesForecast = dynamic(() => import("@/components/dashboard/sales-forecast"), {
+  loading: () => dashboardSectionFallback("h-[320px]"),
+});
+const ProfitForecast = dynamic(() => import("@/components/dashboard/profit-forecast"), {
+  loading: () => dashboardSectionFallback("h-[320px]"),
+});
+const SalesChart = dynamic(() => import("@/components/dashboard/sales-chart"), {
+  loading: () => dashboardSectionFallback("h-[420px]"),
+});
+const CashFlowChart = dynamic(() => import("@/components/dashboard/cashflow-chart"), {
+  loading: () => dashboardSectionFallback("h-[420px]"),
+});
+const PaymentMethodDistribution = dynamic(
+  () => import("@/components/dashboard/payment-method-distribution"),
+  { loading: () => dashboardSectionFallback("h-[380px]") },
+);
+const ProductSalesChart = dynamic(
+  () => import("@/components/dashboard/product-sales-chart"),
+  { loading: () => dashboardSectionFallback("h-[360px]") },
+);
 const CashflowForecastCard = dynamic(
   () => import("@/components/dashboard/cashflow-forecast-card"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
 );
 const ForecastAlertsPanel = dynamic(
   () => import("@/components/dashboard/forecast-alerts-panel"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
 );
 const ForecastInsightsPanel = dynamic(
   () => import("@/components/dashboard/forecast-insights-panel"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
+);
+const DemandSupplyPanel = dynamic(
+  () => import("@/components/dashboard/demand-supply-panel"),
+  { loading: () => dashboardSectionFallback("h-[360px]") },
+);
+const InventoryRiskAlerts = dynamic(
+  () => import("@/components/dashboard/inventory-risk-alerts"),
+  { loading: () => dashboardSectionFallback("h-[340px]") },
+);
+const CustomerInsights = dynamic(
+  () => import("@/components/dashboard/customer-insights"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
+);
+const SupplierOverview = dynamic(
+  () => import("@/components/dashboard/supplier-overview"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
+);
+const TransactionsTable = dynamic(
+  () => import("@/components/dashboard/transactions-table"),
+  { loading: () => dashboardSectionFallback("h-[380px]") },
 );
 
 type InsightsClientProps = {
@@ -33,26 +95,15 @@ type InsightsClientProps = {
   token?: string;
 };
 
-type SectionIntroProps = {
-  kicker: string;
-  title: string;
-  description: string;
-};
-
-const SectionIntro = ({ kicker, title, description }: SectionIntroProps) => (
-  <div className="flex flex-col gap-2">
-    <p className="app-kicker">{kicker}</p>
-    <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-[1.4rem]">
-      {title}
-    </h2>
-    <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{description}</p>
-  </div>
-);
-
 const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
   const { t } = useI18n();
   const { currency, number } = useDashboardFormatters();
   const hydrated = useHydrated();
+  const [filters, setFilters] = useState<DashboardFilterState>({
+    range: "30d",
+    granularity: "day",
+  });
+  const deferredFilters = useDeferredValue(filters);
 
   const displayName = name.trim() || t("common.guest");
   const hasValidSessionToken =
@@ -76,6 +127,16 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
   });
 
   const { data, isLoading, isError, dataUpdatedAt, isFetching } = useDashboardForecast();
+  const showLoadingState = !hydrated || (hasValidSessionToken && isLoading);
+
+  const sectionLinks = [
+    { label: t("dashboard.sectionLinks.overview"), href: "#summary" },
+    { label: t("dashboard.sectionLinks.performance"), href: "#performance" },
+    { label: t("dashboard.sectionLinks.forecasting"), href: "#forecasting" },
+    { label: "Demand vs Supply", href: "#demand-supply" },
+    { label: t("insights.sections.ai.title"), href: "#intelligence" },
+    { label: t("dashboard.sectionLinks.records"), href: "#records" },
+  ];
 
   const summaryCards = useMemo(() => {
     if (!data) return [];
@@ -125,13 +186,41 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
       image={image}
       title={t("insights.title")}
       subtitle={t("insights.subtitle")}
+      actions={
+        <DashboardFilters
+          filters={filters}
+          onChange={(next) => startTransition(() => setFilters(next))}
+          disabled={showLoadingState}
+          className="w-full sm:w-auto"
+        />
+      }
     >
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
-        <section className="grid gap-4">
-          <SectionIntro
+        <nav
+          aria-label={t("navigation.insights")}
+          className="flex flex-wrap items-center gap-2"
+        >
+          {sectionLinks.map((item) => (
+            <Button key={item.href} asChild variant="outline" size="sm" className="rounded-full">
+              <Link href={item.href}>{item.label}</Link>
+            </Button>
+          ))}
+        </nav>
+
+        <section id="summary" className="grid gap-4">
+          <DashboardSectionIntro
+            headingId="insights-summary-heading"
             kicker={t("insights.sections.summary.kicker")}
             title={t("insights.sections.summary.title")}
             description={t("insights.sections.summary.description")}
+            action={
+              <Button asChild variant="outline">
+                <Link href="/dashboard">
+                  {t("navigation.dashboard")}
+                  <ArrowRight size={16} />
+                </Link>
+              </Button>
+            }
           />
 
           <div className="flex justify-end">
@@ -178,24 +267,57 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
           </div>
         </section>
 
-        <section className="grid gap-4">
-          <SectionIntro
-            kicker={t("insights.sections.trends.kicker")}
-            title={t("insights.sections.trends.title")}
-            description={t("insights.sections.trends.description")}
+        <section id="performance" className="grid gap-4">
+          <DashboardSectionIntro
+            headingId="insights-performance-heading"
+            kicker={t("dashboard.sections.performance.kicker")}
+            title={t("dashboard.sections.performance.title")}
+            description={t("dashboard.sections.performance.description")}
+          />
+          <SalesChart filters={deferredFilters} />
+          <div className="grid gap-4 xl:grid-cols-2">
+            <CashFlowChart />
+            <PaymentMethodDistribution />
+          </div>
+          <div className="grid gap-4">
+            <ProductSalesChart className="h-full" />
+          </div>
+        </section>
+
+        <section id="forecasting" className="grid gap-4">
+          <DashboardSectionIntro
+            headingId="insights-forecasting-heading"
+            kicker={t("dashboard.sections.forecasting.kicker")}
+            title={t("dashboard.sections.forecasting.title")}
+            description={t("dashboard.sections.forecasting.description")}
           />
           <div className="grid gap-4 xl:grid-cols-2">
             <SalesForecast className="h-full" />
             <CashflowForecastCard className="h-full" />
           </div>
-          <div className="grid gap-4">
+          <div className="grid gap-4 xl:grid-cols-2">
             <ProfitForecast className="h-full" />
+            <InventoryRiskAlerts className="h-full" />
           </div>
         </section>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <section id="demand-supply" className="grid gap-4">
+          <DashboardSectionIntro
+            headingId="insights-demand-supply-heading"
+            kicker="Demand intelligence"
+            title="Forecast-led inventory pressure"
+            description="Combine sales momentum with stockout risk here so buyers can act before the operational dashboard gets noisy."
+          />
+          <DemandSupplyPanel />
+        </section>
+
+        <section
+          id="intelligence"
+          className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]"
+        >
           <div className="grid gap-4">
-            <SectionIntro
+            <DashboardSectionIntro
+              headingId="insights-intelligence-heading"
               kicker={t("insights.sections.alerts.kicker")}
               title={t("insights.sections.alerts.title")}
               description={t("insights.sections.alerts.description")}
@@ -207,7 +329,8 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
             <div className="flex items-start gap-2 text-primary">
               <Sparkles size={16} />
               <div className="flex-1">
-                <SectionIntro
+                <DashboardSectionIntro
+                  headingId="insights-ai-heading"
                   kicker={t("insights.sections.ai.kicker")}
                   title={t("insights.sections.ai.title")}
                   description={t("insights.sections.ai.description")}
@@ -216,6 +339,29 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
             </div>
             <ForecastInsightsPanel className="h-full" />
           </div>
+        </section>
+
+        <section className="grid gap-4">
+          <DashboardSectionIntro
+            headingId="insights-relationship-heading"
+            kicker={t("insights.sections.trends.kicker")}
+            title={t("dashboard.customerInsights.title")}
+            description={t("dashboard.customerInsights.description")}
+          />
+          <div className="grid gap-4 xl:grid-cols-2">
+            <CustomerInsights className="h-full" />
+            <SupplierOverview className="h-full" />
+          </div>
+        </section>
+
+        <section id="records" className="grid gap-4">
+          <DashboardSectionIntro
+            headingId="insights-records-heading"
+            kicker={t("dashboard.sections.records.kicker")}
+            title={t("dashboard.sections.records.title")}
+            description={t("dashboard.sections.records.description")}
+          />
+          <TransactionsTable filters={deferredFilters} />
         </section>
       </div>
     </DashboardLayout>

@@ -2,6 +2,7 @@ import axios from "axios";
 import { getSession } from "next-auth/react";
 import { API_URL } from "./apiEndPoints";
 import { normalizeListResponse } from "./normalizeListResponse";
+import { captureApiFailure } from "./observability/shared";
 
 const normalizeAuthToken = (rawToken: string | null | undefined) => {
   if (!rawToken) return null;
@@ -41,6 +42,14 @@ apiClient.interceptors.request.use(async (config) => {
   }
   return config;
 });
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    captureApiFailure(error);
+    return Promise.reject(error);
+  },
+);
 
 export type ReportsSummary = {
   invoices: number;
@@ -512,6 +521,48 @@ export type InventoryAdjustInput = {
   change: number;
   reason?: "PURCHASE" | "SALE" | "ADJUSTMENT" | "RETURN" | "DAMAGE";
   note?: string | null;
+};
+
+export type InventoryDemandAlertLevel = "critical" | "warning" | "normal";
+
+export type InventoryDemandPrediction = {
+  product_id: number;
+  product_name: string;
+  warehouse_id?: number | null;
+  stock_left: number;
+  predicted_daily_sales: number;
+  days_until_stockout: number;
+  recommended_reorder_quantity: number;
+  alert_level: InventoryDemandAlertLevel;
+  unit_cost: number;
+  basis_window_days: number;
+  confidence: number;
+};
+
+export type InventoryDemandPredictionsMetadata = {
+  generatedAt: string;
+  basisWindowDays: number;
+  dataCoverageDays: number;
+  warehouseScope: {
+    warehouseId: number | null;
+    mode: "all" | "warehouse";
+  };
+};
+
+export type InventoryDemandPredictionsResponse = {
+  predictions: InventoryDemandPrediction[];
+  count: number;
+  metadata: InventoryDemandPredictionsMetadata;
+};
+
+export type InventoryDemandPredictionFilters = {
+  productId?: number;
+  warehouseId?: number;
+  productIds?: number[];
+  categoryId?: number;
+  supplierId?: number;
+  alertLevel?: InventoryDemandAlertLevel;
+  limit?: number;
 };
 
 export type DashboardOverview = {
@@ -1586,6 +1637,49 @@ export const fetchInventories = async (
     params: warehouseId ? { warehouse_id: warehouseId } : undefined,
   });
   return response.data.data as Inventory[];
+};
+
+const buildInventoryPredictionParams = (
+  filters?: InventoryDemandPredictionFilters,
+) => {
+  if (!filters) return undefined;
+
+  const params = new URLSearchParams();
+
+  if (filters.productId) {
+    params.set("productId", String(filters.productId));
+  }
+  if (filters.warehouseId) {
+    params.set("warehouseId", String(filters.warehouseId));
+  }
+  if (filters.categoryId) {
+    params.set("categoryId", String(filters.categoryId));
+  }
+  if (filters.supplierId) {
+    params.set("supplierId", String(filters.supplierId));
+  }
+  if (filters.alertLevel) {
+    params.set("alertLevel", filters.alertLevel);
+  }
+  if (filters.limit) {
+    params.set("limit", String(filters.limit));
+  }
+  filters.productIds?.forEach((productId) => {
+    params.append("productIds", String(productId));
+  });
+
+  const query = params.toString();
+  return query ? query : undefined;
+};
+
+export const fetchInventoryDemandPredictions = async (
+  filters?: InventoryDemandPredictionFilters,
+): Promise<InventoryDemandPredictionsResponse> => {
+  const query = buildInventoryPredictionParams(filters);
+  const response = await apiClient.get(
+    query ? `/inventory-demand/predictions?${query}` : "/inventory-demand/predictions",
+  );
+  return response.data.data as InventoryDemandPredictionsResponse;
 };
 
 export const adjustInventory = async (

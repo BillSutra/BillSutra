@@ -37,57 +37,61 @@ const InvoiceTotals = ({
   return (
     <div
       className={cn(
-        "no-print rounded-[2rem] border border-[#dbe7ef] bg-[linear-gradient(180deg,#f8fcff_0%,#eef6ff_100%)] p-6 shadow-[0_26px_55px_-38px_rgba(37,99,235,0.35)] dark:border-slate-700 dark:bg-[linear-gradient(180deg,rgba(30,41,59,0.96)_0%,rgba(15,23,42,0.96)_100%)] dark:shadow-[0_26px_55px_-38px_rgba(0,0,0,0.48)]",
+        "no-print rounded-[2.1rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-6 shadow-[0_30px_65px_-42px_rgba(15,23,42,0.24)] dark:border-slate-700 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(15,23,42,0.94)_100%)] dark:shadow-[0_26px_55px_-38px_rgba(0,0,0,0.48)]",
         className,
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-sky-700 dark:text-sky-200">
+          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
             Checkout
           </p>
-          <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
+          <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
             Live bill summary
           </h3>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
             Totals refresh instantly as the cart changes.
           </p>
         </div>
-        <div className="rounded-[1.5rem] border border-white/70 bg-white/80 px-4 py-3 text-right shadow-sm dark:border-white/10 dark:bg-slate-900/70">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-            Grand total
-          </p>
-          <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-            {formatCurrency(totals.total)}
-          </p>
+        <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+          Live
         </div>
       </div>
 
-      <div className="mt-5 space-y-3 text-sm">
-        <div className="flex items-center justify-between rounded-2xl border border-white/70 bg-white/75 px-4 py-3 dark:border-white/10 dark:bg-slate-900/55">
+      <div className="mt-5 rounded-[1.6rem] bg-slate-950 px-5 py-5 text-white shadow-[0_24px_50px_-34px_rgba(15,23,42,0.45)] dark:bg-slate-900">
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
+          Grand total
+        </p>
+        <p className="mt-2 text-4xl font-semibold tracking-tight">
+          {formatCurrency(totals.total)}
+        </p>
+      </div>
+
+      <div className="mt-5 space-y-2.5 text-sm">
+        <div className="flex items-center justify-between rounded-[1.15rem] bg-slate-50/90 px-4 py-3 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
           <span className="text-slate-600 dark:text-slate-300">
             {t("invoiceTotals.subtotal")}
           </span>
-          <span className="font-medium text-slate-900 dark:text-slate-100">
+          <span className="font-medium text-slate-950 dark:text-slate-100">
             {formatCurrency(totals.subtotal)}
           </span>
         </div>
 
         {taxMode === "CGST_SGST" ? (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="flex items-center justify-between rounded-2xl border border-white/70 bg-white/75 px-4 py-3 dark:border-white/10 dark:bg-slate-900/55">
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <div className="flex items-center justify-between rounded-[1.15rem] bg-slate-50/90 px-4 py-3 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
               <span className="text-slate-600 dark:text-slate-300">
                 {t("invoiceTotals.cgst")}
               </span>
-              <span className="font-medium text-slate-900 dark:text-slate-100">
+              <span className="font-medium text-slate-950 dark:text-slate-100">
                 {formatCurrency(totals.cgst)}
               </span>
             </div>
-            <div className="flex items-center justify-between rounded-2xl border border-white/70 bg-white/75 px-4 py-3 dark:border-white/10 dark:bg-slate-900/55">
+            <div className="flex items-center justify-between rounded-[1.15rem] bg-slate-50/90 px-4 py-3 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
               <span className="text-slate-600 dark:text-slate-300">
                 {t("invoiceTotals.sgst")}
               </span>
-              <span className="font-medium text-slate-900 dark:text-slate-100">
+              <span className="font-medium text-slate-950 dark:text-slate-100">
                 {formatCurrency(totals.sgst)}
               </span>
             </div>
@@ -95,30 +99,30 @@ const InvoiceTotals = ({
         ) : null}
 
         {taxMode === "IGST" ? (
-          <div className="flex items-center justify-between rounded-2xl border border-white/70 bg-white/75 px-4 py-3 dark:border-white/10 dark:bg-slate-900/55">
+          <div className="flex items-center justify-between rounded-[1.15rem] bg-slate-50/90 px-4 py-3 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
             <span className="text-slate-600 dark:text-slate-300">
               {t("invoiceTotals.igst")}
             </span>
-            <span className="font-medium text-slate-900 dark:text-slate-100">
+            <span className="font-medium text-slate-950 dark:text-slate-100">
               {formatCurrency(totals.igst)}
             </span>
           </div>
         ) : null}
 
         {taxMode !== "NONE" ? (
-          <div className="flex items-center justify-between rounded-2xl border border-white/70 bg-white/75 px-4 py-3 dark:border-white/10 dark:bg-slate-900/55">
+          <div className="flex items-center justify-between rounded-[1.15rem] bg-slate-50/90 px-4 py-3 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
             <span className="text-slate-600 dark:text-slate-300">
               {t("invoiceTotals.totalGst")}
             </span>
-            <span className="font-medium text-slate-900 dark:text-slate-100">
+            <span className="font-medium text-slate-950 dark:text-slate-100">
               {formatCurrency(totals.tax)}
             </span>
           </div>
         ) : null}
 
-        <div className="flex items-center justify-between rounded-2xl border border-white/70 bg-white/75 px-4 py-3 dark:border-white/10 dark:bg-slate-900/55">
+        <div className="flex items-center justify-between rounded-[1.15rem] bg-slate-50/90 px-4 py-3 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
           <span className="text-slate-600 dark:text-slate-300">{discountLabel}</span>
-          <span className="font-medium text-slate-900 dark:text-slate-100">
+          <span className="font-medium text-slate-950 dark:text-slate-100">
             {formatCurrency(totals.discount)}
           </span>
         </div>

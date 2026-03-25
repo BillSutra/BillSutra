@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { signIn } from "next-auth/react";
 import Image from "next/image";
 import { useI18n } from "@/providers/LanguageProvider";
+import { captureAnalyticsEvent } from "@/lib/observability/client";
 
 const Register = () => {
   const { t } = useI18n();
@@ -24,21 +25,43 @@ const Register = () => {
 
   useEffect(() => {
     if (state.status === 500) {
+      captureAnalyticsEvent("auth_signup_failed", {
+        method: "password",
+        status: state.status,
+      });
       toast.error(state.message);
     } else if (state.status === 422) {
+      captureAnalyticsEvent("auth_signup_failed", {
+        method: "password",
+        status: state.status,
+      });
       toast.error(state.message);
     } else if (state.status === 200) {
+      captureAnalyticsEvent("auth_signup_succeeded", {
+        method: "password",
+      });
       toast.success(state.message || t("auth.registerForm.emailSent"));
     }
   }, [state, t]);
 
   const handleGoogleSignup = () => {
+    captureAnalyticsEvent("auth_signup_started", {
+      method: "google",
+    });
     signIn("google", { callbackUrl: "/dashboard", redirect: true });
   };
 
   return (
     <div>
-      <form action={formAction} className="grid gap-4">
+      <form
+        action={formAction}
+        className="grid gap-4"
+        onSubmit={() =>
+          captureAnalyticsEvent("auth_signup_started", {
+            method: "password",
+          })
+        }
+      >
         <div className="grid gap-2">
           <Label htmlFor="name">{t("auth.registerForm.nameLabel")}</Label>
           <Input

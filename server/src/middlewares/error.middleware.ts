@@ -2,6 +2,7 @@ import type { ErrorRequestHandler } from "express";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import AppError from "../utils/AppError.js";
+import { captureServerException } from "../lib/observability.js";
 
 type ErrorWithStatus = Error & {
   status?: number;
@@ -65,6 +66,19 @@ const errorMiddleware: ErrorRequestHandler = (err, req, res, _next) => {
 
   if (!isProd) {
     console.error(err);
+  }
+
+  if (statusCode >= 500) {
+    captureServerException(err, req, {
+      level: "error",
+      tags: {
+        status_code: statusCode,
+        error_type: err instanceof Error ? err.name : "unknown_error",
+      },
+      extra: {
+        responseMessage: message,
+      },
+    });
   }
 
   const response: {

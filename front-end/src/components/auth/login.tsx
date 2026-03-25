@@ -27,6 +27,8 @@ import {
   verifyOtpLoginCode,
   verifyPasskeyAuthentication,
 } from "@/lib/authClient";
+import { captureAnalyticsEvent } from "@/lib/observability/client";
+import { captureFrontendException } from "@/lib/observability/shared";
 
 type LoginProps = {
   mode?: "owner" | "worker";
@@ -111,6 +113,12 @@ export default function Login({ mode = "owner" }: LoginProps) {
         router.push(callbackUrl);
         router.refresh();
       } catch (error) {
+        captureFrontendException(error, {
+          tags: {
+            flow: "auth.complete_token_login",
+            mode,
+          },
+        });
         const message =
           error instanceof Error && error.message.trim()
             ? error.message
@@ -125,14 +133,28 @@ export default function Login({ mode = "owner" }: LoginProps) {
 
   useEffect(() => {
     if (state.status === 500) {
+      captureAnalyticsEvent("auth_login_failed", {
+        method: "password",
+        mode,
+        status: state.status,
+      });
       toast.error(state.message);
     } else if (state.status === 422) {
+      captureAnalyticsEvent("auth_login_failed", {
+        method: "password",
+        mode,
+        status: state.status,
+      });
       toast.error(state.message);
     } else if (state.status === 200) {
+      captureAnalyticsEvent("auth_login_succeeded", {
+        method: "password",
+        mode,
+      });
       toast.success(state.message);
       void completeTokenLogin(state.data?.token);
     }
-  }, [completeTokenLogin, state]);
+  }, [completeTokenLogin, mode, state]);
 
   useEffect(() => {
     if (otpCooldown <= 0) return;
@@ -155,6 +177,10 @@ export default function Login({ mode = "owner" }: LoginProps) {
   }, [otpExpiresIn]);
 
   const handleGoogleLogin = () => {
+    captureAnalyticsEvent("auth_login_started", {
+      method: "google",
+      mode,
+    });
     signIn("google", { callbackUrl: "/dashboard", redirect: true });
   };
 
@@ -171,6 +197,10 @@ export default function Login({ mode = "owner" }: LoginProps) {
     }
 
     setIsPasskeyLoading(true);
+    captureAnalyticsEvent("auth_login_started", {
+      method: "passkey",
+      mode,
+    });
     try {
       const optionsResponse =
         await requestPasskeyAuthenticationOptions<Record<string, unknown>>(
@@ -189,8 +219,22 @@ export default function Login({ mode = "owner" }: LoginProps) {
       );
 
       toast.success("Passkey verified.");
+      captureAnalyticsEvent("auth_login_succeeded", {
+        method: "passkey",
+        mode,
+      });
       await completeTokenLogin(authPayload.token);
     } catch (error) {
+      captureAnalyticsEvent("auth_login_failed", {
+        method: "passkey",
+        mode,
+      });
+      captureFrontendException(error, {
+        tags: {
+          flow: "auth.passkey_login",
+          mode,
+        },
+      });
       const message =
         error instanceof Error && error.message.trim()
           ? error.message
@@ -214,6 +258,9 @@ export default function Login({ mode = "owner" }: LoginProps) {
     }
 
     setIsOtpSending(true);
+    captureAnalyticsEvent("auth_login_otp_requested", {
+      mode,
+    });
     try {
       const response = await requestOtpLoginCode(normalizedEmail);
       setOtpStarted(true);
@@ -221,9 +268,21 @@ export default function Login({ mode = "owner" }: LoginProps) {
       setOtpCooldown(response.retryAfter ?? 60);
       setOtpExpiresIn(response.expiresIn ?? 300);
       lastSubmittedOtpRef.current = null;
+      captureAnalyticsEvent("auth_login_otp_sent", {
+        mode,
+      });
       toast.success("Login code sent to your email.");
       window.setTimeout(() => focusOtpInput(0), 60);
     } catch (error) {
+      captureAnalyticsEvent("auth_login_otp_failed", {
+        mode,
+      });
+      captureFrontendException(error, {
+        tags: {
+          flow: "auth.otp_request",
+          mode,
+        },
+      });
       if (
         error instanceof Error &&
         "retryAfter" in error &&
@@ -275,8 +334,22 @@ export default function Login({ mode = "owner" }: LoginProps) {
       try {
         const authPayload = await verifyOtpLoginCode(normalizedEmail, code);
         toast.success("OTP verified.");
+        captureAnalyticsEvent("auth_login_succeeded", {
+          method: "otp",
+          mode,
+        });
         await completeTokenLogin(authPayload.token);
       } catch (error) {
+        captureAnalyticsEvent("auth_login_failed", {
+          method: "otp",
+          mode,
+        });
+        captureFrontendException(error, {
+          tags: {
+            flow: "auth.otp_verify",
+            mode,
+          },
+        });
         const message =
           error instanceof Error && error.message.trim()
             ? error.message

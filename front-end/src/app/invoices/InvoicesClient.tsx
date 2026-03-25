@@ -62,6 +62,7 @@ import {
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
 import type { Customer, Product } from "@/lib/apiClient";
+import { captureAnalyticsEvent } from "@/lib/observability/client";
 
 type InvoiceClientProps = {
   name: string;
@@ -232,7 +233,27 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     name: "",
     phone: "",
   });
-  const [recentProductUsage, setRecentProductUsage] = useState<RecentProductUsage[]>([]);
+  const [recentProductUsage, setRecentProductUsage] = useState<RecentProductUsage[]>(() => {
+    if (typeof window === "undefined") return [];
+
+    try {
+      const raw = window.localStorage.getItem(RECENT_PRODUCT_USAGE_STORAGE_KEY);
+      if (!raw) return [];
+
+      const parsed = JSON.parse(raw) as RecentProductUsage[];
+      if (!Array.isArray(parsed)) return [];
+
+      return parsed.filter(
+        (entry): entry is RecentProductUsage =>
+          typeof entry?.productId === "string" &&
+          typeof entry?.count === "number" &&
+          typeof entry?.lastAddedAt === "string",
+      );
+    } catch {
+      window.localStorage.removeItem(RECENT_PRODUCT_USAGE_STORAGE_KEY);
+      return [];
+    }
+  });
   const [itemErrors, setItemErrors] = useState<InvoiceItemError[]>([]);
   const [summaryErrors, setSummaryErrors] = useState<string[]>([]);
   const [serverError, setServerError] = useState<string | null>(null);
@@ -255,7 +276,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   }, []);
   const shortcutModifierLabel = isMacShortcutPlatform ? "Cmd" : "Ctrl";
 
-  const parseServerErrors = (error: unknown, fallback: string) => {
+  const parseServerErrors = useCallback((error: unknown, fallback: string) => {
     if (axios.isAxiosError(error)) {
       const data = error.response?.data as
         | { message?: string; errors?: Record<string, string[] | string> }
@@ -271,7 +292,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       if (messages.size) return Array.from(messages).join(" ");
     }
     return fallback;
-  };
+  }, []);
 
   const focusProductSearch = useCallback((select = true) => {
     window.setTimeout(() => {
@@ -298,29 +319,6 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         window.clearTimeout(recentCartItemTimerRef.current);
       }
     };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    try {
-      const raw = window.localStorage.getItem(RECENT_PRODUCT_USAGE_STORAGE_KEY);
-      if (!raw) return;
-
-      const parsed = JSON.parse(raw) as RecentProductUsage[];
-      if (!Array.isArray(parsed)) return;
-
-      setRecentProductUsage(
-        parsed.filter(
-          (entry): entry is RecentProductUsage =>
-            typeof entry?.productId === "string" &&
-            typeof entry?.count === "number" &&
-            typeof entry?.lastAddedAt === "string",
-        ),
-      );
-    } catch {
-      window.localStorage.removeItem(RECENT_PRODUCT_USAGE_STORAGE_KEY);
-    }
   }, []);
 
   useEffect(() => {
@@ -354,17 +352,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     return () => window.clearTimeout(timeoutId);
   }, [quickAddCustomerOpen]);
 
-  useEffect(() => {
-    if (items.length === 0) {
-      setSelectedItemIndex(null);
-      return;
-    }
-
-    setSelectedItemIndex((currentIndex) => {
-      if (currentIndex === null) return 0;
-      return Math.min(currentIndex, items.length - 1);
-    });
-  }, [items.length]);
+  const resolvedSelectedItemIndex =
+    items.length === 0
+      ? null
+      : selectedItemIndex === null
+        ? 0
+        : Math.min(selectedItemIndex, items.length - 1);
 
   const customer = useMemo(
     () =>
@@ -660,13 +653,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         }
 
         nextSelectedIndex =
-          selectedItemIndex === null
+          resolvedSelectedItemIndex === null
             ? Math.min(index, nextItems.length - 1)
-            : selectedItemIndex > index
-              ? selectedItemIndex - 1
-              : selectedItemIndex === index
+            : resolvedSelectedItemIndex > index
+              ? resolvedSelectedItemIndex - 1
+              : resolvedSelectedItemIndex === index
                 ? Math.min(index, nextItems.length - 1)
-                : selectedItemIndex;
+                : resolvedSelectedItemIndex;
 
         return nextItems;
       });
@@ -705,7 +698,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
       focusProductSearch(false);
     },
-    [flashShortcutSection, focusProductSearch, markDirty, selectedItemIndex],
+    [flashShortcutSection, focusProductSearch, markDirty, resolvedSelectedItemIndex],
   );
 
   const handleFormChange = useCallback(
@@ -793,6 +786,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
         setQuickProductForm({ name: "", price: "", barcode: "" });
         setQuickAddProductOpen(false);
+        captureAnalyticsEvent("invoice_quick_product_created", {
+          productId: createdProduct.id,
+        });
         addProductToBill(createdProduct, {
           toastMessage: `${createdProduct.name} created and added to bill`,
         });
@@ -843,6 +839,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         });
         setQuickCustomerForm({ name: "", phone: "" });
         setQuickAddCustomerOpen(false);
+        captureAnalyticsEvent("invoice_quick_customer_created", {
+          customerId: createdCustomer.id,
+        });
         flashShortcutSection("form");
         toast.success(`${createdCustomer.name} added as bill customer`);
         focusProductSearch();
@@ -948,6 +947,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       setLastCreatedCustomerEmail(selectedCustomer?.email ?? null);
       setInvoiceEmailRecipient(selectedCustomer?.email?.trim() ?? "");
       setInvoiceEmailError(null);
+      captureAnalyticsEvent("invoice_created", {
+        invoiceId: createdInvoice.id,
+        invoiceNumber: createdInvoice.invoice_number,
+        itemCount: items.length,
+        total: Number(createdInvoice.total ?? totals.total),
+        warehouseId: form.warehouse_id ? Number(form.warehouse_id) : null,
+      });
       toast.success(
         t("invoice.createSuccess", { invoiceNumber: createdInvoice.invoice_number }),
       );
@@ -987,6 +993,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     setInvoiceEmailRecipient(lastCreatedCustomerEmail?.trim() ?? "");
     setInvoiceEmailError(null);
     setInvoiceEmailOpen(true);
+    captureAnalyticsEvent("invoice_email_modal_opened", {
+      invoiceId: lastCreatedInvoiceId,
+    });
   }, [lastCreatedCustomerEmail, lastCreatedInvoiceId, t]);
 
   const handleSendInvoiceEmail = useCallback(async () => {
@@ -1014,6 +1023,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       });
       setLastCreatedCustomerEmail(response.email ?? recipient);
       setInvoiceEmailOpen(false);
+      captureAnalyticsEvent("invoice_email_sent", {
+        invoiceId: lastCreatedInvoiceId,
+        invoiceNumber: lastCreatedInvoiceNumber,
+      });
       toast.success(t("invoice.sendEmailSuccess"));
       toast.success(
         t("invoice.sendEmailSuccessInvoice", {
@@ -1129,12 +1142,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         default:
           if (key === "delete" || (isMacShortcutPlatform && key === "backspace")) {
             event.preventDefault();
-            if (selectedItemIndex === null || items.length === 0) {
+            if (resolvedSelectedItemIndex === null || items.length === 0) {
               toast.error("Select a line item first.");
               flashShortcutSection("items");
               return;
             }
-            removeItem(selectedItemIndex);
+            removeItem(resolvedSelectedItemIndex);
           }
       }
     };
@@ -1150,7 +1163,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     quickAddProductOpen,
     removeItem,
     resetInvoiceComposer,
-    selectedItemIndex,
+    resolvedSelectedItemIndex,
     shortcutHelpOpen,
     submitInvoice,
   ]);
@@ -1201,63 +1214,32 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       subtitle={t("invoice.pageSubtitle")}
       actions={headerActions}
     >
-      <div className="mx-auto w-full max-w-7xl font-[var(--font-sora),var(--font-geist-sans)]">
-        <div className="mb-6 flex flex-wrap gap-2">
-          {[
-            `New bill (${shortcutModifierLabel}+B)`,
-            `Add product (${shortcutModifierLabel}+P)`,
-            `Add customer (${shortcutModifierLabel}+C)`,
-            `Save bill (${shortcutModifierLabel}+S)`,
-            `Apply discount (${shortcutModifierLabel}+D)`,
-            `Focus scan (${shortcutModifierLabel}+Q)`,
-            `Remove item (${shortcutModifierLabel}+Delete)`,
-            "Help (?)",
-          ].map((hint) => (
-            <span
-              key={hint}
-              className="rounded-full border border-gray-200 bg-white/90 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-            >
-              {hint}
-            </span>
-          ))}
+      <div className="mx-auto w-full max-w-[1500px] font-[var(--font-sora),var(--font-geist-sans)]">
+        <div className="mb-6 flex flex-wrap items-center gap-2 rounded-[1.4rem] bg-white/85 px-4 py-3 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.12)] ring-1 ring-slate-200/80 dark:bg-slate-900/75 dark:text-slate-300 dark:ring-slate-700/70">
+          <span className="font-semibold text-slate-950 dark:text-slate-100">
+            Keyboard-first billing
+          </span>
+          <span>Enter adds selected product.</span>
+          <span>{shortcutModifierLabel}+Q refocuses search.</span>
+          <span>{shortcutModifierLabel}+S finishes the bill.</span>
         </div>
 
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.8fr)] xl:items-start xl:gap-8">
-          <div className="grid gap-6">
-            <div
-              className={
-                shortcutHighlight === "form"
-                  ? "rounded-2xl shadow-[0_0_0_4px_rgba(99,102,241,0.14)]"
-                  : undefined
-              }
-            >
-              <InvoiceForm
-                form={form}
-                customers={customers ?? []}
-                warehouses={warehouses ?? []}
-                taxMode={taxMode}
-                onFormChange={handleFormChange}
-                onTaxModeChange={handleTaxModeChange}
-                onSubmit={handleSubmit}
-                isSubmitting={createInvoice.isPending}
-                summaryErrors={summaryErrors}
-                serverError={serverError}
-                hideSubmit
-              />
-            </div>
+        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.72fr)_minmax(340px,0.62fr)] xl:items-start xl:gap-8">
+          <div className="min-w-0">
             <InvoiceTable
               items={items}
               errors={itemErrors}
               quickEntryProduct={quickEntryProduct}
               quickEntryRef={quickEntryRef}
               autoFocusProductSearch={autoFocusProductSearch}
-              selectedItemIndex={selectedItemIndex}
+              selectedItemIndex={resolvedSelectedItemIndex}
               recentProductId={recentCartProductId}
               suggestedProducts={suggestedProducts}
               recentProducts={quickAccessProducts}
               shortcutMetaLabel={shortcutModifierLabel}
               entryHighlighted={shortcutHighlight === "entry"}
               itemsHighlighted={shortcutHighlight === "items"}
+              onFocusEntry={() => focusProductSearch()}
               onQuickEntrySelect={setQuickEntryProduct}
               onQuickEntrySubmit={handleQuickEntrySubmit}
               onSelectItem={setSelectedItemIndex}
@@ -1267,40 +1249,73 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             />
           </div>
 
-          <aside className="grid gap-4 xl:sticky xl:top-6">
+          <aside className="xl:sticky xl:top-24">
             <InvoiceTotals
               totals={totals}
               taxMode={taxMode}
               discountValue={form.discount}
               discountType={form.discount_type}
+              className="xl:max-w-[390px]"
               action={
-                <div className="mt-5 grid gap-3">
+                <div className="mt-6 grid gap-3">
                   <Button
                     type="button"
                     size="lg"
-                    className="h-14 rounded-2xl text-base font-semibold shadow-[0_18px_40px_-24px_rgba(79,70,229,0.5)]"
-                    disabled={createInvoice.isPending}
+                    className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
+                    disabled={createInvoice.isPending || items.length === 0}
                     onClick={() => void submitInvoice()}
                   >
                     {createInvoice.isPending ? "Generating bill..." : "Checkout / Generate Bill"}
                   </Button>
-                  <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100">
-                    <span>Live cart total</span>
+                  <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
+                    <span>{items.length === 0 ? "Add items to continue" : "Ready to checkout"}</span>
                     <span className="font-semibold">{items.length} line item(s)</span>
                   </div>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {items.length === 0
+                      ? "Scan or search a product to activate checkout."
+                      : `${shortcutModifierLabel}+S also completes the bill from the keyboard.`}
+                  </p>
                 </div>
               }
             />
-            <div className="no-print rounded-xl border border-gray-200 bg-gray-50 p-6 text-sm text-gray-500 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-              <p className="font-semibold text-gray-900 dark:text-gray-100">
+          </aside>
+        </section>
+
+        <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.64fr)]">
+          <div
+            className={
+              shortcutHighlight === "form"
+                ? "rounded-[2rem] shadow-[0_0_0_4px_rgba(37,99,235,0.12)]"
+                : undefined
+            }
+          >
+            <InvoiceForm
+              form={form}
+              customers={customers ?? []}
+              warehouses={warehouses ?? []}
+              taxMode={taxMode}
+              onFormChange={handleFormChange}
+              onTaxModeChange={handleTaxModeChange}
+              onSubmit={handleSubmit}
+              isSubmitting={createInvoice.isPending}
+              summaryErrors={summaryErrors}
+              serverError={serverError}
+              hideSubmit
+            />
+          </div>
+
+          <aside className="grid gap-4">
+            <div className="no-print rounded-[1.7rem] bg-white/90 p-6 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.14)] ring-1 ring-slate-200/80 dark:bg-slate-900/80 dark:text-slate-300 dark:ring-slate-700/70">
+              <p className="font-semibold text-slate-950 dark:text-slate-100">
                 {t("invoice.gstNoteTitle")}
               </p>
-              <p className="mt-2">{t("invoice.gstNoteBody")}</p>
+              <p className="mt-2 leading-6">{t("invoice.gstNoteBody")}</p>
             </div>
             <div
               className={
                 shortcutHighlight === "actions"
-                  ? "rounded-2xl shadow-[0_0_0_4px_rgba(99,102,241,0.14)]"
+                  ? "rounded-[2rem] shadow-[0_0_0_4px_rgba(37,99,235,0.12)]"
                   : undefined
               }
             >
@@ -1311,22 +1326,24 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 isSendingEmail={sendInvoiceEmailMutation.isPending}
               />
             </div>
+          </aside>
+        </section>
+
+        <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1.28fr)]">
+          <div className="grid gap-6">
             <InvoiceDraftPanel
               isDirty={isDirty}
               lastSavedAt={lastSavedAt}
               onSaveDraft={saveNewDraft}
             />
-          </aside>
-        </section>
-
-        <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(320px,0.8fr)_minmax(0,1.2fr)]">
-          <InvoiceDraftList
-            drafts={drafts}
-            currentDraftId={draftId}
-            customerNameById={customerNameById}
-            onLoadDraft={loadDraft}
-            onDeleteDraft={deleteDraft}
-          />
+            <InvoiceDraftList
+              drafts={drafts}
+              currentDraftId={draftId}
+              customerNameById={customerNameById}
+              onLoadDraft={loadDraft}
+              onDeleteDraft={deleteDraft}
+            />
+          </div>
 
           <div className="printable">
             <DesignConfigProvider

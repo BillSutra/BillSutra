@@ -23,15 +23,35 @@ class InventoryDemandController {
                 });
             }
 
-            const { productId } = queryResult.data;
+            const {
+                productId,
+                warehouseId,
+                productIds,
+                categoryId,
+                supplierId,
+                alertLevel,
+                limit,
+            } = queryResult.data;
 
             // Get predictions
-            const predictions = await getInventoryDemandPredictions(userId, productId);
+            const { predictions, metadata } = await getInventoryDemandPredictions(
+                userId,
+                {
+                    productId,
+                    warehouseId,
+                    productIds,
+                    categoryId,
+                    supplierId,
+                    alertLevel,
+                    limit,
+                },
+            );
 
             return sendResponse(res, 200, {
                 data: {
                     predictions,
                     count: predictions.length,
+                    metadata,
                 },
             });
         } catch (error) {

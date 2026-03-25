@@ -43,19 +43,19 @@ const InvoiceForm = ({
 
   return (
     <form
-      className="no-print rounded-[1.85rem] border border-[#e3e8ef] bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.24)] dark:border-gray-700 dark:bg-[linear-gradient(180deg,rgba(17,24,39,0.95)_0%,rgba(15,23,42,0.96)_100%)]"
+      className="no-print rounded-[1.9rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-6 shadow-[0_22px_50px_-36px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.95)_0%,rgba(15,23,42,0.96)_100%)]"
       onSubmit={onSubmit}
     >
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
-            Bill settings
+            Billing details
           </p>
-          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-            Counter controls
+          <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+            Customer, tax, and invoice settings
           </h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            Keep essentials visible while the cart and totals stay live.
+            Keep supporting details close by while the cart and checkout stay in focus.
           </p>
         </div>
         <div className="rounded-[1.4rem] border border-slate-200 bg-white/80 px-4 py-3 text-right shadow-sm dark:border-gray-700 dark:bg-gray-900/70">
@@ -280,8 +280,8 @@ const InvoiceForm = ({
             {t("invoice.createButton")}
           </Button>
         ) : (
-          <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300">
-            Checkout button stays on the right rail
+          <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+            Checkout stays in the sticky summary rail
           </div>
         )}
       </div>

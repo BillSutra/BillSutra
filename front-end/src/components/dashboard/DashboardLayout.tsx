@@ -47,14 +47,14 @@ const DashboardLayout = ({
             onOpenMobileMenu={() => setMobileOpen(true)}
           />
 
-          <main className="page-fade-in dashboard-grid flex-1 px-4 py-6 sm:px-6">
+          <main className="page-fade-in dashboard-grid flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <section className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="max-w-3xl">
-                <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              <div className="max-w-4xl">
+                <h1 className="text-3xl font-semibold tracking-tight sm:text-[2.35rem]">
                   {title}
                 </h1>
                 {subtitle ? (
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground sm:text-[0.98rem]">
                     {subtitle}
                   </p>
                 ) : null}

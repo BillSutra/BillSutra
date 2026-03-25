@@ -14,6 +14,7 @@ import QueryProvider from "../providers/QueryProvider";
 import AuthTokenSync from "../providers/AuthTokenSync";
 import ThemeProvider from "@/components/theme-provider";
 import { LanguageProvider } from "@/providers/LanguageProvider";
+import ObservabilityProvider from "@/providers/ObservabilityProvider";
 import {
   DEFAULT_LANGUAGE,
   isLanguage,
@@ -73,6 +74,7 @@ export default async function RootLayout({
             <SessionProvider>
               <QueryProvider>
                 <AuthTokenSync />
+                <ObservabilityProvider />
                 {children}
                 <Toaster richColors duration={10000} />
               </QueryProvider>
