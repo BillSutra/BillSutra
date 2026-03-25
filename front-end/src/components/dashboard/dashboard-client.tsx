@@ -1,23 +1,16 @@
 "use client";
 
 import React, { startTransition, useDeferredValue, useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { fetchDashboardCardMetrics, fetchDashboardOverview } from "@/lib/apiClient";
+import {
+  fetchDashboardCardMetrics,
+  fetchDashboardOverview,
+  fetchInvoices,
+} from "@/lib/apiClient";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import MetricCard from "@/components/dashboard/metric-card";
-import ProfitForecast from "@/components/dashboard/profit-forecast";
-import SalesForecast from "@/components/dashboard/sales-forecast";
-import InventoryRiskAlerts from "@/components/dashboard/inventory-risk-alerts";
-import TransactionsTable from "@/components/dashboard/transactions-table";
-import CustomerInsights from "@/components/dashboard/customer-insights";
-import SupplierOverview from "@/components/dashboard/supplier-overview";
-import CashFlowChart from "@/components/dashboard/cashflow-chart";
-import ProductSalesChart from "@/components/dashboard/product-sales-chart";
-import SalesChart from "@/components/dashboard/sales-chart";
-import PaymentMethodDistribution from "@/components/dashboard/payment-method-distribution";
-import QuickActions from "@/components/dashboard/quick-actions";
-import ActivityTimeline from "@/components/dashboard/activity-timeline";
-import NotificationsPanel from "@/components/dashboard/notifications-panel";
 import AnimatedNumber from "@/components/dashboard/AnimatedNumber";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
@@ -25,7 +18,10 @@ import DashboardFilters, {
   type DashboardFilters as DashboardFilterState,
 } from "@/components/dashboard/dashboard-filters";
 import {
+  AlertTriangle,
+  ArrowRight,
   Banknote,
+  BellRing,
   CreditCard,
   Landmark,
   Package,
@@ -33,12 +29,70 @@ import {
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatCurrency, formatTimeLabel } from "@/lib/dashboardUtils";
 import {
-  dashboardQueryDefaults,
   DASHBOARD_REALTIME_ENABLED,
   DASHBOARD_REFRESH_INTERVAL_MS,
+  dashboardQueryDefaults,
 } from "@/lib/dashboardRefresh";
+import { useHydrated } from "@/hooks/useHydrated";
+import { useI18n } from "@/providers/LanguageProvider";
+import { useDashboardFormatters } from "@/components/dashboard/use-dashboard-formatters";
+
+const dashboardSectionFallback = (height: string) => (
+  <div className={`app-loading-skeleton w-full ${height}`} />
+);
+
+const ProfitForecast = dynamic(() => import("@/components/dashboard/profit-forecast"), {
+  loading: () => dashboardSectionFallback("h-[320px]"),
+});
+const SalesForecast = dynamic(() => import("@/components/dashboard/sales-forecast"), {
+  loading: () => dashboardSectionFallback("h-[320px]"),
+});
+const ForecastInsightsPanel = dynamic(
+  () => import("@/components/dashboard/forecast-insights-panel"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
+);
+const InventoryRiskAlerts = dynamic(
+  () => import("@/components/dashboard/inventory-risk-alerts"),
+  { loading: () => dashboardSectionFallback("h-[340px]") },
+);
+const TransactionsTable = dynamic(
+  () => import("@/components/dashboard/transactions-table"),
+  { loading: () => dashboardSectionFallback("h-[380px]") },
+);
+const CustomerInsights = dynamic(
+  () => import("@/components/dashboard/customer-insights"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
+);
+const SupplierOverview = dynamic(
+  () => import("@/components/dashboard/supplier-overview"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
+);
+const CashFlowChart = dynamic(() => import("@/components/dashboard/cashflow-chart"), {
+  loading: () => dashboardSectionFallback("h-[420px]"),
+});
+const ProductSalesChart = dynamic(
+  () => import("@/components/dashboard/product-sales-chart"),
+  { loading: () => dashboardSectionFallback("h-[360px]") },
+);
+const SalesChart = dynamic(() => import("@/components/dashboard/sales-chart"), {
+  loading: () => dashboardSectionFallback("h-[420px]"),
+});
+const PaymentMethodDistribution = dynamic(
+  () => import("@/components/dashboard/payment-method-distribution"),
+  { loading: () => dashboardSectionFallback("h-[380px]") },
+);
+const QuickActions = dynamic(() => import("@/components/dashboard/quick-actions"), {
+  loading: () => dashboardSectionFallback("h-[300px]"),
+});
+const ActivityTimeline = dynamic(
+  () => import("@/components/dashboard/activity-timeline"),
+  { loading: () => dashboardSectionFallback("h-[320px]") },
+);
+const NotificationsPanel = dynamic(
+  () => import("@/components/dashboard/notifications-panel"),
+  { loading: () => dashboardSectionFallback("h-[260px]") },
+);
 
 type DashboardClientProps = {
   name: string;
@@ -46,16 +100,47 @@ type DashboardClientProps = {
   token?: string;
 };
 
-const subtitle =
-  "A sharper view of sales, cash movement, profit trend, and inventory demand.";
+type DashboardSectionIntroProps = {
+  headingId: string;
+  kicker: string;
+  title: string;
+  description: string;
+  action?: React.ReactNode;
+};
+
+const DashboardSectionIntro = ({
+  headingId,
+  kicker,
+  title,
+  description,
+  action,
+}: DashboardSectionIntroProps) => (
+  <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+    <div className="max-w-3xl">
+      <p className="app-kicker">{kicker}</p>
+      <h2
+        id={headingId}
+        className="mt-2 text-xl font-semibold tracking-tight text-foreground sm:text-[1.4rem]"
+      >
+        {title}
+      </h2>
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+    </div>
+    {action ? <div className="flex shrink-0">{action}</div> : null}
+  </div>
+);
 
 const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
-  const [hydrated, setHydrated] = useState(false);
+  const { t } = useI18n();
+  const { currency, dateLabel, dateWithYear, timeLabel, translateEnum } =
+    useDashboardFormatters();
+  const hydrated = useHydrated();
   const [filters, setFilters] = useState<DashboardFilterState>({
     range: "30d",
     granularity: "day",
   });
   const deferredFilters = useDeferredValue(filters);
+  const displayName = name.trim() || t("common.guest");
 
   const hasValidSessionToken =
     typeof token === "string" &&
@@ -64,8 +149,6 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     token !== "null";
 
   useEffect(() => {
-    setHydrated(true);
-
     if (!hasValidSessionToken) {
       window.localStorage.removeItem("token");
       return;
@@ -87,20 +170,29 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     ...dashboardQueryDefaults,
   });
 
-  const {
-    data,
-    isLoading,
-    isError,
-    dataUpdatedAt,
-    isFetching,
-  } = useQuery({
+  const { data, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "overview", deferredFilters],
     queryFn: () => fetchDashboardOverview(deferredFilters),
     enabled: hydrated && hasValidSessionToken,
+    ...dashboardQueryDefaults,
     refetchInterval: DASHBOARD_REALTIME_ENABLED
       ? false
       : DASHBOARD_REFRESH_INTERVAL_MS * 2,
     placeholderData: keepPreviousData,
+  });
+
+  const { data: recentInvoices = [] } = useQuery({
+    queryKey: ["dashboard", "recentInvoices"],
+    queryFn: fetchInvoices,
+    enabled: hydrated && hasValidSessionToken,
+    placeholderData: keepPreviousData,
+    select: (invoices) =>
+      [...invoices]
+        .sort(
+          (left, right) =>
+            new Date(right.date).getTime() - new Date(left.date).getTime(),
+        )
+        .slice(0, 5),
     ...dashboardQueryDefaults,
   });
 
@@ -111,6 +203,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   const metricsError = metricsQuery.isError;
   const invoiceStats = data?.invoiceStats;
   const pendingSalesPayments = data?.pendingPayments ?? [];
+  const prioritizedPendingSalesPayments = [...pendingSalesPayments]
+    .sort((left, right) => right.pendingAmount - left.pendingAmount)
+    .slice(0, 4);
 
   const paymentStatusBadgeClass = (status: string) => {
     if (status === "PAID") return "bg-emerald-100 text-emerald-700";
@@ -119,333 +214,475 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   };
 
   const showLoadingState = !hydrated || (hasValidSessionToken && metricsLoading);
+  const unreadNotifications =
+    data?.notifications.filter((notification) => !notification.read).length ??
+    data?.notifications.length ??
+    0;
+  const rangeLabelByPreset: Record<DashboardFilterState["range"], string> = {
+    "7d": t("dashboard.filters.range7d"),
+    "30d": t("dashboard.filters.range30d"),
+    "90d": t("dashboard.filters.range90d"),
+    ytd: t("dashboard.filters.rangeYtd"),
+    custom: t("dashboard.filters.rangeCustom"),
+  };
+  const filterLabel =
+    filters.range === "custom" && (filters.startDate || filters.endDate)
+      ? [
+          filters.startDate ? dateLabel(filters.startDate) : null,
+          filters.endDate ? dateLabel(filters.endDate) : null,
+        ]
+          .filter(Boolean)
+          .join(" - ")
+      : rangeLabelByPreset[filters.range];
 
-  return (
-    <DashboardLayout
-      name={name}
-      image={image}
-      title={`Welcome back, ${name}.`}
-      subtitle={subtitle}
-      actions={
-        <DashboardFilters
-          filters={filters}
-          onChange={(next) => startTransition(() => setFilters(next))}
-          disabled={showLoadingState}
-        />
-      }
-    >
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <header className="dashboard-chart-surface rounded-[1.5rem] px-6 py-5">
+  const heroStats = [
+    {
+      label: t("dashboard.hero.stats.salesLabel"),
+      value: metrics?.totalSales ?? 0,
+      helper: t("dashboard.hero.stats.salesHelper"),
+    },
+    {
+      label: t("dashboard.hero.stats.purchasesLabel"),
+      value: metrics?.totalPurchases ?? 0,
+      helper: t("dashboard.hero.stats.purchasesHelper"),
+    },
+    {
+      label: t("dashboard.hero.stats.pendingSalesLabel"),
+      value: metrics?.pendingSalesPayments ?? 0,
+      helper: t("dashboard.hero.stats.pendingSalesHelper"),
+    },
+    {
+      label: t("dashboard.hero.stats.pendingPurchasesLabel"),
+      value: metrics?.pendingPurchasePayments ?? 0,
+      helper: t("dashboard.hero.stats.pendingPurchasesHelper"),
+    },
+  ];
+
+  const primaryMetricCards = metrics
+    ? [
+        {
+          title: t("dashboard.primaryMetrics.totalSalesTitle"),
+          value: metrics.totalSales,
+          change: metrics.changes.totalSales,
+          icon: <TrendingUp size={18} />,
+          description: t("dashboard.primaryMetrics.totalSalesDescription"),
+          helperText: t("dashboard.primaryMetrics.totalSalesHelper"),
+          theme: "sales" as const,
+        },
+        {
+          title: t("dashboard.primaryMetrics.totalPurchasesTitle"),
+          value: metrics.totalPurchases,
+          change: metrics.changes.totalPurchases,
+          icon: <Banknote size={18} />,
+          description: t("dashboard.primaryMetrics.totalPurchasesDescription"),
+          helperText: t("dashboard.primaryMetrics.totalPurchasesHelper"),
+          theme: "purchases" as const,
+        },
+        {
+          title: t("dashboard.primaryMetrics.pendingSalesPaymentsTitle"),
+          value: metrics.pendingSalesPayments,
+          change: metrics.changes.pendingSalesPayments,
+          icon: <CreditCard size={18} />,
+          trendLabel: t("dashboard.primaryMetrics.pendingSalesPaymentsTrend"),
+          description: t("dashboard.primaryMetrics.pendingSalesPaymentsDescription"),
+          helperText: t("dashboard.primaryMetrics.pendingSalesPaymentsHelper"),
+          theme: "pending-sales" as const,
+        },
+        {
+          title: t("dashboard.primaryMetrics.pendingPurchasePaymentsTitle"),
+          value: metrics.pendingPurchasePayments,
+          change: metrics.changes.pendingPurchasePayments,
+          icon: <Banknote size={18} />,
+          trendLabel: t("dashboard.primaryMetrics.pendingPurchasePaymentsTrend"),
+          description: t("dashboard.primaryMetrics.pendingPurchasePaymentsDescription"),
+          helperText: t("dashboard.primaryMetrics.pendingPurchasePaymentsHelper"),
+          theme: "pending-purchases" as const,
+        },
+      ]
+    : [];
+
+  const profitMetricCards = metrics
+    ? [
+        {
+          title: t("dashboard.profitMetrics.todayTitle"),
+          value: metrics.profits.today,
+          change: metrics.changes.todayProfit,
+          icon: <CreditCard size={18} />,
+          description: t("dashboard.profitMetrics.todayDescription"),
+          helperText: t("dashboard.profitMetrics.todayHelper"),
+        },
+        {
+          title: t("dashboard.profitMetrics.weeklyTitle"),
+          value: metrics.profits.weekly,
+          change: metrics.changes.weeklyProfit,
+          icon: <Wallet size={18} />,
+          description: t("dashboard.profitMetrics.weeklyDescription"),
+          helperText: t("dashboard.profitMetrics.weeklyHelper"),
+        },
+        {
+          title: t("dashboard.profitMetrics.monthlyTitle"),
+          value: metrics.profits.monthly,
+          change: metrics.changes.monthlyProfit,
+          icon: <Package size={18} />,
+          description: t("dashboard.profitMetrics.monthlyDescription"),
+          helperText: t("dashboard.profitMetrics.monthlyHelper"),
+        },
+        {
+          title: t("dashboard.profitMetrics.yearlyTitle"),
+          value: metrics.profits.yearly,
+          change: metrics.changes.yearlyProfit,
+          icon: <Landmark size={18} />,
+          description: t("dashboard.profitMetrics.yearlyDescription"),
+          helperText: t("dashboard.profitMetrics.yearlyHelper"),
+        },
+      ]
+    : [];
+
+  const focusCards = [
+    {
+      label: t("dashboard.focus.overdueInvoicesLabel"),
+      value: invoiceStats?.overdue ?? 0,
+      meta: t("dashboard.focus.overdueInvoicesMeta"),
+      href: "/invoices/history",
+      tone:
+        "border-rose-200/80 bg-rose-50/80 text-rose-950 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-100",
+    },
+    {
+      label: t("dashboard.focus.pendingCollectionsLabel"),
+      value: pendingSalesPayments.length,
+      meta: currency(metrics?.pendingSalesPayments ?? 0),
+      href: "#operations",
+      tone:
+        "border-amber-200/80 bg-amber-50/80 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100",
+    },
+    {
+      label: t("dashboard.focus.lowStockAlertsLabel"),
+      value: data?.alerts.lowStock.length ?? 0,
+      meta: t("dashboard.focus.lowStockAlertsMeta"),
+      href: "/inventory",
+      tone:
+        "border-orange-200/80 bg-orange-50/80 text-orange-950 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-100",
+    },
+    {
+      label: t("dashboard.focus.unreadSignalsLabel"),
+      value: unreadNotifications,
+      meta: t("dashboard.focus.unreadSignalsMeta"),
+      href: "#operations",
+      tone:
+        "border-border/80 bg-card/90 text-foreground dark:border-border/70 dark:bg-card/70",
+    },
+  ];
+
+  const sectionLinks = [
+    { label: t("dashboard.sectionLinks.overview"), href: "#overview" },
+    { label: t("dashboard.sectionLinks.performance"), href: "#performance" },
+    { label: t("dashboard.sectionLinks.forecasting"), href: "#forecasting" },
+    { label: t("dashboard.sectionLinks.operations"), href: "#operations" },
+    { label: t("dashboard.sectionLinks.records"), href: "#records" },
+  ];
+
+  const heroSection = (
+    <section className="grid gap-4 xl:grid-cols-[minmax(0,1.65fr)_minmax(320px,1fr)]">
+      <header className="dashboard-chart-surface rounded-[1.75rem] px-6 py-6 sm:px-7">
+        <div className="flex flex-wrap items-center gap-2">
           <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
-            Business command center
+            {t("dashboard.hero.kicker")}
           </p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            {metricsQuery.data?.filters?.label ? (
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                {metricsQuery.data.filters.label}
-              </div>
-            ) : null}
-            {metricsUpdatedAt ? (
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Updated {formatTimeLabel(metricsUpdatedAt)}
-              </div>
-            ) : null}
-          </div>
-          <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="max-w-3xl text-2xl font-semibold tracking-tight text-foreground">
-                Revenue, purchases, receivables, and supplier dues in one
-                operating view.
-              </p>
-              <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-                Use the charts below to compare demand, stocking pressure,
-                payment mix, pending cash to collect, and supplier payments
-                without leaving the dashboard.
-              </p>
+          {filterLabel ? (
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              {filterLabel}
             </div>
-            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              {[
-                {
-                  label: "Sales",
-                  value: metrics?.totalSales ?? 0,
-                },
-                {
-                  label: "Purchases",
-                  value: metrics?.totalPurchases ?? 0,
-                },
-                {
-                  label: "Pending Sales",
-                  value: metrics?.pendingSalesPayments ?? 0,
-                },
-                {
-                  label: "Pending Purchases",
-                  value: metrics?.pendingPurchasePayments ?? 0,
-                },
-              ].map((item) => (
-                <div
+          ) : null}
+          {metricsUpdatedAt ? (
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              {t("dashboard.status.lastUpdated", {
+                time: timeLabel(metricsUpdatedAt),
+              })}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-2xl font-semibold tracking-tight text-foreground sm:text-[2rem]">
+              {t("dashboard.hero.operatingViewTitle")}
+            </p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-[0.95rem]">
+              {t("dashboard.hero.operatingViewDescription")}
+            </p>
+          </div>
+          <Button asChild size="lg" className="w-full sm:w-auto">
+            <Link href="#operations">
+              {t("dashboard.hero.reviewPriorityItems")}
+              <ArrowRight size={16} />
+            </Link>
+          </Button>
+        </div>
+
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {heroStats.map((item) => (
+            <div
+              key={item.label}
+              className="dashboard-chart-metric rounded-2xl px-4 py-4"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                {item.label}
+              </p>
+              <p className="mt-2 text-lg font-semibold leading-tight text-foreground">
+                <AnimatedNumber value={item.value} format={currency} />
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">{item.helper}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-6 grid gap-3 lg:grid-cols-2">
+          <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="app-kicker text-[11px]">
+                  {t("dashboard.hero.collectionsFocus")}
+                </p>
+                <p className="mt-2 text-base font-semibold text-foreground">
+                  {currency(metrics?.pendingSalesPayments ?? 0)}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("dashboard.hero.collectionsSummary", {
+                    count: pendingSalesPayments.length,
+                  })}
+                </p>
+              </div>
+              <span className="app-chip">{t("dashboard.hero.receivables")}</span>
+            </div>
+          </div>
+
+          <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="app-kicker text-[11px]">
+                  {t("dashboard.hero.billingHealth")}
+                </p>
+                <p className="mt-2 text-base font-semibold text-foreground">
+                  {t("dashboard.hero.overdueInvoices", {
+                    count: invoiceStats?.overdue ?? 0,
+                  })}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("dashboard.hero.paidSummary", {
+                    paid: invoiceStats?.paid ?? 0,
+                    total: invoiceStats?.total ?? 0,
+                  })}
+                </p>
+              </div>
+              <AlertTriangle size={18} className="mt-1 text-amber-600" />
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="grid gap-4">
+        <section className="dashboard-chart-surface rounded-[1.75rem]">
+          <div className="dashboard-chart-content p-6">
+            <div className="flex items-start gap-3">
+              <div className="rounded-2xl border border-border/70 bg-card/80 p-2 text-primary shadow-sm">
+                <BellRing size={18} />
+              </div>
+              <div>
+                <p className="app-kicker">{t("dashboard.focus.kicker")}</p>
+                <h2 className="mt-1 text-lg font-semibold text-foreground">
+                  {t("dashboard.focus.title")}
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("dashboard.focus.description")}
+                </p>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {focusCards.map((item) => (
+                <Link
                   key={item.label}
-                  className="rounded-2xl border border-border bg-card px-4 py-3 shadow-sm"
+                  href={item.href}
+                  className={`group rounded-2xl border px-4 py-4 shadow-[0_16px_34px_-26px_rgba(31,27,22,0.24)] transition hover:-translate-y-0.5 ${item.tone}`}
                 >
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                    {item.label}
-                  </p>
-                  <p className="mt-1 text-base font-semibold leading-tight text-foreground">
-                    <AnimatedNumber value={item.value} format={formatCurrency} />
-                  </p>
-                </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-70">
+                        {item.label}
+                      </p>
+                      <p className="mt-2 text-2xl font-semibold leading-none">
+                        {item.value}
+                      </p>
+                      <p className="mt-2 text-sm opacity-80">{item.meta}</p>
+                    </div>
+                    <ArrowRight
+                      size={16}
+                      className="mt-1 shrink-0 transition-transform group-hover:translate-x-1"
+                    />
+                  </div>
+                </Link>
               ))}
             </div>
           </div>
-        </header>
-
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-          Dashboard pulse -- at-a-glance from your books
-        </p>
-
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {showLoadingState ? (
-            <div className="col-span-full h-28 animate-pulse rounded-2xl bg-[#fdf7f1]" />
-          ) : metrics ? (
-            <>
-              <MetricCard
-                title="Total Sales"
-                value={metrics.totalSales}
-                change={metrics.changes.totalSales}
-                icon={<TrendingUp size={18} />}
-                description="Booked revenue across all recorded sales."
-                helperText="Sum of sales total_amount (fallback total) for the selected range."
-                theme="sales"
-                formatValue={formatCurrency}
-                status={{
-                  isLoading: metricsLoading,
-                  isFetching: metricsFetching,
-                  isError: metricsError,
-                  dataUpdatedAt: metricsUpdatedAt,
-                  refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
-                }}
-              />
-              <MetricCard
-                title="Total Purchases"
-                value={metrics.totalPurchases}
-                change={metrics.changes.totalPurchases}
-                icon={<Banknote size={18} />}
-                description="Spend committed to stock and supply purchases."
-                helperText="Sum of purchase total_amount (fallback total) for the selected range."
-                theme="purchases"
-                formatValue={formatCurrency}
-                status={{
-                  isLoading: metricsLoading,
-                  isFetching: metricsFetching,
-                  isError: metricsError,
-                  dataUpdatedAt: metricsUpdatedAt,
-                  refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
-                }}
-              />
-              <MetricCard
-                title="Pending Sales Payments"
-                value={metrics.pendingSalesPayments}
-                change={metrics.changes.pendingSalesPayments}
-                icon={<CreditCard size={18} />}
-                trendLabel="to collect"
-                description="Outstanding customer payments still to collect."
-                helperText="Sum of pending_amount on sales in the selected range."
-                theme="pending-sales"
-                formatValue={formatCurrency}
-                status={{
-                  isLoading: metricsLoading,
-                  isFetching: metricsFetching,
-                  isError: metricsError,
-                  dataUpdatedAt: metricsUpdatedAt,
-                  refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
-                }}
-              />
-              <MetricCard
-                title="Pending Purchase Payments"
-                value={metrics.pendingPurchasePayments}
-                change={metrics.changes.pendingPurchasePayments}
-                icon={<Banknote size={18} />}
-                trendLabel="to pay"
-                description="Outstanding supplier payments for recorded purchases."
-                helperText="Sum of pending_amount on purchases in the selected range."
-                theme="pending-purchases"
-                formatValue={formatCurrency}
-                status={{
-                  isLoading: metricsLoading,
-                  isFetching: metricsFetching,
-                  isError: metricsError,
-                  dataUpdatedAt: metricsUpdatedAt,
-                  refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
-                }}
-              />
-              <MetricCard
-                title="Today's Profit"
-                value={metrics.profits.today}
-                change={metrics.changes.todayProfit}
-                icon={<CreditCard size={18} />}
-                description="Today's net after purchases and expenses."
-                helperText="(Sales - purchases - expenses) for today."
-                theme="profit"
-                formatValue={formatCurrency}
-                status={{
-                  isLoading: metricsLoading,
-                  isFetching: metricsFetching,
-                  isError: metricsError,
-                  dataUpdatedAt: metricsUpdatedAt,
-                  refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
-                }}
-              />
-              <MetricCard
-                title="Weekly Profit"
-                value={metrics.profits.weekly}
-                change={metrics.changes.weeklyProfit}
-                icon={<Wallet size={18} />}
-                description="Rolling 7-day profit performance."
-                helperText="(Sales - purchases - expenses) over the last 7 days."
-                theme="profit"
-                formatValue={formatCurrency}
-                status={{
-                  isLoading: metricsLoading,
-                  isFetching: metricsFetching,
-                  isError: metricsError,
-                  dataUpdatedAt: metricsUpdatedAt,
-                  refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
-                }}
-              />
-              <MetricCard
-                title="Monthly Profit"
-                value={metrics.profits.monthly}
-                change={metrics.changes.monthlyProfit}
-                icon={<Package size={18} />}
-                description="Current month profit after all outflows."
-                helperText="(Sales - purchases - expenses) month-to-date."
-                theme="profit"
-                formatValue={formatCurrency}
-                status={{
-                  isLoading: metricsLoading,
-                  isFetching: metricsFetching,
-                  isError: metricsError,
-                  dataUpdatedAt: metricsUpdatedAt,
-                  refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
-                }}
-              />
-              <MetricCard
-                title="Yearly Profit"
-                value={metrics.profits.yearly}
-                change={metrics.changes.yearlyProfit}
-                icon={<Landmark size={18} />}
-                description="Year-to-date profit after purchases and expenses."
-                helperText="(Sales - purchases - expenses) year-to-date."
-                theme="profit"
-                formatValue={formatCurrency}
-                status={{
-                  isLoading: metricsLoading,
-                  isFetching: metricsFetching,
-                  isError: metricsError,
-                  dataUpdatedAt: metricsUpdatedAt,
-                  refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
-                }}
-              />
-            </>
-          ) : null}
         </section>
 
-        <SalesChart filters={deferredFilters} />
+        <QuickActions className="w-full self-auto" />
+      </div>
+    </section>
+  );
 
-        <section className="grid gap-4">
-          <CashFlowChart />
-        </section>
+  const navSection = (
+    <nav
+      aria-label={t("navigation.dashboard")}
+      className="flex flex-wrap items-center gap-2"
+    >
+      {sectionLinks.map((item) => (
+        <Button key={item.href} asChild variant="outline" size="sm" className="rounded-full">
+          <Link href={item.href}>{item.label}</Link>
+        </Button>
+      ))}
+    </nav>
+  );
 
-        <section className="grid gap-4 lg:grid-cols-2">
-          <ProfitForecast className="h-full" />
-          <SalesForecast className="h-full" />
-        </section>
-
-        <PaymentMethodDistribution />
-
-        <section className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-          <ProductSalesChart className="h-full" />
-          <InventoryRiskAlerts className="h-full" />
-        </section>
-
-        <section className="grid gap-4 sm:grid-cols-2">
-          <CustomerInsights className="h-full" />
-          <SupplierOverview className="h-full" />
-        </section>
-
-        <section className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr] lg:items-stretch">
-          <div className="grid gap-4 self-start">
-            {invoiceStats && (
-              <div className="dashboard-chart-surface h-fit self-start rounded-[1.75rem]">
-                <div className="dashboard-chart-content px-6 pb-5 pt-6">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
-                    Billing snapshot
-                  </p>
-                  <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
-                    Invoice statistics
-                  </p>
-                  <p className="mt-1 text-sm text-[#6f6257]">
-                    Monitor issued invoices, settled ones, and what still needs
-                    follow-up.
-                  </p>
-                  <div className="mt-3">
-                    <DashboardCardStatus
-                      isLoading={showLoadingState}
-                      isFetching={isFetching}
-                      isError={isError}
-                      dataUpdatedAt={dataUpdatedAt}
-                      refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
-                    />
-                  </div>
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                    {[
-                      { label: "Total", value: invoiceStats.total },
-                      { label: "Paid", value: invoiceStats.paid },
-                      { label: "Pending", value: invoiceStats.pending },
-                      { label: "Overdue", value: invoiceStats.overdue },
-                    ].map((item) => (
-                      <div
-                        key={item.label}
-                        className="dashboard-chart-metric rounded-2xl px-4 py-4"
-                      >
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
-                          {item.label}
-                        </p>
-                        <p className="mt-2.5 text-lg font-semibold text-[#1f1b16] dark:text-gray-100">
-                          {item.value}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-            <NotificationsPanel
-              data={data}
-              isLoading={showLoadingState}
-              isError={isError}
-              dataUpdatedAt={dataUpdatedAt}
-              isFetching={isFetching}
+  const overviewSection = (
+    <section id="overview" aria-labelledby="overview-heading" className="grid gap-4">
+      <DashboardSectionIntro
+        headingId="overview-heading"
+        kicker={t("dashboard.sections.overview.kicker")}
+        title={t("dashboard.sections.overview.title")}
+        description={t("dashboard.sections.overview.description")}
+      />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {showLoadingState ? (
+          <div className="col-span-full h-28 app-loading-skeleton" />
+        ) : (
+          primaryMetricCards.map((card) => (
+            <MetricCard
+              key={card.title}
+              title={card.title}
+              value={card.value}
+              change={card.change}
+              icon={card.icon}
+              trendLabel={card.trendLabel}
+              description={card.description}
+              helperText={card.helperText}
+              theme={card.theme}
+              formatValue={currency}
+              status={{
+                isLoading: metricsLoading,
+                isFetching: metricsFetching,
+                isError: metricsError,
+                dataUpdatedAt: metricsUpdatedAt,
+                refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
+              }}
             />
-          </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
 
-          <div className="flex h-full flex-col gap-4 self-stretch">
-            <QuickActions className="w-full self-auto" />
-            <section className="dashboard-chart-surface flex-1 rounded-[1.75rem] py-2">
-              <div className="dashboard-chart-content flex h-full flex-col p-6">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#6f5744]">
-                      Collection queue
-                    </p>
-                    <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
-                      Pending sales payments
-                    </p>
-                  </div>
-                  <span className="rounded-full border border-[#ecdccf] bg-white/90 px-3 py-1 text-xs font-medium text-[#5c4331]">
-                    {pendingSalesPayments.length} invoice(s)
-                  </span>
-                </div>
-                <div className="mt-2">
+  const profitSection = (
+    <section aria-labelledby="profit-heading" className="grid gap-4">
+      <DashboardSectionIntro
+        headingId="profit-heading"
+        kicker={t("dashboard.sections.profit.kicker")}
+        title={t("dashboard.sections.profit.title")}
+        description={t("dashboard.sections.profit.description")}
+      />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {showLoadingState ? (
+          <div className="col-span-full h-28 app-loading-skeleton" />
+        ) : (
+          profitMetricCards.map((card) => (
+            <MetricCard
+              key={card.title}
+              title={card.title}
+              value={card.value}
+              change={card.change}
+              icon={card.icon}
+              description={card.description}
+              helperText={card.helperText}
+              theme="profit"
+              formatValue={currency}
+              status={{
+                isLoading: metricsLoading,
+                isFetching: metricsFetching,
+                isError: metricsError,
+                dataUpdatedAt: metricsUpdatedAt,
+                refreshIntervalMs: DASHBOARD_REFRESH_INTERVAL_MS,
+              }}
+            />
+          ))
+        )}
+      </div>
+    </section>
+  );
+
+  const performanceSection = (
+    <section id="performance" aria-labelledby="performance-heading" className="grid gap-4">
+      <DashboardSectionIntro
+        headingId="performance-heading"
+        kicker={t("dashboard.sections.performance.kicker")}
+        title={t("dashboard.sections.performance.title")}
+        description={t("dashboard.sections.performance.description")}
+      />
+      <SalesChart filters={deferredFilters} />
+      <CashFlowChart />
+      <PaymentMethodDistribution />
+    </section>
+  );
+
+  const forecastingSection = (
+    <section id="forecasting" aria-labelledby="forecasting-heading" className="grid gap-4">
+      <DashboardSectionIntro
+        headingId="forecasting-heading"
+        kicker={t("dashboard.sections.forecasting.kicker")}
+        title={t("dashboard.sections.forecasting.title")}
+        description={t("dashboard.sections.forecasting.description")}
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ProfitForecast className="h-full" />
+        <SalesForecast className="h-full" />
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_minmax(320px,0.75fr)]">
+        <ForecastInsightsPanel className="h-full" />
+        <InventoryRiskAlerts className="h-full" />
+      </div>
+      <div className="grid gap-4">
+        <ProductSalesChart className="h-full" />
+      </div>
+    </section>
+  );
+
+  const operationsSection = (
+    <section id="operations" aria-labelledby="operations-heading" className="grid gap-4">
+      <DashboardSectionIntro
+        headingId="operations-heading"
+        kicker={t("dashboard.sections.operations.kicker")}
+        title={t("dashboard.sections.operations.title")}
+        description={t("dashboard.sections.operations.description")}
+        action={
+          <Button asChild variant="outline">
+            <Link href="/sales">{t("dashboard.sections.operations.openSalesLedger")}</Link>
+          </Button>
+        }
+      />
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.92fr)]">
+        <div className="grid gap-4">
+          {invoiceStats ? (
+            <section className="dashboard-chart-surface rounded-[1.75rem]">
+              <div className="dashboard-chart-content px-6 pb-5 pt-6">
+                <p className="app-kicker">
+                  {t("dashboard.operations.billingSnapshotKicker")}
+                </p>
+                <h3 className="mt-2 text-lg font-semibold text-foreground">
+                  {t("dashboard.operations.invoiceStatisticsTitle")}
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("dashboard.operations.invoiceStatisticsDescription")}
+                </p>
+                <div className="mt-3">
                   <DashboardCardStatus
                     isLoading={showLoadingState}
                     isFetching={isFetching}
@@ -454,75 +691,252 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                     refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
                   />
                 </div>
-                <p className="mt-2 text-sm text-[#5f5144]">
-                  Follow up on unpaid and partially paid sales before they age
-                  further.
-                </p>
-                <div className="mt-4 grid gap-3">
-                  {pendingSalesPayments.length === 0 ? (
-                    <div className="rounded-2xl border border-[#f2e6dc] bg-white/85 px-4 py-5 text-sm text-[#5f5144]">
-                      No pending sales invoices.
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    {
+                      label: t("dashboard.operations.invoiceStatsTotal"),
+                      value: invoiceStats.total,
+                    },
+                    {
+                      label: t("dashboard.operations.invoiceStatsPaid"),
+                      value: invoiceStats.paid,
+                    },
+                    {
+                      label: t("dashboard.operations.invoiceStatsPending"),
+                      value: invoiceStats.pending,
+                    },
+                    {
+                      label: t("dashboard.operations.invoiceStatsOverdue"),
+                      value: invoiceStats.overdue,
+                    },
+                  ].map((item) => (
+                    <div
+                      key={item.label}
+                      className="dashboard-chart-metric rounded-2xl px-4 py-4"
+                    >
+                      <p className="app-kicker text-[11px]">{item.label}</p>
+                      <p className="mt-2.5 text-lg font-semibold text-foreground">
+                        {item.value}
+                      </p>
                     </div>
-                  ) : (
-                    pendingSalesPayments.map((purchase) => (
-                      <div
-                        key={purchase.id}
-                        className="flex flex-col gap-3 rounded-2xl border border-[#f2e6dc] bg-white/90 px-4 py-4 shadow-[0_16px_34px_-26px_rgba(31,27,22,0.32)] dark:border-gray-700 dark:bg-gray-900"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-semibold text-[#1f1b16] dark:text-gray-100">
-                            {purchase.invoiceNumber} - {purchase.customer}
-                          </p>
-                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[#5f5144]">
-                            <span className="rounded-full border border-[#f0dfcf] bg-[#fff5ea] px-2.5 py-1 font-medium">
-                              Total: {formatCurrency(purchase.totalAmount)}
-                            </span>
-                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
-                              Paid: {formatCurrency(purchase.paidAmount)}
-                            </span>
-                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
-                              Pending: {formatCurrency(purchase.pendingAmount)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${paymentStatusBadgeClass(
-                              purchase.paymentStatus,
-                            )}`}
-                          >
-                            {purchase.paymentStatus.replace("_", " ")}
-                          </span>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            className="border-[#d8d4cf] bg-[#f5f5f4] text-[#1f1b16] hover:bg-white"
-                          >
-                            Open sales
-                          </Button>
-                        </div>
-                      </div>
-                    ))
-                  )}
+                  ))}
                 </div>
               </div>
             </section>
-          </div>
-        </section>
+          ) : null}
 
-        <section className="grid gap-4">
-          <TransactionsTable filters={deferredFilters} />
-        </section>
-
-        <section className="grid gap-4">
-          <ActivityTimeline
+          <NotificationsPanel
             data={data}
             isLoading={showLoadingState}
             isError={isError}
             dataUpdatedAt={dataUpdatedAt}
             isFetching={isFetching}
           />
+        </div>
+
+        <section className="dashboard-chart-surface rounded-[1.75rem] py-2">
+          <div className="dashboard-chart-content flex h-full flex-col p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="app-kicker">
+                  {t("dashboard.operations.collectionQueueKicker")}
+                </p>
+                <h3 className="mt-2 text-lg font-semibold text-foreground">
+                  {t("dashboard.operations.pendingSalesPaymentsTitle")}
+                </h3>
+              </div>
+              <span className="app-chip">
+                {t("dashboard.operations.invoiceCount", {
+                  count: pendingSalesPayments.length,
+                })}
+              </span>
+            </div>
+            <div className="mt-2">
+              <DashboardCardStatus
+                isLoading={showLoadingState}
+                isFetching={isFetching}
+                isError={isError}
+                dataUpdatedAt={dataUpdatedAt}
+                refreshIntervalMs={DASHBOARD_REFRESH_INTERVAL_MS}
+              />
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {t("dashboard.operations.collectionQueueDescription")}
+            </p>
+            <div className="mt-4 grid gap-3">
+              {prioritizedPendingSalesPayments.length === 0 ? (
+                <div className="app-empty-state px-4 py-5 text-sm">
+                  {t("dashboard.operations.noPendingSalesInvoices")}
+                </div>
+              ) : (
+                prioritizedPendingSalesPayments.map((purchase) => (
+                  <div
+                    key={purchase.id}
+                    className="app-list-item flex flex-col gap-3 px-4 py-4"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-foreground">
+                        {purchase.invoiceNumber} - {purchase.customer}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="app-chip">
+                          {t("dashboard.operations.totalPill", {
+                            amount: currency(purchase.totalAmount),
+                          })}
+                        </span>
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-medium text-emerald-700">
+                          {t("dashboard.operations.paidPill", {
+                            amount: currency(purchase.paidAmount),
+                          })}
+                        </span>
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-medium text-amber-700">
+                          {t("dashboard.operations.pendingPill", {
+                            amount: currency(purchase.pendingAmount),
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-semibold ${paymentStatusBadgeClass(
+                          purchase.paymentStatus,
+                        )}`}
+                      >
+                        {translateEnum(
+                          "dashboard.enums.paymentStatus",
+                          purchase.paymentStatus,
+                        )}
+                      </span>
+                      <Button asChild type="button" variant="outline">
+                        <Link href="/sales">{t("dashboard.operations.openSales")}</Link>
+                      </Button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+            {pendingSalesPayments.length > prioritizedPendingSalesPayments.length ? (
+              <div className="mt-4">
+                <Button asChild variant="outline">
+                  <Link href="/sales">
+                    {t("dashboard.operations.viewAllPendingCollections")}
+                    <ArrowRight size={16} />
+                  </Link>
+                </Button>
+              </div>
+            ) : null}
+          </div>
         </section>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <CustomerInsights className="h-full" />
+        <SupplierOverview className="h-full" />
+      </div>
+
+      <ActivityTimeline
+        data={data}
+        isLoading={showLoadingState}
+        isError={isError}
+        dataUpdatedAt={dataUpdatedAt}
+        isFetching={isFetching}
+      />
+    </section>
+  );
+
+  const recordsSection = (
+    <section id="records" aria-labelledby="records-heading" className="grid gap-4">
+      <DashboardSectionIntro
+        headingId="records-heading"
+        kicker={t("dashboard.sections.records.kicker")}
+        title={t("dashboard.sections.records.title")}
+        description={t("dashboard.sections.records.description")}
+        action={
+          <Button asChild variant="outline">
+            <Link href="/invoices/history">{t("dashboard.sections.records.openRecords")}</Link>
+          </Button>
+        }
+      />
+
+      <TransactionsTable filters={deferredFilters} />
+
+      <section className="dashboard-chart-surface rounded-[1.75rem]">
+        <div className="dashboard-chart-content p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="app-kicker">{t("dashboard.records.invoiceRecordsKicker")}</p>
+              <h3 className="mt-2 text-lg font-semibold text-foreground">
+                {t("dashboard.records.recentInvoiceHistoryTitle")}
+              </h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("dashboard.records.recentInvoiceHistoryDescription")}
+              </p>
+            </div>
+            <Button asChild variant="outline">
+              <Link href="/invoices/history">{t("dashboard.sections.records.openRecords")}</Link>
+            </Button>
+          </div>
+          <div className="mt-4 grid gap-3">
+            {recentInvoices.length === 0 ? (
+              <div className="app-empty-state px-4 py-5 text-sm">
+                {t("dashboard.records.noInvoiceRecords")}
+              </div>
+            ) : (
+              recentInvoices.map((invoice) => (
+                <div
+                  key={invoice.id}
+                  className="app-list-item flex flex-wrap items-center justify-between gap-3 px-4 py-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-foreground">
+                      {invoice.invoice_number}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {invoice.customer?.name ?? t("invoice.fallbackCustomer")} -{" "}
+                      {dateWithYear(invoice.date)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="rounded-full border border-border bg-card px-2.5 py-1 font-medium text-foreground">
+                      {currency(Number(invoice.total))}
+                    </span>
+                    <span className="rounded-full border border-border bg-background px-2.5 py-1 font-medium text-muted-foreground">
+                      {translateEnum("dashboard.enums.paymentStatus", invoice.status)}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </section>
+    </section>
+  );
+
+  return (
+    <DashboardLayout
+      name={displayName}
+      image={image}
+      title={t("dashboard.title", { name: displayName })}
+      subtitle={t("dashboard.subtitle")}
+      actions={
+        <DashboardFilters
+          filters={filters}
+          onChange={(next) => startTransition(() => setFilters(next))}
+          disabled={showLoadingState}
+          className="w-full sm:w-auto"
+        />
+      }
+    >
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-8">
+        {heroSection}
+        {navSection}
+        {overviewSection}
+        {profitSection}
+        {performanceSection}
+        {forecastingSection}
+        {operationsSection}
+        {recordsSection}
       </div>
     </DashboardLayout>
   );

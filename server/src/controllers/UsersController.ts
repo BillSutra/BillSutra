@@ -10,6 +10,10 @@ import {
   userPasswordUpdateSchema,
   userProfileUpdateSchema,
 } from "../validations/apiValidations.js";
+import {
+  ensureBusinessForUser,
+  findBusinessByOwnerIdIfAvailable,
+} from "../lib/authSession.js";
 
 type UserProfileUpdateInput = z.infer<typeof userProfileUpdateSchema>;
 type UserPasswordUpdateInput = z.infer<typeof userPasswordUpdateSchema>;
@@ -30,6 +34,37 @@ class UsersController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    if (req.user?.accountType === "WORKER" && req.user.workerId) {
+      const worker = await prisma.worker.findUnique({
+        where: { id: req.user.workerId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          businessId: true,
+        },
+      });
+
+      if (!worker) {
+        return sendResponse(res, 404, { message: "Worker not found" });
+      }
+
+      return sendResponse(res, 200, {
+        data: {
+          id: worker.id,
+          name: worker.name,
+          email: worker.email,
+          provider: "worker",
+          is_email_verified: true,
+          role: worker.role,
+          businessId: worker.businessId,
+          account_type: "WORKER",
+          worker_id: worker.id,
+        },
+      });
+    }
+
     const user = await prisma.user.findFirst({
       where: { id: userId },
       select: {
@@ -46,7 +81,14 @@ class UsersController {
       return sendResponse(res, 404, { message: "User not found" });
     }
 
-    return sendResponse(res, 200, { data: user });
+    return sendResponse(res, 200, {
+      data: {
+        ...user,
+        role: req.user?.role ?? "ADMIN",
+        businessId: req.user?.businessId,
+        account_type: "OWNER",
+      },
+    });
   }
 
   static async updateProfile(req: Request, res: Response) {
@@ -62,6 +104,50 @@ class UsersController {
       return sendResponse(res, 422, {
         message: "No changes provided",
         errors: { name: "Provide a name or email" },
+      });
+    }
+
+    if (req.user?.accountType === "WORKER" && req.user.workerId) {
+      if (email) {
+        const existingWorker = await prisma.worker.findFirst({
+          where: { email, NOT: { id: req.user.workerId } },
+        });
+        if (existingWorker) {
+          return sendResponse(res, 422, {
+            message: "Email already in use",
+            errors: { email: "Email already in use" },
+          });
+        }
+      }
+
+      const updatedWorker = await prisma.worker.update({
+        where: { id: req.user.workerId },
+        data: {
+          name: name ?? undefined,
+          email: email ?? undefined,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          businessId: true,
+        },
+      });
+
+      return sendResponse(res, 200, {
+        message: "Profile updated",
+        data: {
+          id: updatedWorker.id,
+          name: updatedWorker.name,
+          email: updatedWorker.email,
+          provider: "worker",
+          is_email_verified: true,
+          role: updatedWorker.role,
+          businessId: updatedWorker.businessId,
+          account_type: "WORKER",
+          worker_id: updatedWorker.id,
+        },
       });
     }
 
@@ -95,7 +181,12 @@ class UsersController {
 
     return sendResponse(res, 200, {
       message: "Profile updated",
-      data: updated,
+      data: {
+        ...updated,
+        role: req.user?.role ?? "ADMIN",
+        businessId: req.user?.businessId,
+        account_type: "OWNER",
+      },
     });
   }
 
@@ -107,6 +198,33 @@ class UsersController {
 
     const body: UserPasswordUpdateInput = req.body;
     const { current_password, password } = body;
+
+    if (req.user?.accountType === "WORKER" && req.user.workerId) {
+      const worker = await prisma.worker.findUnique({
+        where: { id: req.user.workerId },
+        select: { password: true },
+      });
+
+      if (!worker) {
+        return sendResponse(res, 404, { message: "Worker not found" });
+      }
+
+      const valid = await bcrypt.compare(current_password, worker.password);
+      if (!valid) {
+        return sendResponse(res, 422, {
+          message: "Current password is incorrect",
+          errors: { current_password: "Incorrect password" },
+        });
+      }
+
+      const password_hash = await bcrypt.hash(password, 12);
+      await prisma.worker.update({
+        where: { id: req.user.workerId },
+        data: { password: password_hash },
+      });
+
+      return sendResponse(res, 200, { message: "Password updated" });
+    }
 
     const user = await prisma.user.findFirst({
       where: { id: userId },
@@ -152,6 +270,14 @@ class UsersController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    if (req.user?.accountType === "WORKER") {
+      return sendResponse(res, 403, {
+        message: "Only the business admin can delete business data",
+      });
+    }
+
+    const business = await findBusinessByOwnerIdIfAvailable(userId);
+
     await prisma.passwordResetToken.deleteMany({ where: { user_id: userId } });
     await prisma.recurringInvoiceTemplate.deleteMany({
       where: { user_id: userId },
@@ -168,6 +294,12 @@ class UsersController {
     await prisma.userTemplate.deleteMany({ where: { user_id: userId } });
     await prisma.userSavedTemplate.deleteMany({ where: { user_id: userId } });
 
+    if (business) {
+      await prisma.worker.deleteMany({ where: { businessId: business.id } });
+      await prisma.business.delete({ where: { id: business.id } });
+    }
+
+    await ensureBusinessForUser(userId);
     removeUserUploads(userId);
 
     return sendResponse(res, 200, { message: "User data deleted" });
@@ -177,6 +309,19 @@ class UsersController {
     const userId = req.user?.id;
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    if (req.user?.accountType === "WORKER") {
+      return sendResponse(res, 403, {
+        message: "Only the business admin can delete the business account",
+      });
+    }
+
+    const business = await findBusinessByOwnerIdIfAvailable(userId);
+
+    if (business) {
+      await prisma.worker.deleteMany({ where: { businessId: business.id } });
+      await prisma.business.delete({ where: { id: business.id } });
     }
 
     const deleted = await prisma.user.deleteMany({

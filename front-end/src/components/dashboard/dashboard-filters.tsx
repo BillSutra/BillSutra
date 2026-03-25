@@ -45,53 +45,59 @@ const DashboardFilters = ({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card/90 px-3 py-2 shadow-sm backdrop-blur",
+        "flex w-full flex-col gap-2 rounded-2xl border border-border bg-card/90 px-3 py-2 shadow-sm backdrop-blur sm:w-auto sm:flex-row sm:flex-wrap sm:items-center",
         className,
       )}
     >
-      <div className="flex items-center gap-1 rounded-xl border border-border bg-muted/60 p-1">
-        {(Object.keys(presetLabels) as DashboardRangePreset[]).map((preset) => (
-          <Button
-            key={preset}
-            type="button"
-            size="sm"
-            variant={filters.range === preset ? "default" : "ghost"}
-            onClick={() =>
-              update({
-                range: preset,
-                ...(preset !== "custom" ? { startDate: undefined, endDate: undefined } : {}),
-              })
-            }
-            disabled={disabled}
-            className={`h-7 px-3 text-xs ${
-              filters.range === preset
-                ? "bg-foreground text-background hover:bg-foreground/90"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-            }`}
-          >
-            {presetLabels[preset]}
-          </Button>
-        ))}
+      <div className="overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex min-w-max items-center gap-1 rounded-xl border border-border bg-muted/60 p-1">
+          {(Object.keys(presetLabels) as DashboardRangePreset[]).map((preset) => (
+            <Button
+              key={preset}
+              type="button"
+              size="sm"
+              variant={filters.range === preset ? "default" : "ghost"}
+              onClick={() =>
+                update({
+                  range: preset,
+                  ...(preset !== "custom"
+                    ? { startDate: undefined, endDate: undefined }
+                    : {}),
+                })
+              }
+              disabled={disabled}
+              className={`h-7 px-3 text-xs ${
+                filters.range === preset
+                  ? "bg-foreground text-background hover:bg-foreground/90"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              }`}
+            >
+              {presetLabels[preset]}
+            </Button>
+          ))}
+        </div>
       </div>
 
-      <div className="flex items-center gap-1 rounded-xl border border-border bg-muted/60 p-1">
-        {(Object.keys(granularityLabels) as DashboardGranularity[]).map((preset) => (
-          <Button
-            key={preset}
-            type="button"
-            size="sm"
-            variant={filters.granularity === preset ? "default" : "ghost"}
-            onClick={() => update({ granularity: preset })}
-            disabled={disabled}
-            className={`h-7 px-3 text-xs ${
-              filters.granularity === preset
-                ? "bg-foreground text-background hover:bg-foreground/90"
-                : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
-            }`}
-          >
-            {granularityLabels[preset]}
-          </Button>
-        ))}
+      <div className="overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex min-w-max items-center gap-1 rounded-xl border border-border bg-muted/60 p-1">
+          {(Object.keys(granularityLabels) as DashboardGranularity[]).map((preset) => (
+            <Button
+              key={preset}
+              type="button"
+              size="sm"
+              variant={filters.granularity === preset ? "default" : "ghost"}
+              onClick={() => update({ granularity: preset })}
+              disabled={disabled}
+              className={`h-7 px-3 text-xs ${
+                filters.granularity === preset
+                  ? "bg-foreground text-background hover:bg-foreground/90"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+              }`}
+            >
+              {granularityLabels[preset]}
+            </Button>
+          ))}
+        </div>
       </div>
 
       {filters.range === "custom" && (

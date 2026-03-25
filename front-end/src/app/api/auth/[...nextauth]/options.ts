@@ -3,7 +3,12 @@ import GoogleProvider from "next-auth/providers/google";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { JWT } from "next-auth/jwt";
 import axios, { AxiosError } from "axios";
-import { LOGIN_URL, check_credential } from "@/lib/apiEndPoints";
+import {
+  API_URL,
+  LOGIN_URL,
+  WORKER_LOGIN_URL,
+  check_credential,
+} from "@/lib/apiEndPoints";
 
 /* ================= TYPES ================= */
 
@@ -12,13 +17,69 @@ export type CustomSession = {
   expires: ISODateString;
 };
 
-export type CustomUser = {
-  id?: string | null;
-  name?: string | null;
-  email?: string | null;
-  image?: string | null;
+export type CustomUser = User & {
+  id: string;
   provider?: string | null;
   token?: string | null;
+  role?: "ADMIN" | "WORKER" | null;
+  businessId?: string | null;
+  accountType?: "OWNER" | "WORKER" | null;
+  workerId?: string | null;
+  ownerUserId?: number | null;
+};
+
+type AuthPayloadUser = {
+  id?: number | string | null;
+  name?: string | null;
+  email?: string | null;
+  provider?: string | null;
+  image?: string | null;
+  role?: "ADMIN" | "WORKER" | null;
+  businessId?: string | null;
+  accountType?: "OWNER" | "WORKER" | null;
+  account_type?: "OWNER" | "WORKER" | null;
+  workerId?: string | null;
+  worker_id?: string | null;
+  ownerUserId?: number | null;
+  owner_user_id?: number | null;
+};
+
+type AuthPayload = {
+  user?: AuthPayloadUser;
+  token?: string | null;
+};
+
+const mapAuthPayloadToUser = (
+  authPayload: AuthPayload | undefined,
+  fallbackProvider: string,
+): CustomUser | null => {
+  const user = authPayload?.user;
+  if (!user) return null;
+
+  const resolvedId =
+    user.id !== undefined && user.id !== null
+      ? String(user.id)
+      : (user.workerId ?? user.worker_id ?? null);
+  if (!resolvedId) return null;
+
+  return {
+    id: resolvedId,
+    name: user.name ?? null,
+    email: user.email ?? null,
+    image: user.image ?? null,
+    provider: user.provider ?? fallbackProvider,
+    token: authPayload?.token ?? null,
+    role: user.role ?? null,
+    businessId: user.businessId ?? null,
+    accountType: user.accountType ?? user.account_type ?? null,
+    workerId: user.workerId ?? user.worker_id ?? null,
+    ownerUserId:
+      typeof user.ownerUserId === "number"
+        ? user.ownerUserId
+        : typeof user.owner_user_id === "number"
+          ? user.owner_user_id
+          : null,
+  };
 };
 
 /* ================= AUTH OPTIONS ================= */
@@ -63,19 +124,70 @@ export const authOptions: AuthOptions = {
 
           const { data } = await axios.post(check_credential, payload);
           const authPayload = data?.data ?? data;
-          const user = authPayload?.user;
+          const user = mapAuthPayloadToUser(authPayload, "credentials");
 
           if (!user) return null;
 
-          return {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            token: authPayload?.token ?? null,
-            provider: "credentials",
-          };
+          return user;
         } catch (error) {
           console.error("Credentials login error:", error);
+          return null;
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: "worker-credentials",
+      name: "Worker Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        try {
+          const payload = {
+            email: credentials?.email,
+            password: credentials?.password,
+          };
+
+          const { data } = await axios.post(WORKER_LOGIN_URL, payload);
+          const authPayload = data?.data ?? data;
+          return mapAuthPayloadToUser(authPayload, "worker");
+        } catch (error) {
+          console.error("Worker credentials login error:", error);
+          return null;
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: "auth-token",
+      name: "Auth Token",
+      credentials: {
+        token: { label: "Token", type: "text" },
+      },
+      async authorize(credentials) {
+        const rawToken = credentials?.token?.trim();
+        if (!rawToken) return null;
+
+        const bearerToken = rawToken.startsWith("Bearer ")
+          ? rawToken
+          : `Bearer ${rawToken}`;
+
+        try {
+          const { data } = await axios.get(`${API_URL}/users/me`, {
+            headers: {
+              Authorization: bearerToken,
+            },
+          });
+
+          return mapAuthPayloadToUser(
+            {
+              user: data?.data as AuthPayloadUser | undefined,
+              token: bearerToken,
+            },
+            "token",
+          );
+        } catch (error) {
+          console.error("Token login error:", error);
           return null;
         }
       },
@@ -105,10 +217,26 @@ export const authOptions: AuthOptions = {
 
           const { data } = await axios.post(LOGIN_URL, payload);
           const authPayload = data?.data ?? data;
+          const mappedUser = mapAuthPayloadToUser(
+            authPayload,
+            account?.provider ?? "google",
+          );
 
-          user.id = authPayload?.user?.id?.toString();
-          user.token = authPayload?.token ?? authPayload?.user?.token ?? null;
-          user.provider = account?.provider;
+          if (!mappedUser) {
+            return false;
+          }
+
+          user.id = mappedUser.id;
+          user.name = mappedUser.name;
+          user.email = mappedUser.email;
+          user.image = mappedUser.image;
+          user.token = mappedUser.token;
+          user.provider = mappedUser.provider;
+          user.role = mappedUser.role;
+          user.businessId = mappedUser.businessId;
+          user.accountType = mappedUser.accountType;
+          user.workerId = mappedUser.workerId;
+          user.ownerUserId = mappedUser.ownerUserId;
         }
 
         return true;

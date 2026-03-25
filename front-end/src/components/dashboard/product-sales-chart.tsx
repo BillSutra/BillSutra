@@ -3,7 +3,6 @@
 import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  ResponsiveContainer,
   BarChart,
   Bar,
   XAxis,
@@ -16,6 +15,7 @@ import {
   type DashboardProductSales,
 } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import DashboardResponsiveChart from "@/components/dashboard/DashboardResponsiveChart";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatNumber, sumBy } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
@@ -149,8 +149,8 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
                 </p>
               </div>
             ) : (
-              <div className="flex-1 min-h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="flex-1 min-h-[300px] min-w-0">
+                <DashboardResponsiveChart>
                   <BarChart
                     data={data.products}
                     margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
@@ -183,7 +183,7 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
                       maxBarSize={40}
                     />
                   </BarChart>
-                </ResponsiveContainer>
+                </DashboardResponsiveChart>
               </div>
             )}
             <p className="mt-4 text-center text-xs text-[#8a6d56]">

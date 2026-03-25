@@ -37,6 +37,7 @@ import {
   updateUserSavedTemplate,
 } from "@/lib/apiClient";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const MemoTemplatePreview = memo(TemplatePreviewRenderer);
 
@@ -82,6 +83,7 @@ const normalizeHexColor = (value: string) => {
 };
 
 const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
+  const { t, formatDate } = useI18n();
   const queryClient = useQueryClient();
   const [businessTypeId, setBusinessTypeId] = useState("retail");
   const [selectedTemplateId, setSelectedTemplateId] = useState("minimal");
@@ -169,10 +171,10 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
           return [savedTemplate, ...previous];
         },
       );
-      toast.success("Template settings saved");
+      toast.success(t("templatesPage.toasts.settingsSaved"));
     },
     onError: () => {
-      toast.error("Unable to save template settings");
+      toast.error(t("templatesPage.toasts.settingsSaveError"));
     },
   });
 
@@ -180,10 +182,10 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
     mutationFn: createUserSavedTemplate,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-saved-templates"] });
-      toast.success("Saved template created");
+      toast.success(t("templatesPage.toasts.savedCreated"));
     },
     onError: () => {
-      toast.error("Unable to create saved template");
+      toast.error(t("templatesPage.toasts.savedCreateError"));
     },
   });
 
@@ -197,10 +199,10 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
     }) => updateUserSavedTemplate(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-saved-templates"] });
-      toast.success("Saved template updated");
+      toast.success(t("templatesPage.toasts.savedUpdated"));
     },
     onError: () => {
-      toast.error("Unable to update saved template");
+      toast.error(t("templatesPage.toasts.savedUpdateError"));
     },
   });
 
@@ -208,10 +210,10 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
     mutationFn: deleteUserSavedTemplate,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-saved-templates"] });
-      toast.success("Saved template deleted");
+      toast.success(t("templatesPage.toasts.savedDeleted"));
     },
     onError: () => {
-      toast.error("Unable to delete saved template");
+      toast.error(t("templatesPage.toasts.savedDeleteError"));
     },
   });
 
@@ -408,6 +410,47 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
       }
       return [...prev, section];
     });
+  };
+
+  const availableSections = useMemo(() => {
+    return (selectedTemplate.sectionOrder ?? selectedTemplate.defaultSections).filter(
+      (section) => !sectionOrder.includes(section),
+    );
+  }, [sectionOrder, selectedTemplate]);
+
+  const previewAvailableSections = useMemo(() => {
+    if (!previewTemplate) return [];
+    return (previewTemplate.sectionOrder ?? previewTemplate.defaultSections).filter(
+      (section) => !previewSectionOrder.includes(section),
+    );
+  }, [previewSectionOrder, previewTemplate]);
+
+  const removeSection = (section: SectionKey) => {
+    setEnabledSections((prev) => prev.filter((item) => item !== section));
+    setSectionOrder((prev) => prev.filter((item) => item !== section));
+  };
+
+  const addSection = (section: SectionKey) => {
+    setEnabledSections((prev) =>
+      prev.includes(section) ? prev : [...prev, section],
+    );
+    setSectionOrder((prev) =>
+      prev.includes(section) ? prev : [...prev, section],
+    );
+  };
+
+  const removePreviewSection = (section: SectionKey) => {
+    setPreviewEnabledSections((prev) => prev.filter((item) => item !== section));
+    setPreviewSectionOrder((prev) => prev.filter((item) => item !== section));
+  };
+
+  const addPreviewSection = (section: SectionKey) => {
+    setPreviewEnabledSections((prev) =>
+      prev.includes(section) ? prev : [...prev, section],
+    );
+    setPreviewSectionOrder((prev) =>
+      prev.includes(section) ? prev : [...prev, section],
+    );
   };
 
   const reorderSections = (
@@ -757,9 +800,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
   ]);
 
   const handleCreateSavedTemplate = async () => {
-    const defaultName = `${selectedTemplate.name} copy`;
+    const defaultName = `${selectedTemplate.name} ${t("templatesPage.copySuffix")}`;
     const name = window.prompt(
-      "Enter a name for your saved template",
+      t("templatesPage.prompts.saveName"),
       defaultName,
     );
     if (!name?.trim()) return;
@@ -804,7 +847,10 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
   const handleRenameSavedTemplate = async (
     savedTemplate: (typeof userSavedTemplates)[number],
   ) => {
-    const nextName = window.prompt("Rename saved template", savedTemplate.name);
+    const nextName = window.prompt(
+      t("templatesPage.prompts.renameName"),
+      savedTemplate.name,
+    );
     if (!nextName?.trim()) return;
 
     await updateSavedTemplateMutation.mutateAsync({
@@ -821,7 +867,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
   };
 
   const handleDeleteSavedTemplate = async (id: number) => {
-    const confirmed = window.confirm("Delete this saved template?");
+    const confirmed = window.confirm(t("templatesPage.prompts.deleteConfirm"));
     if (!confirmed) return;
     await deleteSavedTemplateMutation.mutateAsync(id);
   };
@@ -842,7 +888,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
   const applyThemeHexInput = () => {
     const normalized = normalizeHexColor(themeHexInput);
     if (!normalized) {
-      toast.error("Use a valid 6-digit hex color like #2563eb");
+      toast.error(t("templatesPage.toasts.validThemeHex"));
       return;
     }
     setThemeColor(normalized);
@@ -854,7 +900,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
   ) => {
     const normalized = normalizeHexColor(value);
     if (!normalized) {
-      toast.error("Use a valid 6-digit hex color like #334155");
+      toast.error(t("templatesPage.toasts.validSectionHex"));
       return;
     }
     updateDesignSection(activeDesignSection, { [key]: normalized });
@@ -882,12 +928,17 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
     userSavedTemplates,
   ]);
 
+  const livePreviewStackKey = `templates-live-${selectedTemplate.id}-${enabledSections.join(",")}-${sectionOrder.join(",")}-${theme.primaryColor}`;
+  const modalPreviewStackKey = previewTemplate
+    ? `templates-modal-${previewTemplate.id}-${previewEnabledSections.join(",")}-${previewSectionOrder.join(",")}-${previewThemeColor}-${previewShowLogo}`
+    : "";
+
   return (
     <DashboardLayout
       name={name}
       image={image}
-      title="Templates"
-      subtitle="Customize invoice sections, styling, and reusable layouts."
+      title={t("templatesPage.title")}
+      subtitle={t("templatesPage.subtitle")}
     >
       <div className="mx-auto w-full max-w-6xl">
         <div
@@ -900,12 +951,11 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
           <section className="space-y-6">
             <header>
               <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                Template studio
+                {t("templatesPage.kicker")}
               </p>
-              <h1 className="mt-2 text-3xl font-semibold">Invoice templates</h1>
+              <h1 className="mt-2 text-3xl font-semibold">{t("templatesPage.heading")}</h1>
               <p className="mt-2 text-sm text-[#5c4b3b]">
-                Choose a business type, enable sections, and preview updates in
-                real time.
+                {t("templatesPage.description")}
               </p>
             </header>
 
@@ -916,7 +966,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 className="flex w-full items-center justify-between text-left"
                 aria-expanded={openBusinessType}
               >
-                <h2 className="text-sm font-semibold">1. Business type</h2>
+                <h2 className="text-sm font-semibold">{t("templatesPage.sections.businessType")}</h2>
                 <ChevronDown
                   className={`h-4 w-4 text-[#8a6d56] transition ${
                     openBusinessType ? "rotate-0" : "-rotate-90"
@@ -950,7 +1000,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 className="flex w-full items-center justify-between text-left"
                 aria-expanded={openCustomize}
               >
-                <h2 className="text-sm font-semibold">2. Customize sections</h2>
+                <h2 className="text-sm font-semibold">{t("templatesPage.sections.customize")}</h2>
                 <ChevronDown
                   className={`h-4 w-4 text-[#8a6d56] transition ${
                     openCustomize ? "rotate-0" : "-rotate-90"
@@ -977,7 +1027,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                             draggable
                             onDragStart={() => handleDragStart(section)}
                             className="rounded-full border border-border bg-white p-1 text-[#8a6d56] hover:text-primary"
-                            aria-label="Drag to reorder"
+                            aria-label={t("templatesPage.aria.dragToReorder")}
                           >
                             <GripVertical size={14} />
                           </button>
@@ -992,26 +1042,52 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         <div className="flex items-center gap-2 text-xs">
                           <button
                             type="button"
+                            onClick={() => removeSection(section)}
+                            className="rounded-full border border-border px-3 py-1"
+                          >
+                            {t("templatesPage.actions.remove")}
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => moveSection(section, "up")}
                             className="rounded-full border border-border px-3 py-1"
                           >
-                            Move up
+                            {t("templatesPage.actions.moveUp")}
                           </button>
                           <button
                             type="button"
                             onClick={() => moveSection(section, "down")}
                             className="rounded-full border border-border px-3 py-1"
                           >
-                            Move down
+                            {t("templatesPage.actions.moveDown")}
                           </button>
                         </div>
                       </div>
                     ))}
                   </div>
+                  {availableSections.length ? (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6d56]">
+                        {t("templatesPage.actions.addSections")}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {availableSections.map((section) => (
+                          <button
+                            key={`add-${section}`}
+                            type="button"
+                            onClick={() => addSection(section)}
+                            className="rounded-full border border-border px-3 py-1 text-xs"
+                          >
+                            + {SECTION_LABELS[section]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                   <div className="mt-5 flex flex-wrap items-center gap-4 text-sm">
                     <div className="grid gap-2">
                       <label className="flex items-center gap-2">
-                        <span>Theme color</span>
+                        <span>{t("templatesPage.actions.themeColor")}</span>
                         <input
                           type="color"
                           value={themeColor}
@@ -1026,7 +1102,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           <button
                             key={`theme-${color}`}
                             type="button"
-                            aria-label={`Set theme color ${color}`}
+                            aria-label={t("templatesPage.aria.setThemeColor", { color })}
                             onClick={() => setThemeColor(color)}
                             className="h-6 w-6 rounded-full border border-[#d6c8b8]"
                             style={{ backgroundColor: color }}
@@ -1048,7 +1124,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           onClick={applyThemeHexInput}
                           className="rounded-full border border-border px-3 py-1 text-xs"
                         >
-                          Apply
+                          {t("templatesPage.actions.apply")}
                         </button>
                       </div>
                     </div>
@@ -1059,7 +1135,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         onChange={() => setShowLogo((prev) => !prev)}
                         className="h-4 w-4 rounded border-[#d6c8b8] text-primary"
                       />
-                      Show logo
+                      {t("templatesPage.actions.showLogo")}
                     </label>
                     <button
                       type="button"
@@ -1068,8 +1144,8 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                       className="ml-auto rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-60"
                     >
                       {saveTemplateMutation.isPending
-                        ? "Saving..."
-                        : "Save settings"}
+                        ? t("templatesPage.actions.saving")
+                        : t("templatesPage.actions.saveSettings")}
                     </button>
                   </div>
                 </>
@@ -1083,7 +1159,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 className="flex w-full items-center justify-between text-left"
                 aria-expanded={openDesignPanel}
               >
-                <h2 className="text-sm font-semibold">3. Template styling</h2>
+                <h2 className="text-sm font-semibold">{t("templatesPage.sections.styling")}</h2>
                 <ChevronDown
                   className={`h-4 w-4 text-[#8a6d56] transition ${
                     openDesignPanel ? "rotate-0" : "-rotate-90"
@@ -1111,7 +1187,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                   <div className="mt-5 grid gap-4 text-sm">
                     <div className="grid gap-2">
                       <label className="flex items-center justify-between gap-4">
-                        <span>Background color</span>
+                        <span>{t("templatesPage.actions.backgroundColor")}</span>
                         <input
                           type="color"
                           value={activeDesignConfig.backgroundColor}
@@ -1128,7 +1204,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           <button
                             key={`bg-${color}`}
                             type="button"
-                            aria-label={`Set background color ${color}`}
+                            aria-label={t("templatesPage.aria.setBackgroundColor", { color })}
                             onClick={() =>
                               updateDesignSection(activeDesignSection, {
                                 backgroundColor: color,
@@ -1159,13 +1235,13 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           }
                           className="rounded-full border border-border px-3 py-1 text-xs"
                         >
-                          Apply
+                          {t("templatesPage.actions.apply")}
                         </button>
                       </div>
                     </div>
                     <div className="grid gap-2">
                       <label className="flex items-center justify-between gap-4">
-                        <span>Text color</span>
+                        <span>{t("templatesPage.actions.textColor")}</span>
                         <input
                           type="color"
                           value={activeDesignConfig.textColor}
@@ -1182,7 +1258,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           <button
                             key={`text-${color}`}
                             type="button"
-                            aria-label={`Set text color ${color}`}
+                            aria-label={t("templatesPage.aria.setTextColor", { color })}
                             onClick={() =>
                               updateDesignSection(activeDesignSection, {
                                 textColor: color,
@@ -1210,12 +1286,12 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           }
                           className="rounded-full border border-border px-3 py-1 text-xs"
                         >
-                          Apply
+                          {t("templatesPage.actions.apply")}
                         </button>
                       </div>
                     </div>
                     <label className="grid gap-2">
-                      <span>Font family</span>
+                      <span>{t("templatesPage.actions.fontFamily")}</span>
                       <select
                         value={activeDesignConfig.fontFamily}
                         onChange={(event) =>
@@ -1233,7 +1309,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                       </select>
                     </label>
                     <label className="grid gap-2">
-                      <span>Font size ({activeDesignConfig.fontSize}px)</span>
+                      <span>{t("templatesPage.actions.fontSize", { value: activeDesignConfig.fontSize })}</span>
                       <input
                         type="range"
                         min={10}
@@ -1248,7 +1324,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                     </label>
                     <label className="grid gap-2">
                       <span>
-                        Section padding ({activeDesignConfig.padding}px)
+                        {t("templatesPage.actions.sectionPadding", { value: activeDesignConfig.padding })}
                       </span>
                       <input
                         type="range"
@@ -1264,7 +1340,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                     </label>
                     <label className="grid gap-2">
                       <span>
-                        Section margin ({activeDesignConfig.margin}px)
+                        {t("templatesPage.actions.sectionMargin", { value: activeDesignConfig.margin })}
                       </span>
                       <input
                         type="range"
@@ -1280,7 +1356,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                     </label>
                     <label className="grid gap-2">
                       <span>
-                        Border radius ({activeDesignConfig.borderRadius}px)
+                        {t("templatesPage.actions.borderRadius", { value: activeDesignConfig.borderRadius })}
                       </span>
                       <input
                         type="range"
@@ -1295,7 +1371,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                       />
                     </label>
                     <label className="grid gap-2">
-                      <span>Section width</span>
+                      <span>{t("templatesPage.actions.sectionWidth")}</span>
                       <select
                         value={activeDesignConfig.width}
                         onChange={(event) =>
@@ -1305,12 +1381,12 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         }
                         className="rounded-xl border border-border px-3 py-2 text-sm"
                       >
-                        <option value="contained">Contained</option>
-                        <option value="full">Full width</option>
+                        <option value="contained">{t("templatesPage.actions.widthContained")}</option>
+                        <option value="full">{t("templatesPage.actions.widthFull")}</option>
                       </select>
                     </label>
                     <label className="grid gap-2">
-                      <span>Background image</span>
+                      <span>{t("templatesPage.actions.backgroundImage")}</span>
                       <input
                         type="file"
                         accept="image/*"
@@ -1330,7 +1406,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         }
                         className="rounded-full border border-border px-3 py-2 text-xs"
                       >
-                        Remove background image
+                        {t("templatesPage.actions.removeBackgroundImage")}
                       </button>
                     ) : null}
                     <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -1340,37 +1416,37 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         disabled={createSavedTemplateMutation.isPending}
                         className="rounded-full border border-border px-3 py-2"
                       >
-                        {createSavedTemplateMutation.isPending
-                          ? "Saving template..."
-                          : "Save as template"}
+                      {createSavedTemplateMutation.isPending
+                          ? t("templatesPage.actions.savingTemplate")
+                          : t("templatesPage.actions.saveAsTemplate")}
                       </button>
                       <button
                         type="button"
                         onClick={() => resetDesignSection(activeDesignSection)}
                         className="rounded-full border border-border px-3 py-2"
                       >
-                        Reset section
+                        {t("templatesPage.actions.resetSection")}
                       </button>
                       <button
                         type="button"
                         onClick={resetAllDesign}
                         className="rounded-full border border-border px-3 py-2"
                       >
-                        Reset all
+                        {t("templatesPage.actions.resetAll")}
                       </button>
                       <button
                         type="button"
                         onClick={handleSaveDesignConfig}
                         className="ml-auto rounded-full bg-primary px-3 py-2 font-semibold text-primary-foreground"
                       >
-                        Save design
+                        {t("templatesPage.actions.saveDesign")}
                       </button>
                       <button
                         type="button"
                         onClick={handleLoadDesignConfig}
                         className="rounded-full border border-border px-3 py-2"
                       >
-                        Load design
+                        {t("templatesPage.actions.loadDesign")}
                       </button>
                     </div>
                   </div>
@@ -1399,10 +1475,10 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 aria-expanded={openLivePreview}
               >
                 {openLivePreview ? (
-                  <h2 className="text-sm font-semibold">Live preview</h2>
+                  <h2 className="text-sm font-semibold">{t("templatesPage.sections.livePreview")}</h2>
                 ) : (
                   <span className="text-xs font-semibold text-[#5c4b3b]">
-                    Live
+                    {t("templatesPage.live")}
                   </span>
                 )}
                 <ChevronDown
@@ -1412,7 +1488,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 />
               </button>
               {openLivePreview ? (
-                <span className="text-xs text-[#8a6d56]">Mock data</span>
+                <span className="text-xs text-[#8a6d56]">{t("templatesPage.mockData")}</span>
               ) : null}
             </div>
             {openLivePreview ? (
@@ -1420,12 +1496,14 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 <div className="mx-auto w-full max-w-[520px]">
                   <DesignConfigProvider value={designContextValue}>
                     <A4PreviewStack
+                      key={livePreviewStackKey}
                       className="w-full"
-                      stackKey={`templates-live-${selectedTemplate.id}-${enabledSections.join(",")}-${sectionOrder.join(",")}-${theme.primaryColor}`}
+                      stackKey={livePreviewStackKey}
                     >
                       <MemoTemplatePreview
                         key={`live-${selectedTemplate.id}-${enabledSections.join(",")}-${sectionOrder.join(",")}`}
                         templateId={selectedTemplate.id}
+                        templateName={selectedTemplate.name}
                         data={previewData}
                         enabledSections={enabledSections}
                         sectionOrder={sectionOrder}
@@ -1446,7 +1524,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
             className="flex w-full items-center justify-between text-left"
             aria-expanded={openTemplateSelection}
           >
-            <h2 className="text-sm font-semibold">4. Template selection</h2>
+            <h2 className="text-sm font-semibold">{t("templatesPage.sections.selection")}</h2>
             <ChevronDown
               className={`h-4 w-4 text-[#8a6d56] transition ${
                 openTemplateSelection ? "rotate-0" : "-rotate-90"
@@ -1457,13 +1535,13 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
             <>
               {templatesLoading ? (
                 <p className="mt-3 text-xs text-[#8a6d56]">
-                  Loading templates...
+                  {t("templatesPage.loading")}
                 </p>
               ) : null}
               <div className="mt-4">
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6d56]">
-                    My saved templates
+                    {t("templatesPage.savedTemplates")}
                   </p>
                   <button
                     type="button"
@@ -1472,8 +1550,8 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                     className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold"
                   >
                     {createSavedTemplateMutation.isPending
-                      ? "Saving..."
-                      : "Save current"}
+                      ? t("templatesPage.actions.saving")
+                      : t("templatesPage.actions.saveCurrent")}
                   </button>
                 </div>
                 <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
@@ -1483,7 +1561,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                     onChange={(event) =>
                       setSavedTemplateSearch(event.target.value)
                     }
-                    placeholder="Search saved templates"
+                    placeholder={t("templatesPage.searchPlaceholder")}
                     className="rounded-xl border border-border px-3 py-2 text-sm"
                   />
                   <select
@@ -1495,8 +1573,8 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                     }
                     className="rounded-xl border border-border px-3 py-2 text-sm"
                   >
-                    <option value="all">All templates</option>
-                    <option value="current-template">Current base</option>
+                    <option value="all">{t("templatesPage.filters.allTemplates")}</option>
+                    <option value="current-template">{t("templatesPage.filters.currentBase")}</option>
                   </select>
                 </div>
                 {filteredUserSavedTemplates.length ? (
@@ -1510,8 +1588,12 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           {savedTemplate.name}
                         </p>
                         <p className="mt-1 text-xs text-[#6b5847]">
-                          Updated{" "}
-                          {new Date(savedTemplate.updated_at).toLocaleString()}
+                          {t("templatesPage.updated", {
+                            value: formatDate(new Date(savedTemplate.updated_at), {
+                              dateStyle: "medium",
+                              timeStyle: "short",
+                            }),
+                          })}
                         </p>
                         <div className="mt-4 flex flex-wrap gap-2">
                           <button
@@ -1519,7 +1601,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                             onClick={() => applySavedTemplate(savedTemplate)}
                             className="rounded-full bg-primary px-3 py-1 text-[11px] font-semibold text-primary-foreground"
                           >
-                            Apply
+                            {t("templatesPage.actions.applyTemplate")}
                           </button>
                           <button
                             type="button"
@@ -1529,7 +1611,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                             disabled={updateSavedTemplateMutation.isPending}
                             className="rounded-full border border-border px-3 py-1 text-[11px]"
                           >
-                            Update
+                            {t("templatesPage.actions.update")}
                           </button>
                           <button
                             type="button"
@@ -1539,7 +1621,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                             disabled={updateSavedTemplateMutation.isPending}
                             className="rounded-full border border-border px-3 py-1 text-[11px]"
                           >
-                            Rename
+                            {t("templatesPage.actions.rename")}
                           </button>
                           <button
                             type="button"
@@ -1549,7 +1631,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                             disabled={deleteSavedTemplateMutation.isPending}
                             className="rounded-full border border-red-200 px-3 py-1 text-[11px] text-red-600"
                           >
-                            Delete
+                            {t("common.delete")}
                           </button>
                         </div>
                       </div>
@@ -1558,15 +1640,15 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 ) : (
                   <p className="mt-2 text-xs text-[#8a6d56]">
                     {userSavedTemplates.length
-                      ? "No saved templates match your search/filter."
-                      : "No saved templates yet. Save your current setup to create one."}
+                      ? t("templatesPage.empty.filtered")
+                      : t("templatesPage.empty.none")}
                   </p>
                 )}
               </div>
               {featuredTemplates.length ? (
                 <div className="mt-4">
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6d56]">
-                    Featured
+                    {t("templatesPage.featured")}
                   </p>
                   <div className="mt-3 grid justify-items-center gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {featuredTemplates.map((template) => (
@@ -1595,7 +1677,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           </div>
                           {selectedTemplateId === template.id ? (
                             <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">
-                              Active
+                              {t("templatesPage.active")}
                             </span>
                           ) : null}
                         </div>
@@ -1612,6 +1694,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                               <MemoTemplatePreview
                                 key={`featured-${template.id}`}
                                 templateId={template.id}
+                                templateName={template.name}
                                 data={cardPreviewData}
                                 enabledSections={template.defaultSections}
                                 sectionOrder={template.sectionOrder}
@@ -1626,14 +1709,14 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                             onClick={() => openPreview(template.id)}
                             className="rounded-full border border-border px-4 py-2 text-xs font-semibold"
                           >
-                            Preview
+                            {t("templatesPage.actions.preview")}
                           </button>
                           <button
                             type="button"
                             onClick={() => applyTemplate(template.id)}
                             className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
                           >
-                            Use template
+                            {t("templatesPage.actions.useTemplate")}
                           </button>
                         </div>
                       </div>
@@ -1643,7 +1726,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
               ) : null}
               <div className="mt-6">
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6d56]">
-                  All templates
+                  {t("templatesPage.allTemplates")}
                 </p>
                 <div className="mt-3 grid justify-items-center gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {regularTemplates.map((template) => (
@@ -1672,7 +1755,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         </div>
                         {selectedTemplateId === template.id ? (
                           <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">
-                            Active
+                            {t("templatesPage.active")}
                           </span>
                         ) : null}
                       </div>
@@ -1689,6 +1772,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                             <MemoTemplatePreview
                               key={`all-${template.id}`}
                               templateId={template.id}
+                              templateName={template.name}
                               data={cardPreviewData}
                               enabledSections={template.defaultSections}
                               sectionOrder={template.sectionOrder}
@@ -1703,14 +1787,14 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           onClick={() => openPreview(template.id)}
                           className="rounded-full border border-border px-4 py-2 text-xs font-semibold"
                         >
-                          Preview
+                          {t("templatesPage.actions.preview")}
                         </button>
                         <button
                           type="button"
                           onClick={() => applyTemplate(template.id)}
                           className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
                         >
-                          Use template
+                          {t("templatesPage.actions.useTemplate")}
                         </button>
                       </div>
                     </div>
@@ -1734,7 +1818,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border px-6 py-4">
               <div>
                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                  Template preview
+                  {t("templatesPage.previewTitle")}
                 </p>
                 <h3 className="mt-1 text-xl font-semibold">
                   {previewTemplate.name}
@@ -1748,6 +1832,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                       await downloadPdf({
                         previewPayload: {
                           templateId: previewTemplate.id,
+                          templateName: previewTemplate.name,
                           data: modalPreviewData,
                           enabledSections: previewEnabledSections,
                           sectionOrder: previewSectionOrder,
@@ -1757,12 +1842,12 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         fileName: `${previewTemplate.name}-preview.pdf`,
                       });
                     } catch {
-                      toast.error("Unable to generate PDF from preview");
+                      toast.error(t("templatesPage.toasts.previewPdfError"));
                     }
                   }}
                   className="rounded-full border border-border px-4 py-2 text-xs font-semibold"
                 >
-                  Download PDF
+                  {t("templatesPage.actions.downloadPdf")}
                 </button>
                 <button
                   type="button"
@@ -1791,25 +1876,25 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                   className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground disabled:opacity-60"
                 >
                   {saveTemplateMutation.isPending
-                    ? "Saving..."
-                    : "Use template"}
+                    ? t("templatesPage.actions.saving")
+                    : t("templatesPage.actions.useTemplate")}
                 </button>
                 <button
                   type="button"
                   onClick={closePreview}
                   className="rounded-full border border-border px-4 py-2 text-xs font-semibold"
                 >
-                  Close
+                  {t("templatesPage.actions.close")}
                 </button>
               </div>
             </div>
             <div className="grid flex-1 gap-6 overflow-y-auto px-6 py-6 lg:grid-cols-[0.4fr_0.6fr]">
               <div className="space-y-5">
                 <div className="rounded-2xl border border-border bg-muted/40 p-4">
-                  <h4 className="text-sm font-semibold">Preview settings</h4>
+                  <h4 className="text-sm font-semibold">{t("templatesPage.previewSettings")}</h4>
                   <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
                     <label className="flex items-center gap-2">
-                      <span>Theme color</span>
+                      <span>{t("templatesPage.actions.themeColor")}</span>
                       <input
                         type="color"
                         value={previewThemeColor}
@@ -1826,12 +1911,12 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         onChange={() => setPreviewShowLogo((prev) => !prev)}
                         className="h-4 w-4 rounded border-[#d6c8b8] text-primary"
                       />
-                      Show logo
+                      {t("templatesPage.actions.showLogo")}
                     </label>
                   </div>
                 </div>
                 <div className="rounded-2xl border border-border bg-white p-4">
-                  <h4 className="text-sm font-semibold">Sections</h4>
+                  <h4 className="text-sm font-semibold">{t("templatesPage.previewSections")}</h4>
                   <div className="mt-3 grid gap-2 text-sm">
                     {previewSectionOrder.map((section) => (
                       <div
@@ -1850,7 +1935,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                             draggable
                             onDragStart={() => handlePreviewDragStart(section)}
                             className="rounded-full border border-border bg-white p-1 text-[#8a6d56] hover:text-primary"
-                            aria-label="Drag to reorder"
+                            aria-label={t("templatesPage.aria.dragToReorder")}
                           >
                             <GripVertical size={14} />
                           </button>
@@ -1874,22 +1959,48 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         <div className="flex items-center gap-2 text-[11px]">
                           <button
                             type="button"
+                            onClick={() => removePreviewSection(section)}
+                            className="rounded-full border border-border px-2 py-1"
+                          >
+                            {t("templatesPage.actions.remove")}
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => movePreviewSection(section, "up")}
                             className="rounded-full border border-border px-2 py-1"
                           >
-                            Up
+                            {t("templatesPage.actions.up")}
                           </button>
                           <button
                             type="button"
                             onClick={() => movePreviewSection(section, "down")}
                             className="rounded-full border border-border px-2 py-1"
                           >
-                            Down
+                            {t("templatesPage.actions.down")}
                           </button>
                         </div>
                       </div>
                     ))}
                   </div>
+                  {previewAvailableSections.length ? (
+                    <div className="mt-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6d56]">
+                        {t("templatesPage.actions.addSections")}
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {previewAvailableSections.map((section) => (
+                          <button
+                            key={`preview-add-${section}`}
+                            type="button"
+                            onClick={() => addPreviewSection(section)}
+                            className="rounded-full border border-border px-3 py-1 text-[11px]"
+                          >
+                            + {SECTION_LABELS[section]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="rounded-2xl border border-border bg-white p-4">
@@ -1900,11 +2011,13 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                   >
                     <DesignConfigProvider value={designContextValue}>
                       <A4PreviewStack
-                        stackKey={`templates-modal-${previewTemplate.id}-${previewEnabledSections.join(",")}-${previewSectionOrder.join(",")}-${previewThemeColor}-${previewShowLogo}`}
+                        key={modalPreviewStackKey}
+                        stackKey={modalPreviewStackKey}
                       >
                         <MemoTemplatePreview
                           key={`modal-${previewTemplate.id}-${previewEnabledSections.join(",")}-${previewSectionOrder.join(",")}-${previewThemeColor}-${previewShowLogo}`}
                           templateId={previewTemplate.id}
+                          templateName={previewTemplate.name}
                           data={modalPreviewData}
                           enabledSections={previewEnabledSections}
                           sectionOrder={previewSectionOrder}

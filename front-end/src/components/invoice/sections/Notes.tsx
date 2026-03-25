@@ -4,7 +4,7 @@ import { calculateTotals, formatCurrency } from "./utils";
 
 const Notes = ({ data, theme }: InvoiceSectionProps) => {
   const { style } = useSectionStyles("notes");
-  const totals = calculateTotals(data.items);
+  const totals = data.totals ?? calculateTotals(data.items);
   return (
     <section className="border border-slate-400 bg-white" style={style}>
       <div

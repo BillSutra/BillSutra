@@ -4,6 +4,7 @@ import {
   PaymentMethod,
   SaleStatus,
   StockReason,
+  WorkerRole,
 } from "@prisma/client";
 
 export const idParamSchema = z.object({
@@ -67,6 +68,69 @@ export const authForgotSchema = z.object({
   email: z.string().email(),
 });
 
+const webAuthnRegistrationResponseSchema = z.object({
+  id: z.string().min(1),
+  rawId: z.string().min(1),
+  type: z.literal("public-key"),
+  authenticatorAttachment: z.string().optional(),
+  clientExtensionResults: z.record(z.string(), z.unknown()),
+  response: z.object({
+    clientDataJSON: z.string().min(1),
+    attestationObject: z.string().min(1),
+    transports: z.array(z.string()).optional(),
+    publicKeyAlgorithm: z.number().optional(),
+    publicKey: z.string().optional(),
+    authenticatorData: z.string().optional(),
+  }),
+});
+
+const webAuthnAuthenticationResponseSchema = z.object({
+  id: z.string().min(1),
+  rawId: z.string().min(1),
+  type: z.literal("public-key"),
+  authenticatorAttachment: z.string().optional(),
+  clientExtensionResults: z.record(z.string(), z.unknown()),
+  response: z.object({
+    clientDataJSON: z.string().min(1),
+    authenticatorData: z.string().min(1),
+    signature: z.string().min(1),
+    userHandle: z.string().optional(),
+  }),
+});
+
+export const authTokenSchema = z.object({
+  token: z.string().min(10),
+});
+
+export const authOtpSendSchema = z.object({
+  email: z.string().email(),
+});
+
+export const authOtpVerifySchema = z.object({
+  email: z.string().email(),
+  code: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+});
+
+export const passkeyAuthenticateOptionsSchema = z.object({
+  email: z.string().email(),
+});
+
+export const passkeyAuthenticateVerifySchema = z.object({
+  email: z.string().email(),
+  challenge_id: z.coerce.number().int().positive(),
+  response: webAuthnAuthenticationResponseSchema,
+});
+
+export const passkeyRegisterOptionsSchema = z.object({
+  label: z.string().min(1).max(191).optional(),
+});
+
+export const passkeyRegisterVerifySchema = z.object({
+  challenge_id: z.coerce.number().int().positive(),
+  label: z.string().min(1).max(191).optional(),
+  response: webAuthnRegistrationResponseSchema,
+});
+
 export const authResetSchema = z
   .object({
     email: z.string().email(),
@@ -78,6 +142,42 @@ export const authResetSchema = z
     message: "Passwords do not match",
     path: ["confirm_password"],
   });
+
+export const adminLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(6),
+});
+
+export const workerLoginSchema = authLoginSchema;
+
+export const workerCreateSchema = z.object({
+  name: z.string().min(2),
+  email: z.string().email(),
+  phone: z.string().regex(/^\d{10,15}$/),
+  password: z.string().min(6),
+});
+
+export const workerUpdateSchema = z
+  .object({
+    name: z.string().min(2).optional(),
+    phone: z.string().regex(/^\d{10,15}$/).optional(),
+    password: z.string().min(6).optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one field is required",
+  });
+
+export const workerRoleSchema = z.object({
+  role: z.nativeEnum(WorkerRole),
+});
+
+export const workerIdParamSchema = z.object({
+  id: z.string().min(1),
+});
+
+export const adminBusinessIdParamSchema = z.object({
+  id: z.string().min(1),
+});
 
 export const userProfileUpdateSchema = z.object({
   name: z.string().min(2).optional(),
@@ -172,6 +272,10 @@ export const productCreateSchema = z.object({
 
 export const productUpdateSchema = productCreateSchema.partial();
 
+export const productImportConfirmSchema = z.object({
+  preview_token: z.string().min(1),
+});
+
 const invoiceItemSchema = z.object({
   product_id: z.coerce.number().int().positive().optional(),
   name: z.string().min(1),
@@ -185,6 +289,7 @@ export const invoiceCreateSchema = z.object({
   date: z.coerce.date().optional(),
   due_date: z.coerce.date().optional(),
   discount: z.coerce.number().nonnegative().optional(),
+  discount_type: z.enum(["PERCENTAGE", "FIXED"]).optional(),
   status: z.nativeEnum(InvoiceStatus).optional(),
   notes: z.string().optional(),
   sync_sales: z.boolean().optional(),
@@ -293,4 +398,34 @@ export const stockAdjustSchema = z.object({
   change: z.coerce.number().int(),
   reason: z.nativeEnum(StockReason).optional(),
   note: z.string().optional(),
+});
+
+const exportFilterSchema = z.object({
+  start_date: z.coerce.date().optional(),
+  end_date: z.coerce.date().optional(),
+  category: z.string().min(1).optional(),
+  payment_status: z.string().min(1).optional(),
+  customer_name: z.string().min(1).optional(),
+  search: z.string().min(1).optional(),
+});
+
+export const exportResourceParamSchema = z.object({
+  resource: z.enum(["products", "customers", "invoices"]),
+});
+
+export const exportRequestSchema = z.object({
+  format: z.enum(["csv", "xlsx", "pdf", "json"]),
+  scope: z.enum(["all", "filtered", "selected"]).default("all"),
+  delivery: z.enum(["download", "email"]).default("download"),
+  email: z.string().email().optional(),
+  fields: z.array(z.string().min(1)).min(1),
+  selected_ids: z.array(z.coerce.number().int().positive()).optional(),
+  filters: exportFilterSchema.optional(),
+});
+
+export const exportPreviewRequestSchema = z.object({
+  scope: z.enum(["all", "filtered", "selected"]).default("all"),
+  fields: z.array(z.string().min(1)).min(1),
+  selected_ids: z.array(z.coerce.number().int().positive()).optional(),
+  filters: exportFilterSchema.optional(),
 });

@@ -34,15 +34,21 @@ const writeDrafts = (drafts: InvoiceDraft[]) => {
   window.localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts));
 };
 
-export const formatRelativeTime = (value: Date) => {
+export const formatRelativeTime = (value: Date, locale = "en-IN") => {
   const diffMs = Date.now() - value.getTime();
   const minutes = Math.max(0, Math.round(diffMs / 60000));
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) {
+    return locale.startsWith("hi") ? "अभी-अभी" : "just now";
+  }
+  if (minutes < 60) {
+    return locale.startsWith("hi") ? `${minutes}मि पहले` : `${minutes}m ago`;
+  }
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) {
+    return locale.startsWith("hi") ? `${hours}घं पहले` : `${hours}h ago`;
+  }
   const days = Math.round(hours / 24);
-  return `${days}d ago`;
+  return locale.startsWith("hi") ? `${days}दिन पहले` : `${days}d ago`;
 };
 
 export const useInvoiceDrafts = ({

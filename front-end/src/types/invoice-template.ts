@@ -68,6 +68,20 @@ export type InvoicePreviewData = {
     address: string;
   };
   items: InvoiceLineItem[];
+  totals?: {
+    subtotal: number;
+    tax: number;
+    discount: number;
+    total: number;
+    cgst?: number;
+    sgst?: number;
+    igst?: number;
+  };
+  discount?: {
+    type: "PERCENTAGE" | "FIXED";
+    value: number;
+    label?: string;
+  };
   notes: string;
   paymentInfo: string;
 };

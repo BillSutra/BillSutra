@@ -4,7 +4,9 @@ import { Bell, Menu, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ThemeToggle from "@/components/theme-toggle";
+import LanguageToggle from "@/components/language-toggle";
 import ProfileMenu from "@/components/auth/ProfileMenu";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type TopNavbarProps = {
   name: string;
@@ -13,6 +15,8 @@ type TopNavbarProps = {
 };
 
 const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
+  const { t } = useI18n();
+
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
       <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
@@ -21,7 +25,7 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
           size="icon"
           variant="outline"
           className="lg:hidden"
-          aria-label="Open sidebar"
+          aria-label={t("topNavbar.openSidebar")}
           onClick={onOpenMobileMenu}
         >
           <Menu className="h-4 w-4" />
@@ -30,7 +34,7 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
         <div className="relative hidden w-full max-w-md sm:block">
           <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search invoices, customers, products..."
+            placeholder={t("topNavbar.searchPlaceholder")}
             className="h-10 rounded-xl border-border bg-card pl-9 shadow-sm"
           />
         </div>
@@ -40,10 +44,11 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
             type="button"
             variant="outline"
             size="icon"
-            aria-label="Notifications"
+            aria-label={t("topNavbar.notifications")}
           >
             <Bell className="h-4 w-4" />
           </Button>
+          <LanguageToggle className="hidden sm:inline-flex" />
           <ThemeToggle />
           <ProfileMenu name={name} image={image} />
         </div>

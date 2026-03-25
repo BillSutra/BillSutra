@@ -14,6 +14,7 @@ import {
   useUpdateWarehouseMutation,
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type WarehousesClientProps = {
   name: string;
@@ -21,6 +22,7 @@ type WarehousesClientProps = {
 };
 
 const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
+  const { t } = useI18n();
   const { data, isLoading, isError } = useWarehousesQuery();
   const createWarehouse = useCreateWarehouseMutation();
   const updateWarehouse = useUpdateWarehouseMutation();
@@ -53,7 +55,7 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
   const validateForm = () => {
     const errors: Partial<Record<keyof typeof form, string>> = {};
     if (form.name.trim().length < 2) {
-      errors.name = "Warehouse name must be at least 2 characters.";
+      errors.name = t("warehousesPage.validation.nameMin");
     }
     setFieldErrors(errors);
     return Object.keys(errors).length === 0;
@@ -69,15 +71,13 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
         name: form.name.trim(),
         location: form.location.trim() || undefined,
       });
-      toast.success("Warehouse created", {
+      toast.success(t("warehousesPage.created"), {
         description: form.name.trim(),
       });
       setForm({ name: "", location: "" });
       setFieldErrors({});
     } catch (error) {
-      setServerError(
-        parseServerErrors(error, "Unable to create warehouse right now."),
-      );
+      setServerError(parseServerErrors(error, t("warehousesPage.createError")));
     }
   };
 
@@ -99,7 +99,7 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
     event.preventDefault();
     if (!editingId) return;
     if (editForm.name.trim().length < 2) {
-      setServerError("Warehouse name must be at least 2 characters.");
+      setServerError(t("warehousesPage.validation.nameMin"));
       return;
     }
 
@@ -111,26 +111,22 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
           location: editForm.location.trim() || undefined,
         },
       });
-      toast.success("Warehouse updated", {
+      toast.success(t("warehousesPage.updated"), {
         description: editForm.name.trim(),
       });
       handleEditCancel();
     } catch (error) {
-      setServerError(
-        parseServerErrors(error, "Unable to update warehouse right now."),
-      );
+      setServerError(parseServerErrors(error, t("warehousesPage.updateError")));
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm("Delete this warehouse?")) return;
+    if (!window.confirm(t("warehousesPage.confirmDelete"))) return;
     try {
       await deleteWarehouse.mutateAsync(id);
-      toast.success("Warehouse deleted");
+      toast.success(t("warehousesPage.deleted"));
     } catch (error) {
-      setServerError(
-        parseServerErrors(error, "Unable to delete warehouse right now."),
-      );
+      setServerError(parseServerErrors(error, t("warehousesPage.deleteError")));
     }
   };
 
@@ -138,28 +134,32 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title="Warehouses"
-      subtitle="Monitor warehouse footprints and available stock at a glance."
+      title={t("warehousesPage.title")}
+      subtitle={t("warehousesPage.subtitle")}
     >
       <div className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-2">
           <p className="text-sm uppercase tracking-[0.2em] text-muted-foreground">
-            Storage
+            {t("warehousesPage.kicker")}
           </p>
           <p className="max-w-2xl text-base text-muted-foreground">
-            Monitor warehouse footprints and available stock at a glance.
+            {t("warehousesPage.lead")}
           </p>
         </div>
 
         <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.1fr]">
           <div className="rounded-2xl border border-border bg-card p-6">
-            <h2 className="text-lg font-semibold">Create warehouse</h2>
+            <h2 className="text-lg font-semibold">
+              {t("warehousesPage.createTitle")}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Add storage locations before stocking inventory.
+              {t("warehousesPage.createDescription")}
             </p>
             <form className="mt-4 grid gap-4" onSubmit={handleCreate}>
               <div className="grid gap-2">
-                <Label htmlFor="warehouse_name">Name</Label>
+                <Label htmlFor="warehouse_name">
+                  {t("warehousesPage.fields.name")}
+                </Label>
                 <Input
                   id="warehouse_name"
                   value={form.name}
@@ -174,7 +174,9 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                 )}
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="warehouse_location">Location</Label>
+                <Label htmlFor="warehouse_location">
+                  {t("warehousesPage.fields.location")}
+                </Label>
                 <Input
                   id="warehouse_location"
                   value={form.location}
@@ -185,7 +187,7 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                     }));
                     setServerError(null);
                   }}
-                  placeholder="City, building, or zone"
+                  placeholder={t("warehousesPage.placeholders.location")}
                 />
               </div>
               <Button
@@ -193,35 +195,37 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
                 disabled={createWarehouse.isPending}
               >
-                Add warehouse
+                {t("warehousesPage.actions.add")}
               </Button>
               {(createWarehouse.isError || serverError) && (
                 <p className="text-sm text-destructive">
-                  {serverError ?? "Unable to create warehouse right now."}
+                  {serverError ?? t("warehousesPage.createError")}
                 </p>
               )}
             </form>
           </div>
 
           <div className="rounded-2xl border border-border bg-card p-6">
-            <h2 className="text-lg font-semibold">Warehouse list</h2>
+            <h2 className="text-lg font-semibold">
+              {t("warehousesPage.listTitle")}
+            </h2>
             <p className="text-sm text-muted-foreground">
-              Keep locations organized and ready for stock moves.
+              {t("warehousesPage.listDescription")}
             </p>
             <div className="mt-4">
               {isLoading && (
                 <p className="text-sm text-muted-foreground">
-                  Loading warehouses...
+                  {t("warehousesPage.loading")}
                 </p>
               )}
               {isError && (
                 <p className="text-sm text-destructive">
-                  Failed to load warehouses.
+                  {t("warehousesPage.loadError")}
                 </p>
               )}
               {!isLoading && !isError && data && data.length === 0 && (
                 <p className="text-sm text-muted-foreground">
-                  No warehouses yet.
+                  {t("warehousesPage.empty")}
                 </p>
               )}
               {!isLoading && !isError && data && data.length > 0 && (
@@ -234,7 +238,7 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                       {editingId === warehouse.id ? (
                         <form className="grid gap-3" onSubmit={handleEditSave}>
                           <div className="grid gap-2">
-                            <Label>Name</Label>
+                            <Label>{t("warehousesPage.fields.name")}</Label>
                             <Input
                               value={editForm.name}
                               onChange={(event) =>
@@ -246,7 +250,7 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                             />
                           </div>
                           <div className="grid gap-2">
-                            <Label>Location</Label>
+                            <Label>{t("warehousesPage.fields.location")}</Label>
                             <Input
                               value={editForm.location}
                               onChange={(event) =>
@@ -262,14 +266,14 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                               type="submit"
                               className="bg-primary text-primary-foreground hover:bg-primary/90"
                             >
-                              Save
+                              {t("warehousesPage.actions.save")}
                             </Button>
                             <Button
                               type="button"
                               variant="outline"
                               onClick={handleEditCancel}
                             >
-                              Cancel
+                              {t("warehousesPage.actions.cancel")}
                             </Button>
                           </div>
                         </form>
@@ -280,7 +284,8 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                               {warehouse.name}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              {warehouse.location ?? "Location not set"}
+                              {warehouse.location ??
+                                t("warehousesPage.locationNotSet")}
                             </p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -288,7 +293,7 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                               href={`/warehouses/${warehouse.id}`}
                               className="text-sm text-primary"
                             >
-                              View stock →
+                              {t("warehousesPage.actions.viewStock")}
                             </Link>
                             <Button
                               type="button"
@@ -301,7 +306,7 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                                 )
                               }
                             >
-                              Edit
+                              {t("warehousesPage.actions.edit")}
                             </Button>
                             <Button
                               type="button"
@@ -309,7 +314,7 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                               onClick={() => handleDelete(warehouse.id)}
                               disabled={deleteWarehouse.isPending}
                             >
-                              Delete
+                              {t("warehousesPage.actions.delete")}
                             </Button>
                           </div>
                         </div>

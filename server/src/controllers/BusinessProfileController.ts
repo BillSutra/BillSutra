@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { sendResponse } from "../utils/sendResponse.js";
 import type { z } from "zod";
 import prisma from "../config/db.config.js";
+import { ensureBusinessForUser } from "../lib/authSession.js";
 import { businessProfileUpsertSchema } from "../validations/apiValidations.js";
 
 type BusinessProfileInput = z.infer<typeof businessProfileUpsertSchema>;
@@ -58,6 +59,8 @@ class BusinessProfileController {
         show_payment_qr: body.show_payment_qr ?? false,
       },
     });
+
+    await ensureBusinessForUser(userId, body.business_name);
 
     return sendResponse(res, 200, { message: "Profile saved", data: profile });
   }

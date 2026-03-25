@@ -1,12 +1,15 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { dashboardNavItems } from "./dashboard-nav";
 import { useBusinessLogo } from "@/hooks/useBusinessLogo";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type AppSidebarProps = {
   collapsed: boolean;
@@ -18,6 +21,48 @@ type AppSidebarProps = {
 const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
   const pathname = usePathname();
   const { logo } = useBusinessLogo();
+  const { language, t } = useI18n();
+  const { data: session } = useSession();
+
+  const translatedNavItems = useMemo(
+    () =>
+      dashboardNavItems
+        .filter((item) => {
+          const role = session?.user?.role;
+          if (role === "WORKER") {
+            return item.href === "/sales" || item.href === "/invoices";
+          }
+
+          return !item.adminOnly || role === "ADMIN";
+        })
+        .map((item) => ({
+          ...item,
+          label: t(item.labelKey),
+        })),
+    [language, session?.user?.role, t],
+  );
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+
+    const unresolvedKeys = translatedNavItems
+      .filter((item) => item.label === item.labelKey)
+      .map((item) => item.labelKey);
+
+    console.debug("[AppSidebar] current language:", language);
+    console.debug(
+      "[AppSidebar] resolved navigation labels:",
+      translatedNavItems.map(({ href, labelKey, label }) => ({
+        href,
+        labelKey,
+        label,
+      })),
+    );
+
+    if (unresolvedKeys.length > 0) {
+      console.warn("[AppSidebar] unresolved navigation keys:", unresolvedKeys);
+    }
+  }, [language, translatedNavItems]);
 
   return (
     <div className="flex h-full flex-col gap-6 p-3">
@@ -26,25 +71,25 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
           {/* Show uploaded business logo, or fallback to "BS" text */}
           {logo ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt="Business logo" className="h-6 w-6 object-contain" />
+            <img src={logo} alt={t("sidebar.businessLogoAlt")} className="h-6 w-6 object-contain" />
           ) : (
             "BS"
           )}
         </div>
         {!collapsed && (
-          <span className="ml-3 text-sm font-semibold">BillSutra</span>
+          <span className="ml-3 text-sm font-semibold">{t("common.appName")}</span>
         )}
       </div>
 
       <nav className="grid gap-1">
-        {dashboardNavItems.map((item) => {
+        {translatedNavItems.map((item) => {
           const active =
             pathname === item.href || pathname.startsWith(`${item.href}/`);
           const Icon = item.icon;
 
           return (
             <Link
-              key={item.href + item.label}
+              key={item.href + item.labelKey}
               href={item.href}
               className={cn(
                 "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200",
@@ -71,6 +116,8 @@ const AppSidebar = ({
   mobileOpen,
   onCloseMobile,
 }: AppSidebarProps) => {
+  const { t } = useI18n();
+
   return (
     <>
       <aside
@@ -86,7 +133,7 @@ const AppSidebar = ({
               size="icon-sm"
               variant="outline"
               onClick={onToggleCollapsed}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
             >
               {collapsed ? (
                 <PanelLeftOpen className="h-4 w-4" />
@@ -106,7 +153,7 @@ const AppSidebar = ({
               size="icon-sm"
               variant="outline"
               onClick={onToggleCollapsed}
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
             >
               {collapsed ? (
                 <PanelLeftOpen className="h-4 w-4" />

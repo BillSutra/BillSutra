@@ -1,36 +1,71 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import DataExportDialog from "@/components/export/DataExportDialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ValidationField } from "@/components/ui/ValidationField";
-import {
-  validateName,
-  validateNumber,
-  validateRequired,
-} from "@/lib/validation";
 import {
   useCategoriesQuery,
   useCreateCategoryMutation,
   useCreateProductMutation,
   useDeleteProductMutation,
-  useProductsQuery,
+  useProductsPageQuery,
   useUpdateProductMutation,
 } from "@/hooks/useInventoryQueries";
+import {
+  confirmProductImport,
+  downloadProductImportTemplate,
+  previewProductImport,
+  type ProductImportPreview,
+} from "@/lib/apiClient";
+import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
+import { useI18n } from "@/providers/LanguageProvider";
+
+const MAX_IMPORT_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+const PRODUCTS_PAGE_LIMIT = 20;
 
 type ProductsClientProps = {
   name: string;
   image?: string;
+  canManageProducts: boolean;
 };
 
-const ProductsClient = ({ name, image }: ProductsClientProps) => {
-  const { data, isLoading, isError } = useProductsQuery();
+const downloadBlobFile = (blob: Blob, fileName: string) => {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
+
+const toSafeCsvCell = (value: unknown) => {
+  const text = String(value ?? "");
+  return /^[=+\-@]/.test(text) ? `'${text}` : text;
+};
+
+export default function ProductsClient({
+  name,
+  image,
+  canManageProducts,
+}: ProductsClientProps) {
+  const { t, formatCurrency } = useI18n();
+  const queryClient = useQueryClient();
   const { data: categories } = useCategoriesQuery();
   const createCategory = useCreateCategoryMutation();
   const createProduct = useCreateProductMutation();
   const updateProduct = useUpdateProductMutation();
   const deleteProduct = useDeleteProductMutation();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({
     name: "",
@@ -46,15 +81,61 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
   const [editingForm, setEditingForm] = useState(form);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [formTouched, setFormTouched] = useState(false);
+  const [selectedImportFile, setSelectedImportFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<ProductImportPreview | null>(
+    null,
+  );
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
+  const [isPreviewingImport, setIsPreviewingImport] = useState(false);
+  const [isConfirmingImport, setIsConfirmingImport] = useState(false);
+  const [importSummary, setImportSummary] = useState<{
+    importedCount: number;
+    skippedCount: number;
+  } | null>(null);
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
+
+  const { data, isLoading, isError, isFetching } = useProductsPageQuery({
+    page: currentPage,
+    limit: PRODUCTS_PAGE_LIMIT,
+    category: selectedCategoryFilter || null,
+    search: debouncedSearch || null,
+  });
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, selectedCategoryFilter]);
+
+  useEffect(() => {
+    if (data?.totalPages && currentPage > data.totalPages) {
+      setCurrentPage(data.totalPages);
+    }
+  }, [currentPage, data?.totalPages]);
+
+  const products = useMemo(() => data?.products ?? [], [data]);
+  const categoryOptions = categories ?? [];
+  const totalProducts = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
+  const showingFrom = totalProducts === 0 ? 0 : (currentPage - 1) * PRODUCTS_PAGE_LIMIT + 1;
+  const showingTo = Math.min(currentPage * PRODUCTS_PAGE_LIMIT, totalProducts);
 
   const isMutating =
     createCategory.isPending ||
     createProduct.isPending ||
     updateProduct.isPending ||
     deleteProduct.isPending;
-
-  const products = useMemo(() => data ?? [], [data]);
-  const categoryOptions = categories ?? [];
 
   const resetForm = () =>
     setForm({
@@ -69,19 +150,44 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
       category_id: "",
     });
 
-  const toNumber = (value: string) => (value ? Number(value) : undefined);
-
-  const validateAll = () => {
-    return (
-      !validateName(form.name) &&
-      !validateRequired(form.sku) &&
-      !validateNumber(form.price) &&
-      !validateNumber(form.cost, true) &&
-      !validateNumber(form.gst_rate, true) &&
-      !validateNumber(form.stock_on_hand, true) &&
-      !validateNumber(form.reorder_level, true)
-    );
+  const resetImportState = () => {
+    setSelectedImportFile(null);
+    setImportPreview(null);
+    setUploadProgress(0);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
+  const toNumber = (value: string) => (value ? Number(value) : undefined);
+  const validateProductNameField = (value: string) => {
+    if (!value.trim()) return t("validation.required");
+    if (
+      !/^[\p{L}\p{N}\s\-&().,/'"]+$/u.test(value) ||
+      value.trim().length < 2
+    ) {
+      return t("productsPage.validation.invalidName");
+    }
+    return "";
+  };
+  const validateRequiredField = (value: string) =>
+    value.trim() ? "" : t("validation.required");
+  const validateNumberField = (value: string) => {
+    if (!value.trim()) return t("validation.required");
+    if (!/^\d+(\.\d+)?$/.test(value)) return t("validation.validNumber");
+    return "";
+  };
+  const validateOptionalNumberField = (value: string) => {
+    if (!value.trim()) return "";
+    if (!/^\d+(\.\d+)?$/.test(value)) return t("validation.validNumber");
+    return "";
+  };
+  const validateAll = () =>
+    !validateProductNameField(form.name) &&
+    !validateRequiredField(form.sku) &&
+    !validateNumberField(form.price) &&
+    !validateOptionalNumberField(form.cost) &&
+    !validateNumberField(form.gst_rate) &&
+    !validateNumberField(form.stock_on_hand) &&
+    !validateNumberField(form.reorder_level);
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -104,9 +210,7 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
 
   const handleCreateCategory = async () => {
     const trimmed = newCategoryName.trim();
-    if (!trimmed) {
-      return;
-    }
+    if (!trimmed) return;
     const created = await createCategory.mutateAsync({ name: trimmed });
     setNewCategoryName("");
     setForm((prev) => ({ ...prev, category_id: created.id.toString() }));
@@ -151,167 +255,562 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
     setEditingId(null);
   };
 
+  const toggleProductSelection = (productId: number) => {
+    setSelectedProductIds((prev) =>
+      prev.includes(productId)
+        ? prev.filter((id) => id !== productId)
+        : [...prev, productId],
+    );
+  };
+
+  const handleImportFileChange = (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0] ?? null;
+    setImportSummary(null);
+    setImportPreview(null);
+    setUploadProgress(0);
+    if (!file) {
+      setSelectedImportFile(null);
+      return;
+    }
+    if (!/\.(xlsx|csv)$/i.test(file.name)) {
+      setSelectedImportFile(null);
+      toast.error("Only .xlsx and .csv files are supported.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    if (file.size > MAX_IMPORT_FILE_SIZE_BYTES) {
+      setSelectedImportFile(null);
+      toast.error("File exceeds the 5MB limit.");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+    setSelectedImportFile(file);
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      setIsDownloadingTemplate(true);
+      const { blob, fileName } = await downloadProductImportTemplate();
+      downloadBlobFile(blob, fileName);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to download the product import template.";
+      toast.error(message);
+    } finally {
+      setIsDownloadingTemplate(false);
+    }
+  };
+
+  const handlePreviewImport = async () => {
+    if (!selectedImportFile) {
+      toast.error("Choose a file before generating a preview.");
+      return;
+    }
+    try {
+      setIsPreviewingImport(true);
+      setImportSummary(null);
+      const preview = await previewProductImport(selectedImportFile, {
+        onUploadProgress: setUploadProgress,
+      });
+      setImportPreview(preview);
+      toast.success("Validation complete.", {
+        description: `${preview.summary.validRows} valid rows, ${preview.summary.invalidRows} rows with errors.`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Unable to validate the uploaded file.";
+      toast.error(message);
+    } finally {
+      setIsPreviewingImport(false);
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!importPreview) return;
+    try {
+      setIsConfirmingImport(true);
+      const result = await confirmProductImport(importPreview.previewToken);
+      setImportSummary({
+        importedCount: result.importedCount,
+        skippedCount: result.skippedCount,
+      });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        invalidateDashboardQueries(queryClient),
+      ]);
+      resetImportState();
+      toast.success("Bulk import finished.", {
+        description: `${result.importedCount} products imported, ${result.skippedCount} rows skipped.`,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Unable to confirm import.";
+      toast.error(message);
+    } finally {
+      setIsConfirmingImport(false);
+    }
+  };
+
+  const handleDownloadErrorReport = () => {
+    if (!importPreview || importPreview.invalidRows.length === 0) return;
+    const csv = [
+      [
+        "row_number",
+        "name",
+        "sku",
+        "barcode",
+        "selling_price",
+        "cost_price",
+        "gst_rate",
+        "opening_stock",
+        "reorder_level",
+        "category",
+        "errors",
+      ],
+      ...importPreview.invalidRows.map((row) => [
+        row.rowNumber,
+        toSafeCsvCell(row.values.name),
+        toSafeCsvCell(row.values.sku),
+        toSafeCsvCell(row.values.barcode),
+        toSafeCsvCell(row.values.sellingPrice),
+        toSafeCsvCell(row.values.costPrice),
+        toSafeCsvCell(row.values.gstRate),
+        toSafeCsvCell(row.values.openingStock),
+        toSafeCsvCell(row.values.reorderLevel),
+        toSafeCsvCell(row.values.category),
+        toSafeCsvCell(row.errors.join(" | ")),
+      ]),
+    ]
+      .map((cells) =>
+        cells.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","),
+      )
+      .join("\n");
+    downloadBlobFile(
+      new Blob([csv], { type: "text/csv;charset=utf-8;" }),
+      "product-import-errors.csv",
+    );
+  };
+
   return (
     <DashboardLayout
       name={name}
       image={image}
-      title="Products"
-      subtitle="Manage SKUs, pricing, and stock levels in one place."
+      title={t("productsPage.title")}
+      subtitle={t("productsPage.subtitle")}
     >
-      <div className="mx-auto w-full max-w-6xl">
-        <div className="flex flex-col gap-2">
-          <p className="text-sm uppercase tracking-[0.2em] text-[#8a6d56]">
-            Catalog
-          </p>
-          <h1 className="text-3xl font-black">Products</h1>
-          <p className="max-w-2xl text-base text-[#5c4b3b]">
-            Manage SKUs, pricing, and stock levels in one place.
-          </p>
+      <div className="mx-auto w-full max-w-6xl space-y-6">
+        <div className="app-page-intro">
+          <p className="app-kicker">{t("productsPage.kicker")}</p>
+          <h1 className="text-3xl font-black tracking-tight text-foreground">
+            {t("productsPage.title")}
+          </h1>
+          <p className="app-lead">{t("productsPage.lead")}</p>
         </div>
 
-        <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-          <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
-            <h2 className="text-lg font-semibold">Add product</h2>
-            <p className="text-sm text-[#8a6d56]">
-              Create new SKUs and keep stock levels updated.
+        {canManageProducts ? (
+          <section className="app-panel rounded-3xl p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  Bulk Product Import
+                </h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                  Upload a CSV or Excel file, review the validation report, and
+                  confirm only the clean rows.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDownloadTemplate}
+                  disabled={isDownloadingTemplate}
+                >
+                  {isDownloadingTemplate
+                    ? "Preparing template..."
+                    : "Download Template"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {selectedImportFile ? "Change File" : "Choose File"}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handlePreviewImport}
+                  disabled={isPreviewingImport || !selectedImportFile}
+                >
+                  {isPreviewingImport ? "Validating..." : "Preview Import"}
+                </Button>
+              </div>
+            </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.csv"
+              className="hidden"
+              onChange={handleImportFileChange}
+            />
+
+            <div className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+              <div className="rounded-2xl border border-border/70 bg-background/80 p-4 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">Import requirements</p>
+                <p className="mt-3">Accepted files: `.xlsx` and `.csv`</p>
+                <p>Maximum file size: 5MB</p>
+                <p>Required columns: name, sku, selling_price</p>
+                <p>
+                  Optional columns: barcode, cost_price, gst_rate, opening_stock,
+                  reorder_level, category
+                </p>
+                <p>Category names must already exist if you include a category.</p>
+                {selectedImportFile ? (
+                  <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
+                    <p className="font-medium">{selectedImportFile.name}</p>
+                    <p className="mt-1">
+                      {(selectedImportFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                  </div>
+                ) : null}
+                {isPreviewingImport ? (
+                  <div className="mt-4">
+                    <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.2em]">
+                      <span>Upload Progress</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                      <div
+                        className="h-full rounded-full bg-slate-950 transition-all"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                {importSummary ? (
+                  <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
+                    {importSummary.importedCount} products imported successfully.
+                    {importSummary.skippedCount > 0
+                      ? ` ${importSummary.skippedCount} rows were skipped during confirmation.`
+                      : ""}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+                <p className="text-sm font-medium text-foreground">
+                  Preview summary
+                </p>
+                {importPreview ? (
+                  <>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-2xl border border-border bg-muted/40 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                          Total rows
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-foreground">
+                          {importPreview.summary.totalRows}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">
+                          Valid rows
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-emerald-900">
+                          {importPreview.summary.validRows}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                        <p className="text-xs uppercase tracking-[0.2em] text-amber-700">
+                          Errors
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold text-amber-900">
+                          {importPreview.summary.invalidRows}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        onClick={handleConfirmImport}
+                        disabled={
+                          isConfirmingImport ||
+                          importPreview.validRows.length === 0
+                        }
+                      >
+                        {isConfirmingImport ? "Importing..." : "Confirm Import"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleDownloadErrorReport}
+                        disabled={importPreview.invalidRows.length === 0}
+                      >
+                        Download Error Report
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={resetImportState}
+                        disabled={isConfirmingImport}
+                      >
+                        Clear Preview
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+                    Generate a preview to inspect valid rows and row-level errors.
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        {importPreview ? (
+          <section className="grid gap-6 xl:grid-cols-2">
+            <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">
+                    Valid rows
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    These rows are ready to import.
+                  </p>
+                </div>
+                <span className="app-chip">{importPreview.validRows.length}</span>
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-muted/50 text-left text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Row</th>
+                      <th className="px-3 py-2 font-medium">Name</th>
+                      <th className="px-3 py-2 font-medium">SKU</th>
+                      <th className="px-3 py-2 font-medium">Category</th>
+                      <th className="px-3 py-2 font-medium">Selling price</th>
+                      <th className="px-3 py-2 font-medium">Opening stock</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreview.validRows.length > 0 ? (
+                      importPreview.validRows.map((row) => (
+                        <tr
+                          key={`${row.rowNumber}-${row.sku}`}
+                          className="border-t border-border/70"
+                        >
+                          <td className="px-3 py-3">{row.rowNumber}</td>
+                          <td className="px-3 py-3 font-medium text-foreground">
+                            {row.name}
+                          </td>
+                          <td className="px-3 py-3">{row.sku}</td>
+                          <td className="px-3 py-3">{row.category || "Uncategorized"}</td>
+                          <td className="px-3 py-3">{formatCurrency(row.price)}</td>
+                          <td className="px-3 py-3">{row.stock}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="px-3 py-8 text-center text-muted-foreground"
+                        >
+                          No valid rows found in this file.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-base font-semibold text-foreground">
+                    Invalid rows
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Review row-level errors before confirming the import.
+                  </p>
+                </div>
+                <span className="app-chip">{importPreview.invalidRows.length}</span>
+              </div>
+              <div className="mt-4 space-y-3">
+                {importPreview.invalidRows.length > 0 ? (
+                  importPreview.invalidRows.map((row) => (
+                    <div
+                      key={`invalid-${row.rowNumber}`}
+                      className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-amber-900">
+                          Row {row.rowNumber}
+                        </p>
+                        <p className="text-xs text-amber-800">
+                          {row.values.sku || row.values.name || "Unnamed product"}
+                        </p>
+                      </div>
+                      <p className="mt-2 text-sm text-amber-900">
+                        {row.errors.join(" | ")}
+                      </p>
+                      <p className="mt-2 text-xs text-amber-800">
+                        Name: {row.values.name || "N/A"} | SKU:{" "}
+                        {row.values.sku || "N/A"} | Selling price:{" "}
+                        {row.values.sellingPrice || "N/A"} | Opening stock:{" "}
+                        {row.values.openingStock || "0"} | Category:{" "}
+                        {row.values.category || "Uncategorized"}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-8 text-center text-sm text-emerald-800">
+                    No validation errors found.
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        ) : null}
+
+        <section className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+          <div className="app-panel rounded-3xl p-6">
+            <h2 className="text-lg font-semibold text-foreground">
+              {t("productsPage.addTitle")}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {t("productsPage.addDescription")}
             </p>
-            <form
-              className="mt-4 grid gap-4"
-              onSubmit={handleCreate}
-              noValidate
-            >
+            <form className="mt-5 grid gap-4" onSubmit={handleCreate} noValidate>
               <ValidationField
                 id="name"
-                label="Product name"
+                label={t("productsPage.fields.name")}
                 value={form.name}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, name: value }))
-                }
-                validate={validateName}
+                onChange={(value) => setForm((prev) => ({ ...prev, name: value }))}
+                validate={validateProductNameField}
                 required
-                placeholder="Product name"
+                placeholder={t("productsPage.placeholders.name")}
                 success
               />
               <ValidationField
                 id="sku"
-                label="SKU"
+                label={t("productsPage.fields.sku")}
                 value={form.sku}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, sku: value }))
-                }
-                validate={validateRequired}
+                onChange={(value) => setForm((prev) => ({ ...prev, sku: value }))}
+                validate={validateRequiredField}
                 required
-                placeholder="SKU"
+                placeholder={t("productsPage.placeholders.sku")}
                 success
               />
               <ValidationField
                 id="barcode"
-                label="Barcode"
+                label={t("productsPage.fields.barcode")}
                 value={form.barcode}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, barcode: value }))
                 }
                 validate={() => ""}
-                placeholder="Barcode"
+                placeholder={t("productsPage.placeholders.barcode")}
                 success
               />
               <ValidationField
                 id="price"
-                label="Selling price"
+                label={t("productsPage.fields.sellingPrice")}
                 type="number"
                 value={form.price}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, price: value }))
-                }
-                validate={validateNumber}
+                onChange={(value) => setForm((prev) => ({ ...prev, price: value }))}
+                validate={validateNumberField}
                 required
-                placeholder="0"
+                placeholder={t("productsPage.placeholders.zero")}
                 success
               />
               <ValidationField
                 id="cost"
-                label="Cost price"
+                label={t("productsPage.fields.costPrice")}
                 type="number"
                 value={form.cost}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, cost: value }))
-                }
-                validate={(v) => validateNumber(v, true)}
-                placeholder="0"
+                onChange={(value) => setForm((prev) => ({ ...prev, cost: value }))}
+                validate={validateOptionalNumberField}
+                placeholder={t("productsPage.placeholders.zero")}
                 success
               />
               <ValidationField
                 id="gst"
-                label="GST rate"
+                label={t("productsPage.fields.gstRate")}
                 type="number"
                 value={form.gst_rate}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, gst_rate: value }))
                 }
-                validate={(v) => validateNumber(v, true)}
-                placeholder="18"
+                validate={validateNumberField}
+                placeholder={t("productsPage.placeholders.gstRate")}
                 success
               />
-              <ValidationField
-                id="stock"
-                label="Opening stock"
-                type="number"
-                value={form.stock_on_hand}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, stock_on_hand: value }))
-                }
-                validate={(v) => validateNumber(v, true)}
-                placeholder="0"
-                success
-              />
-              <ValidationField
-                id="reorder"
-                label="Reorder level"
-                type="number"
-                value={form.reorder_level}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, reorder_level: value }))
-                }
-                validate={(v) => validateNumber(v, true)}
-                placeholder="0"
-                success
-              />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <ValidationField
+                  id="stock"
+                  label={t("productsPage.fields.openingStock")}
+                  type="number"
+                  value={form.stock_on_hand}
+                  onChange={(value) =>
+                    setForm((prev) => ({ ...prev, stock_on_hand: value }))
+                  }
+                  validate={validateNumberField}
+                  placeholder={t("productsPage.placeholders.zero")}
+                  success
+                />
+                <ValidationField
+                  id="reorder"
+                  label={t("productsPage.fields.reorderLevel")}
+                  type="number"
+                  value={form.reorder_level}
+                  onChange={(value) =>
+                    setForm((prev) => ({ ...prev, reorder_level: value }))
+                  }
+                  validate={validateNumberField}
+                  placeholder={t("productsPage.placeholders.zero")}
+                  success
+                />
+              </div>
               <div className="grid gap-2">
-                <Label htmlFor="category">Category</Label>
+                <Label htmlFor="category" className="text-foreground">
+                  {t("productsPage.fields.category")}
+                </Label>
                 <select
                   id="category"
-                  className="h-9 w-full rounded-md border border-[#e4d6ca] bg-white px-3 text-sm"
+                  className="app-field h-10 px-3 text-sm text-foreground"
                   value={form.category_id}
                   onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      category_id: event.target.value,
-                    }))
-                  }
-                  aria-invalid={formTouched && !form.category_id}
-                  aria-describedby={
-                    formTouched && !form.category_id
-                      ? "category-error"
-                      : undefined
+                    setForm((prev) => ({ ...prev, category_id: event.target.value }))
                   }
                 >
-                  <option value="">Uncategorized</option>
+                  <option value="">{t("productsPage.uncategorized")}</option>
                   {categoryOptions.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
                     </option>
                   ))}
                 </select>
-                {/* Optionally, add error message for required category */}
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="new-category">Add new category</Label>
-                <div className="flex flex-wrap gap-2">
+              <div className="app-panel-muted rounded-2xl p-4">
+                <Label htmlFor="new-category" className="text-foreground">
+                  {t("productsPage.fields.newCategory")}
+                </Label>
+                <div className="mt-2 flex flex-wrap gap-2">
                   <Input
                     id="new-category"
                     value={newCategoryName}
                     onChange={(event) => setNewCategoryName(event.target.value)}
-                    placeholder="e.g. Electronics"
+                    placeholder={t("productsPage.placeholders.categoryName")}
                   />
                   <Button
                     type="button"
@@ -319,202 +818,307 @@ const ProductsClient = ({ name, image }: ProductsClientProps) => {
                     onClick={handleCreateCategory}
                     disabled={createCategory.isPending}
                   >
-                    {createCategory.isPending ? "Adding..." : "Add"}
+                    {createCategory.isPending
+                      ? t("productsPage.actions.adding")
+                      : t("productsPage.actions.addCategory")}
                   </Button>
                 </div>
-                {createCategory.isError && (
-                  <p className="text-sm text-[#b45309]">
-                    Unable to create category.
+                {createCategory.isError ? (
+                  <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                    {t("productsPage.createCategoryError")}
                   </p>
-                )}
+                ) : null}
               </div>
               <Button
                 type="submit"
-                className="bg-[#1f1b16] text-white hover:bg-[#2c2520]"
                 disabled={isMutating || (formTouched && !validateAll())}
                 aria-disabled={isMutating || (formTouched && !validateAll())}
               >
-                Add product
+                {t("productsPage.actions.add")}
               </Button>
-              {createProduct.isError && (
-                <p className="text-sm text-[#b45309]">
-                  Unable to save product right now.
+              {createProduct.isError ? (
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  {t("productsPage.saveError")}
                 </p>
-              )}
+              ) : null}
             </form>
           </div>
-
-          <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
-            <h2 className="text-lg font-semibold">Product list</h2>
-            <p className="text-sm text-[#8a6d56]">
-              Update stock and pricing without leaving this view.
-            </p>
-            <div className="mt-4">
-              {isLoading && (
-                <p className="text-sm text-[#8a6d56]">Loading products...</p>
-              )}
-              {isError && (
-                <p className="text-sm text-[#b45309]">
-                  Failed to load products.
+          <div className="app-panel rounded-3xl p-6">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  {t("productsPage.listTitle")}
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("productsPage.listDescription")}
                 </p>
-              )}
-              {!isLoading && !isError && products.length === 0 && (
-                <p className="text-sm text-[#8a6d56]">No products yet.</p>
-              )}
-              {!isLoading && !isError && products.length > 0 && (
-                <div className="grid gap-3">
-                  {products.map((product) => (
-                    <div
-                      key={product.id}
-                      className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] px-4 py-3"
-                    >
-                      {editingId === product.id ? (
-                        <form className="grid gap-3" onSubmit={handleUpdate}>
-                          <div className="grid gap-2">
-                            <Label>Name</Label>
-                            <Input
-                              value={editingForm.name}
-                              onChange={(event) =>
-                                setEditingForm((prev) => ({
-                                  ...prev,
-                                  name: event.target.value,
-                                }))
-                              }
-                              required
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label>SKU</Label>
-                            <Input
-                              value={editingForm.sku}
-                              onChange={(event) =>
-                                setEditingForm((prev) => ({
-                                  ...prev,
-                                  sku: event.target.value,
-                                }))
-                              }
-                              required
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label>Price</Label>
-                            <Input
-                              type="number"
-                              value={editingForm.price}
-                              onChange={(event) =>
-                                setEditingForm((prev) => ({
-                                  ...prev,
-                                  price: event.target.value,
-                                }))
-                              }
-                              required
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label>Stock</Label>
-                            <Input
-                              type="number"
-                              value={editingForm.stock_on_hand}
-                              onChange={(event) =>
-                                setEditingForm((prev) => ({
-                                  ...prev,
-                                  stock_on_hand: event.target.value,
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label>Reorder level</Label>
-                            <Input
-                              type="number"
-                              value={editingForm.reorder_level}
-                              onChange={(event) =>
-                                setEditingForm((prev) => ({
-                                  ...prev,
-                                  reorder_level: event.target.value,
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="grid gap-2">
-                            <Label>Category</Label>
-                            <select
-                              className="h-9 w-full rounded-md border border-[#e4d6ca] bg-white px-3 text-sm"
-                              value={editingForm.category_id}
-                              onChange={(event) =>
-                                setEditingForm((prev) => ({
-                                  ...prev,
-                                  category_id: event.target.value,
-                                }))
-                              }
-                            >
-                              <option value="">Uncategorized</option>
-                              {categoryOptions.map((category) => (
-                                <option key={category.id} value={category.id}>
-                                  {category.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              type="submit"
-                              className="bg-[#1f1b16] text-white hover:bg-[#2c2520]"
-                              disabled={isMutating}
-                            >
-                              Save
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => setEditingId(null)}
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        </form>
-                      ) : (
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div>
-                            <p className="text-base font-semibold">
-                              {product.name} • {product.sku}
-                            </p>
-                            <p className="text-xs text-[#8a6d56]">
-                              Category:{" "}
-                              {product.category?.name ?? "Uncategorized"}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-3 text-sm">
-                            <span>Stock: {product.stock_on_hand}</span>
-                            <span>₹{Number(product.price).toFixed(2)}</span>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => handleEdit(product.id)}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              onClick={() => deleteProduct.mutate(product.id)}
-                              disabled={deleteProduct.isPending}
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+              </div>
+              {!isLoading && !isError && totalProducts > 0 ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="app-chip">
+                    {t("productsPage.count", { count: totalProducts })}
+                  </span>
+                  <DataExportDialog
+                    resource="products"
+                    title="Products"
+                    selectedIds={selectedProductIds}
+                    disabled={!canManageProducts || isLoading || isError}
+                    categoryOptions={categoryOptions}
+                    initialFilters={{
+                      search: debouncedSearch || undefined,
+                      category: selectedCategoryFilter || undefined,
+                    }}
+                  />
                 </div>
-              )}
+              ) : null}
+            </div>
+            <div className="mt-5">
+              <div className="mb-4 grid gap-3 lg:grid-cols-[1.4fr_0.8fr_auto]">
+                <Input
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="Search by product name, SKU, or barcode"
+                />
+                <select
+                  className="app-field h-10 px-3 text-sm text-foreground"
+                  value={selectedCategoryFilter}
+                  onChange={(event) => setSelectedCategoryFilter(event.target.value)}
+                >
+                  <option value="">All categories</option>
+                  {categoryOptions.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                  <span>
+                    Showing {showingFrom}-{showingTo} of {totalProducts}
+                  </span>
+                  {isFetching && !isLoading ? (
+                    <span className="ml-3 inline-flex items-center gap-2">
+                      <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      Updating
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              {isLoading ? <div className="app-loading-skeleton h-64 w-full" /> : null}
+              {isError ? (
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  {t("productsPage.loadError")}
+                </p>
+              ) : null}
+              {!isLoading && !isError && products.length === 0 ? (
+                <div className="app-empty-state text-sm">
+                  {debouncedSearch || selectedCategoryFilter
+                    ? "No products found for the current search or category."
+                    : t("productsPage.empty")}
+                </div>
+              ) : null}
+              {!isLoading && !isError && products.length > 0 ? (
+                <>
+                  <div className="grid gap-3">
+                    {products.map((product) => (
+                      <div key={product.id} className="app-list-item px-4 py-4">
+                        {editingId === product.id ? (
+                          <form className="grid gap-3" onSubmit={handleUpdate}>
+                            <div className="grid gap-3 sm:grid-cols-2">
+                              <div className="grid gap-2">
+                                <Label>{t("productsPage.fields.name")}</Label>
+                                <Input
+                                  value={editingForm.name}
+                                  onChange={(event) =>
+                                    setEditingForm((prev) => ({
+                                      ...prev,
+                                      name: event.target.value,
+                                    }))
+                                  }
+                                  required
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label>{t("productsPage.fields.sku")}</Label>
+                                <Input
+                                  value={editingForm.sku}
+                                  onChange={(event) =>
+                                    setEditingForm((prev) => ({
+                                      ...prev,
+                                      sku: event.target.value,
+                                    }))
+                                  }
+                                  required
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label>{t("productsPage.fields.sellingPrice")}</Label>
+                                <Input
+                                  type="number"
+                                  value={editingForm.price}
+                                  onChange={(event) =>
+                                    setEditingForm((prev) => ({
+                                      ...prev,
+                                      price: event.target.value,
+                                    }))
+                                  }
+                                  required
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label>{t("productsPage.fields.openingStock")}</Label>
+                                <Input
+                                  type="number"
+                                  value={editingForm.stock_on_hand}
+                                  onChange={(event) =>
+                                    setEditingForm((prev) => ({
+                                      ...prev,
+                                      stock_on_hand: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label>{t("productsPage.fields.reorderLevel")}</Label>
+                                <Input
+                                  type="number"
+                                  value={editingForm.reorder_level}
+                                  onChange={(event) =>
+                                    setEditingForm((prev) => ({
+                                      ...prev,
+                                      reorder_level: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label>{t("productsPage.fields.category")}</Label>
+                                <select
+                                  className="app-field h-10 px-3 text-sm text-foreground"
+                                  value={editingForm.category_id}
+                                  onChange={(event) =>
+                                    setEditingForm((prev) => ({
+                                      ...prev,
+                                      category_id: event.target.value,
+                                    }))
+                                  }
+                                >
+                                  <option value="">
+                                    {t("productsPage.uncategorized")}
+                                  </option>
+                                  {categoryOptions.map((category) => (
+                                    <option key={category.id} value={category.id}>
+                                      {category.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button type="submit" disabled={isMutating}>
+                                {t("productsPage.actions.save")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setEditingId(null)}
+                              >
+                                {t("productsPage.actions.cancel")}
+                              </Button>
+                            </div>
+                          </form>
+                        ) : (
+                          <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex min-w-0 flex-1 items-start gap-3">
+                              <input
+                                type="checkbox"
+                                className="mt-1"
+                                checked={selectedProductIds.includes(product.id)}
+                                onChange={() => toggleProductSelection(product.id)}
+                                aria-label={`Select ${product.name}`}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <p className="text-base font-semibold text-foreground">
+                                    {product.name}
+                                  </p>
+                                  <span className="app-chip">{product.sku}</span>
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                                  <span className="app-chip">
+                                    {t("productsPage.categoryLabel", {
+                                      name:
+                                        product.category?.name ??
+                                        t("productsPage.uncategorized"),
+                                    })}
+                                  </span>
+                                  <span className="app-chip">
+                                    {t("productsPage.stockLabel", {
+                                      count: product.stock_on_hand,
+                                    })}
+                                  </span>
+                                  <span className="app-chip">
+                                    {t("productsPage.priceLabel", {
+                                      amount: formatCurrency(Number(product.price)),
+                                    })}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => handleEdit(product.id)}
+                              >
+                                {t("productsPage.actions.edit")}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="destructive"
+                                onClick={() => deleteProduct.mutate(product.id)}
+                                disabled={deleteProduct.isPending}
+                              >
+                                {t("productsPage.actions.delete")}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border/70 pt-4">
+                    <p className="text-sm text-muted-foreground">
+                      Page {currentPage} of {Math.max(totalPages, 1)}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                        disabled={currentPage <= 1 || isFetching}
+                      >
+                        Previous
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          setCurrentPage((page) =>
+                            Math.min(page + 1, Math.max(totalPages, 1)),
+                          )
+                        }
+                        disabled={currentPage >= totalPages || isFetching}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </div>
           </div>
         </section>
       </div>
     </DashboardLayout>
   );
-};
-
-export default ProductsClient;
+}

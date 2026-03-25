@@ -48,19 +48,19 @@ const DashboardLayout = ({
           />
 
           <main className="page-fade-in dashboard-grid flex-1 px-4 py-6 sm:px-6">
-            <section className="mb-6 flex flex-wrap items-start justify-between gap-4">
-              <div>
+            <section className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-3xl">
                 <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
                   {title}
                 </h1>
                 {subtitle ? (
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                     {subtitle}
                   </p>
                 ) : null}
               </div>
               {actions ? (
-                <div className="flex items-center gap-2">{actions}</div>
+                <div className="flex w-full lg:w-auto lg:justify-end">{actions}</div>
               ) : null}
             </section>
 

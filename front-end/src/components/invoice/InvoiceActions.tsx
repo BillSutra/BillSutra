@@ -1,4 +1,7 @@
+"use client";
+
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type InvoiceActionsProps = {
   onPrint: () => void;
@@ -15,13 +18,15 @@ const InvoiceActions = ({
   isSendingEmail = false,
   canSendEmail = true,
 }: InvoiceActionsProps) => {
+  const { t } = useI18n();
+
   return (
     <div className="no-print flex flex-wrap gap-2">
       <Button type="button" variant="outline" onClick={onPrint}>
-        Print invoice
+        {t("invoiceActions.print")}
       </Button>
       <Button type="button" onClick={onDownloadPdf}>
-        Download PDF
+        {t("invoiceActions.downloadPdf")}
       </Button>
       {onSendEmail ? (
         <Button
@@ -30,7 +35,9 @@ const InvoiceActions = ({
           onClick={onSendEmail}
           disabled={!canSendEmail || isSendingEmail}
         >
-          {isSendingEmail ? "Sending..." : "Send Email"}
+          {isSendingEmail
+            ? t("invoiceActions.sendingEmail")
+            : t("invoiceActions.sendEmail")}
         </Button>
       ) : null}
     </div>

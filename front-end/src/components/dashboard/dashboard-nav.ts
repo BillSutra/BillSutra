@@ -1,4 +1,6 @@
 import {
+  BarChart3,
+  Bot,
   Boxes,
   Building2,
   FileText,
@@ -9,69 +11,99 @@ import {
   Settings,
   Shapes,
   Store,
+  UserCog,
   Users,
   Warehouse,
+  type LucideIcon,
 } from "lucide-react";
 
-export const dashboardNavItems = [
+type DashboardNavItem = {
+  labelKey: string;
+  href: string;
+  icon: LucideIcon;
+  adminOnly?: boolean;
+};
+
+export const dashboardNavItems: DashboardNavItem[] = [
   {
-    label: "Dashboard",
+    labelKey: "navigation.dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
   },
   {
-    label: "Products",
+    labelKey: "navigation.insights",
+    href: "/insights",
+    icon: BarChart3,
+  },
+  {
+    labelKey: "navigation.assistant",
+    href: "/assistant",
+    icon: Bot,
+  },
+  {
+    labelKey: "navigation.products",
     href: "/products",
     icon: Package,
   },
   {
-    label: "Inventory",
+    labelKey: "navigation.inventory",
     href: "/inventory",
     icon: Boxes,
   },
   {
-    label: "Warehouses",
+    labelKey: "navigation.warehouses",
     href: "/warehouses",
     icon: Warehouse,
   },
   {
-    label: "Invoices",
+    labelKey: "navigation.invoices",
     href: "/invoices",
     icon: FileText,
   },
   {
-    label: "Clients",
+    labelKey: "navigation.invoiceRecords",
+    href: "/invoices/history",
+    icon: FileText,
+  },
+  {
+    labelKey: "navigation.clients",
     href: "/customers",
     icon: Users,
   },
   {
-    label: "Suppliers",
+    labelKey: "navigation.workers",
+    href: "/workers",
+    icon: UserCog,
+    adminOnly: true,
+  },
+  {
+    labelKey: "navigation.suppliers",
     href: "/suppliers",
     icon: Store,
   },
   {
-    label: "Purchases",
+    labelKey: "navigation.purchases",
     href: "/purchases",
     icon: ShoppingCart,
   },
   {
-    label: "Sales",
+    labelKey: "navigation.sales",
     href: "/sales",
     icon: ShoppingBag,
   },
   {
-    label: "Templates",
+    labelKey: "navigation.templates",
     href: "/templates",
     icon: Shapes,
   },
   {
-    label: "Business Profile",
+    labelKey: "navigation.businessProfile",
     href: "/business-profile",
     icon: Building2,
   },
   {
-    label: "Settings",
+    labelKey: "navigation.settings",
     href: "/settings",
     icon: Settings,
   },
-] as const;
+];

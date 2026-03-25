@@ -1,8 +1,12 @@
 import { Router, type RequestHandler } from "express";
 import multer, { type FileFilterCallback } from "multer";
 import AuthMiddleware from "../../middlewares/AuthMIddleware.js";
+import RequireAdminMiddleware from "../../middlewares/RequireAdminMiddleware.js";
+import validate from "../../middlewares/validate.js";
 import { sendResponse } from "../../utils/sendResponse.js";
+import { productImportConfirmSchema } from "../../validations/apiValidations.js";
 import {
+  confirmProductImportController,
   downloadClientTemplateController,
   downloadInvoiceItemsTemplateController,
   downloadInvoiceTemplateController,
@@ -60,7 +64,27 @@ const uploadFile: RequestHandler = (req, res, next) => {
 };
 
 router.post("/clients", AuthMiddleware, uploadFile, importClientsController);
-router.post("/products", AuthMiddleware, uploadFile, importProductsController);
+router.post(
+  "/products",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  uploadFile,
+  importProductsController,
+);
+router.post(
+  "/products/preview",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  uploadFile,
+  importProductsController,
+);
+router.post(
+  "/products/confirm",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  validate({ body: productImportConfirmSchema }),
+  confirmProductImportController,
+);
 router.post("/invoices", AuthMiddleware, uploadFile, importInvoicesController);
 router.post(
   "/invoice-items",
@@ -77,6 +101,7 @@ router.get(
 router.get(
   "/templates/products",
   AuthMiddleware,
+  RequireAdminMiddleware,
   downloadProductTemplateController,
 );
 router.get(

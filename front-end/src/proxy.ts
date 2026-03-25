@@ -1,0 +1,81 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
+import {
+  ADMIN_TOKEN_COOKIE_KEY,
+  getAdminRoleFromToken,
+  SUPER_ADMIN_ROLE,
+} from "@/lib/adminAuthShared";
+
+export async function proxy(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
+  if (pathname.startsWith("/admin")) {
+    const adminToken = request.cookies.get(ADMIN_TOKEN_COOKIE_KEY)?.value;
+    const adminRole = getAdminRoleFromToken(adminToken);
+    const isAdminLoginRoute = pathname === "/admin/login";
+
+    if (adminRole === SUPER_ADMIN_ROLE) {
+      if (isAdminLoginRoute) {
+        return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+      }
+
+      return NextResponse.next();
+    }
+
+    if (isAdminLoginRoute) {
+      return NextResponse.next();
+    }
+
+    return NextResponse.redirect(new URL("/admin/login", request.url));
+  }
+
+  const token = await getToken({
+    req: request,
+    secret: process.env.NEXTAUTH_SECRET,
+  });
+
+  if (!token) {
+    const signInUrl = new URL("/", request.url);
+    signInUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
+    return NextResponse.redirect(signInUrl);
+  }
+
+  const role = (token as { user?: { role?: string } } | null)?.user?.role;
+  if (pathname.startsWith("/workers") && role !== "ADMIN") {
+    return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  if (role === "WORKER") {
+    const workerAllowed =
+      pathname.startsWith("/sales") || pathname.startsWith("/invoices");
+
+    if (!workerAllowed) {
+      return NextResponse.redirect(new URL("/sales", request.url));
+    }
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [
+    "/assistant/:path*",
+    "/admin/:path*",
+    "/business-profile/:path*",
+    "/customers/:path*",
+    "/dashboard/:path*",
+    "/inventory/:path*",
+    "/insights/:path*",
+    "/invoices/:path*",
+    "/products/:path*",
+    "/profile/:path*",
+    "/purchases/:path*",
+    "/sales/:path*",
+    "/settings/:path*",
+    "/suppliers/:path*",
+    "/templates/:path*",
+    "/warehouses/:path*",
+    "/workers/:path*",
+  ],
+};

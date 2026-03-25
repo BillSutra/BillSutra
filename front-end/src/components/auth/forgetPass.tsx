@@ -10,7 +10,9 @@ import SubmitBtn from "@/components/common/SubmitBtn";
 // import { signIn } from "next-auth/react";
 import Env from "@/lib/env";
 import { sendPasswordResetEmail } from "@/lib/emailService";
+import { useI18n } from "@/providers/LanguageProvider";
 export default function ForgetPass() {
+  const { t } = useI18n();
   const initialState = {
     message: "",
     status: 0,
@@ -35,9 +37,9 @@ export default function ForgetPass() {
           user_email: email,
           reset_link: resetLink,
         });
-        toast.success("Email sent successfully");
+        toast.success(t("auth.forgotForm.emailSent"));
       } catch {
-        toast.error("Failed to send email");
+        toast.error(t("auth.forgotForm.emailFailed"));
       }
     };
 
@@ -47,13 +49,16 @@ export default function ForgetPass() {
       toast.success(state.message);
       void sendResetEmail();
     }
-  }, [state]);
+  }, [state, t]);
 
   return (
     <form action={formAction}>
       <div className="mt-4">
-        <Label htmlFor="email">Email</Label>
-        <Input placeholder="Type your email" name="email" />
+        <Label htmlFor="email">{t("auth.forgotForm.emailLabel")}</Label>
+        <Input
+          placeholder={t("auth.forgotForm.emailPlaceholder")}
+          name="email"
+        />
         <span className="text-red-400">{state.errors?.email}</span>
       </div>
 

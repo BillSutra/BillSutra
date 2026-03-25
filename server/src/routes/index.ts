@@ -1,5 +1,6 @@
 import { Router } from "express";
 import AuthController from "../controllers/AuthController.js";
+import AdminController from "../controllers/AdminController.js";
 import CustomersController from "../controllers/CustomersController.js";
 import CategoriesController from "../controllers/CategoriesController.js";
 import ProductsController from "../controllers/ProductsController.js";
@@ -19,19 +20,34 @@ import UserTemplateController from "../controllers/UserTemplateController.js";
 import UserSavedTemplateController from "../controllers/UserSavedTemplateController.js";
 import PublicInvoiceController from "../controllers/PublicInvoiceController.js";
 import LogoController from "../controllers/LogoController.js";
+import WorkersController from "../controllers/WorkersController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
+import AdminAuthMiddleware from "../middlewares/AdminAuthMiddleware.js";
 import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
+import RequireAdminMiddleware from "../middlewares/RequireAdminMiddleware.js";
 import { logoUploadMiddleware } from "../middlewares/logo.upload.js";
 import { authRateLimiter } from "../middlewares/rateLimit.middleware.js";
 import validate from "../middlewares/validate.js";
 import {
   idParamSchema,
   invoiceIdParamSchema,
+  adminLoginSchema,
+  adminBusinessIdParamSchema,
   authOauthSchema,
   authLoginSchema,
+  authOtpSendSchema,
+  authOtpVerifySchema,
   authRegisterSchema,
   authForgotSchema,
   authResetSchema,
+  passkeyAuthenticateOptionsSchema,
+  passkeyAuthenticateVerifySchema,
+  passkeyRegisterOptionsSchema,
+  passkeyRegisterVerifySchema,
+  workerLoginSchema,
+  workerCreateSchema,
+  workerIdParamSchema,
+  workerUpdateSchema,
   userProfileUpdateSchema,
   userPasswordUpdateSchema,
   customerCreateSchema,
@@ -55,13 +71,52 @@ import {
   userTemplateUpsertSchema,
   userSavedTemplateCreateSchema,
   userSavedTemplateUpdateSchema,
+  exportPreviewRequestSchema,
+  exportRequestSchema,
+  exportResourceParamSchema,
 } from "../validations/apiValidations.js";
 import invoiceRoutes from "../modules/invoice/invoice.routes.js";
 import importRoutes from "../modules/import/import.routes.js";
 import forecastRoutes from "../modules/forecast/forecast.routes.js";
 import inventoryDemandRoutes from "../modules/inventory-demand/inventoryDemand.routes.js";
+import assistantRoutes from "../modules/assistant/assistant.routes.js";
+import ExportController from "../modules/export/export.controller.js";
 
 const router = Router();
+
+// Super admin routes
+router.post(
+  "/admin/login",
+  validate({ body: adminLoginSchema }),
+  AdminController.login,
+);
+router.get(
+  "/admin/summary",
+  AdminAuthMiddleware,
+  AdminController.summary,
+);
+router.get(
+  "/admin/businesses",
+  AdminAuthMiddleware,
+  AdminController.listBusinesses,
+);
+router.get(
+  "/admin/business/:id",
+  AdminAuthMiddleware,
+  validate({ params: adminBusinessIdParamSchema }),
+  AdminController.showBusiness,
+);
+router.delete(
+  "/admin/business/:id",
+  AdminAuthMiddleware,
+  validate({ params: adminBusinessIdParamSchema }),
+  AdminController.deleteBusiness,
+);
+router.get(
+  "/admin/workers",
+  AdminAuthMiddleware,
+  AdminController.listWorkers,
+);
 
 // Auth routes
 router.post(
@@ -72,6 +127,7 @@ router.post(
 );
 router.post(
   "/auth/logincheck",
+  authRateLimiter,
   validate({ body: authLoginSchema }),
   AuthController.loginCheck,
 );
@@ -85,6 +141,55 @@ router.post(
   "/auth/forgot-password",
   validate({ body: authForgotSchema }),
   AuthController.forgotPassword,
+);
+router.post(
+  "/auth/worker/login",
+  authRateLimiter,
+  validate({ body: workerLoginSchema }),
+  AuthController.workerLogin,
+);
+router.post(
+  "/auth/otp/send",
+  authRateLimiter,
+  validate({ body: authOtpSendSchema }),
+  AuthController.sendOtp,
+);
+router.post(
+  "/auth/otp/verify",
+  authRateLimiter,
+  validate({ body: authOtpVerifySchema }),
+  AuthController.verifyOtp,
+);
+router.post(
+  "/auth/passkeys/authenticate/options",
+  authRateLimiter,
+  validate({ body: passkeyAuthenticateOptionsSchema }),
+  AuthController.passkeyAuthenticateOptions,
+);
+router.post(
+  "/auth/passkeys/authenticate/verify",
+  authRateLimiter,
+  validate({ body: passkeyAuthenticateVerifySchema }),
+  AuthController.passkeyAuthenticateVerify,
+);
+router.get("/auth/passkeys", AuthMiddleware, AuthController.listPasskeys);
+router.post(
+  "/auth/passkeys/register/options",
+  AuthMiddleware,
+  validate({ body: passkeyRegisterOptionsSchema }),
+  AuthController.passkeyRegisterOptions,
+);
+router.post(
+  "/auth/passkeys/register/verify",
+  AuthMiddleware,
+  validate({ body: passkeyRegisterVerifySchema }),
+  AuthController.passkeyRegisterVerify,
+);
+router.delete(
+  "/auth/passkeys/:id",
+  AuthMiddleware,
+  validate({ params: idParamSchema }),
+  AuthController.deletePasskey,
 );
 router.post(
   "/auth/reset-password",
@@ -157,11 +262,57 @@ router.post(
   BusinessProfileController.store,
 );
 
+// Workers
+router.get(
+  "/workers",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  WorkersController.index,
+);
+router.post(
+  "/workers/create",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  validate({ body: workerCreateSchema }),
+  WorkersController.store,
+);
+router.put(
+  "/workers/:id",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  validate({ params: workerIdParamSchema, body: workerUpdateSchema }),
+  WorkersController.update,
+);
+router.delete(
+  "/workers/:id",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  validate({ params: workerIdParamSchema }),
+  WorkersController.destroy,
+);
+
 // Logo management
 router.get("/logo", AuthMiddleware, LogoController.get);
 router.post("/logo", AuthMiddleware, logoUploadMiddleware, LogoController.upload);
 router.put("/logo", AuthMiddleware, logoUploadMiddleware, LogoController.update);
 router.delete("/logo", AuthMiddleware, LogoController.remove);
+
+router.post(
+  "/exports/:resource/preview",
+  AuthMiddleware,
+  validate({
+    params: exportResourceParamSchema,
+    body: exportPreviewRequestSchema,
+  }),
+  ExportController.preview,
+);
+
+router.post(
+  "/exports/:resource",
+  AuthMiddleware,
+  validate({ params: exportResourceParamSchema, body: exportRequestSchema }),
+  ExportController.run,
+);
 
 // Templates
 router.get("/templates", AuthMiddleware, TemplatesController.index);
@@ -361,6 +512,9 @@ router.use("/forecast", forecastRoutes);
 
 // Inventory Demand Predictions
 router.use("/inventory-demand", inventoryDemandRoutes);
+
+// Assistant
+router.use("/assistant", assistantRoutes);
 
 // Payments
 router.get("/payments", AuthMiddleware, PaymentsController.index);

@@ -31,6 +31,7 @@ const round2 = (value: number) =>
 export const calculateTotals = (
   items: InvoiceCalcItem[],
   discount = 0,
+  discountType: "PERCENTAGE" | "FIXED" = "FIXED",
 ): InvoiceTotals => {
   let subtotal = 0;
   let tax = 0;
@@ -53,7 +54,11 @@ export const calculateTotals = (
     };
   });
 
-  const safeDiscount = Math.max(0, discount);
+  const safeDiscountValue = Math.max(0, discount);
+  const safeDiscount =
+    discountType === "PERCENTAGE"
+      ? round2((subtotal * Math.min(100, safeDiscountValue)) / 100)
+      : round2(Math.min(subtotal + tax, safeDiscountValue));
   const total = round2(subtotal + tax - safeDiscount);
 
   return {

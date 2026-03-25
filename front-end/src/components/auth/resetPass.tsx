@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { useSearchParams,useRouter } from "next/navigation";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const ResetPass = () => {
+  const { t } = useI18n();
   const initalState = {
     status: 0,
     message: "",
@@ -29,18 +31,18 @@ const ResetPass = () => {
         router.replace("/login");
       }, 1000);
     }
-  }, [state]);
+  }, [router, state]);
 
   return (
     <div>
       <form action={formAction}>
       <input type="hidden"  name="token" value={sParams.get("token") ?? ""} />
         <div className="mt-4">
-          <Label htmlFor="email">Email</Label>
+          <Label htmlFor="email">{t("auth.resetForm.emailLabel")}</Label>
           <Input
             id="email"
             name="email"
-            placeholder="Enter Your Email"
+            placeholder={t("auth.resetForm.emailPlaceholder")}
             type="email"
             readOnly
             value={sParams.get("email") ?? " "}
@@ -48,21 +50,23 @@ const ResetPass = () => {
           <span className="text-red-500">{state.errors?.email}</span>
         </div>
         <div className="mt-4">
-          <Label htmlFor="Password">Password</Label>
+          <Label htmlFor="Password">{t("auth.resetForm.passwordLabel")}</Label>
           <Input
             id="Password"
             name="password"
-            placeholder="Enter Your Password"
+            placeholder={t("auth.resetForm.passwordPlaceholder")}
             type="password"
           />
           <span className="text-red-500">{state.errors?.password}</span>
         </div>
         <div className="mt-4">
-          <Label htmlFor="ConfirmPassword">ConfirmPassword</Label>
+          <Label htmlFor="ConfirmPassword">
+            {t("auth.resetForm.confirmPasswordLabel")}
+          </Label>
           <Input
             id="ConfirmPassword"
             name="confirmpassword"
-            placeholder="Confirm  Your Password"
+            placeholder={t("auth.resetForm.confirmPasswordPlaceholder")}
             type="password"
           />
           <span className="text-red-500">{state.errors?.confirm_password}</span>

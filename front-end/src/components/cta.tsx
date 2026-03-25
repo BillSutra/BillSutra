@@ -1,7 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const Cta = () => {
+  const { t } = useI18n();
+
   return (
     <section className="bg-background py-16">
       <div className="mx-auto w-full max-w-6xl px-6">
@@ -9,14 +14,13 @@ const Cta = () => {
           <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.3em] text-background/70">
-                Ready to start
+                {t("landing.cta.kicker")}
               </p>
               <h2 className="mt-3 text-3xl font-semibold">
-                Start Managing Your Business Today
+                {t("landing.cta.title")}
               </h2>
               <p className="mt-2 text-sm text-background/70">
-                Join thousands of small businesses using BillSutra to simplify
-                billing and inventory.
+                {t("landing.cta.description")}
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
@@ -24,14 +28,14 @@ const Cta = () => {
                 asChild
                 className="bg-background text-foreground hover:bg-muted"
               >
-                <Link href="/register">Get Started Free</Link>
+                <Link href="/register">{t("landing.cta.primaryCta")}</Link>
               </Button>
               <Button
                 asChild
                 variant="outline"
                 className="border-background text-background hover:bg-background/10"
               >
-                <Link href="#product">Book Demo</Link>
+                <Link href="#product">{t("landing.cta.secondaryCta")}</Link>
               </Button>
             </div>
           </div>

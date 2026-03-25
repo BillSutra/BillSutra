@@ -4,12 +4,14 @@ import React, { useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import DataExportDialog from "@/components/export/DataExportDialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/table";
 import Modal from "@/components/ui/modal";
+import { useI18n } from "@/providers/LanguageProvider";
 import {
   useCreatePaymentMutation,
   useInvoicesQuery,
@@ -31,19 +33,7 @@ const invoiceStatusOptions = [
   "VOID",
 ] as const;
 
-const formatCurrency = (value: string) => {
-  const amount = Number(value || 0);
-  return `INR ${amount.toFixed(2)}`;
-};
-
-const formatDate = (value?: string | null) => {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("en-IN");
-};
-
-const formatStatusLabel = (status: string) =>
+const humanizeEnum = (status: string) =>
   status
     .toLowerCase()
     .split("_")
@@ -51,6 +41,7 @@ const formatStatusLabel = (status: string) =>
     .join(" ");
 
 const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
+  const { t, formatCurrency, formatDate } = useI18n();
   const { data, isLoading, isError } = useInvoicesQuery();
   const updateInvoice = useUpdateInvoiceMutation();
   const createPayment = useCreatePaymentMutation();
@@ -62,6 +53,27 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
   const [selectedStatus, setSelectedStatus] = useState<string>("SENT");
   const [paidAmount, setPaidAmount] = useState("");
   const [statusError, setStatusError] = useState<string | null>(null);
+  const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<number[]>([]);
+
+  const formatCurrencyValue = (value: string | number) =>
+    formatCurrency(Number(value || 0), "INR");
+
+  const formatInvoiceDate = (value?: string | null) => {
+    if (!value) return "-";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return value;
+    return formatDate(parsed, {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const formatStatusLabel = (status: string) => {
+    const key = `invoiceHistory.status.${status}`;
+    const translated = t(key);
+    return translated === key ? humanizeEnum(status) : translated;
+  };
 
   const invoices = useMemo(() => data ?? [], [data]);
   const filtered = useMemo(() => {
@@ -106,6 +118,14 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
     setStatusError(null);
   };
 
+  const toggleInvoiceSelection = (invoiceId: number) => {
+    setSelectedInvoiceIds((prev) =>
+      prev.includes(invoiceId)
+        ? prev.filter((id) => id !== invoiceId)
+        : [...prev, invoiceId],
+    );
+  };
+
   const handleSaveStatus = async () => {
     if (!statusEditorInvoice) return;
 
@@ -122,12 +142,14 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
     if (selectedStatus === "PARTIALLY_PAID") {
       const amount = Number(paidAmount);
       if (!Number.isFinite(amount) || amount <= 0) {
-        setStatusError("Enter a paid amount greater than 0.");
+        setStatusError(t("invoiceHistory.messages.paidAmountPositive"));
         return;
       }
       if (amount >= remaining) {
         setStatusError(
-          `Partial payment must be less than the remaining balance of INR ${remaining.toFixed(2)}.`,
+          t("invoiceHistory.messages.partialLessThanRemaining", {
+            amount: formatCurrencyValue(remaining),
+          }),
         );
         return;
       }
@@ -138,10 +160,10 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
           amount,
           paid_at: new Date().toISOString(),
         });
-        toast.success("Partial payment recorded.");
+        toast.success(t("invoiceHistory.messages.partialRecorded"));
         closeStatusEditor();
       } catch {
-        setStatusError("Unable to record partial payment.");
+        setStatusError(t("invoiceHistory.messages.partialRecordError"));
       }
       return;
     }
@@ -153,10 +175,10 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
             id: invoice.id,
             payload: { status: "PAID" },
           });
-          toast.success("Invoice marked as Paid.");
+          toast.success(t("invoiceHistory.messages.markedPaid"));
           closeStatusEditor();
         } catch {
-          setStatusError("Unable to update invoice status.");
+          setStatusError(t("invoiceHistory.messages.statusUpdateError"));
         }
         return;
       }
@@ -167,10 +189,10 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
           amount: remaining,
           paid_at: new Date().toISOString(),
         });
-        toast.success("Remaining payment recorded.");
+        toast.success(t("invoiceHistory.messages.remainingPaymentRecorded"));
         closeStatusEditor();
       } catch {
-        setStatusError("Unable to record payment.");
+        setStatusError(t("invoiceHistory.messages.paymentRecordError"));
       }
       return;
     }
@@ -180,12 +202,12 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
         id: invoice.id,
         payload: { status: selectedStatus },
       });
-      toast.success(
-        `Invoice marked as ${formatStatusLabel(selectedStatus)}.`,
-      );
+      toast.success(t("invoiceHistory.messages.markedStatus", {
+        status: formatStatusLabel(selectedStatus),
+      }));
       closeStatusEditor();
     } catch {
-      setStatusError("Unable to update invoice status.");
+      setStatusError(t("invoiceHistory.messages.statusUpdateError"));
     }
   };
 
@@ -193,16 +215,16 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title="Invoice history"
-      subtitle="Search completed invoices by their unique invoice number."
+      title={t("invoiceHistory.title")}
+      subtitle={t("invoiceHistory.subtitle")}
     >
       <div className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-2">
           <p className="text-sm uppercase tracking-[0.2em] text-gray-500">
-            Invoices
+            {t("invoiceHistory.kicker")}
           </p>
           <p className="max-w-2xl text-base text-gray-500">
-            Search completed invoices by their unique invoice number.
+            {t("invoiceHistory.subtitle")}
           </p>
         </div>
 
@@ -210,14 +232,16 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div>
-                <h2 className="text-lg font-semibold">Search invoices</h2>
+                <h2 className="text-lg font-semibold">
+                  {t("invoiceHistory.searchTitle")}
+                </h2>
                 <p className="text-sm text-gray-500">
-                  Type an invoice number like INV-0001.
+                  {t("invoiceHistory.searchDescription")}
                 </p>
               </div>
               <div className="flex w-full max-w-md items-center gap-2">
                 <Input
-                  placeholder="Search by invoice number"
+                  placeholder={t("invoiceHistory.searchPlaceholder")}
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
@@ -226,50 +250,73 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                   variant="outline"
                   onClick={() => setQuery("")}
                 >
-                  Clear
+                  {t("invoiceHistory.clear")}
                 </Button>
                 <Button
                   type="button"
                   variant="primary"
                   onClick={() => setQuickActionsOpen(true)}
                 >
-                  Quick actions
+                  {t("invoiceHistory.quickActions")}
                 </Button>
+                <DataExportDialog
+                  resource="invoices"
+                  title="Invoices"
+                  selectedIds={selectedInvoiceIds}
+                  initialFilters={{
+                    search: query.trim() || undefined,
+                  }}
+                  disabled={isLoading || isError}
+                />
               </div>
             </div>
           </div>
 
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">Results</h2>
+              <h2 className="text-lg font-semibold">
+                {t("invoiceHistory.resultsTitle")}
+              </h2>
               <span className="text-sm text-gray-500">
-                {filtered.length} shown
+                {t("invoiceHistory.resultsShown", { count: filtered.length })}
               </span>
             </div>
 
             <div className="mt-4">
               {isLoading && (
-                <p className="text-sm text-gray-500">Loading invoices...</p>
+                <p className="text-sm text-gray-500">
+                  {t("invoiceHistory.loading")}
+                </p>
               )}
               {isError && (
                 <p className="text-sm text-[#b45309]">
-                  Failed to load invoices.
+                  {t("invoiceHistory.loadError")}
                 </p>
               )}
               {!isLoading && !isError && filtered.length === 0 && (
-                <p className="text-sm text-gray-500">No invoices found.</p>
+                <p className="text-sm text-gray-500">
+                  {t("invoiceHistory.empty")}
+                </p>
               )}
               {!isLoading && !isError && filtered.length > 0 && (
                 <DataTable
                   rows={filtered.map((invoice) => ({
                     id: invoice.id,
+                    select: (
+                      <input
+                        type="checkbox"
+                        checked={selectedInvoiceIds.includes(invoice.id)}
+                        onChange={() => toggleInvoiceSelection(invoice.id)}
+                        aria-label={`Select ${invoice.invoice_number}`}
+                      />
+                    ),
                     invoice_number: (
                       <span className="font-semibold">
                         {invoice.invoice_number}
                       </span>
                     ),
                     customer: invoice.customer?.name || "-",
-                    date: formatDate(invoice.date),
+                    date: formatInvoiceDate(invoice.date),
                     status: (
                       <div className="flex min-w-[180px] flex-col gap-2">
                         <Badge
@@ -285,11 +332,11 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                           className="w-fit rounded-lg"
                           onClick={() => openStatusEditor(invoice)}
                         >
-                          Update status
+                          {t("invoiceHistory.updateStatus")}
                         </Button>
                       </div>
                     ),
-                    total: formatCurrency(invoice.total),
+                    total: formatCurrencyValue(invoice.total),
                     actions: (
                       <Button
                         asChild
@@ -298,38 +345,42 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                         className="rounded-lg"
                       >
                         <Link href={`/invoices/history/${invoice.id}`}>
-                          View
+                          {t("invoiceHistory.view")}
                         </Link>
                       </Button>
                     ),
                   }))}
-                  searchPlaceholder="Search invoice number"
+                  searchPlaceholder={t("invoiceHistory.tableSearchPlaceholder")}
                   searchKeys={["invoice_number", "customer", "date", "total"]}
                   columns={[
                     {
+                      key: "select",
+                      header: "Select",
+                    },
+                    {
                       key: "invoice_number",
-                      header: "Invoice No.",
+                      header: t("invoiceHistory.columns.invoiceNumber"),
                     },
                     {
                       key: "customer",
-                      header: "Customer",
+                      header: t("invoiceHistory.columns.customer"),
                     },
                     {
                       key: "date",
-                      header: "Date",
+                      header: t("invoiceHistory.columns.date"),
                     },
                     {
                       key: "status",
-                      header: "Status",
+                      header: t("invoiceHistory.columns.status"),
                     },
                     {
                       key: "total",
-                      header: "Total",
+                      header: t("invoiceHistory.columns.total"),
                       className: "text-right",
                     },
                     {
                       key: "actions",
-                      header: "Actions",
+                      header: t("invoiceHistory.columns.actions"),
                       className: "text-right",
                     },
                   ]}
@@ -344,8 +395,8 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
           onOpenChange={(open) => {
             if (!open) closeStatusEditor();
           }}
-          title="Update invoice status"
-          description="Save a status change explicitly. Partial and full payments will be recorded in the database."
+          title={t("invoiceHistory.statusModalTitle")}
+          description={t("invoiceHistory.statusModalDescription")}
         >
           {statusEditorInvoice && (
             <div className="grid gap-4">
@@ -353,24 +404,33 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                 <span className="font-semibold">
                   {statusEditorInvoice.invoice_number}
                 </span>
-                <span>Total: {formatCurrency(statusEditorInvoice.total)}</span>
                 <span>
-                  Paid: {formatCurrency(getPaidTotal(statusEditorInvoice).toFixed(2))}
+                  {t("invoiceHistory.summary.total", {
+                    amount: formatCurrencyValue(statusEditorInvoice.total),
+                  })}
                 </span>
                 <span>
-                  Balance:{" "}
-                  {formatCurrency(
-                    Math.max(
-                      Number(statusEditorInvoice.total) -
-                        getPaidTotal(statusEditorInvoice),
-                      0,
-                    ).toFixed(2),
-                  )}
+                  {t("invoiceHistory.summary.paid", {
+                    amount: formatCurrencyValue(getPaidTotal(statusEditorInvoice)),
+                  })}
+                </span>
+                <span>
+                  {t("invoiceHistory.summary.balance", {
+                    amount: formatCurrencyValue(
+                      Math.max(
+                        Number(statusEditorInvoice.total) -
+                          getPaidTotal(statusEditorInvoice),
+                        0,
+                      ),
+                    ),
+                  })}
                 </span>
               </div>
 
               <div className="grid gap-2">
-                <Label htmlFor="invoice_status">Status</Label>
+                <Label htmlFor="invoice_status">
+                  {t("invoiceHistory.columns.status")}
+                </Label>
                 <select
                   id="invoice_status"
                   className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm dark:border-gray-600 dark:bg-gray-900"
@@ -390,13 +450,15 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
 
               {selectedStatus === "PARTIALLY_PAID" && (
                 <div className="grid gap-2">
-                  <Label htmlFor="paid_amount">Paid amount</Label>
+                  <Label htmlFor="paid_amount">
+                    {t("invoiceHistory.paidAmount")}
+                  </Label>
                   <Input
                     id="paid_amount"
                     type="number"
                     min="0.01"
                     step="0.01"
-                    placeholder="Enter paid amount"
+                    placeholder={t("invoiceHistory.paidAmountPlaceholder")}
                     value={paidAmount}
                     onChange={(event) => {
                       setPaidAmount(event.target.value);
@@ -408,7 +470,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
 
               {selectedStatus === "PAID" && (
                 <p className="text-sm text-gray-500">
-                  Saving will record the remaining balance as paid.
+                  {t("invoiceHistory.paidRemainingHint")}
                 </p>
               )}
 
@@ -422,7 +484,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                   variant="outline"
                   onClick={closeStatusEditor}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button
                   type="button"
@@ -432,7 +494,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                     updateInvoice.isPending || createPayment.isPending
                   }
                 >
-                  Save
+                  {t("invoiceHistory.save")}
                 </Button>
               </div>
             </div>
@@ -442,8 +504,8 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
         <Modal
           open={quickActionsOpen}
           onOpenChange={setQuickActionsOpen}
-          title="Quick actions"
-          description="Start common billing tasks from one place."
+          title={t("invoiceHistory.quickActionsTitle")}
+          description={t("invoiceHistory.quickActionsDescription")}
         >
           <div className="grid gap-3">
             <Button
@@ -451,21 +513,21 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
               variant="primary"
               className="justify-start rounded-xl"
             >
-              <Link href="/invoices">Create invoice</Link>
+              <Link href="/invoices">{t("invoiceHistory.quickCreateInvoice")}</Link>
             </Button>
             <Button
               asChild
               variant="secondary"
               className="justify-start rounded-xl"
             >
-              <Link href="/customers">Create client</Link>
+              <Link href="/customers">{t("invoiceHistory.quickCreateClient")}</Link>
             </Button>
             <Button
               asChild
               variant="outline"
               className="justify-start rounded-xl"
             >
-              <Link href="/products">Edit product</Link>
+              <Link href="/products">{t("invoiceHistory.quickEditProduct")}</Link>
             </Button>
           </div>
         </Modal>

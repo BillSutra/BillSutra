@@ -1,23 +1,14 @@
 "use client";
 
+import { useMemo } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useSession } from "next-auth/react";
 import ProfileMenu from "../auth/ProfileMenu";
 import ThemeToggle from "@/components/theme-toggle";
-
-const navItems = [
-  { label: "Dashboard", href: "/dashboard" },
-  { label: "Products", href: "/products" },
-  { label: "Inventory", href: "/inventory" },
-  { label: "Warehouses", href: "/warehouses" },
-  { label: "Invoices", href: "/invoices" },
-  { label: "Clients", href: "/customers" },
-  { label: "Suppliers", href: "/suppliers" },
-  { label: "Purchases", href: "/purchases" },
-  { label: "Sales", href: "/sales" },
-  { label: "Templates", href: "/templates" },
-  { label: "Business Profile", href: "/business-profile" },
-  { label: "Settings", href: "/settings" },
-];
+import { cn } from "@/lib/utils";
+import { useI18n } from "@/providers/LanguageProvider";
+import { dashboardNavItems } from "./dashboard-nav";
 
 export default function DashNavbar({
   name,
@@ -26,18 +17,45 @@ export default function DashNavbar({
   name: string;
   image?: string;
 }) {
+  const pathname = usePathname();
+  const { language, t } = useI18n();
+  const { data: session } = useSession();
+
+  const navItems = useMemo(
+    () =>
+      dashboardNavItems
+        .filter((item) => {
+          const role = session?.user?.role;
+          if (role === "WORKER") {
+            return item.href === "/sales" || item.href === "/invoices";
+          }
+
+          return !item.adminOnly || role === "ADMIN";
+        })
+        .map((item) => ({
+          ...item,
+          label: t(item.labelKey),
+        })),
+    [language, session?.user?.role, t],
+  );
+
   return (
     <nav className="border-b border-border/60 bg-background">
       <div className="grid grid-cols-1 items-center gap-4 px-6 py-4 lg:grid-cols-[auto_1fr_auto]">
         <div className="text-center text-xl font-extrabold md:text-2xl lg:text-left">
-          BillSutra
+          {t("common.appName")}
         </div>
         <div className="hidden flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground lg:flex">
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="hover:text-foreground"
+              className={cn(
+                "transition-colors hover:text-foreground",
+                pathname === item.href || pathname.startsWith(`${item.href}/`)
+                  ? "text-foreground"
+                  : undefined,
+              )}
             >
               {item.label}
             </Link>
@@ -53,7 +71,12 @@ export default function DashNavbar({
           <Link
             key={item.href}
             href={item.href}
-            className="rounded-full border border-border px-3 py-1 hover:border-primary"
+            className={cn(
+              "rounded-full border px-3 py-1 transition-colors",
+              pathname === item.href || pathname.startsWith(`${item.href}/`)
+                ? "border-primary text-foreground"
+                : "border-border hover:border-primary",
+            )}
           >
             {item.label}
           </Link>

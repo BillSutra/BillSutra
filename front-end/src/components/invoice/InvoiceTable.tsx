@@ -1,25 +1,22 @@
 "use client";
+
+import AsyncProductSelect from "@/components/products/AsyncProductSelect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { Product } from "@/lib/apiClient";
 import type { InvoiceItemError, InvoiceItemForm } from "@/types/invoice";
+import { useI18n } from "@/providers/LanguageProvider";
 
 export type InvoiceTableProps = {
   items: InvoiceItemForm[];
   errors: InvoiceItemError[];
-  products: Array<{
-    id: number;
-    name: string;
-    sku: string;
-    price: string;
-    gst_rate: string;
-  }>;
   onItemChange: (
     index: number,
     key: keyof InvoiceItemForm,
     value: string,
   ) => void;
-  onProductSelect: (index: number, productId: string) => void;
+  onProductSelect: (index: number, product: Product | null) => void;
   onAddItem: () => void;
   onRemoveItem: (index: number) => void;
 };
@@ -27,39 +24,37 @@ export type InvoiceTableProps = {
 const InvoiceTable = ({
   items,
   errors,
-  products,
   onItemChange,
   onProductSelect,
   onAddItem,
   onRemoveItem,
 }: InvoiceTableProps) => {
+  const { t } = useI18n();
+
   return (
     <div className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-xs uppercase tracking-[0.25em] text-gray-500">
-            Line items
+            {t("invoiceTable.lineItems")}
           </p>
-          <h2 className="mt-2 text-lg font-semibold">Invoice items</h2>
+          <h2 className="mt-2 text-lg font-semibold">
+            {t("invoiceTable.invoiceItems")}
+          </h2>
         </div>
         <Button type="button" variant="outline" onClick={onAddItem}>
-          Add item
+          {t("invoiceTable.addItem")}
         </Button>
       </div>
 
       <div className="mt-4 grid gap-3">
         {items.map((item, index) => {
-          const availableProducts = products.filter((product) => {
-            const productId = String(product.id);
-            return (
-              productId === item.product_id ||
-              !items.some(
-                (selectedItem, selectedIndex) =>
-                  selectedIndex !== index &&
-                  selectedItem.product_id === productId,
-              )
-            );
-          });
+          const excludedProductIds = items
+            .filter(
+              (selectedItem, selectedIndex) =>
+                selectedIndex !== index && Boolean(selectedItem.product_id),
+            )
+            .map((selectedItem) => selectedItem.product_id);
 
           return (
             <div
@@ -68,22 +63,14 @@ const InvoiceTable = ({
             >
               <div className="grid gap-2">
                 <Label className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                  Product
+                  {t("invoiceTable.product")}
                 </Label>
-                <select
-                  className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-500/20"
+                <AsyncProductSelect
                   value={item.product_id}
-                  onChange={(event) =>
-                    onProductSelect(index, event.target.value)
-                  }
-                >
-                  <option value="">Select product</option>
-                  {availableProducts.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.name} - {product.sku}
-                    </option>
-                  ))}
-                </select>
+                  selectedLabel={item.name}
+                  onSelect={(product) => onProductSelect(index, product)}
+                  excludeProductIds={excludedProductIds}
+                />
                 {errors[index]?.product_id && (
                   <p className="text-xs text-red-600 dark:text-red-300">
                     {errors[index]?.product_id}
@@ -94,7 +81,7 @@ const InvoiceTable = ({
               <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
                 <div className="grid gap-2">
                   <Label className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                    Qty
+                    {t("invoiceTable.quantity")}
                   </Label>
                   <Input
                     type="number"
@@ -115,7 +102,7 @@ const InvoiceTable = ({
 
                 <div className="grid gap-2">
                   <Label className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                    Price
+                    {t("invoiceTable.price")}
                   </Label>
                   <Input
                     type="number"
@@ -136,7 +123,7 @@ const InvoiceTable = ({
 
                 <div className="grid gap-2">
                   <Label className="text-xs font-semibold uppercase tracking-[0.16em] text-gray-500">
-                    GST %
+                    {t("invoiceTable.gstRate")}
                   </Label>
                   <Input
                     type="number"
@@ -164,7 +151,7 @@ const InvoiceTable = ({
                   disabled={items.length === 1}
                   className="h-10 w-full sm:w-auto"
                 >
-                  Remove
+                  {t("invoiceTable.remove")}
                 </Button>
               </div>
             </div>

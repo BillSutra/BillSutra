@@ -79,6 +79,58 @@ export type Category = {
   name: string;
 };
 
+export type ProductImportValidRow = {
+  rowNumber: number;
+  name: string;
+  sku: string;
+  barcode?: string;
+  price: number;
+  cost?: number;
+  gstRate: number;
+  stock: number;
+  reorderLevel: number;
+  category?: string;
+};
+
+export type ProductImportInvalidRow = {
+  rowNumber: number;
+  values: {
+    name: string;
+    sku: string;
+    barcode: string;
+    sellingPrice: string;
+    costPrice: string;
+    gstRate: string;
+    openingStock: string;
+    reorderLevel: string;
+    category: string;
+  };
+  errors: string[];
+};
+
+export type ProductImportPreview = {
+  previewToken: string;
+  fileName: string;
+  totalRows: number;
+  validRows: ProductImportValidRow[];
+  invalidRows: ProductImportInvalidRow[];
+  summary: {
+    totalRows: number;
+    validRows: number;
+    invalidRows: number;
+    expiresAt: string;
+  };
+};
+
+export type ProductImportConfirmResult = {
+  importedCount: number;
+  skippedCount: number;
+  errors: Array<{
+    rowNumber: number;
+    message: string;
+  }>;
+};
+
 export type ProductInput = {
   name: string;
   sku: string;
@@ -89,6 +141,67 @@ export type ProductInput = {
   stock_on_hand?: number | null;
   reorder_level?: number | null;
   category_id?: number | null;
+};
+
+export type ProductListParams = {
+  page?: number;
+  limit?: number;
+  category?: string | null;
+  search?: string | null;
+};
+
+export type ProductListResponse = {
+  products: Product[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+export type ExportResource = "products" | "customers" | "invoices";
+export type ExportFormat = "csv" | "xlsx" | "pdf" | "json";
+export type ExportScope = "all" | "filtered" | "selected";
+export type ExportDelivery = "download" | "email";
+
+export type ExportFilters = {
+  start_date?: string;
+  end_date?: string;
+  category?: string;
+  payment_status?: string;
+  customer_name?: string;
+  search?: string;
+};
+
+export type ExportRequest = {
+  resource: ExportResource;
+  format: ExportFormat;
+  scope: ExportScope;
+  delivery: ExportDelivery;
+  email?: string;
+  fields: string[];
+  selected_ids?: number[];
+  filters?: ExportFilters;
+};
+
+export type ExportResponse =
+  | {
+      delivery: "download";
+      blob: Blob;
+      fileName: string;
+    }
+  | {
+      delivery: "email";
+      fileName: string;
+      email: string;
+      exportedCount: number;
+      message: string;
+    };
+
+export type ExportPreviewResponse = {
+  totalCount: number;
+  previewCount: number;
+  columns: Array<{ id: string; label: string }>;
+  rows: string[][];
 };
 
 export type Customer = {
@@ -119,6 +232,29 @@ export type SupplierInput = {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+};
+
+export type Worker = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string | null;
+  role: "ADMIN" | "WORKER";
+  businessId: string;
+  createdAt: string;
+};
+
+export type WorkerInput = {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+};
+
+export type WorkerUpdateInput = {
+  name?: string;
+  phone?: string;
+  password?: string;
 };
 
 export type Purchase = {
@@ -276,6 +412,7 @@ export type InvoiceInput = {
   date?: string | Date | null;
   due_date?: string | Date | null;
   discount?: number | null;
+  discount_type?: "PERCENTAGE" | "FIXED" | null;
   status?: string | null;
   notes?: string | null;
   sync_sales?: boolean;
@@ -642,24 +779,113 @@ export type DashboardPaymentMethods = {
   }>;
 };
 
-export type DashboardForecast = {
-  method: string;
-  historicalMonthly: Array<{ month: string; sales: number }>;
-  predictedMonthly: Array<{ month: string; value: number }>;
+export type DashboardForecastResponse = {
+  generatedAt: string;
+  basis: {
+    averageWindowDays: number;
+    historicalWindowMonths: number;
+    projectionMonths: number;
+  };
+  sales: {
+    method: string;
+    historicalMonthly: Array<{ month: string; receipts: number }>;
+    predictedMonthly: Array<{ month: string; receipts: number }>;
+    trailing30Days: {
+      totalReceipts: number;
+      averageDailyReceipts: number;
+      previous30DaysTotal: number;
+      trendPercent: number;
+    };
+    projectedNext30Days: number;
+  };
+  cashflow: {
+    trailing30Days: {
+      inflow: number;
+      outflow: number;
+      net: number;
+      averageDailyInflow: number;
+      averageDailyOutflow: number;
+      balanceEstimate: number;
+    };
+    projected30Days: {
+      inflow: number;
+      outflow: number;
+      net: number;
+      closingBalanceEstimate: number;
+    };
+    predictedMonthly: Array<{
+      month: string;
+      inflow: number;
+      outflow: number;
+      net: number;
+      closingBalanceEstimate: number;
+    }>;
+  };
+  profit: {
+    historicalMonthly: Array<{
+      month: string;
+      sales: number;
+      purchases: number;
+      expenses: number;
+      profit: number;
+      margin: number;
+    }>;
+    projectedMonthly: Array<{
+      month: string;
+      sales: number;
+      purchases: number;
+      expenses: number;
+      profit: number;
+      margin: number;
+    }>;
+    trailing30Days: {
+      sales: number;
+      purchases: number;
+      expenses: number;
+      profit: number;
+      margin: number;
+    };
+    projected30Days: {
+      sales: number;
+      purchases: number;
+      expenses: number;
+      profit: number;
+      margin: number;
+    };
+  };
+  receivables: {
+    outstanding: number;
+  };
+  insights: Array<{
+    id: string;
+    tone: "positive" | "warning" | "critical" | "info";
+    title: string;
+    message: string;
+  }>;
 };
 
-export type DashboardForecastResponse = {
-  profit: DashboardProfit;
-  forecast: DashboardForecast;
+export type AssistantReply = {
+  language: "en" | "hi";
+  intent: "profit" | "total_sales" | "pending_payments" | "cashflow" | "help";
+  answer: string;
+  highlights: Array<{
+    label: string;
+    value: string;
+  }>;
+  examples: string[];
 };
 
 export type UserProfile = {
-  id: number;
+  id: number | string;
   name: string;
   email: string;
   provider: string;
   image?: string | null;
   is_email_verified: boolean;
+  role?: "ADMIN" | "WORKER";
+  businessId?: string | null;
+  account_type?: "OWNER" | "WORKER";
+  worker_id?: string | null;
 };
 
 export type UpdateProfilePayload = {
@@ -743,9 +969,58 @@ export const fetchReportsSummary = async (): Promise<ReportsSummary> => {
   return response.data.data as ReportsSummary;
 };
 
-export const fetchProducts = async (): Promise<Product[]> => {
-  const response = await apiClient.get("/products");
-  return normalizeListResponse<Product>(response.data?.data);
+export const fetchProducts = async (
+  params?: ProductListParams,
+): Promise<ProductListResponse> => {
+  const searchParams = new URLSearchParams();
+
+  if (params?.page) {
+    searchParams.set("page", String(params.page));
+  }
+  if (params?.limit) {
+    searchParams.set("limit", String(params.limit));
+  }
+  if (params?.category) {
+    searchParams.set("category", params.category);
+  }
+  if (params?.search) {
+    searchParams.set("search", params.search);
+  }
+
+  const query = searchParams.toString();
+  const response = await apiClient.get(query ? `/products?${query}` : "/products");
+  const payload = response.data?.data;
+  const products = normalizeListResponse<Product>(
+    payload?.products ?? payload?.items ?? payload,
+  );
+
+  return {
+    products,
+    total:
+      typeof payload?.total === "number" ? payload.total : products.length,
+    page: typeof payload?.page === "number" ? payload.page : params?.page ?? 1,
+    limit:
+      typeof payload?.limit === "number"
+        ? payload.limit
+        : params?.limit ?? products.length,
+    totalPages:
+      typeof payload?.totalPages === "number"
+        ? payload.totalPages
+        : 1,
+  };
+};
+
+export const fetchProductOptions = async (
+  params?: ProductListParams,
+): Promise<Product[]> => {
+  const response = await fetchProducts({
+    page: params?.page ?? 1,
+    limit: params?.limit ?? 1000,
+    category: params?.category ?? null,
+    search: params?.search ?? null,
+  });
+
+  return response.products;
 };
 
 export const createProduct = async (
@@ -764,6 +1039,87 @@ export const updateProduct = async (
 
 export const deleteProduct = async (id: number): Promise<void> => {
   await apiClient.delete(`/products/${id}`);
+};
+
+export const previewProductImport = async (
+  file: File,
+  options?: {
+    onUploadProgress?: (progress: number) => void;
+  },
+): Promise<ProductImportPreview> => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  try {
+    const response = await apiClient.post("/import/products/preview", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      onUploadProgress: (event) => {
+        if (!options?.onUploadProgress || !event.total) {
+          return;
+        }
+
+        const progress = Math.min(
+          100,
+          Math.round((event.loaded / event.total) * 100),
+        );
+        options.onUploadProgress(progress);
+      },
+    });
+
+    return response.data.data as ProductImportPreview;
+  } catch (error) {
+    const message =
+      (await extractBlobErrorMessage(error)) ||
+      "Unable to validate the uploaded file.";
+
+    throw new Error(message);
+  }
+};
+
+export const confirmProductImport = async (
+  previewToken: string,
+): Promise<ProductImportConfirmResult> => {
+  try {
+    const response = await apiClient.post("/import/products/confirm", {
+      preview_token: previewToken,
+    });
+
+    return response.data.data as ProductImportConfirmResult;
+  } catch (error) {
+    const message =
+      (await extractBlobErrorMessage(error)) || "Unable to confirm import.";
+
+    throw new Error(message);
+  }
+};
+
+export const downloadProductImportTemplate = async (): Promise<{
+  blob: Blob;
+  fileName: string;
+}> => {
+  try {
+    const response = await apiClient.get("/import/templates/products", {
+      responseType: "blob",
+    });
+
+    const disposition = response.headers?.["content-disposition"] as
+      | string
+      | undefined;
+
+    return {
+      blob: response.data as Blob,
+      fileName: parseDownloadFileName(
+        disposition,
+        "products-import-template.xlsx",
+      ),
+    };
+  } catch (error) {
+    const message =
+      (await extractBlobErrorMessage(error)) ||
+      "Unable to download the product import template.";
+
+    throw new Error(message);
+  }
 };
 
 export const fetchCustomers = async (): Promise<Customer[]> => {
@@ -822,6 +1178,30 @@ export const updateSupplier = async (
 
 export const deleteSupplier = async (id: number): Promise<void> => {
   await apiClient.delete(`/suppliers/${id}`);
+};
+
+export const fetchWorkers = async (): Promise<Worker[]> => {
+  const response = await apiClient.get("/workers");
+  return response.data.data as Worker[];
+};
+
+export const createWorker = async (
+  payload: WorkerInput,
+): Promise<Worker> => {
+  const response = await apiClient.post("/workers/create", payload);
+  return response.data.data as Worker;
+};
+
+export const updateWorker = async (
+  id: string,
+  payload: WorkerUpdateInput,
+): Promise<Worker> => {
+  const response = await apiClient.put(`/workers/${id}`, payload);
+  return response.data.data as Worker;
+};
+
+export const deleteWorker = async (id: string): Promise<void> => {
+  await apiClient.delete(`/workers/${id}`);
 };
 
 export const fetchPurchases = async (): Promise<Purchase[]> => {
@@ -931,7 +1311,7 @@ export const sendInvoiceReminder = async (
   return (response.data?.data ?? { invoiceId }) as { invoiceId: number };
 };
 
-const parsePdfFileName = (
+const parseDownloadFileName = (
   contentDisposition: string | undefined,
   fallback: string,
 ) => {
@@ -945,6 +1325,138 @@ const parsePdfFileName = (
     return basicMatch[1];
   }
   return fallback;
+};
+
+const extractBlobErrorMessage = async (error: unknown) => {
+  if (!axios.isAxiosError(error)) {
+    return null;
+  }
+
+  const responseData = error.response?.data;
+
+  if (responseData instanceof Blob) {
+    try {
+      const text = await responseData.text();
+
+      if (!text) {
+        return null;
+      }
+
+      try {
+        const parsed = JSON.parse(text) as { message?: string };
+        return parsed.message?.trim() || null;
+      } catch {
+        return text.trim() || null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  if (responseData instanceof ArrayBuffer) {
+    try {
+      const text = new TextDecoder().decode(responseData);
+
+      if (!text) {
+        return null;
+      }
+
+      try {
+        const parsed = JSON.parse(text) as { message?: string };
+        return parsed.message?.trim() || null;
+      } catch {
+        return text.trim() || null;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  if (
+    responseData &&
+    typeof responseData === "object" &&
+    "message" in responseData &&
+    typeof responseData.message === "string"
+  ) {
+    return responseData.message.trim() || null;
+  }
+
+  return null;
+};
+
+export const runDataExport = async (
+  payload: ExportRequest,
+): Promise<ExportResponse> => {
+  try {
+    const response = await apiClient.post(
+      `/exports/${payload.resource}`,
+      payload,
+      {
+        responseType: "arraybuffer",
+      },
+    );
+
+    const contentType = String(response.headers?.["content-type"] || "");
+    const disposition = response.headers?.["content-disposition"] as
+      | string
+      | undefined;
+
+    if (contentType.includes("application/json")) {
+      const text = new TextDecoder().decode(response.data as ArrayBuffer);
+      const parsed = JSON.parse(text) as {
+        message?: string;
+        data?: {
+          delivery: "email";
+          fileName: string;
+          email: string;
+          exportedCount: number;
+        };
+      };
+
+      return {
+        delivery: "email",
+        fileName: parsed.data?.fileName ?? `${payload.resource}.${payload.format}`,
+        email: parsed.data?.email ?? payload.email ?? "",
+        exportedCount: parsed.data?.exportedCount ?? 0,
+        message: parsed.message ?? "Export sent successfully.",
+      };
+    }
+
+    const fileName = parseDownloadFileName(
+      disposition,
+      `${payload.resource}.${payload.format}`,
+    );
+
+    return {
+      delivery: "download",
+      blob: new Blob([response.data as ArrayBuffer], { type: contentType }),
+      fileName,
+    };
+  } catch (error) {
+    const message =
+      (await extractBlobErrorMessage(error)) || "Unable to export data.";
+    throw new Error(message);
+  }
+};
+
+export const previewDataExport = async (
+  payload: Pick<
+    ExportRequest,
+    "resource" | "scope" | "fields" | "selected_ids" | "filters"
+  >,
+): Promise<ExportPreviewResponse> => {
+  try {
+    const response = await apiClient.post(
+      `/exports/${payload.resource}/preview`,
+      payload,
+    );
+
+    return response.data.data as ExportPreviewResponse;
+  } catch (error) {
+    const message =
+      (await extractBlobErrorMessage(error)) || "Unable to preview export.";
+    throw new Error(message);
+  }
 };
 
 export const fetchInvoicePdfFile = async (
@@ -962,7 +1474,7 @@ export const fetchInvoicePdfFile = async (
 
   return {
     blob: response.data as Blob,
-    fileName: parsePdfFileName(disposition, fallback),
+    fileName: parseDownloadFileName(disposition, fallback),
   };
 };
 
@@ -1095,6 +1607,11 @@ export const fetchDashboardForecast =
     const response = await apiClient.get("/dashboard/forecast");
     return response.data.data as DashboardForecastResponse;
   };
+
+export const askAssistant = async (message: string): Promise<AssistantReply> => {
+  const response = await apiClient.post("/assistant/query", { message });
+  return response.data.data as AssistantReply;
+};
 
 export const fetchUserProfile = async (): Promise<UserProfile> => {
   const response = await apiClient.get("/users/me");

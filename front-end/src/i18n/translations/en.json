@@ -1,0 +1,1424 @@
+{
+  "common": {
+    "appName": "BillSutra",
+    "loading": "Loading...",
+    "guest": "Guest",
+    "processing": "Processing",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "ready": "Ready",
+    "saved": "Saved",
+    "draft": "Draft",
+    "unsaved": "Unsaved",
+    "delete": "Delete",
+    "load": "Load",
+    "remove": "Remove",
+    "search": "Search",
+    "searchProducts": "Search products by name, SKU, or barcode",
+    "typeToSearchProducts": "Type to search products",
+    "noProductsFound": "No matching products found",
+    "language": "Language",
+    "english": "English",
+    "hindi": "Hindi",
+    "looksGood": "Looks good",
+    "selectOption": "Please select an option",
+    "currencyCode": "INR",
+    "currencySymbol": "Rs"
+  },
+  "landing": {
+    "nav": {
+      "features": "Features",
+      "pricing": "Pricing",
+      "docs": "Docs",
+      "login": "Login",
+      "getStarted": "Get Started"
+    },
+    "hero": {
+      "kicker": "Business management platform",
+      "title": "Manage your business smarter with BillSutra",
+      "description": "Create invoices, track inventory, manage customers and payments, all in one powerful platform.",
+      "primaryCta": "Get Started Free",
+      "secondaryCta": "View Demo",
+      "previewLabel": "Dashboard Preview",
+      "live": "Live"
+    },
+    "features": {
+      "trustedBy": "Trusted by growing businesses",
+      "title": "Everything you need",
+      "description": "One workspace to handle invoices, inventory, and cash flow without juggling spreadsheets.",
+      "items": {
+        "invoiceManagementTitle": "Invoice Management",
+        "invoiceManagementDescription": "Create and print invoices instantly",
+        "inventoryTrackingTitle": "Inventory Tracking",
+        "inventoryTrackingDescription": "Track product stock and get low stock alerts",
+        "customerManagementTitle": "Customer Management",
+        "customerManagementDescription": "Manage customer records and transactions",
+        "supplierManagementTitle": "Supplier Management",
+        "supplierManagementDescription": "Track purchases and supplier payments",
+        "businessAnalyticsTitle": "Business Analytics",
+        "businessAnalyticsDescription": "Understand sales, profit and performance",
+        "paymentTrackingTitle": "Payment Tracking",
+        "paymentTrackingDescription": "Monitor pending payments and cash flow"
+      }
+    },
+    "pricing": {
+      "kicker": "Pricing",
+      "title": "Simple plans for growing teams",
+      "description": "Talk to us for the plan that fits your business size.",
+      "tiers": {
+        "starterName": "Starter",
+        "starterPrice": "Free",
+        "starterDescription": "For early stage businesses",
+        "growthName": "Growth",
+        "growthPrice": "\u20b91,499/mo",
+        "growthDescription": "For scaling teams",
+        "proName": "Pro",
+        "proPrice": "Custom",
+        "proDescription": "For multi-location ops"
+      }
+    },
+    "cta": {
+      "kicker": "Ready to start",
+      "title": "Start managing your business today",
+      "description": "Join thousands of small businesses using BillSutra to simplify billing and inventory.",
+      "primaryCta": "Get Started Free",
+      "secondaryCta": "Book Demo"
+    },
+    "footer": {
+      "description": "Business management built for small teams.",
+      "product": "Product",
+      "company": "Company",
+      "resources": "Resources",
+      "legal": "Legal",
+      "links": {
+        "features": "Features",
+        "pricing": "Pricing",
+        "updates": "Updates",
+        "about": "About",
+        "contact": "Contact",
+        "careers": "Careers",
+        "documentation": "Documentation",
+        "blog": "Blog",
+        "helpCenter": "Help Center",
+        "privacy": "Privacy",
+        "terms": "Terms"
+      },
+      "copyright": "\u00a9 2026 BillSutra. All rights reserved."
+    }
+  },
+  "auth": {
+    "loginPage": {
+      "badge": "Finance Suite",
+      "title": "Sign in to keep your business in motion.",
+      "description": "Track invoices, monitor stock, and oversee cash flow with a single dashboard tailored for teams.",
+      "metricRevenue": "Monthly revenue tracked",
+      "metricOpenInvoices": "Open invoices",
+      "formKicker": "Login",
+      "formTitle": "Welcome back",
+      "formDescription": "Use your work email to continue to BillSutra.",
+      "footerPrompt": "Don't have an account?",
+      "footerAction": "Register"
+    },
+    "registerPage": {
+      "badge": "Workspace",
+      "title": "Create your billing workspace in minutes.",
+      "description": "Centralize customers, products, invoices, and payment follow-ups from day one.",
+      "metricTeams": "Teams onboarded",
+      "metricSetupTime": "Average setup time",
+      "formKicker": "Create account",
+      "formTitle": "Get started",
+      "formDescription": "Sign up with your work email to access the dashboard.",
+      "footerPrompt": "Already have an account?",
+      "footerAction": "Login"
+    },
+    "forgotPage": {
+      "badge": "Reset access",
+      "title": "Forgot your password?",
+      "description": "Enter your email and we will send a reset link."
+    },
+    "resetPage": {
+      "badge": "Secure reset",
+      "title": "Reset your password",
+      "description": "Choose a strong password to keep your billing data protected."
+    },
+    "loginForm": {
+      "emailLabel": "Work email",
+      "emailPlaceholder": "you@company.com",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "forgotPassword": "Forgot password?",
+      "continueWith": "Or continue with",
+      "google": "Sign in with Google",
+      "googleLogoAlt": "Google logo"
+    },
+    "registerForm": {
+      "nameLabel": "Full name",
+      "namePlaceholder": "Your name",
+      "emailLabel": "Work email",
+      "emailPlaceholder": "you@company.com",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Create a password",
+      "confirmPasswordLabel": "Confirm password",
+      "confirmPasswordPlaceholder": "Repeat your password",
+      "continueWith": "Or continue with",
+      "google": "Sign up with Google",
+      "googleLogoAlt": "Google logo",
+      "emailSent": "Email sent successfully",
+      "emailFailed": "Failed to send email"
+    },
+    "forgotForm": {
+      "emailLabel": "Email",
+      "emailPlaceholder": "Type your email",
+      "emailSent": "Email sent successfully",
+      "emailFailed": "Failed to send email"
+    },
+    "resetForm": {
+      "emailLabel": "Email",
+      "emailPlaceholder": "Enter your email",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter your password",
+      "confirmPasswordLabel": "Confirm password",
+      "confirmPasswordPlaceholder": "Confirm your password"
+    }
+  },
+  "customers": {
+    "title": "Customers",
+    "subtitle": "Keep contact details and recent activity handy.",
+    "kicker": "Relationships",
+    "lead": "Keep billing contacts organized so follow-ups, invoices, and payment conversations stay easy to manage.",
+    "addTitle": "Add customer",
+    "addDescription": "Capture billing details once and reuse them wherever you need.",
+    "listTitle": "Customer list",
+    "listDescription": "Review contacts quickly and update details without leaving the page.",
+    "count": "{count} customers",
+    "saveError": "Unable to save customer right now.",
+    "loadError": "Failed to load customers.",
+    "empty": "No customers yet.",
+    "actions": {
+      "add": "Add customer",
+      "save": "Save",
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel"
+    },
+    "fields": {
+      "name": "Name",
+      "email": "Email",
+      "phone": "Phone",
+      "address": "Address"
+    },
+    "placeholders": {
+      "name": "Customer name",
+      "email": "name@example.com",
+      "phone": "9876543210",
+      "address": "City, State"
+    },
+    "fallbacks": {
+      "email": "No email",
+      "phone": "No phone",
+      "address": "No address"
+    }
+  },
+  "inventory": {
+    "title": "Warehouse Inventory",
+    "subtitle": "All warehouse stock levels, grouped by location.",
+    "kicker": "Inventory",
+    "lead": "All warehouse stock levels, grouped by location.",
+    "adjustTitle": "Adjust inventory",
+    "adjustDescription": "Log stock movements for audits and corrections.",
+    "loading": "Loading inventory...",
+    "loadError": "Failed to load inventory.",
+    "empty": "No inventory records yet.",
+    "updateSuccess": "Inventory updated",
+    "updateSuccessDescription": "Change: {change} units",
+    "updateError": "Unable to adjust inventory right now.",
+    "nonZeroQuantity": "Enter a non-zero quantity change.",
+    "selectWarehouse": "Select warehouse",
+    "selectProduct": "Select product",
+    "reorderAt": "Reorder at {level}",
+    "stock": "Stock: {quantity}",
+    "applyAdjustment": "Apply adjustment",
+    "fields": {
+      "warehouse": "Warehouse",
+      "product": "Product",
+      "quantityChange": "Quantity change",
+      "reason": "Reason",
+      "note": "Note"
+    },
+    "placeholders": {
+      "quantityChange": "Use negative values to remove stock",
+      "note": "Optional context"
+    },
+    "reasons": {
+      "ADJUSTMENT": "Adjustment",
+      "PURCHASE": "Purchase",
+      "SALE": "Sale",
+      "RETURN": "Return",
+      "DAMAGE": "Damage"
+    }
+  },
+  "productsPage": {
+    "title": "Products",
+    "subtitle": "Manage SKUs, pricing, and stock levels in one place.",
+    "kicker": "Catalog",
+    "lead": "Add products, maintain stock thresholds, and keep pricing current without bouncing between screens.",
+    "addTitle": "Add product",
+    "addDescription": "Create clean SKUs with category, pricing, and reorder details in one step.",
+    "listTitle": "Product list",
+    "listDescription": "Update stock and pricing from a single, scan-friendly list.",
+    "count": "{count} items",
+    "loadError": "Failed to load products.",
+    "empty": "No products yet.",
+    "saveError": "Unable to save product right now.",
+    "createCategoryError": "Unable to create category.",
+    "uncategorized": "Uncategorized",
+    "categoryLabel": "Category: {name}",
+    "stockLabel": "Stock: {count}",
+    "priceLabel": "Price: {amount}",
+    "actions": {
+      "add": "Add product",
+      "addCategory": "Add",
+      "adding": "Adding...",
+      "save": "Save",
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel"
+    },
+    "fields": {
+      "name": "Product name",
+      "sku": "SKU",
+      "barcode": "Barcode",
+      "sellingPrice": "Selling price",
+      "costPrice": "Cost price",
+      "gstRate": "GST rate",
+      "openingStock": "Opening stock",
+      "reorderLevel": "Reorder level",
+      "category": "Category",
+      "newCategory": "Add new category"
+    },
+    "placeholders": {
+      "name": "Product name",
+      "sku": "SKU",
+      "barcode": "Barcode",
+      "zero": "0",
+      "gstRate": "18",
+      "categoryName": "e.g. Electronics"
+    },
+    "validation": {
+      "invalidName": "Please enter a valid product name"
+    }
+  },
+  "warehousesPage": {
+    "title": "Warehouses",
+    "subtitle": "Monitor warehouse footprints and available stock at a glance.",
+    "kicker": "Storage",
+    "lead": "Monitor warehouse footprints and available stock at a glance.",
+    "createTitle": "Create warehouse",
+    "createDescription": "Add storage locations before stocking inventory.",
+    "listTitle": "Warehouse list",
+    "listDescription": "Keep locations organized and ready for stock moves.",
+    "loading": "Loading warehouses...",
+    "loadError": "Failed to load warehouses.",
+    "empty": "No warehouses yet.",
+    "createError": "Unable to create warehouse right now.",
+    "updateError": "Unable to update warehouse right now.",
+    "deleteError": "Unable to delete warehouse right now.",
+    "created": "Warehouse created",
+    "updated": "Warehouse updated",
+    "deleted": "Warehouse deleted",
+    "confirmDelete": "Delete this warehouse?",
+    "locationNotSet": "Location not set",
+    "actions": {
+      "add": "Add warehouse",
+      "viewStock": "View stock",
+      "save": "Save",
+      "edit": "Edit",
+      "delete": "Delete",
+      "cancel": "Cancel"
+    },
+    "fields": {
+      "name": "Name",
+      "location": "Location"
+    },
+    "placeholders": {
+      "location": "City, building, or zone"
+    },
+    "validation": {
+      "nameMin": "Warehouse name must be at least 2 characters."
+    },
+    "detail": {
+      "titleFallback": "Warehouse",
+      "backToWarehouses": "Back to warehouses",
+      "quickAdjustTitle": "Quick adjust",
+      "quickAdjustDescription": "Apply a stock change directly to this warehouse.",
+      "stockTitle": "Stock left",
+      "stockDescription": "Remaining stock by product for this warehouse.",
+      "itemCount": "{count} items",
+      "empty": "No items stored here yet.",
+      "stockLeft": "Stock left: {count}",
+      "reorderLevel": "Reorder level: {count}"
+    }
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "insights": "Insights",
+    "assistant": "Assistant",
+    "products": "Products",
+    "inventory": "Inventory",
+    "warehouses": "Warehouses",
+    "invoices": "Invoices",
+    "invoiceRecords": "Invoice Records",
+    "clients": "Clients",
+    "workers": "Worker Panel",
+    "suppliers": "Suppliers",
+    "purchases": "Purchases",
+    "sales": "Sales",
+    "templates": "Templates",
+    "businessProfile": "Business Profile",
+    "settings": "Settings"
+  },
+  "profileMenu": {
+    "myAccount": "My Account",
+    "profile": "Profile",
+    "logout": "Logout",
+    "languageSection": "Language",
+    "languageEnglish": "EN",
+    "languageHindi": "हिंदी"
+  },
+  "logoutModal": {
+    "title": "Are you absolutely sure?",
+    "description": "This action will log you out.",
+    "confirm": "Yes Continue"
+  },
+  "topNavbar": {
+    "openSidebar": "Open sidebar",
+    "searchPlaceholder": "Search invoices, customers, products...",
+    "notifications": "Notifications"
+  },
+  "themeToggle": {
+    "toggleTheme": "Toggle theme",
+    "light": "Light",
+    "dark": "Dark",
+    "system": "System"
+  },
+  "sidebar": {
+    "businessLogoAlt": "Business logo",
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar"
+  },
+  "insights": {
+    "title": "Insights and Forecasting",
+    "subtitle": "See projected sales, cashflow, profit, and the alerts that need attention next.",
+    "sections": {
+      "summary": {
+        "kicker": "Forecast snapshot",
+        "title": "Predictions from live business activity",
+        "description": "These cards summarize the next likely direction of receipts, profit, and cash movement using the latest transactions."
+      },
+      "trends": {
+        "kicker": "Trend visualization",
+        "title": "Past vs predicted performance",
+        "description": "Compare historical receipts and profitability against projected movement for the next few months."
+      },
+      "alerts": {
+        "kicker": "Smart alerts",
+        "title": "Risks that need attention",
+        "description": "Focus on warnings first so collections, profitability, and cashflow stay healthy."
+      },
+      "ai": {
+        "kicker": "AI insights",
+        "title": "Actionable business suggestions",
+        "description": "Plain-language suggestions generated from your receipts, expenses, and expected future movement."
+      }
+    },
+    "cards": {
+      "predictedMonthlySales": "Predicted Monthly Sales",
+      "expectedProfit": "Expected Profit",
+      "cashflowForecast": "Cashflow Forecast",
+      "nextThirtyDays": "Next 30 days",
+      "trendVsLastPeriod": "Trend vs last period",
+      "outstandingReceivables": "Outstanding receivables"
+    },
+    "alerts": {
+      "empty": "No major risks flagged right now.",
+      "reviewCollections": "Review collections",
+      "openDashboard": "Open dashboard"
+    }
+  },
+  "assistant": {
+    "title": "AI Assistant",
+    "subtitle": "Ask direct questions about your latest business data and get instant answers.",
+    "introKicker": "Smart assistance",
+    "introTitle": "Ask live questions about sales, profit, pending payments, and cashflow",
+    "introDescription": "The assistant checks your latest financial data for every query and answers in the same language you use.",
+    "chatTitle": "AI Assistant",
+    "chatDescription": "Ask about profit, total sales, pending payments, and cashflow.",
+    "placeholder": "Ask a question about your business...",
+    "send": "Send",
+    "thinking": "Assistant is checking your latest data...",
+    "error": "I could not fetch the latest answer right now. Please try again in a moment.",
+    "welcome": "Hello! I can answer live questions using your Bill Sutra financial data. Ask me about profit, sales, pending payments, or cashflow.",
+    "examplesTitle": "Try these questions",
+    "understandsTitle": "What the assistant understands",
+    "roleUser": "You",
+    "roleAssistant": "Bill Sutra AI",
+    "quickPrompts": {
+      "profit": "What is my profit this month?",
+      "sales": "Show my total sales",
+      "pending": "How much is pending in payments?",
+      "cashflow": "What is my cashflow this month?"
+    },
+    "understands": {
+      "profit": "Profit and margin",
+      "sales": "Total sales and receipts",
+      "pending": "Pending payments and dues",
+      "cashflow": "Cashflow inflow and outflow"
+    }
+  },
+  "dashboard": {
+    "title": "Welcome back, {name}.",
+    "subtitle": "A sharper view of sales, cash movement, profit trend, and inventory demand.",
+    "sectionLinks": {
+      "overview": "Overview",
+      "performance": "Performance",
+      "forecasting": "Forecasting",
+      "operations": "Operations",
+      "records": "Records"
+    },
+    "status": {
+      "live": "Live",
+      "updating": "Updating",
+      "error": "Error",
+      "lastUpdated": "Last updated {time}",
+      "nextUpdateIn": "Next update in {seconds}s"
+    },
+    "filters": {
+      "range7d": "Last 7 days",
+      "range30d": "Last 30 days",
+      "range90d": "Last 90 days",
+      "rangeYtd": "Year to date",
+      "rangeCustom": "Custom",
+      "granularityDay": "Daily",
+      "granularityWeek": "Weekly",
+      "granularityMonth": "Monthly",
+      "start": "Start",
+      "end": "End"
+    },
+    "metricCard": {
+      "vsLastPeriod": "vs last period",
+      "lossImproved": "Loss improved",
+      "lossWidened": "Loss widened",
+      "profitSurged": "Profit surged",
+      "profitDropped": "Profit dropped",
+      "flat": "Flat"
+    },
+    "hero": {
+      "kicker": "Business command center",
+      "operatingViewTitle": "Revenue, receivables, supplier dues, and next actions in one operating view.",
+      "operatingViewDescription": "The dashboard now leads with what needs attention first, then steps through performance, forecasting, and records so the page is easier to scan on every screen size.",
+      "reviewPriorityItems": "Review priority items",
+      "stats": {
+        "salesLabel": "Sales",
+        "salesHelper": "Paid sales + invoice collections",
+        "purchasesLabel": "Purchases",
+        "purchasesHelper": "Stock and supply spend",
+        "pendingSalesLabel": "Pending sales",
+        "pendingSalesHelper": "Customer dues",
+        "pendingPurchasesLabel": "Pending purchases",
+        "pendingPurchasesHelper": "Supplier dues"
+      },
+      "collectionsFocus": "Collections focus",
+      "receivables": "Receivables",
+      "collectionsSummary": "Outstanding customer payments across {count} invoice(s).",
+      "billingHealth": "Billing health",
+      "overdueInvoices": "{count} overdue invoice(s)",
+      "paidSummary": "Paid: {paid} of {total} total."
+    },
+    "focus": {
+      "kicker": "Today's focus",
+      "title": "Priority items",
+      "description": "Surface the tasks most likely to need action before you dive into the charts.",
+      "overdueInvoicesLabel": "Overdue invoices",
+      "overdueInvoicesMeta": "Needs billing follow-up",
+      "pendingCollectionsLabel": "Pending collections",
+      "lowStockAlertsLabel": "Low stock alerts",
+      "lowStockAlertsMeta": "Inventory watchlist",
+      "unreadSignalsLabel": "Unread signals",
+      "unreadSignalsMeta": "Operational notifications"
+    },
+    "sections": {
+      "overview": {
+        "kicker": "Core metrics",
+        "title": "Business pulse at a glance",
+        "description": "Primary KPIs are grouped together first so revenue, spend, collections, and payables can be compared without hunting through the page."
+      },
+      "profit": {
+        "kicker": "Profit trend",
+        "title": "How profitability is moving over time",
+        "description": "Profit cards are separated from operational balances to reduce cognitive load and make period-over-period changes easier to read."
+      },
+      "performance": {
+        "kicker": "Performance",
+        "title": "Revenue, cash, and payment mix",
+        "description": "Charts are grouped by financial story so users can move from booked activity to actual cash movement and then to payment behavior."
+      },
+      "forecasting": {
+        "kicker": "Forecasting",
+        "title": "Demand, inventory, and forward-looking signals",
+        "description": "Forecast widgets sit together with product demand and risk alerts so replenishment decisions can be made from one area."
+      },
+      "operations": {
+        "kicker": "Operations",
+        "title": "Alerts, billing health, and collection queue",
+        "description": "Action-oriented cards are grouped ahead of supporting insight panels so the dashboard helps users decide what to do next, not just what happened.",
+        "openSalesLedger": "Open sales ledger"
+      },
+      "records": {
+        "kicker": "Records",
+        "title": "Transactions and recent invoice history",
+        "description": "Dense data views are pushed toward the end of the page and paired with direct navigation, which keeps the main dashboard focused while still making detail accessible.",
+        "openRecords": "Open records"
+      }
+    },
+    "primaryMetrics": {
+      "totalSalesTitle": "Total Sales",
+      "totalSalesDescription": "Paid direct sales and invoice collections combined for the selected range.",
+      "totalSalesHelper": "Direct sales exclude invoice-synced entries; invoice payments are merged with paid fallback handling to avoid duplicates.",
+      "totalPurchasesTitle": "Total Purchases",
+      "totalPurchasesDescription": "Spend committed to stock and supply purchases.",
+      "totalPurchasesHelper": "Sum of purchase total_amount (fallback total) for the selected range.",
+      "pendingSalesPaymentsTitle": "Pending Sales Payments",
+      "pendingSalesPaymentsDescription": "Outstanding customer payments still to collect.",
+      "pendingSalesPaymentsHelper": "Sum of pending_amount on sales in the selected range.",
+      "pendingSalesPaymentsTrend": "to collect",
+      "pendingPurchasePaymentsTitle": "Pending Purchase Payments",
+      "pendingPurchasePaymentsDescription": "Outstanding supplier payments for recorded purchases.",
+      "pendingPurchasePaymentsHelper": "Sum of pending_amount on purchases in the selected range.",
+      "pendingPurchasePaymentsTrend": "to pay"
+    },
+    "profitMetrics": {
+      "todayTitle": "Today's Profit",
+      "todayDescription": "Today's net after purchases and expenses.",
+      "todayHelper": "(Sales - purchases - expenses) for today.",
+      "weeklyTitle": "Weekly Profit",
+      "weeklyDescription": "Rolling 7-day profit performance.",
+      "weeklyHelper": "(Sales - purchases - expenses) over the last 7 days.",
+      "monthlyTitle": "Monthly Profit",
+      "monthlyDescription": "Current month profit after all outflows.",
+      "monthlyHelper": "(Sales - purchases - expenses) month-to-date.",
+      "yearlyTitle": "Yearly Profit",
+      "yearlyDescription": "Year-to-date profit after purchases and expenses.",
+      "yearlyHelper": "(Sales - purchases - expenses) year-to-date."
+    },
+    "operations": {
+      "billingSnapshotKicker": "Billing snapshot",
+      "invoiceStatisticsTitle": "Invoice statistics",
+      "invoiceStatisticsDescription": "Keep invoice totals, pending items, and overdue follow-ups visible without opening the records page.",
+      "invoiceStatsTotal": "Total",
+      "invoiceStatsPaid": "Paid",
+      "invoiceStatsPending": "Pending",
+      "invoiceStatsOverdue": "Overdue",
+      "collectionQueueKicker": "Collection queue",
+      "pendingSalesPaymentsTitle": "Pending sales payments",
+      "invoiceCount": "{count} invoice(s)",
+      "collectionQueueDescription": "The highest pending balances are surfaced first so collection work stays short and targeted.",
+      "noPendingSalesInvoices": "No pending sales invoices.",
+      "totalPill": "Total: {amount}",
+      "paidPill": "Paid: {amount}",
+      "pendingPill": "Pending: {amount}",
+      "openSales": "Open sales",
+      "viewAllPendingCollections": "View all pending collections"
+    },
+    "records": {
+      "invoiceRecordsKicker": "Invoice records",
+      "recentInvoiceHistoryTitle": "Recent invoice history",
+      "recentInvoiceHistoryDescription": "Recent invoices are sorted by date and trimmed to the latest five so the dashboard stays readable.",
+      "noInvoiceRecords": "No invoice records yet."
+    },
+    "cashflow": {
+      "kicker": "Cash movement",
+      "title": "Cash flow summary",
+      "description": "Current-month collections versus outgoing purchase payments and expenses.",
+      "inflowSource": "Inflow source",
+      "inflowModePayments": "Invoice payments",
+      "inflowModeSales": "Direct sale receipts",
+      "inflowModeHybrid": "Sales receipts + invoice payments",
+      "unableToLoad": "Unable to load cash flow.",
+      "cashInflow": "Cash inflow",
+      "cashOutflow": "Cash outflow",
+      "netCashFlow": "Net cash flow",
+      "sourceMode": "Source mode",
+      "legendCashInflow": "Cash Inflow",
+      "legendCashOutflow": "Cash Outflow",
+      "empty": "No cash flow activity recorded for this period yet.",
+      "footnote": "Includes direct sale receipts, invoice collections, paid purchase amounts, and recorded expenses."
+    },
+    "paymentMethods": {
+      "sectionKicker": "Payment method distribution",
+      "sectionDescription": "Breakdown of paid sales and purchases by payment type.",
+      "periodWeek": "This Week",
+      "periodMonth": "This Month",
+      "periodYear": "This Year",
+      "amountLabel": "Amount: {amount}",
+      "transactionsLabel": "Transactions: {count}",
+      "salesTitle": "Sales payment methods",
+      "salesDescription": "Collected amount distribution for {period}.",
+      "salesEmpty": "No recorded sale payments in this period.",
+      "purchasesTitle": "Purchase payment methods",
+      "purchasesDescription": "Paid amount distribution for {period}.",
+      "purchasesEmpty": "No recorded purchase payments in this period.",
+      "loadError": "Unable to load payment method data.",
+      "totalAmount": "Total amount",
+      "transactions": "Transactions",
+      "topMethod": "Top method",
+      "none": "None",
+      "topMethodShare": "{share} of collected amount",
+      "paymentMix": "Payment mix",
+      "shareOfAmount": "Share of amount",
+      "transactionCount": "{count} transaction(s)"
+    },
+    "salesChart": {
+      "kicker": "Trade pulse",
+      "title": "Sales and purchase analytics",
+      "description": "Compare booked sales against purchase activity to spot demand bursts and stocking pressure.",
+      "last7Days": "Last 7 days",
+      "last30Days": "Last 30 days",
+      "salesSuffix": "{amount} sales",
+      "purchasesSuffix": "{amount} purchases",
+      "loadError": "Unable to load sales data.",
+      "balanceTitle": "Six-month trade balance",
+      "balanceDescription": "Monthly sales and purchase movement across the latest six months.",
+      "categoryMixTitle": "Category revenue mix",
+      "categoryMixDescription": "Top categories ranked by booked sales value.",
+      "legendSales": "Sales",
+      "legendPurchases": "Purchases"
+    },
+    "profitForecast": {
+      "kicker": "Profit radar",
+      "title": "Profit analytics",
+      "description": "Revenue, operating cost, and net profit across the latest six-month window.",
+      "loadError": "Unable to load profit data.",
+      "totalRevenue": "Total revenue",
+      "totalCost": "Total cost",
+      "netProfit": "Net profit",
+      "monthlyTrend": "Monthly profit trend",
+      "avgMargin": "Avg margin: {value}"
+    },
+    "salesForecast": {
+      "receiptsDescription": "Monthly sales forecast uses real cash receipts from paid sales and invoice collections.",
+      "avgDailyReceipts": "Avg daily receipts",
+      "projectedNext30Days": "Projected next 30 days",
+      "trendVsLastPeriod": "Trend vs last period",
+      "actualReceipts": "Actual receipts",
+      "projectedReceipts": "Projected receipts",
+      "kicker": "Forecast studio",
+      "title": "Sales forecast",
+      "description": "Historical sales against projected movement for the selected period.",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "yearly": "Yearly",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing...",
+      "loading": "Loading forecast...",
+      "loadError": "Failed to load forecast data",
+      "empty": "No data available",
+      "historicalSales": "Historical Sales",
+      "predictedSales": "Predicted Sales",
+      "historicalAvg": "Historical Avg",
+      "predictedAvg": "Predicted Avg",
+      "forecastPeriods": "Forecast Periods"
+    },
+    "quickActions": {
+      "kicker": "Shortcuts",
+      "title": "Quick actions",
+      "description": "Jump into common billing, catalog, and purchasing flows without extra navigation.",
+      "createInvoice": "Create Invoice",
+      "addProduct": "Add Product",
+      "addCustomer": "Add Customer",
+      "recordPayment": "Record Payment",
+      "addPurchase": "Add Purchase"
+    },
+    "notifications": {
+      "kicker": "Attention center",
+      "title": "Notifications & alerts",
+      "description": "Review stock issues, unpaid invoices, and supplier reminders.",
+      "loadError": "Unable to load alerts.",
+      "empty": "No alerts right now.",
+      "openDetails": "Open details"
+    },
+    "productSales": {
+      "kicker": "Product momentum",
+      "title": "Product sales performance",
+      "description": "Best-selling products ranked by units sold for the selected window.",
+      "unitsSold": "Units sold",
+      "revenueCaptured": "Revenue captured",
+      "periodWeek": "This Week",
+      "periodMonth": "This Month",
+      "periodYear": "This Year",
+      "periodLifetime": "Lifetime",
+      "tooltipUnitsSold": "Units Sold: {count}",
+      "tooltipRevenue": "Revenue: {amount}",
+      "loadError": "Unable to load sales data.",
+      "empty": "No products sold during this period.",
+      "topProducts": "Showing top {count} products by units sold"
+    },
+    "customerInsights": {
+      "kicker": "Customer pulse",
+      "title": "Customer insights",
+      "description": "Loyalty, churn risk, and visit cadence across your customer base.",
+      "loadError": "Unable to load customers.",
+      "totalRegisteredCustomers": "Total Registered Customers",
+      "topCustomers": "Top customers",
+      "pendingPayments": "Pending payments",
+      "premium": "Premium",
+      "regular": "Regular",
+      "newLow": "New / Low",
+      "topCustomersTitle": "Top 5 customers by total purchase amount",
+      "empty": "No customer data available yet.",
+      "lifetimeValue": "Lifetime Value",
+      "predictedSixMonths": "Predicted (6mo)",
+      "orders": "Orders: {count}",
+      "customersAtRisk": "Customers at risk",
+      "highRisk": "High Risk",
+      "mediumRisk": "Medium Risk",
+      "lowRisk": "Low Risk",
+      "churnRisk": "{value}% churn risk",
+      "lastPurchase": "Last Purchase: {count} days ago",
+      "visitsTitle": "Daily / Weekly / Monthly customers",
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly",
+      "visitsSummary": "Registered: {registered} | Walk-in: {walkIn} | Total: {total}"
+    },
+    "supplierOverview": {
+      "kicker": "Vendor desk",
+      "title": "Supplier overview",
+      "description": "Purchase concentration, payables, and top supplier relationships.",
+      "loadError": "Unable to load suppliers.",
+      "totalSuppliers": "Total Suppliers",
+      "recentPurchases": "Recent Purchases",
+      "outstandingPayables": "Outstanding Payables",
+      "highValue": "High Value",
+      "lowValue": "Low Value",
+      "topSuppliersTitle": "Top 5 suppliers by total purchase amount",
+      "empty": "No supplier data available yet.",
+      "lifetimeValue": "Lifetime Value",
+      "predictedSixMonths": "Predicted (6mo)",
+      "orders": "Orders: {count}"
+    },
+    "activityTimeline": {
+      "kicker": "Recent movement",
+      "title": "Activity timeline",
+      "description": "A quick stream of the latest recorded sales and purchases.",
+      "loadError": "Unable to load activity.",
+      "empty": "No activity yet."
+    },
+    "transactions": {
+      "kicker": "Ledger snapshot",
+      "title": "Recent transactions",
+      "description": "Track the latest invoices and payment status at a glance.",
+      "loadError": "Unable to load transactions.",
+      "empty": "No transactions found for this range.",
+      "date": "Date",
+      "invoice": "Invoice",
+      "customer": "Customer",
+      "amount": "Amount",
+      "paymentStatus": "Payment Status",
+      "page": "Page {current} of {total}",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "inventoryRisk": {
+      "critical": "Critical",
+      "warning": "Warning",
+      "normal": "Normal",
+      "notAvailable": "N/A",
+      "kicker": "Stock watch",
+      "title": "Inventory risk alerts",
+      "description": "Products that need attention",
+      "totalProducts": "Total products",
+      "lowStock": "Low stock",
+      "outOfStock": "Out of stock",
+      "inventoryValue": "Inventory value",
+      "loadError": "Failed to load inventory alerts",
+      "empty": "No products at risk. Inventory levels are healthy.",
+      "outOfStockBadge": "Out of Stock",
+      "stockLeft": "Stock Left",
+      "dailySales": "Daily Sales",
+      "daysUntilStockout": "Days Until Stockout",
+      "reorderQty": "Reorder Qty",
+      "units": "{count} units",
+      "days": "{count} days"
+    },
+    "enums": {
+      "paymentMethod": {
+        "CASH": "Cash",
+        "CARD": "Card",
+        "BANK_TRANSFER": "Bank transfer",
+        "UPI": "UPI",
+        "CHEQUE": "Cheque",
+        "OTHER": "Other"
+      },
+      "paymentStatus": {
+        "PAID": "Paid",
+        "PARTIAL": "Partial",
+        "PENDING": "Pending",
+        "PARTIALLY_PAID": "Partially paid",
+        "UNPAID": "Unpaid"
+      },
+      "notificationType": {
+        "LOW_STOCK": "Low stock",
+        "PENDING_INVOICE": "Pending invoice",
+        "SUPPLIER_PAYABLE": "Supplier payable"
+      }
+    }
+  },
+  "invoice": {
+    "pageTitle": "Create invoice",
+    "pageSubtitle": "Build GST-ready invoices with live totals, customer details, and preview-ready layouts for printing.",
+    "viewHistory": "View invoice history",
+    "statusUnsavedChanges": "Unsaved changes",
+    "invoiceGeneratedAutomatically": "Invoice number is generated automatically.",
+    "createButton": "Create invoice",
+    "createSuccess": "Invoice {{invoiceNumber}} created",
+    "createError": "Unable to create invoice.",
+    "pdfError": "Unable to generate PDF from preview",
+    "sendEmailMissingInvoice": "Create and save the invoice first",
+    "sendEmailMissingCustomer": "Customer email is missing on the saved invoice",
+    "sendEmailSuccess": "Email sent successfully",
+    "sendEmailSuccessInvoice": "Invoice {{invoiceNumber}} email sent",
+    "sendEmailError": "Unable to send invoice email.",
+    "sendEmailFailureToast": "Failed to send email",
+    "invoicePreviewNumber": "INV-NEW",
+    "fallbackCustomer": "Customer",
+    "fallbackItem": "Item",
+    "discountPercentageLabel": "Discount ({{value}}%)",
+    "discountFixedLabel": "Fixed discount",
+    "noItemsSummary": "No items",
+    "itemsSummaryLine": "{{name}} x{{quantity}} @ {{currency}} {{price}}",
+    "gstNoteTitle": "GST note",
+    "gstNoteBody": "Choose CGST + SGST for intra-state invoices and IGST for inter-state billing. Use \"No GST\" for exempt invoices."
+  },
+  "invoiceForm": {
+    "customer": "Customer",
+    "selectCustomer": "Select customer",
+    "invoiceDate": "Invoice date",
+    "dueDate": "Due date",
+    "gstMode": "GST mode",
+    "gstModeCgstSgst": "CGST + SGST",
+    "gstModeIgst": "IGST",
+    "gstModeNone": "No GST",
+    "discountPercentage": "Discount (%)",
+    "discountAmount": "Discount amount",
+    "discountPlaceholder": "0",
+    "discountType": "Discount type",
+    "discountTypePercentage": "Percentage",
+    "discountTypeFixed": "Fixed amount",
+    "notes": "Notes",
+    "syncSales": "Sync with sales and inventory",
+    "syncSalesDescription": "Creates a sales record and deducts stock from inventory.",
+    "warehouse": "Warehouse for stock sync",
+    "selectWarehouse": "Select warehouse",
+    "selectOptionError": "Please select an option"
+  },
+  "invoiceTable": {
+    "lineItems": "Line items",
+    "invoiceItems": "Invoice items",
+    "addItem": "Add item",
+    "product": "Product",
+    "selectProduct": "Select product",
+    "quantity": "Qty",
+    "price": "Price",
+    "gstRate": "GST %",
+    "remove": "Remove"
+  },
+  "invoiceDrafts": {
+    "title": "Draft",
+    "recentDrafts": "Recent drafts",
+    "savedCount": "{{count}} total",
+    "saveDraft": "Save draft",
+    "savedRelative": "Saved {{time}}.",
+    "saveHelp": "Save a draft to continue later without submitting the invoice.",
+    "noDrafts": "No saved drafts yet.",
+    "untitledDraft": "Untitled draft",
+    "current": "Current"
+  },
+  "invoiceActions": {
+    "print": "Print invoice",
+    "downloadPdf": "Download PDF",
+    "sendEmail": "Send Email",
+    "sendingEmail": "Sending..."
+  },
+  "invoiceTotals": {
+    "title": "Totals",
+    "subtotal": "Subtotal",
+    "cgst": "CGST",
+    "sgst": "SGST",
+    "igst": "IGST",
+    "totalGst": "Total GST",
+    "discountFixed": "Discount (fixed)",
+    "discountPercentage": "Discount ({{value}}%)",
+    "total": "Total"
+  },
+  "invoiceHistory": {
+    "title": "Invoice history",
+    "subtitle": "Search completed invoices by their unique invoice number.",
+    "kicker": "Invoices",
+    "searchTitle": "Search invoices",
+    "searchDescription": "Type an invoice number like INV-0001.",
+    "searchPlaceholder": "Search by invoice number",
+    "clear": "Clear",
+    "quickActions": "Quick actions",
+    "resultsTitle": "Results",
+    "resultsShown": "{count} shown",
+    "loading": "Loading invoices...",
+    "loadError": "Failed to load invoices.",
+    "empty": "No invoices found.",
+    "updateStatus": "Update status",
+    "view": "View",
+    "tableSearchPlaceholder": "Search invoice number",
+    "columns": {
+      "invoiceNumber": "Invoice No.",
+      "customer": "Customer",
+      "date": "Date",
+      "status": "Status",
+      "total": "Total",
+      "actions": "Actions"
+    },
+    "statusModalTitle": "Update invoice status",
+    "statusModalDescription": "Save a status change explicitly. Partial and full payments will be recorded in the database.",
+    "summary": {
+      "total": "Total: {amount}",
+      "paid": "Paid: {amount}",
+      "balance": "Balance: {amount}"
+    },
+    "paidAmount": "Paid amount",
+    "paidAmountPlaceholder": "Enter paid amount",
+    "paidRemainingHint": "Saving will record the remaining balance as paid.",
+    "save": "Save",
+    "quickActionsTitle": "Quick actions",
+    "quickActionsDescription": "Start common billing tasks from one place.",
+    "quickCreateInvoice": "Create invoice",
+    "quickCreateClient": "Create client",
+    "quickEditProduct": "Edit product",
+    "messages": {
+      "paidAmountPositive": "Enter a paid amount greater than 0.",
+      "partialLessThanRemaining": "Partial payment must be less than the remaining balance of {amount}.",
+      "partialRecorded": "Partial payment recorded.",
+      "partialRecordError": "Unable to record partial payment.",
+      "markedPaid": "Invoice marked as paid.",
+      "statusUpdateError": "Unable to update invoice status.",
+      "remainingPaymentRecorded": "Remaining payment recorded.",
+      "paymentRecordError": "Unable to record payment.",
+      "markedStatus": "Invoice marked as {status}."
+    },
+    "status": {
+      "DRAFT": "Draft",
+      "SENT": "Sent",
+      "PARTIALLY_PAID": "Partially paid",
+      "PAID": "Paid",
+      "OVERDUE": "Overdue",
+      "VOID": "Void"
+    }
+  },
+  "suppliersPage": {
+    "title": "Suppliers",
+    "subtitle": "Track vendor contacts and procurement partners.",
+    "kicker": "Supply chain",
+    "formTitle": "Add supplier",
+    "formDescription": "Capture vendor contacts and preferred channels.",
+    "fields": {
+      "name": "Name",
+      "email": "Email",
+      "phone": "Phone",
+      "address": "Address"
+    },
+    "placeholders": {
+      "name": "Supplier name",
+      "email": "vendor@example.com",
+      "phone": "+91 98765 43210",
+      "address": "City, State"
+    },
+    "addSupplier": "Add supplier",
+    "saveError": "Unable to save supplier right now.",
+    "listTitle": "Supplier list",
+    "listDescription": "Keep your most active partners handy.",
+    "loading": "Loading suppliers...",
+    "loadError": "Failed to load suppliers.",
+    "empty": "No suppliers yet.",
+    "save": "Save",
+    "edit": "Edit",
+    "noEmail": "No email",
+    "noAddress": "No address",
+    "noPhone": "No phone"
+  },
+  "purchasesPage": {
+    "title": "Purchases",
+    "subtitle": "Record incoming stock and supplier invoices.",
+    "kicker": "Procurement",
+    "formTitle": "Record purchase",
+    "editTitle": "Edit purchase",
+    "formDescription": "Add supplier invoices and incoming stock.",
+    "editingNotice": "Editing PO-{id}. Adjust quantities to update stock.",
+    "fields": {
+      "supplier": "Supplier",
+      "warehouse": "Warehouse",
+      "purchaseDate": "Purchase date",
+      "notes": "Notes",
+      "paymentStatus": "Payment status",
+      "amountPaid": "Paid amount",
+      "paymentDate": "Payment date",
+      "paymentMethod": "Payment method"
+    },
+    "placeholders": {
+      "notes": "Invoice reference",
+      "amountPaid": "0"
+    },
+    "validation": {
+      "selectSupplier": "Please select a supplier",
+      "selectWarehouse": "Please select a warehouse"
+    },
+    "directPurchase": "Direct purchase",
+    "defaultStock": "Default stock",
+    "selectMethod": "Select method",
+    "optional": "Optional",
+    "lineItems": {
+      "title": "Line items",
+      "addItem": "Add item",
+      "fixTitle": "Fix the following:",
+      "selectProduct": "Select product",
+      "removeItem": "Remove item",
+      "fields": {
+        "product": "Product",
+        "quantity": "Quantity",
+        "unitCost": "Unit cost",
+        "taxRate": "Tax rate"
+      },
+      "errors": {
+        "product": "Select a product.",
+        "quantity": "Quantity must be greater than 0.",
+        "unitCost": "Unit cost must be greater than 0.",
+        "taxRate": "Tax rate must be 0 or higher."
+      },
+      "summary": {
+        "product": "Select a product for each line item.",
+        "quantity": "Ensure quantities are valid numbers greater than 0.",
+        "unitCost": "Enter a valid unit cost greater than 0 for each item.",
+        "taxRate": "Tax rates must be 0 or higher when provided."
+      }
+    },
+    "savePurchase": "Save purchase",
+    "updatePurchase": "Update purchase",
+    "cancelEdit": "Cancel edit",
+    "saveError": "Unable to save purchase right now.",
+    "listTitle": "Recent purchases",
+    "listDescription": "Latest supplier invoices and incoming stock.",
+    "loading": "Loading purchases...",
+    "loadError": "Failed to load purchases.",
+    "empty": "No purchases yet.",
+    "purchaseCode": "PO-{id}",
+    "direct": "Direct",
+    "itemsCount": "Items: {count}",
+    "warehouseName": "Warehouse: {name}",
+    "totals": {
+      "total": "Total {amount}",
+      "paid": "Paid {amount}",
+      "pending": "Pending {amount}"
+    },
+    "edit": "Edit",
+    "supplierForm": {
+      "saveError": "Unable to create supplier right now.",
+      "errors": {
+        "name": "Supplier name must be at least 2 characters.",
+        "phone": "Phone number should be at least 6 characters."
+      }
+    }
+  },
+  "salesPage": {
+    "title": "Sales",
+    "subtitle": "Track outgoing invoices and realized revenue.",
+    "kicker": "Billing",
+    "formTitle": "Create sale",
+    "formDescription": "Record customer invoices and outgoing stock.",
+    "fields": {
+      "customer": "Customer",
+      "warehouse": "Warehouse",
+      "saleDate": "Sale date",
+      "notes": "Notes",
+      "paymentStatus": "Payment status",
+      "amountPaid": "Paid amount",
+      "paymentDate": "Payment date",
+      "paymentMethod": "Payment method",
+      "status": "Status"
+    },
+    "placeholders": {
+      "notes": "Invoice reference",
+      "amountPaid": "0"
+    },
+    "defaultStock": "Default stock",
+    "selectMethod": "Select method",
+    "optional": "Optional",
+    "saveSale": "Save sale",
+    "save": "Save",
+    "edit": "Edit",
+    "recentTitle": "Recent sales",
+    "recentDescription": "Update status and track settled invoices.",
+    "loading": "Loading sales...",
+    "loadError": "Failed to load sales.",
+    "empty": "No sales yet.",
+    "invoiceCode": "INV-{id}",
+    "itemsCount": "Items: {count}",
+    "totals": {
+      "total": "Total {amount}",
+      "paid": "Paid {amount}",
+      "pending": "Pending {amount}"
+    },
+    "status": {
+      "DRAFT": "Draft",
+      "COMPLETED": "Completed",
+      "VOID": "Void"
+    },
+    "customer": {
+      "quickAdd": "Quick add",
+      "addTitle": "Add customer",
+      "addDescription": "Create a customer without leaving this screen.",
+      "save": "Save customer",
+      "walkIn": "Walk-in customer",
+      "fields": {
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "address": "Address"
+      },
+      "errors": {
+        "name": "Customer name must be at least 2 characters.",
+        "phone": "Phone number should be at least 6 characters."
+      }
+    },
+    "lineItems": {
+      "title": "Line items",
+      "addItem": "Add item",
+      "fixTitle": "Fix the following:",
+      "selectProduct": "Select product",
+      "removeItem": "Remove item",
+      "fields": {
+        "product": "Product",
+        "quantity": "Quantity",
+        "unitPrice": "Unit price",
+        "taxRate": "Tax rate"
+      },
+      "errors": {
+        "product": "Select a product.",
+        "quantity": "Quantity must be greater than 0.",
+        "unitPrice": "Unit price must be greater than 0.",
+        "taxRate": "Tax rate must be 0 or higher."
+      },
+      "summary": {
+        "product": "Select a product for each line item.",
+        "quantity": "Ensure quantities are valid numbers greater than 0.",
+        "unitPrice": "Enter a valid unit price greater than 0 for each item.",
+        "taxRate": "Tax rates must be 0 or higher when provided."
+      }
+    },
+    "messages": {
+      "saveError": "Unable to save sale right now.",
+      "createCustomerError": "Unable to create customer right now.",
+      "updateError": "Unable to update sale right now.",
+      "deleteError": "Unable to delete sale right now.",
+      "deleteConfirm": "Delete this sale? Product stock will be restored."
+    }
+  },
+  "templatesPage": {
+    "title": "Templates",
+    "subtitle": "Customize invoice sections, styling, and reusable layouts.",
+    "kicker": "Template studio",
+    "heading": "Invoice templates",
+    "description": "Choose a business type, enable sections, and preview updates in real time.",
+    "copySuffix": "copy",
+    "live": "Live",
+    "mockData": "Mock data",
+    "loading": "Loading templates...",
+    "savedTemplates": "My saved templates",
+    "featured": "Featured",
+    "allTemplates": "All templates",
+    "active": "Active",
+    "updated": "Updated {value}",
+    "previewTitle": "Template preview",
+    "previewSettings": "Preview settings",
+    "previewSections": "Sections",
+    "searchPlaceholder": "Search saved templates",
+    "sections": {
+      "businessType": "1. Business type",
+      "customize": "2. Customize sections",
+      "styling": "3. Template styling",
+      "livePreview": "Live preview",
+      "selection": "4. Template selection"
+    },
+    "filters": {
+      "allTemplates": "All templates",
+      "currentBase": "Current base"
+    },
+    "actions": {
+      "remove": "Remove",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "up": "Up",
+      "down": "Down",
+      "addSections": "Add sections",
+      "themeColor": "Theme color",
+      "backgroundColor": "Background color",
+      "textColor": "Text color",
+      "fontFamily": "Font family",
+      "fontSize": "Font size ({value}px)",
+      "sectionPadding": "Section padding ({value}px)",
+      "sectionMargin": "Section margin ({value}px)",
+      "borderRadius": "Border radius ({value}px)",
+      "sectionWidth": "Section width",
+      "widthContained": "Contained",
+      "widthFull": "Full width",
+      "backgroundImage": "Background image",
+      "removeBackgroundImage": "Remove background image",
+      "apply": "Apply",
+      "showLogo": "Show logo",
+      "saving": "Saving...",
+      "saveSettings": "Save settings",
+      "savingTemplate": "Saving template...",
+      "saveAsTemplate": "Save as template",
+      "resetSection": "Reset section",
+      "resetAll": "Reset all",
+      "saveDesign": "Save design",
+      "loadDesign": "Load design",
+      "saveCurrent": "Save current",
+      "applyTemplate": "Apply",
+      "update": "Update",
+      "rename": "Rename",
+      "preview": "Preview",
+      "useTemplate": "Use template",
+      "downloadPdf": "Download PDF",
+      "close": "Close"
+    },
+    "prompts": {
+      "saveName": "Enter a name for your saved template",
+      "renameName": "Rename saved template",
+      "deleteConfirm": "Delete this saved template?"
+    },
+    "empty": {
+      "filtered": "No saved templates match your search/filter.",
+      "none": "No saved templates yet. Save your current setup to create one."
+    },
+    "toasts": {
+      "settingsSaved": "Template settings saved",
+      "settingsSaveError": "Unable to save template settings",
+      "savedCreated": "Saved template created",
+      "savedCreateError": "Unable to create saved template",
+      "savedUpdated": "Saved template updated",
+      "savedUpdateError": "Unable to update saved template",
+      "savedDeleted": "Saved template deleted",
+      "savedDeleteError": "Unable to delete saved template",
+      "validThemeHex": "Use a valid 6-digit hex color like #2563eb",
+      "validSectionHex": "Use a valid 6-digit hex color like #334155",
+      "previewPdfError": "Unable to generate PDF from preview"
+    },
+    "aria": {
+      "dragToReorder": "Drag to reorder",
+      "setThemeColor": "Set theme color {color}",
+      "setBackgroundColor": "Set background color {color}",
+      "setTextColor": "Set text color {color}"
+    }
+  },
+  "businessProfilePage": {
+    "title": "Business Profile",
+    "subtitle": "Set up business identity and invoice defaults.",
+    "kicker": "Invoice onboarding",
+    "heading": "Set up your billing profile",
+    "steps": {
+      "businessType": "Business type",
+      "businessDetails": "Business details",
+      "template": "Template"
+    },
+    "stepTitles": {
+      "businessType": "Step 1: Choose business type",
+      "businessProfile": "Step 2: Business profile",
+      "templateSelection": "Step 3: Template selection"
+    },
+    "enabledSections": "Enabled sections",
+    "fields": {
+      "businessName": "Business name",
+      "phone": "Phone",
+      "address": "Address",
+      "email": "Email",
+      "website": "Website",
+      "taxId": "Tax ID / GSTIN",
+      "currency": "Currency"
+    },
+    "placeholders": {
+      "businessName": "Business name",
+      "phone": "9876543210",
+      "address": "Business address",
+      "email": "name@example.com",
+      "website": "https://example.com",
+      "taxId": "GSTIN or Tax ID",
+      "currency": "INR"
+    },
+    "toggles": {
+      "showLogoOnInvoice": "Show logo on invoice",
+      "showTaxNumber": "Show tax number",
+      "showPaymentQr": "Show payment QR"
+    },
+    "actions": {
+      "back": "Back",
+      "next": "Next",
+      "finish": "Finish",
+      "saving": "Saving..."
+    },
+    "previewTitle": "Preview",
+    "previewDescription": "Matches the selected template and business profile.",
+    "messages": {
+      "saved": "Business profile saved",
+      "saveError": "Unable to save business profile"
+    },
+    "logo": {
+      "title": "Business Logo",
+      "uploadAriaLabel": "Upload logo",
+      "imageAlt": "Business logo",
+      "replaceHint": "Click or drag to replace",
+      "uploadTitle": "Upload a logo",
+      "uploadDescription": "PNG, JPG, JPEG or WebP · max 2 MB",
+      "remove": "Remove logo",
+      "messages": {
+        "fileType": "Only PNG, JPG, JPEG, and WebP files are allowed.",
+        "fileSize": "File size must not exceed 2 MB.",
+        "replaced": "Logo replaced successfully.",
+        "uploaded": "Logo uploaded successfully.",
+        "processError": "Failed to process the image.",
+        "removed": "Logo removed."
+      }
+    }
+  },
+  "validation": {
+    "required": "This field is required",
+    "validDate": "Select a valid date",
+    "validNumber": "Enter a valid number",
+    "validName": "Please enter a valid name (letters only)",
+    "validEmail": "Enter a valid email address",
+    "validPhone": "Enter a valid phone number",
+    "invoiceSelectCustomer": "Select a customer.",
+    "invoiceSelectWarehouse": "Select a warehouse to sync inventory.",
+    "invoiceSelectProduct": "Select a product.",
+    "invoiceEnterItemName": "Enter an item name.",
+    "invoiceQuantityPositive": "Quantity must be greater than 0.",
+    "invoicePricePositive": "Price must be greater than 0.",
+    "invoiceTaxPositive": "Tax rate must be 0 or higher.",
+    "invoiceEachLineItem": "Select a product for each line item.",
+    "invoiceWarehouseSync": "Choose a warehouse when syncing inventory.",
+    "invoiceQuantitySummary": "Ensure quantities are valid numbers greater than 0.",
+    "invoicePriceSummary": "Enter a valid price for each item.",
+    "invoiceTaxSummary": "Tax rates must be 0 or higher when provided."
+  },
+  "time": {
+    "justNow": "just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago"
+  }
+}

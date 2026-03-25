@@ -18,6 +18,7 @@ import {
   useSuppliersQuery,
   useUpdateSupplierMutation,
 } from "@/hooks/useInventoryQueries";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type SuppliersClientProps = {
   name: string;
@@ -25,6 +26,7 @@ type SuppliersClientProps = {
 };
 
 const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
+  const { t } = useI18n();
   const { data, isLoading, isError } = useSuppliersQuery();
   const createSupplier = useCreateSupplierMutation();
   const updateSupplier = useUpdateSupplierMutation();
@@ -44,6 +46,25 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
   });
 
   const suppliers = useMemo(() => data ?? [], [data]);
+
+  const translateValidationMessage = (message: string) => {
+    switch (message) {
+      case "This field is required":
+        return t("validation.required");
+      case "Please enter a valid name (letters only)":
+        return t("validation.validName");
+      case "Enter a valid email address":
+        return t("validation.validEmail");
+      case "Enter a valid phone number":
+        return t("validation.validPhone");
+      default:
+        return message;
+    }
+  };
+
+  const withTranslatedValidation =
+    (validator: (value: string) => string) => (value: string) =>
+      translateValidationMessage(validator(value));
 
   const isMutating =
     createSupplier.isPending ||
@@ -95,24 +116,26 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title="Suppliers"
-      subtitle="Track vendor contacts and procurement partners."
+      title={t("suppliersPage.title")}
+      subtitle={t("suppliersPage.subtitle")}
     >
       <div className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-2">
           <p className="text-sm uppercase tracking-[0.2em] text-[#8a6d56]">
-            Supply chain
+            {t("suppliersPage.kicker")}
           </p>
           <p className="max-w-2xl text-base text-[#5c4b3b]">
-            Track vendor contacts and procurement partners.
+            {t("suppliersPage.subtitle")}
           </p>
         </div>
 
         <section className="mt-6 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
-            <h2 className="text-lg font-semibold">Add supplier</h2>
+            <h2 className="text-lg font-semibold">
+              {t("suppliersPage.formTitle")}
+            </h2>
             <p className="text-sm text-[#8a6d56]">
-              Capture vendor contacts and preferred channels.
+              {t("suppliersPage.formDescription")}
             </p>
             <form
               className="mt-4 grid gap-4"
@@ -121,48 +144,56 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
             >
               <ValidationField
                 id="name"
-                label="Name"
+                label={t("suppliersPage.fields.name")}
                 value={form.name}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, name: value }))
                 }
-                validate={validateName}
+                validate={withTranslatedValidation(validateName)}
                 required
-                placeholder="Supplier name"
+                placeholder={t("suppliersPage.placeholders.name")}
                 success
               />
               <ValidationField
                 id="email"
-                label="Email"
+                label={t("suppliersPage.fields.email")}
                 type="email"
                 value={form.email}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, email: value }))
                 }
-                validate={(value) => (value ? validateEmail(value) : "")}
-                placeholder="vendor@example.com"
+                validate={(value) =>
+                  value
+                    ? translateValidationMessage(validateEmail(value))
+                    : ""
+                }
+                placeholder={t("suppliersPage.placeholders.email")}
                 success
               />
               <ValidationField
                 id="phone"
-                label="Phone"
+                label={t("suppliersPage.fields.phone")}
                 value={form.phone}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, phone: value }))
                 }
-                validate={(value) => (value ? validatePhone(value) : "")}
-                placeholder="+91 98765 43210"
+                validate={(value) =>
+                  value
+                    ? translateValidationMessage(validatePhone(value))
+                    : ""
+                }
+                placeholder={t("suppliersPage.placeholders.phone")}
                 success
               />
               <ValidationField
                 id="address"
-                label="Address"
+                label={t("suppliersPage.fields.address")}
                 value={form.address}
                 onChange={(value) =>
                   setForm((prev) => ({ ...prev, address: value }))
                 }
-                validate={validateRequired}
-                placeholder="City, State"
+                validate={withTranslatedValidation(validateRequired)}
+                placeholder={t("suppliersPage.placeholders.address")}
                 success
               />
               <Button
@@ -170,32 +201,38 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                 className="bg-[#1f1b16] text-white hover:bg-[#2c2520]"
                 disabled={isMutating}
               >
-                Add supplier
+                {t("suppliersPage.addSupplier")}
               </Button>
               {(createSupplier.isError || updateSupplier.isError) && (
                 <p className="text-sm text-[#b45309]">
-                  Unable to save supplier right now.
+                  {t("suppliersPage.saveError")}
                 </p>
               )}
             </form>
           </div>
 
           <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
-            <h2 className="text-lg font-semibold">Supplier list</h2>
+            <h2 className="text-lg font-semibold">
+              {t("suppliersPage.listTitle")}
+            </h2>
             <p className="text-sm text-[#8a6d56]">
-              Keep your most active partners handy.
+              {t("suppliersPage.listDescription")}
             </p>
             <div className="mt-4">
               {isLoading && (
-                <p className="text-sm text-[#8a6d56]">Loading suppliers...</p>
+                <p className="text-sm text-[#8a6d56]">
+                  {t("suppliersPage.loading")}
+                </p>
               )}
               {isError && (
                 <p className="text-sm text-[#b45309]">
-                  Failed to load suppliers.
+                  {t("suppliersPage.loadError")}
                 </p>
               )}
               {!isLoading && !isError && suppliers.length === 0 && (
-                <p className="text-sm text-[#8a6d56]">No suppliers yet.</p>
+                <p className="text-sm text-[#8a6d56]">
+                  {t("suppliersPage.empty")}
+                </p>
               )}
               {!isLoading && !isError && suppliers.length > 0 && (
                 <div className="grid gap-3">
@@ -212,7 +249,7 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                         >
                           <ValidationField
                             id="edit-name"
-                            label="Name"
+                            label={t("suppliersPage.fields.name")}
                             value={editingForm.name}
                             onChange={(value) =>
                               setEditingForm((prev) => ({
@@ -220,13 +257,13 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                                 name: value,
                               }))
                             }
-                            validate={validateName}
+                            validate={withTranslatedValidation(validateName)}
                             required
                             success
                           />
                           <ValidationField
                             id="edit-email"
-                            label="Email"
+                            label={t("suppliersPage.fields.email")}
                             type="email"
                             value={editingForm.email}
                             onChange={(value) =>
@@ -236,13 +273,17 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                               }))
                             }
                             validate={(value) =>
-                              value ? validateEmail(value) : ""
+                              value
+                                ? translateValidationMessage(
+                                    validateEmail(value),
+                                  )
+                                : ""
                             }
                             success
                           />
                           <ValidationField
                             id="edit-phone"
-                            label="Phone"
+                            label={t("suppliersPage.fields.phone")}
                             value={editingForm.phone}
                             onChange={(value) =>
                               setEditingForm((prev) => ({
@@ -251,13 +292,17 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                               }))
                             }
                             validate={(value) =>
-                              value ? validatePhone(value) : ""
+                              value
+                                ? translateValidationMessage(
+                                    validatePhone(value),
+                                  )
+                                : ""
                             }
                             success
                           />
                           <ValidationField
                             id="edit-address"
-                            label="Address"
+                            label={t("suppliersPage.fields.address")}
                             value={editingForm.address}
                             onChange={(value) =>
                               setEditingForm((prev) => ({
@@ -265,7 +310,7 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                                 address: value,
                               }))
                             }
-                            validate={validateRequired}
+                            validate={withTranslatedValidation(validateRequired)}
                             success
                           />
                           <div className="flex flex-wrap gap-2">
@@ -274,14 +319,14 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                               className="bg-[#1f1b16] text-white hover:bg-[#2c2520]"
                               disabled={isMutating}
                             >
-                              Save
+                              {t("suppliersPage.save")}
                             </Button>
                             <Button
                               type="button"
                               variant="outline"
                               onClick={() => setEditingId(null)}
                             >
-                              Cancel
+                              {t("common.cancel")}
                             </Button>
                           </div>
                         </form>
@@ -292,20 +337,20 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                               {supplier.name}
                             </p>
                             <p className="text-xs text-[#8a6d56]">
-                              {supplier.email ?? "No email"}
+                              {supplier.email ?? t("suppliersPage.noEmail")}
                             </p>
                             <p className="text-xs text-[#8a6d56]">
-                              {supplier.address ?? "No address"}
+                              {supplier.address ?? t("suppliersPage.noAddress")}
                             </p>
                           </div>
                           <div className="flex flex-wrap items-center gap-2 text-sm text-[#5c4b3b]">
-                            <span>{supplier.phone ?? "No phone"}</span>
+                            <span>{supplier.phone ?? t("suppliersPage.noPhone")}</span>
                             <Button
                               type="button"
                               variant="outline"
                               onClick={() => handleEdit(supplier.id)}
                             >
-                              Edit
+                              {t("suppliersPage.edit")}
                             </Button>
                             <Button
                               type="button"
@@ -313,7 +358,7 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                               onClick={() => deleteSupplier.mutate(supplier.id)}
                               disabled={deleteSupplier.isPending}
                             >
-                              Delete
+                              {t("common.delete")}
                             </Button>
                           </div>
                         </div>

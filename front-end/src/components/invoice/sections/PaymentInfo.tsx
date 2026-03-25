@@ -4,7 +4,7 @@ import { calculateTotals, formatCurrency } from "./utils";
 
 const PaymentInfo = ({ data, theme }: InvoiceSectionProps) => {
   const { style } = useSectionStyles("payment_info");
-  const totals = calculateTotals(data.items);
+  const totals = data.totals ?? calculateTotals(data.items);
   const receivedAmount = 0;
   const balanceAmount = totals.total - receivedAmount;
 

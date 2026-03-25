@@ -4,6 +4,7 @@ import InvoiceRenderer, {
 
 export type TemplatePreviewRendererProps = InvoiceRendererProps & {
   templateId?: string | null;
+  templateName?: string | null;
 };
 
 export const InvoiceTemplate1 = (props: InvoiceRendererProps) => {
@@ -42,18 +43,28 @@ const classicTemplateIds = new Set([
   "monarch",
 ]);
 
-const resolveTemplateVariant = (templateId?: string | null) => {
-  const normalized = (templateId ?? "").trim().toLowerCase();
-  if (modernTemplateIds.has(normalized)) return "modern" as const;
-  if (classicTemplateIds.has(normalized)) return "classic" as const;
+const resolveTemplateVariant = (
+  templateId?: string | null,
+  templateName?: string | null,
+) => {
+  const candidates = [templateId, templateName]
+    .map((value) => (value ?? "").trim().toLowerCase())
+    .filter(Boolean);
+  if (candidates.some((value) => modernTemplateIds.has(value))) {
+    return "modern" as const;
+  }
+  if (candidates.some((value) => classicTemplateIds.has(value))) {
+    return "classic" as const;
+  }
   return "minimal" as const;
 };
 
 const TemplatePreviewRenderer = ({
   templateId,
+  templateName,
   ...rendererProps
 }: TemplatePreviewRendererProps) => {
-  const SelectedTemplate = templates[resolveTemplateVariant(templateId)];
+  const SelectedTemplate = templates[resolveTemplateVariant(templateId, templateName)];
   return <SelectedTemplate {...rendererProps} />;
 };
 

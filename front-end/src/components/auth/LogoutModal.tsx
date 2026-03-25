@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {signOut} from 'next-auth/react'
+import { useI18n } from "@/providers/LanguageProvider";
 const LogoutModal = ({
   open,
   setOpen,
@@ -17,6 +18,7 @@ const LogoutModal = ({
   open: boolean;
   setOpen: Dispatch<SetStateAction<boolean>>;
 }) => {
+const { t } = useI18n();
 
 
 const logoutUser = ()=>{
@@ -34,14 +36,14 @@ const logoutUser = ()=>{
     <AlertDialog open={open} onOpenChange={setOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+          <AlertDialogTitle>{t("logoutModal.title")}</AlertDialogTitle>
           <AlertDialogDescription>
-            This action will log you out.
+            {t("logoutModal.description")}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction onClick={logoutUser} >Yes Continue</AlertDialogAction>
+          <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+          <AlertDialogAction onClick={logoutUser} >{t("logoutModal.confirm")}</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
