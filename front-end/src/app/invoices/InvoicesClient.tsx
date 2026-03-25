@@ -462,17 +462,17 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             : t("invoice.discountFixedLabel"),
       },
       paymentSummary: {
-        statusLabel: "Pending",
+        statusLabel: t("invoicePreview.pending"),
         statusTone: "pending",
-        statusNote: "Awaiting payment",
+        statusNote: t("invoiceDetail.awaitingPayment"),
         paidAmount: 0,
         remainingAmount: totals.total,
         history: [],
       },
       notes: form.notes || "",
-      paymentInfo: "Payment status and balances are tracked after invoice creation.",
-      closingNote: "Thank you for your business.",
-      signatureLabel: "Authorized signatory",
+      paymentInfo: t("invoiceDetail.paymentInfo"),
+      closingNote: t("invoiceDetail.closingNote"),
+      signatureLabel: t("invoiceDetail.signatureLabel"),
     };
   }, [
     businessProfile,
@@ -582,8 +582,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       toast.success(
         options?.toastMessage ??
           (incrementedQuantity
-            ? `${product.name} quantity increased`
-            : `${product.name} added to bill`),
+            ? t("invoiceComposer.quantityIncreased", { name: product.name })
+            : t("invoiceComposer.itemAdded", { name: product.name })),
       );
 
       if (options?.focusSearch !== false) {
@@ -609,7 +609,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       flashShortcutSection("entry");
 
       if (options?.announce) {
-        toast.success("New bill created");
+        toast.success(t("invoice.createButton"));
       }
 
       focusProductSearch();
@@ -636,7 +636,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
   const removeItem = useCallback(
     (index: number, options?: { announce?: boolean }) => {
-      let removedLabel = "Item";
+      let removedLabel = t("invoiceComposer.itemFallback");
       let nextSelectedIndex: number | null = null;
       let removedItem: InvoiceItemForm | null = null;
 
@@ -672,11 +672,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       flashShortcutSection("items");
 
       if (options?.announce !== false) {
-        toast.success(`${removedLabel} removed from bill`, {
+        toast.success(t("invoiceComposer.itemRemoved", { name: removedLabel }), {
           action:
             removedItem !== null
               ? {
-                  label: "Undo",
+                  label: t("invoiceComposer.undo"),
                   onClick: () => {
                     const itemToRestore = removedItem;
                     if (!itemToRestore) return;
@@ -698,7 +698,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
       focusProductSearch(false);
     },
-    [flashShortcutSection, focusProductSearch, markDirty, resolvedSelectedItemIndex],
+    [flashShortcutSection, focusProductSearch, markDirty, resolvedSelectedItemIndex, t],
   );
 
   const handleFormChange = useCallback(
@@ -732,7 +732,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     (product: Product | null) => {
       if (!product) {
         flashShortcutSection("entry");
-        toast.error("Select or scan a product first.");
+        toast.error(t("invoiceComposer.selectOrScanProduct"));
         focusProductSearch();
         return;
       }
@@ -743,15 +743,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   );
 
   const handleSuggestedProductAdd = useCallback(
-    (product: Product, source: "suggested" | "recent") => {
+    (product: Product, _source: "suggested" | "recent") => {
       addProductToBill(product, {
-        toastMessage:
-          source === "suggested"
-            ? `${product.name} added from smart suggestions`
-            : `${product.name} added from quick access`,
+        toastMessage: t("invoiceComposer.itemAdded", { name: product.name }),
       });
     },
-    [addProductToBill],
+    [addProductToBill, t],
   );
 
   const handleQuickCreateProduct = useCallback(
@@ -763,13 +760,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       const trimmedBarcode = quickProductForm.barcode.trim();
 
       if (!trimmedName) {
-        toast.error("Enter a product name.");
+        toast.error(t("invoiceComposer.enterProductName"));
         quickProductNameRef.current?.focus();
         return;
       }
 
       if (!trimmedPrice || Number.isNaN(Number(trimmedPrice)) || Number(trimmedPrice) <= 0) {
-        toast.error("Enter a valid selling price.");
+        toast.error(t("invoiceComposer.enterValidSellingPrice"));
         return;
       }
 
@@ -790,15 +787,15 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           productId: createdProduct.id,
         });
         addProductToBill(createdProduct, {
-          toastMessage: `${createdProduct.name} created and added to bill`,
+          toastMessage: `${createdProduct.name} ${t("invoiceComposer.addToCart").toLowerCase()}`,
         });
       } catch (error) {
         toast.error(
-          parseServerErrors(error, "Unable to create the product right now."),
+          parseServerErrors(error, t("inventory.saveError")),
         );
       }
     },
-    [addProductToBill, createProduct, parseServerErrors, quickProductForm],
+    [addProductToBill, createProduct, parseServerErrors, quickProductForm, t],
   );
 
   const handleQuickCreateCustomer = useCallback(
@@ -809,13 +806,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       const trimmedPhone = quickCustomerForm.phone.trim();
 
       if (trimmedName.length < 2) {
-        toast.error("Customer name must be at least 2 characters.");
+        toast.error(t("invoiceComposer.customerNameMin"));
         quickCustomerNameRef.current?.focus();
         return;
       }
 
       if (trimmedPhone && trimmedPhone.length < 6) {
-        toast.error("Phone number should be at least 6 characters.");
+        toast.error(t("invoiceComposer.customerPhoneMin"));
         return;
       }
 
@@ -843,11 +840,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           customerId: createdCustomer.id,
         });
         flashShortcutSection("form");
-        toast.success(`${createdCustomer.name} added as bill customer`);
+        toast.success(
+          t("invoiceComposer.billCustomerAdded", { name: createdCustomer.name }),
+        );
         focusProductSearch();
       } catch (error) {
         toast.error(
-          parseServerErrors(error, "Unable to create the customer right now."),
+          parseServerErrors(error, t("customers.saveError")),
         );
       }
     },
@@ -909,7 +908,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         flashShortcutSection("items");
       }
 
-      toast.error(validation.summary[0] ?? "Complete the required billing details.");
+      toast.error(validation.summary[0] ?? t("invoiceComposer.missingDetails"));
       return;
     }
 
@@ -1006,12 +1005,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
     const recipient = invoiceEmailRecipient.trim();
     if (!recipient) {
-      setInvoiceEmailError("Enter the customer email to send this invoice.");
+      setInvoiceEmailError(t("invoiceDetail.messages.enterCustomerEmail"));
       return;
     }
 
     if (!/^[\w-.]+@[\w-]+\.[a-zA-Z]{2,}$/.test(recipient)) {
-      setInvoiceEmailError("Enter a valid email address.");
+      setInvoiceEmailError(t("invoiceDetail.messages.enterValidEmail"));
       return;
     }
 
@@ -1110,13 +1109,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           event.preventDefault();
           setQuickAddProductOpen(true);
           flashShortcutSection("actions");
-          toast.success("Quick product form opened");
+          toast.success(t("invoiceComposer.quickProductOpened"));
           break;
         case "c":
           event.preventDefault();
           setQuickAddCustomerOpen(true);
           flashShortcutSection("actions");
-          toast.success("Quick customer form opened");
+          toast.success(t("invoiceComposer.quickCustomerOpened"));
           break;
         case "s":
           event.preventDefault();
@@ -1130,20 +1129,20 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             discountInput.select();
           }
           flashShortcutSection("form");
-          toast.success("Discount field focused");
+          toast.success(t("invoiceComposer.discountFocused"));
           break;
         }
         case "q":
           event.preventDefault();
           flashShortcutSection("entry");
           focusProductSearch();
-          toast.success("Product search focused");
+          toast.success(t("invoiceComposer.productSearchFocused"));
           break;
         default:
           if (key === "delete" || (isMacShortcutPlatform && key === "backspace")) {
             event.preventDefault();
             if (resolvedSelectedItemIndex === null || items.length === 0) {
-              toast.error("Select a line item first.");
+              toast.error(t("invoiceComposer.selectLineItemFirst"));
               flashShortcutSection("items");
               return;
             }
@@ -1190,7 +1189,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         className="h-11 rounded-xl px-4"
         onClick={() => resetInvoiceComposer({ announce: true })}
       >
-        New bill ({shortcutModifierLabel}+B)
+        {t("invoiceComposer.newBill", { key: shortcutModifierLabel })}
       </Button>
       <Button
         type="button"
@@ -1198,7 +1197,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         className="h-11 rounded-xl px-4"
         onClick={() => setShortcutHelpOpen(true)}
       >
-        Shortcuts (?)
+        {t("invoiceComposer.shortcuts")}
       </Button>
       <Button asChild variant="outline" className="h-11 rounded-xl px-4">
         <Link href="/invoices/history">{t("invoice.viewHistory")}</Link>
@@ -1217,11 +1216,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       <div className="mx-auto w-full max-w-[1500px] font-[var(--font-sora),var(--font-geist-sans)]">
         <div className="mb-6 flex flex-wrap items-center gap-2 rounded-[1.4rem] bg-white/85 px-4 py-3 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.12)] ring-1 ring-slate-200/80 dark:bg-slate-900/75 dark:text-slate-300 dark:ring-slate-700/70">
           <span className="font-semibold text-slate-950 dark:text-slate-100">
-            Keyboard-first billing
+            {t("invoiceComposer.keyboardFirst")}
           </span>
-          <span>Enter adds selected product.</span>
-          <span>{shortcutModifierLabel}+Q refocuses search.</span>
-          <span>{shortcutModifierLabel}+S finishes the bill.</span>
+          <span>{t("invoiceComposer.bannerEnter")}</span>
+          <span>{t("invoiceComposer.bannerRefocus", { key: shortcutModifierLabel })}</span>
+          <span>{t("invoiceComposer.bannerFinish", { key: shortcutModifierLabel })}</span>
         </div>
 
         <section className="grid gap-6 xl:grid-cols-[minmax(0,1.72fr)_minmax(340px,0.62fr)] xl:items-start xl:gap-8">
@@ -1265,16 +1264,26 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                     disabled={createInvoice.isPending || items.length === 0}
                     onClick={() => void submitInvoice()}
                   >
-                    {createInvoice.isPending ? "Generating bill..." : "Checkout / Generate Bill"}
+                    {createInvoice.isPending
+                      ? t("invoiceComposer.generating")
+                      : t("invoiceComposer.checkout")}
                   </Button>
                   <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
-                    <span>{items.length === 0 ? "Add items to continue" : "Ready to checkout"}</span>
-                    <span className="font-semibold">{items.length} line item(s)</span>
+                    <span>
+                      {items.length === 0
+                        ? t("invoiceComposer.addItemsToContinue")
+                        : t("invoiceComposer.readyToCheckout")}
+                    </span>
+                    <span className="font-semibold">
+                      {t("invoiceComposer.lineItemsCount", { count: items.length })}
+                    </span>
                   </div>
                   <p className="text-sm text-slate-500 dark:text-slate-400">
                     {items.length === 0
-                      ? "Scan or search a product to activate checkout."
-                      : `${shortcutModifierLabel}+S also completes the bill from the keyboard.`}
+                      ? t("invoiceComposer.scanToCheckout")
+                      : t("invoiceComposer.keyboardCheckout", {
+                          key: shortcutModifierLabel,
+                        })}
                   </p>
                 </div>
               }
@@ -1382,25 +1391,28 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               setInvoiceEmailError(null);
             }
           }}
-          title="Send invoice with Resend"
-          description="Review the latest generated invoice and send it through the server-side email flow."
+          title={t("invoiceComposer.emailModalTitle")}
+          description={t("invoiceComposer.emailModalDescription")}
         >
           <div className="grid gap-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-              <p>invoice_id: {lastCreatedInvoiceNumber ?? "-"}</p>
+              <p>{t("invoiceDetail.emailDebugInvoice", { value: lastCreatedInvoiceNumber ?? "-" })}</p>
               <p className="mt-1">
-                amount: INR {(lastCreatedInvoiceTotal ?? 0).toFixed(2)}
+                {t("invoiceDetail.emailDebugAmount", {
+                  value: `INR ${(lastCreatedInvoiceTotal ?? 0).toFixed(2)}`,
+                })}
               </p>
               <p className="mt-1">
-                date:{" "}
-                {lastCreatedInvoiceDate
-                  ? formatDate(lastCreatedInvoiceDate)
-                  : invoiceDate}
+                {t("invoiceDetail.emailDebugDate", {
+                  value: lastCreatedInvoiceDate
+                    ? formatDate(lastCreatedInvoiceDate)
+                    : invoiceDate,
+                })}
               </p>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="invoice-email-recipient">email</Label>
+              <Label htmlFor="invoice-email-recipient">{t("invoiceComposer.emailLabel")}</Label>
               <Input
                 id="invoice-email-recipient"
                 type="email"
@@ -1409,7 +1421,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                   setInvoiceEmailRecipient(event.target.value);
                   setInvoiceEmailError(null);
                 }}
-                placeholder="customer@example.com"
+                placeholder={t("invoiceComposer.emailPlaceholder")}
                 autoComplete="email"
               />
             </div>
@@ -1425,7 +1437,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 onClick={() => setInvoiceEmailOpen(false)}
                 disabled={sendInvoiceEmailMutation.isPending}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button
                 type="button"
@@ -1433,8 +1445,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 disabled={sendInvoiceEmailMutation.isPending}
               >
                 {sendInvoiceEmailMutation.isPending
-                  ? "Sending..."
-                  : "Send invoice email"}
+                  ? t("invoiceActions.sendingEmail")
+                  : t("invoiceComposer.sendEmail")}
               </Button>
             </div>
           </div>
@@ -1443,20 +1455,20 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         <Modal
           open={shortcutHelpOpen}
           onOpenChange={setShortcutHelpOpen}
-          title="Keyboard shortcuts"
-          description="Billing stays keyboard-first here. Use the scan lane for barcode input and these shortcuts for the rest."
+          title={t("invoiceComposer.shortcutTitle")}
+          description={t("invoiceComposer.shortcutDescription")}
         >
           <div className="grid gap-3 text-sm text-muted-foreground">
             {[
-              [`${shortcutModifierLabel}+B`, "Start a new bill and refocus the scan lane"],
-              [`${shortcutModifierLabel}+P`, "Open quick add product"],
-              [`${shortcutModifierLabel}+C`, "Open quick add customer"],
-              [`${shortcutModifierLabel}+S`, "Save and complete the current bill"],
-              [`${shortcutModifierLabel}+D`, "Jump to the discount field"],
-              [`${shortcutModifierLabel}+Q`, "Focus the product search / barcode input"],
-              [`${shortcutModifierLabel}+Delete`, "Remove the currently selected line item"],
-              ["Enter", "Add the scanned or searched product to the bill"],
-              ["?", "Open this shortcut panel"],
+              [`${shortcutModifierLabel}+B`, t("invoiceComposer.shortcutNewBill")],
+              [`${shortcutModifierLabel}+P`, t("invoiceComposer.shortcutQuickProduct")],
+              [`${shortcutModifierLabel}+C`, t("invoiceComposer.shortcutQuickCustomer")],
+              [`${shortcutModifierLabel}+S`, t("invoiceComposer.shortcutSaveBill")],
+              [`${shortcutModifierLabel}+D`, t("invoiceComposer.shortcutDiscount")],
+              [`${shortcutModifierLabel}+Q`, t("invoiceComposer.shortcutFocusSearch")],
+              [`${shortcutModifierLabel}+Delete`, t("invoiceComposer.shortcutRemoveItem")],
+              ["Enter", t("invoiceComposer.shortcutEnter")],
+              ["?", t("invoiceComposer.shortcutHelp")],
             ].map(([shortcut, description]) => (
               <div
                 key={shortcut}
@@ -1469,9 +1481,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               </div>
             ))}
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
-              Note: on this billing screen, {shortcutModifierLabel}+P and{" "}
-              {shortcutModifierLabel}+S override the browser print/save defaults
-              so the billing flow stays uninterrupted.
+              {t("invoiceComposer.shortcutNote", {
+                saveKey: `${shortcutModifierLabel}+S`,
+                productKey: `${shortcutModifierLabel}+P`,
+              })}
             </p>
           </div>
         </Modal>
@@ -1479,12 +1492,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         <Modal
           open={quickAddProductOpen}
           onOpenChange={setQuickAddProductOpen}
-          title="Quick add product"
-          description="Create a missing product and drop it straight into the bill."
+          title={t("invoiceComposer.quickProductTitle")}
+          description={t("invoiceComposer.quickProductDescription")}
         >
           <form className="grid gap-4" onSubmit={handleQuickCreateProduct}>
             <div className="grid gap-2">
-              <Label htmlFor="quick-product-name">Name</Label>
+              <Label htmlFor="quick-product-name">{t("invoiceComposer.name")}</Label>
               <Input
                 ref={quickProductNameRef}
                 id="quick-product-name"
@@ -1495,11 +1508,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                     name: event.target.value,
                   }))
                 }
-                placeholder="e.g. Fresh milk 500ml"
+                placeholder={t("invoiceComposer.namePlaceholder")}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="quick-product-price">Price</Label>
+              <Label htmlFor="quick-product-price">{t("invoiceComposer.price")}</Label>
               <Input
                 id="quick-product-price"
                 type="number"
@@ -1512,11 +1525,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                     price: event.target.value,
                   }))
                 }
-                placeholder="0.00"
+                placeholder={t("invoiceComposer.pricePlaceholder")}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="quick-product-barcode">Barcode</Label>
+              <Label htmlFor="quick-product-barcode">{t("invoiceComposer.barcode")}</Label>
               <Input
                 id="quick-product-barcode"
                 value={quickProductForm.barcode}
@@ -1526,7 +1539,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                     barcode: event.target.value,
                   }))
                 }
-                placeholder="Optional barcode"
+                placeholder={t("invoiceComposer.barcodePlaceholder")}
               />
             </div>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -1535,10 +1548,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 variant="outline"
                 onClick={() => setQuickAddProductOpen(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={createProduct.isPending}>
-                {createProduct.isPending ? "Saving..." : "Save product"}
+                {createProduct.isPending ? t("common.processing") : t("invoiceComposer.saveProduct")}
               </Button>
             </div>
           </form>
@@ -1547,12 +1560,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         <Modal
           open={quickAddCustomerOpen}
           onOpenChange={setQuickAddCustomerOpen}
-          title="Quick add customer"
-          description="Create a customer and attach them to the current bill."
+          title={t("invoiceComposer.quickCustomerTitle")}
+          description={t("invoiceComposer.quickCustomerDescription")}
         >
           <form className="grid gap-4" onSubmit={handleQuickCreateCustomer}>
             <div className="grid gap-2">
-              <Label htmlFor="quick-customer-name">Name</Label>
+              <Label htmlFor="quick-customer-name">{t("invoiceComposer.name")}</Label>
               <Input
                 ref={quickCustomerNameRef}
                 id="quick-customer-name"
@@ -1563,11 +1576,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                     name: event.target.value,
                   }))
                 }
-                placeholder="e.g. Ravi Kumar"
+                placeholder={t("invoiceComposer.customerNamePlaceholder")}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="quick-customer-phone">Phone</Label>
+              <Label htmlFor="quick-customer-phone">{t("invoiceComposer.phone")}</Label>
               <Input
                 id="quick-customer-phone"
                 value={quickCustomerForm.phone}
@@ -1577,7 +1590,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                     phone: event.target.value,
                   }))
                 }
-                placeholder="Optional phone number"
+                placeholder={t("invoiceComposer.customerPhonePlaceholder")}
               />
             </div>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -1586,10 +1599,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 variant="outline"
                 onClick={() => setQuickAddCustomerOpen(false)}
               >
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={createCustomer.isPending}>
-                {createCustomer.isPending ? "Saving..." : "Save customer"}
+                {createCustomer.isPending ? t("common.processing") : t("invoiceComposer.saveCustomer")}
               </Button>
             </div>
           </form>

@@ -81,6 +81,26 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
     return translated === key ? humanizeEnum(status) : translated;
   };
 
+  const localizeSnapshotLabel = (invoice: Invoice) => {
+    const snapshot = getInvoicePaymentSnapshot(invoice);
+    if (snapshot.paymentStatus === "PAID") return t("invoiceDetail.markPaid");
+    if (snapshot.paymentStatus === "PARTIAL") return t("invoiceDetail.markPartial");
+    return t("invoiceDetail.markPending");
+  };
+
+  const localizeSnapshotHint = (invoice: Invoice) => {
+    const snapshot = getInvoicePaymentSnapshot(invoice);
+    if (snapshot.paymentStatus === "PAID") return t("invoiceDetail.settledInFull");
+    if (snapshot.paymentStatus === "PARTIAL") {
+      return invoice.status === "OVERDUE"
+        ? t("invoiceDetail.followUpNeeded")
+        : t("invoiceDetail.partialCollected");
+    }
+    if (invoice.status === "DRAFT") return t("invoiceDetail.draftInvoice");
+    if (invoice.status === "OVERDUE") return t("invoiceDetail.paymentOverdue");
+    return t("invoiceDetail.awaitingPayment");
+  };
+
   const invoices = useMemo(() => data ?? [], [data]);
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -232,7 +252,11 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
         id: invoice.id,
         payload: { status },
       });
-      toast.success(t("invoiceHistory.messages.markedStatus", { status: "Pending" }));
+      toast.success(
+        t("invoiceHistory.messages.markedStatus", {
+          status: formatStatusLabel("SENT"),
+        }),
+      );
     } catch {
       toast.error(t("invoiceHistory.messages.statusUpdateError"));
     }
@@ -298,7 +322,9 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                     {formatCurrencyValue(summary.paid)}
                   </p>
                   <p className="mt-2 text-sm text-emerald-800/80 dark:text-emerald-100/80">
-                    {summary.paidCount} invoice(s) fully settled
+                    {t("invoiceHistory.summarySettled", {
+                      count: summary.paidCount,
+                    })}
                   </p>
                 </div>
                 <CheckCircle2 className="mt-1 h-5 w-5 text-emerald-700 dark:text-emerald-200" />
@@ -309,13 +335,16 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700 dark:text-amber-200">
-                    Outstanding
+                    {t("invoiceHistory.summaryOutstanding")}
                   </p>
                   <p className="mt-3 text-3xl font-semibold tracking-tight text-amber-950 dark:text-amber-50">
                     {formatCurrencyValue(summary.remaining)}
                   </p>
                   <p className="mt-2 text-sm text-amber-800/80 dark:text-amber-100/80">
-                    {summary.pendingCount} pending, {summary.partialCount} partial
+                    {t("invoiceHistory.summaryOutstandingBreakdown", {
+                      pending: summary.pendingCount,
+                      partial: summary.partialCount,
+                    })}
                   </p>
                 </div>
                 <Clock3 className="mt-1 h-5 w-5 text-amber-700 dark:text-amber-200" />
@@ -326,13 +355,13 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-600 dark:text-slate-300">
-                    Invoice value
+                    {t("invoiceHistory.summaryValue")}
                   </p>
                   <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
                     {formatCurrencyValue(summary.total)}
                   </p>
                   <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                    Track every bill from issue to settlement
+                    {t("invoiceHistory.summaryValueDescription")}
                   </p>
                 </div>
                 <Wallet className="mt-1 h-5 w-5 text-slate-700 dark:text-slate-200" />
@@ -372,7 +401,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                 </Button>
                 <DataExportDialog
                   resource="invoices"
-                  title="Invoices"
+                  title={t("invoiceHistory.kicker")}
                   selectedIds={selectedInvoiceIds}
                   initialFilters={{
                     search: query.trim() || undefined,
@@ -421,7 +450,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                         type="checkbox"
                         checked={selectedInvoiceIds.includes(invoice.id)}
                         onChange={() => toggleInvoiceSelection(invoice.id)}
-                        aria-label={`Select ${invoice.invoice_number}`}
+                        aria-label={`${t("invoiceHistory.select")} ${invoice.invoice_number}`}
                       />
                     ),
                     invoice_number: (
@@ -434,19 +463,19 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                     status: (
                       <div className="flex min-w-[220px] flex-col gap-3">
                         <InvoicePaymentStatusBadge
-                          label={snapshot.label}
+                          label={localizeSnapshotLabel(invoice)}
                           variant={snapshot.badgeVariant}
-                          hint={snapshot.statusHint}
+                          hint={localizeSnapshotHint(invoice)}
                         />
                         <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
                           <div className="flex items-center justify-between gap-3">
-                            <span>Paid</span>
+                            <span>{t("invoiceHistory.paidLabel")}</span>
                             <span className="font-semibold">
                               {formatCurrencyValue(snapshot.paid)}
                             </span>
                           </div>
                           <div className="mt-1 flex items-center justify-between gap-3">
-                            <span>Balance</span>
+                            <span>{t("invoiceHistory.balanceLabel")}</span>
                             <span className="font-semibold">
                               {formatCurrencyValue(snapshot.remaining)}
                             </span>
@@ -458,7 +487,9 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                       <div className="text-right">
                         <p className="font-semibold">{formatCurrencyValue(invoice.total)}</p>
                         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          Paid {formatCurrencyValue(snapshot.paid)}
+                          {t("invoiceHistory.paidInline", {
+                            amount: formatCurrencyValue(snapshot.paid),
+                          })}
                         </p>
                       </div>
                     ),
@@ -475,7 +506,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                           )}
                           onClick={() => void handleQuickStatusUpdate(invoice, "SENT")}
                         >
-                          Pending
+                          {t("invoiceDetail.markPending")}
                         </Button>
                         <Button
                           type="button"
@@ -486,7 +517,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                             openStatusEditor(invoice, { status: "PARTIALLY_PAID" })
                           }
                         >
-                          Partial
+                          {t("invoiceDetail.markPartial")}
                         </Button>
                         <Button
                           type="button"
@@ -494,7 +525,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                           className="rounded-full"
                           onClick={() => void handleQuickStatusUpdate(invoice, "PAID")}
                         >
-                          Paid
+                          {t("invoiceDetail.markPaid")}
                         </Button>
                       </div>
                     ),
@@ -528,7 +559,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                   columns={[
                     {
                       key: "select",
-                      header: "Select",
+                      header: t("invoiceHistory.select"),
                     },
                     {
                       key: "invoice_number",
@@ -548,7 +579,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                     },
                     {
                       key: "quick_update",
-                      header: "Quick update",
+                      header: t("invoiceHistory.quickUpdate"),
                       className: "text-right",
                     },
                     {

@@ -22,6 +22,7 @@ import Modal from "@/components/ui/modal";
 import Link from "next/link";
 import PasskeySettingsCard from "@/components/profile/PasskeySettingsCard";
 import PlanManagementCard from "@/components/pricing/PlanManagementCard";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type ProfileClientProps = {
   initialProfile: UserProfile;
@@ -29,6 +30,7 @@ type ProfileClientProps = {
 
 const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
   const router = useRouter();
+  const { t } = useI18n();
   const { data } = useQuery({
     queryKey: ["users", "me"],
     queryFn: fetchUserProfile,
@@ -71,10 +73,14 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
     () => name.trim() !== profile.name || email.trim() !== profile.email,
     [name, email, profile.name, profile.email],
   );
-  const canConfirmDeleteData = deleteDataConfirmation.trim() === "DELETE";
+  const deleteKeyword = t("profilePage.deleteKeyword");
+  const canConfirmDeleteData =
+    deleteDataConfirmation.trim() === "DELETE" ||
+    deleteDataConfirmation.trim() === deleteKeyword;
   const deleteAccountVerification = deleteAccountConfirmation.trim();
   const canConfirmDeleteAccount =
     deleteAccountVerification === "DELETE" ||
+    deleteAccountVerification === deleteKeyword ||
     deleteAccountVerification.toLowerCase() === profile.email.toLowerCase();
 
   const parseApiError = (error: unknown, fallback: string) => {
@@ -93,7 +99,7 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
     setProfileError(null);
 
     if (!hasProfileChanges) {
-      setProfileError("No changes to save.");
+      setProfileError(t("profilePage.noChanges"));
       return;
     }
 
@@ -105,9 +111,9 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
       });
       setName(updated.name);
       setEmail(updated.email);
-      setProfileMessage("Profile updated successfully.");
+      setProfileMessage(t("profilePage.profileUpdated"));
     } catch {
-      setProfileError("Unable to update profile.");
+      setProfileError(t("profilePage.profileUpdateError"));
     } finally {
       setProfileSaving(false);
     }
@@ -119,12 +125,12 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
     setPasswordError(null);
 
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setPasswordError("Please fill in all password fields.");
+      setPasswordError(t("profilePage.fillPasswordFields"));
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setPasswordError("New passwords do not match.");
+      setPasswordError(t("profilePage.passwordMismatch"));
       return;
     }
 
@@ -138,9 +144,9 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-      setPasswordMessage("Password updated successfully.");
+      setPasswordMessage(t("profilePage.passwordUpdated"));
     } catch {
-      setPasswordError("Unable to update password.");
+      setPasswordError(t("profilePage.passwordUpdateError"));
     } finally {
       setPasswordSaving(false);
     }
@@ -165,16 +171,16 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
     setDeleteDataError(null);
     try {
       await deleteUserData();
-      toast.success("Your data has been deleted. A confirmation email was requested.");
+      toast.success(t("profilePage.deleteDataToast"));
       closeDeleteDataModal();
     } catch (error) {
       setDeleteDataError(
         parseApiError(
           error,
-          "Failed to delete your data right now.",
+          t("profilePage.deleteDataError"),
         ),
       );
-      toast.error("Failed to delete data");
+      toast.error(t("profilePage.deleteDataErrorToast"));
     } finally {
       setDeleteDataLoading(false);
     }
@@ -191,7 +197,7 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
         window.localStorage.removeItem("token");
         window.sessionStorage.setItem(
           "account_deleted_message",
-          "Your account has been deleted.",
+          t("profilePage.deleteAccountDeletedMessage"),
         );
       }
       await signOut({ redirect: false });
@@ -201,10 +207,10 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
       setDeleteAccountError(
         parseApiError(
           error,
-          "Failed to delete your account right now.",
+          t("profilePage.deleteAccountError"),
         ),
       );
-      toast.error("Failed to delete account");
+      toast.error(t("profilePage.deleteAccountErrorToast"));
       setDeleteAccountLoading(false);
     }
   };
@@ -214,13 +220,13 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
       <div className="mx-auto w-full max-w-4xl px-6 py-10">
         <header className="flex flex-col gap-2">
           <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-            Profile
+            {t("profilePage.kicker")}
           </p>
           <h1 className="text-3xl font-semibold truncate" title={profile.name}>
             {profile.name}
           </h1>
           <p className="max-w-2xl text-sm text-[#5c4b3b]">
-            Manage your account details and personal preferences.
+            {t("profilePage.description")}
           </p>
         </header>
 
@@ -228,34 +234,34 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
           <div className="grid gap-4">
             <Card className="border-[#ecdccf] bg-white/90">
               <CardHeader>
-                <CardTitle className="text-lg">Account details</CardTitle>
+                <CardTitle className="text-lg">{t("profilePage.accountDetails")}</CardTitle>
               </CardHeader>
               <CardContent>
                 <form className="grid gap-4" onSubmit={handleProfileSubmit}>
                   <div className="grid gap-2">
-                    <Label htmlFor="profile-name">Full name</Label>
+                    <Label htmlFor="profile-name">{t("profilePage.fullName")}</Label>
                     <Input
                       id="profile-name"
                       className="truncate text-sm sm:text-base"
                       value={name}
                       onChange={(event) => setName(event.target.value)}
-                      placeholder="Enter your name"
+                      placeholder={t("profilePage.enterName")}
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="profile-email">Email address</Label>
+                    <Label htmlFor="profile-email">{t("profilePage.emailAddress")}</Label>
                     <Input
                       id="profile-email"
                       type="email"
                       className="truncate text-sm sm:text-base"
                       value={email}
                       onChange={(event) => setEmail(event.target.value)}
-                      placeholder="Enter your email"
+                      placeholder={t("profilePage.enterEmail")}
                     />
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <Button type="submit" disabled={profileSaving}>
-                      {profileSaving ? "Saving..." : "Save changes"}
+                      {profileSaving ? t("profilePage.saving") : t("profilePage.saveChanges")}
                     </Button>
                     {profileMessage && (
                       <span className="text-sm text-[#0f766e]">
@@ -274,13 +280,13 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
 
             <Card className="border-[#ecdccf] bg-white/90">
               <CardHeader>
-                <CardTitle className="text-lg">Change password</CardTitle>
+                <CardTitle className="text-lg">{t("profilePage.changePassword")}</CardTitle>
               </CardHeader>
               <CardContent>
                 {canChangePassword ? (
                   <form className="grid gap-4" onSubmit={handlePasswordSubmit}>
                     <div className="grid gap-2">
-                      <Label htmlFor="current-password">Current password</Label>
+                      <Label htmlFor="current-password">{t("profilePage.currentPassword")}</Label>
                       <Input
                         id="current-password"
                         type="password"
@@ -288,22 +294,22 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
                         onChange={(event) =>
                           setCurrentPassword(event.target.value)
                         }
-                        placeholder="Enter current password"
+                        placeholder={t("profilePage.enterCurrentPassword")}
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="new-password">New password</Label>
+                      <Label htmlFor="new-password">{t("profilePage.newPassword")}</Label>
                       <Input
                         id="new-password"
                         type="password"
                         value={newPassword}
                         onChange={(event) => setNewPassword(event.target.value)}
-                        placeholder="Enter new password"
+                        placeholder={t("profilePage.enterNewPassword")}
                       />
                     </div>
                     <div className="grid gap-2">
                       <Label htmlFor="confirm-password">
-                        Confirm new password
+                        {t("profilePage.confirmNewPassword")}
                       </Label>
                       <Input
                         id="confirm-password"
@@ -312,12 +318,14 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
                         onChange={(event) =>
                           setConfirmPassword(event.target.value)
                         }
-                        placeholder="Confirm new password"
+                        placeholder={t("profilePage.confirmNewPasswordPlaceholder")}
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-3">
                       <Button type="submit" disabled={passwordSaving}>
-                        {passwordSaving ? "Updating..." : "Update password"}
+                        {passwordSaving
+                          ? t("profilePage.updatingPassword")
+                          : t("profilePage.updatePassword")}
                       </Button>
                       {passwordMessage && (
                         <span className="text-sm text-[#0f766e]">
@@ -333,8 +341,7 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
                   </form>
                 ) : (
                   <p className="text-sm text-[#5c4b3b]">
-                    Password changes are managed through Google for this
-                    account.
+                    {t("profilePage.googlePasswordNotice")}
                   </p>
                 )}
               </CardContent>
@@ -343,18 +350,18 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
 
           <div className="grid gap-4">
             <PlanManagementCard
-              title="Manage your plan from your profile"
-              description="Review Billsutra pricing alongside your account details so upgrading feels predictable and easy when your business grows."
+              title={t("profilePage.planTitle")}
+              description={t("profilePage.planDescription")}
             />
 
             <Card className="border-[#ecdccf] bg-white/90">
               <CardHeader>
-                <CardTitle className="text-lg">Account status</CardTitle>
+                <CardTitle className="text-lg">{t("profilePage.accountStatus")}</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3 text-sm text-[#5c4b3b]">
                 <div className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                    Provider
+                    {t("profilePage.provider")}
                   </p>
                   <p
                     className="mt-2 text-sm text-[#1f1b16] truncate"
@@ -365,10 +372,12 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
                 </div>
                 <div className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4">
                   <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                    Email verified
+                    {t("profilePage.emailVerified")}
                   </p>
                   <p className="mt-2 text-sm text-[#1f1b16]">
-                    {profile.is_email_verified ? "Verified" : "Pending"}
+                    {profile.is_email_verified
+                      ? t("profilePage.verified")
+                      : t("profilePage.pending")}
                   </p>
                 </div>
               </CardContent>
@@ -376,17 +385,17 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
 
             <Card className="border-[#ecdccf] bg-white/90">
               <CardHeader>
-                <CardTitle className="text-lg">Quick actions</CardTitle>
+                <CardTitle className="text-lg">{t("profilePage.quickActions")}</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3">
                 <Button asChild variant="outline" className="justify-start">
-                  <Link href="/pricing">Open pricing</Link>
+                  <Link href="/pricing">{t("profilePage.openPricing")}</Link>
                 </Button>
                 <Button asChild variant="outline" className="justify-start">
-                  <Link href="/dashboard">Back to dashboard</Link>
+                  <Link href="/dashboard">{t("profilePage.backToDashboard")}</Link>
                 </Button>
                 <Button asChild variant="outline" className="justify-start">
-                  <Link href="/invoices">Create invoice</Link>
+                  <Link href="/invoices">{t("profilePage.createInvoice")}</Link>
                 </Button>
               </CardContent>
             </Card>
@@ -396,17 +405,16 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
             <Card className="border-red-200 bg-white/90">
               <CardHeader>
                 <CardTitle className="text-lg text-red-700">
-                  Danger Zone
+                  {t("profilePage.dangerZone")}
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-4">
                 <div className="rounded-xl border border-red-200 bg-red-50 p-4">
                   <p className="text-sm font-semibold text-red-800">
-                    Delete your data
+                    {t("profilePage.deleteDataTitle")}
                   </p>
                   <p className="mt-1 text-sm text-red-700/90">
-                    Permanently remove your stored business data while keeping
-                    your account access.
+                    {t("profilePage.deleteDataDescription")}
                   </p>
                   <Button
                     type="button"
@@ -414,16 +422,16 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
                     className="mt-4 w-full sm:w-auto"
                     onClick={() => setDeleteDataOpen(true)}
                   >
-                    Delete My Data
+                    {t("profilePage.deleteMyData")}
                   </Button>
                 </div>
 
                 <div className="rounded-xl border border-red-200 bg-red-50 p-4">
                   <p className="text-sm font-semibold text-red-800">
-                    Delete your account
+                    {t("profilePage.deleteAccountTitle")}
                   </p>
                   <p className="mt-1 text-sm text-red-700/90">
-                    Permanently remove your login and all associated data.
+                    {t("profilePage.deleteAccountDescription")}
                   </p>
                   <Button
                     type="button"
@@ -431,7 +439,7 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
                     className="mt-4 w-full sm:w-auto"
                     onClick={() => setDeleteAccountOpen(true)}
                   >
-                    Delete My Account
+                    {t("profilePage.deleteMyAccount")}
                   </Button>
                 </div>
               </CardContent>
@@ -449,13 +457,13 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
           }
           setDeleteDataOpen(true);
         }}
-        title="Delete Your Data"
-        description="This will permanently delete all your stored data including activity history and uploaded content. This action cannot be undone."
+        title={t("profilePage.deleteDataModalTitle")}
+        description={t("profilePage.deleteDataModalDescription")}
       >
         <div className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="delete-data-confirmation">
-              Type DELETE to enable deletion
+              {t("profilePage.deleteDataConfirmLabel")}
             </Label>
             <Input
               id="delete-data-confirmation"
@@ -464,7 +472,7 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
                 setDeleteDataConfirmation(event.target.value);
                 setDeleteDataError(null);
               }}
-              placeholder="DELETE"
+              placeholder={deleteKeyword}
               autoComplete="off"
             />
           </div>
@@ -478,7 +486,7 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
               onClick={closeDeleteDataModal}
               disabled={deleteDataLoading}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="button"
@@ -486,7 +494,9 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
               onClick={handleDeleteData}
               disabled={!canConfirmDeleteData || deleteDataLoading}
             >
-              {deleteDataLoading ? "Deleting..." : "Delete Data"}
+              {deleteDataLoading
+                ? t("profilePage.deleting")
+                : t("profilePage.deleteDataButton")}
             </Button>
           </div>
         </div>
@@ -501,13 +511,13 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
           }
           setDeleteAccountOpen(true);
         }}
-        title="Delete Account"
-        description="This will permanently delete your account and all associated data. This action cannot be undone."
+        title={t("profilePage.deleteAccountModalTitle")}
+        description={t("profilePage.deleteAccountModalDescription")}
       >
         <div className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="delete-account-confirmation">
-              Type your email or DELETE to confirm
+              {t("profilePage.deleteAccountConfirmLabel")}
             </Label>
             <Input
               id="delete-account-confirmation"
@@ -516,7 +526,7 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
                 setDeleteAccountConfirmation(event.target.value);
                 setDeleteAccountError(null);
               }}
-              placeholder={profile.email || "DELETE"}
+              placeholder={profile.email || deleteKeyword}
               autoComplete="off"
             />
           </div>
@@ -530,7 +540,7 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
               onClick={closeDeleteAccountModal}
               disabled={deleteAccountLoading}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               type="button"
@@ -538,7 +548,9 @@ const ProfileClient = ({ initialProfile }: ProfileClientProps) => {
               onClick={handleDeleteAccount}
               disabled={!canConfirmDeleteAccount || deleteAccountLoading}
             >
-              {deleteAccountLoading ? "Deleting..." : "Delete Account"}
+              {deleteAccountLoading
+                ? t("profilePage.deleting")
+                : t("profilePage.deleteAccountButton")}
             </Button>
           </div>
         </div>

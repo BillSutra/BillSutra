@@ -1,3 +1,5 @@
+"use client";
+
 import type { InvoiceSectionProps } from "@/types/invoice-template";
 import { useSectionStyles } from "@/components/invoice/DesignConfigContext";
 import {
@@ -5,9 +7,11 @@ import {
   calculateTotals,
   formatCurrency,
 } from "./utils";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
   const { style } = useSectionStyles("tax");
+  const { t } = useI18n();
   const totals = data.totals ?? calculateTotals(data.items);
   const taxBreakdown = calculateTaxBreakdown(data.items).filter(
     (entry) => entry.rate > 0 || entry.taxAmount > 0,
@@ -23,14 +27,14 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
         className="border-b border-slate-300 px-2 py-1 text-[0.82em] font-semibold"
         style={{ backgroundColor: `${theme.primaryColor}22` }}
       >
-        Tax Summary
+        {t("invoicePreview.taxSummary")}
       </p>
 
       <div className="grid gap-3 px-2 py-3 text-[0.9em]">
         <div className="grid gap-2 sm:grid-cols-2">
           <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
             <p className="text-[0.78em] font-semibold uppercase tracking-[0.12em] text-slate-600">
-              Subtotal Before Tax
+              {t("invoicePreview.subtotalBeforeTax")}
             </p>
             <p className="mt-1 text-[1.05em] font-semibold text-slate-900">
               {formatCurrency(subtotal, data.business.currency)}
@@ -44,7 +48,7 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
             }}
           >
             <p className="text-[0.78em] font-semibold uppercase tracking-[0.12em] text-slate-600">
-              Total Tax Amount
+              {t("invoicePreview.totalTaxAmount")}
             </p>
             <p className="mt-1 text-[1.05em] font-semibold text-slate-900">
               {formatCurrency(totalTax, data.business.currency)}
@@ -60,16 +64,16 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
             >
               <tr>
                 <th className="border-b border-slate-200 px-3 py-2 font-semibold">
-                  Tax Rate
+                  {t("invoicePreview.taxRate")}
                 </th>
                 <th className="border-b border-slate-200 px-3 py-2 text-right font-semibold">
-                  Taxable Subtotal
+                  {t("invoicePreview.taxableSubtotal")}
                 </th>
                 <th className="border-b border-slate-200 px-3 py-2 font-semibold">
-                  Calculation
+                  {t("invoicePreview.calculation")}
                 </th>
                 <th className="border-b border-slate-200 px-3 py-2 text-right font-semibold">
-                  Tax Amount
+                  {t("invoicePreview.taxAmount")}
                 </th>
               </tr>
             </thead>
@@ -84,8 +88,13 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
                       {formatCurrency(entry.taxableSubtotal, data.business.currency)}
                     </td>
                     <td className="border-b border-slate-200 px-3 py-2 text-slate-600">
-                      Tax Amount = {formatCurrency(entry.taxableSubtotal, data.business.currency)} x{" "}
-                      {entry.rate.toFixed(2)}%
+                      {t("invoicePreview.taxFormula", {
+                        subtotal: formatCurrency(
+                          entry.taxableSubtotal,
+                          data.business.currency,
+                        ),
+                        rate: `${entry.rate.toFixed(2)}%`,
+                      })}
                     </td>
                     <td className="border-b border-slate-200 px-3 py-2 text-right font-semibold text-slate-900">
                       {formatCurrency(entry.taxAmount, data.business.currency)}
@@ -98,7 +107,7 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
                     colSpan={4}
                     className="px-3 py-4 text-center text-slate-500"
                   >
-                    No tax rates applied. Tax amount is calculated as 0.00.
+                    {t("invoicePreview.noTaxApplied")}
                   </td>
                 </tr>
               )}
@@ -108,20 +117,20 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
 
         <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
           <div className="flex items-center justify-between">
-            <span className="text-slate-600">Subtotal</span>
+            <span className="text-slate-600">{t("invoicePreview.subtotal")}</span>
             <span className="font-medium text-slate-900">
               {formatCurrency(subtotal, data.business.currency)}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-slate-600">Total Tax</span>
+            <span className="text-slate-600">{t("invoicePreview.totalTaxAmount")}</span>
             <span className="font-medium text-slate-900">
               {formatCurrency(totalTax, data.business.currency)}
             </span>
           </div>
           {discount > 0 ? (
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">Discount</span>
+              <span className="text-slate-600">{t("invoicePreview.discount")}</span>
               <span className="font-medium text-slate-900">
                 -{formatCurrency(discount, data.business.currency)}
               </span>
@@ -131,14 +140,13 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
             className="flex items-center justify-between rounded-md px-3 py-2 text-[1em] font-semibold"
             style={{ backgroundColor: `${theme.primaryColor}18` }}
           >
-            <span>Grand Total (Including Tax)</span>
+            <span>{t("invoicePreview.grandTotalIncludingTax")}</span>
             <span>{formatCurrency(grandTotal, data.business.currency)}</span>
           </div>
         </div>
 
         <p className="text-[0.78em] text-slate-500">
-          Calculation note: Tax Amount = Subtotal x Tax Rate. All values are
-          rounded to 2 decimal places for invoice display.
+          {t("invoicePreview.calculationNote")}
         </p>
       </div>
     </section>

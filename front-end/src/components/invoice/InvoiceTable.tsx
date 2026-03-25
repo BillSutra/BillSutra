@@ -68,7 +68,7 @@ const InvoiceTable = ({
   onRemoveItem,
   onAddSuggestedProduct,
 }: InvoiceTableProps) => {
-  const { formatCurrency } = useI18n();
+  const { formatCurrency, formatNumber, t } = useI18n();
   const itemCount = items.reduce(
     (count, item) => count + Math.max(0, Number(item.quantity) || 0),
     0,
@@ -85,19 +85,18 @@ const InvoiceTable = ({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.26em] text-slate-500 dark:text-slate-400">
-              Product station
+              {t("invoiceComposer.productStation")}
             </p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-              Smart billing lane
+              {t("invoiceComposer.smartBillingLane")}
             </h2>
             <p className="mt-2 max-w-lg text-sm leading-6 text-slate-600 dark:text-slate-300">
-              Keep the cursor here, scan or search, and press Enter to add the
-              next item without breaking billing flow.
+              {t("invoiceComposer.laneDescription")}
             </p>
           </div>
           <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200">
             <ScanLine size={14} />
-            Scanner ready
+            {t("invoiceComposer.scannerReady")}
           </span>
         </div>
 
@@ -106,7 +105,7 @@ const InvoiceTable = ({
             htmlFor="pos-product-search"
             className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400"
           >
-            Search or scan
+            {t("invoiceComposer.searchOrScan")}
           </Label>
           <div className="mt-3 grid gap-3 2xl:grid-cols-[minmax(0,1fr)_minmax(188px,auto)]">
             <AsyncProductSelect
@@ -119,7 +118,7 @@ const InvoiceTable = ({
               onSubmitSelection={(candidate) =>
                 onQuickEntrySubmit(candidate ?? quickEntryProduct)
               }
-              placeholder="Scan barcode or search product"
+              placeholder={t("invoiceComposer.searchPlaceholder")}
               className="min-w-0"
               inputClassName="h-13 rounded-[1.15rem] border-slate-200 bg-white pr-4 text-[15px] shadow-[0_14px_28px_-22px_rgba(15,23,42,0.22)] focus-visible:border-primary/40 focus-visible:ring-primary/10 dark:border-slate-700 dark:bg-slate-950 dark:focus-visible:border-primary/40 dark:focus-visible:ring-primary/20"
             />
@@ -134,36 +133,46 @@ const InvoiceTable = ({
               }}
               className="h-13 w-full rounded-[1.15rem] px-6 text-sm font-semibold"
             >
-              Add to cart
+              {t("invoiceComposer.addToCart")}
             </Button>
           </div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className={shortcutBadgeClassName}>Enter adds selection</span>
-            <span className={shortcutBadgeClassName}>{shortcutMetaLabel}+Q refocus</span>
-            <span className={shortcutBadgeClassName}>{shortcutMetaLabel}+P quick product</span>
+            <span className={shortcutBadgeClassName}>
+              {t("invoiceComposer.enterAddsSelection")}
+            </span>
+            <span className={shortcutBadgeClassName}>
+              {t("invoiceComposer.refocusSearch", { key: shortcutMetaLabel })}
+            </span>
+            <span className={shortcutBadgeClassName}>
+              {t("invoiceComposer.quickProductShortcut", {
+                key: shortcutMetaLabel,
+              })}
+            </span>
           </div>
         </div>
 
         <div className="mt-4 grid gap-3 2xl:grid-cols-2">
           <div className="rounded-[1.45rem] bg-white p-4 ring-1 ring-slate-200/80 dark:bg-slate-950/70 dark:ring-slate-700/70">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Ready state
+              {t("invoiceComposer.readyState")}
             </p>
             <div className="mt-3">
               <p className="text-base font-semibold text-slate-950 dark:text-slate-100">
-                {quickEntryProduct?.name ?? "Waiting for scan"}
+                {quickEntryProduct?.name ?? t("invoiceComposer.waitingForScan")}
               </p>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                 {quickEntryProduct
-                  ? `Unit price ${formatCurrency(Number(quickEntryProduct.price))}`
-                  : "Keep the cursor here and start typing or scanning."}
+                  ? t("invoiceComposer.unitPrice", {
+                      price: formatCurrency(Number(quickEntryProduct.price)),
+                    })
+                  : t("invoiceComposer.keepCursorReady")}
               </p>
             </div>
           </div>
 
           <div className="rounded-[1.45rem] bg-white p-4 ring-1 ring-slate-200/80 dark:bg-slate-950/70 dark:ring-slate-700/70">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-              Cart volume
+              {t("invoiceComposer.cartVolume")}
             </p>
             <div className="mt-3 flex flex-col gap-3">
               <div>
@@ -171,12 +180,12 @@ const InvoiceTable = ({
                   {itemCount}
                 </p>
                 <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
-                  total units in the live cart
+                  {t("invoiceComposer.totalUnits")}
                 </p>
               </div>
               <div className="inline-flex w-fit items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-100">
                 <Sparkles size={14} />
-                <span>Live totals</span>
+                <span>{t("invoiceComposer.liveTotals")}</span>
               </div>
             </div>
           </div>
@@ -198,22 +207,26 @@ const InvoiceTable = ({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-              Cart
+              {t("invoiceComposer.cart")}
             </p>
             <h2 className="mt-2 flex items-center gap-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
               <ShoppingCart size={20} />
-              <span>Current bill</span>
+              <span>{t("invoiceComposer.currentBill")}</span>
             </h2>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
-              Review line items, adjust quantity inline, and keep checkout moving.
+              {t("invoiceComposer.cartDescription")}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              {items.length} line item{items.length === 1 ? "" : "s"}
+              {t("invoiceComposer.lineItems", {
+                count: formatNumber(items.length),
+              })}
             </span>
             <span className="hidden rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 dark:bg-slate-800 dark:text-slate-300 sm:inline-flex">
-              {shortcutMetaLabel}+Delete removes selected
+              {t("invoiceComposer.removeSelectedShortcut", {
+                key: shortcutMetaLabel,
+              })}
             </span>
           </div>
         </div>
@@ -224,15 +237,14 @@ const InvoiceTable = ({
               <ShoppingCart size={24} />
             </div>
             <p className="mt-4 text-lg font-semibold text-slate-950 dark:text-slate-100">
-              Your cart is empty
+              {t("invoiceComposer.emptyCartTitle")}
             </p>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-600 dark:text-slate-400">
-              Scan a barcode or search for a product from the billing lane, then
-              press Enter to build the bill instantly.
+              {t("invoiceComposer.emptyCartDescription")}
             </p>
             <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button type="button" onClick={() => onFocusEntry?.()}>
-                Focus product search
+                {t("invoiceComposer.focusProductSearch")}
                 <ArrowRight size={16} />
               </Button>
               <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
@@ -265,16 +277,22 @@ const InvoiceTable = ({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="truncate text-base font-semibold text-slate-950 dark:text-slate-100">
-                          {item.name || "Item"}
+                          {item.name || t("invoiceComposer.itemFallback")}
                         </p>
                         {isRecent ? (
                           <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-100">
-                            Recently added
+                            {t("invoiceComposer.recentlyAdded")}
                           </span>
                         ) : null}
                       </div>
                       <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                        {item.tax_rate ? `GST ${item.tax_rate}%` : "No GST"} | Line {index + 1}
+                        {item.tax_rate
+                          ? `GST ${item.tax_rate}%`
+                          : t("invoiceComposer.noGst")}{" "}
+                        |{" "}
+                        {t("invoiceComposer.lineNumber", {
+                          number: formatNumber(index + 1),
+                        })}
                       </p>
                     </div>
                     <Button
@@ -286,7 +304,9 @@ const InvoiceTable = ({
                         event.stopPropagation();
                         onRemoveItem(index);
                       }}
-                      aria-label={`Remove ${item.name || "item"}`}
+                      aria-label={t("invoiceComposer.removeItemAria", {
+                        name: item.name || t("invoiceComposer.itemFallback"),
+                      })}
                     >
                       <Trash2 size={18} />
                     </Button>
@@ -296,7 +316,7 @@ const InvoiceTable = ({
                     <div className="grid gap-3 md:grid-cols-[minmax(150px,0.7fr)_minmax(220px,1fr)]">
                       <div className="grid gap-2">
                         <Label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                          Unit price
+                          {t("invoiceComposer.unitPriceLabel")}
                         </Label>
                         <Input
                           type="number"
@@ -318,7 +338,7 @@ const InvoiceTable = ({
 
                       <div className="grid gap-2">
                         <Label className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                          Quantity
+                          {t("invoiceComposer.quantityLabel")}
                         </Label>
                         <div className="flex min-w-0 items-center gap-2">
                           <button
@@ -333,7 +353,9 @@ const InvoiceTable = ({
                               );
                               onSelectItem(index);
                             }}
-                            aria-label={`Decrease quantity for ${item.name || "item"}`}
+                            aria-label={t("invoiceComposer.decreaseQuantityAria", {
+                              name: item.name || t("invoiceComposer.itemFallback"),
+                            })}
                           >
                             <Minus size={18} className="mx-auto" />
                           </button>
@@ -360,7 +382,9 @@ const InvoiceTable = ({
                               );
                               onSelectItem(index);
                             }}
-                            aria-label={`Increase quantity for ${item.name || "item"}`}
+                            aria-label={t("invoiceComposer.increaseQuantityAria", {
+                              name: item.name || t("invoiceComposer.itemFallback"),
+                            })}
                           >
                             <Plus size={18} className="mx-auto" />
                           </button>
@@ -375,7 +399,7 @@ const InvoiceTable = ({
 
                     <div className="rounded-[1.35rem] bg-slate-50/80 px-4 py-3 text-left ring-1 ring-slate-200/80 lg:text-right dark:bg-slate-900/70 dark:ring-slate-700/70">
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                        Line subtotal
+                        {t("invoiceComposer.lineSubtotal")}
                       </p>
                       <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-100">
                         {formatCurrency(lineTotal)}
