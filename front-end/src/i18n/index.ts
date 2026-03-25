@@ -90,6 +90,10 @@ export const translate = (
   params?: Record<string, string | number>,
 ) => {
   const active = resolveTranslation(translations[language], key);
-  const fallback = resolveTranslation(translations[DEFAULT_LANGUAGE], key);
+  const fallback =
+    language === DEFAULT_LANGUAGE
+      ? resolveTranslation(translations[DEFAULT_LANGUAGE], key)
+      : undefined;
+
   return interpolate(active ?? fallback ?? key, params);
 };

@@ -14,15 +14,7 @@ import {
   verifyPasskeyRegistration,
 } from "@/lib/authClient";
 import { useHydrated } from "@/hooks/useHydrated";
-
-const formatDate = (value?: string | null) => {
-  if (!value) return "Never";
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "Unknown";
-
-  return parsed.toLocaleString();
-};
+import { useI18n } from "@/providers/LanguageProvider";
 
 const PasskeySettingsCard = () => {
   const { data, isLoading, refetch } = useQuery({
@@ -33,6 +25,22 @@ const PasskeySettingsCard = () => {
   const [isRegistering, setIsRegistering] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const hydrated = useHydrated();
+  const { t, formatDate } = useI18n();
+
+  const formatPasskeyDate = (value?: string | null) => {
+    if (!value) return t("passkeys.never");
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return t("passkeys.unknown");
+
+    return formatDate(parsed, {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  };
 
   const supportsPasskeys = useMemo(
     () =>
@@ -43,7 +51,7 @@ const PasskeySettingsCard = () => {
 
   const handleAddPasskey = async () => {
     if (!supportsPasskeys) {
-      toast.error("Passkeys are not supported in this browser.");
+      toast.error(t("passkeys.unsupported"));
       return;
     }
 
@@ -67,13 +75,13 @@ const PasskeySettingsCard = () => {
       );
 
       setLabel("");
-      toast.success("Passkey added successfully.");
+      toast.success(t("passkeys.addedToast"));
       await refetch();
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
           ? error.message
-          : "Unable to register a passkey.";
+          : t("passkeys.registerError");
       toast.error(message);
     } finally {
       setIsRegistering(false);
@@ -84,13 +92,13 @@ const PasskeySettingsCard = () => {
     setDeletingId(id);
     try {
       await removePasskey(id);
-      toast.success("Passkey removed.");
+      toast.success(t("passkeys.removedToast"));
       await refetch();
     } catch (error) {
       const message =
         error instanceof Error && error.message.trim()
           ? error.message
-          : "Unable to remove passkey.";
+          : t("passkeys.removeError");
       toast.error(message);
     } finally {
       setDeletingId(null);
@@ -100,23 +108,21 @@ const PasskeySettingsCard = () => {
   return (
     <Card className="border-[#ecdccf] bg-white/90">
       <CardHeader>
-        <CardTitle className="text-lg">Passkeys</CardTitle>
+        <CardTitle className="text-lg">{t("passkeys.title")}</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-4">
         <p className="text-sm text-[#5c4b3b]">
-          Add a passkey to this account to sign in with Face ID, fingerprint,
-          or your device PIN.
+          {t("passkeys.description")}
         </p>
         <p className="text-xs text-[#8a6d56]">
-          Passkeys saved here are linked only to the currently signed-in
-          account.
+          {t("passkeys.linkedNote")}
         </p>
 
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
           <Input
             value={label}
             onChange={(event) => setLabel(event.target.value)}
-            placeholder="Optional label, e.g. Office laptop"
+            placeholder={t("passkeys.placeholder")}
             maxLength={191}
             disabled={isRegistering}
           />
@@ -125,19 +131,17 @@ const PasskeySettingsCard = () => {
             onClick={handleAddPasskey}
             disabled={!supportsPasskeys || isRegistering}
           >
-            {isRegistering ? "Adding..." : "Add passkey"}
+            {isRegistering ? t("passkeys.adding") : t("passkeys.add")}
           </Button>
         </div>
 
         {!supportsPasskeys ? (
-          <p className="text-xs text-[#8a6d56]">
-            This browser does not support passkeys.
-          </p>
+          <p className="text-xs text-[#8a6d56]">{t("passkeys.unsupported")}</p>
         ) : null}
 
         <div className="grid gap-3">
           {isLoading ? (
-            <p className="text-sm text-[#8a6d56]">Loading your passkeys...</p>
+            <p className="text-sm text-[#8a6d56]">{t("passkeys.loading")}</p>
           ) : data && data.length > 0 ? (
             data.map((credential) => (
               <div
@@ -150,14 +154,20 @@ const PasskeySettingsCard = () => {
                       {credential.label}
                     </p>
                     <p className="text-xs text-[#8a6d56]">
-                      Device type: {credential.device_type}
-                      {credential.backed_up ? " | Synced passkey" : ""}
+                      {t("passkeys.deviceType", {
+                        type: credential.device_type,
+                      })}
+                      {credential.backed_up ? ` | ${t("passkeys.synced")}` : ""}
                     </p>
                     <p className="text-xs text-[#8a6d56]">
-                      Added: {formatDate(credential.created_at)}
+                      {t("passkeys.added", {
+                        date: formatPasskeyDate(credential.created_at),
+                      })}
                     </p>
                     <p className="text-xs text-[#8a6d56]">
-                      Last used: {formatDate(credential.last_used_at)}
+                      {t("passkeys.lastUsed", {
+                        date: formatPasskeyDate(credential.last_used_at),
+                      })}
                     </p>
                   </div>
                   <Button
@@ -167,14 +177,16 @@ const PasskeySettingsCard = () => {
                     onClick={() => void handleDeletePasskey(credential.id)}
                     disabled={deletingId === credential.id}
                   >
-                    {deletingId === credential.id ? "Removing..." : "Remove"}
+                    {deletingId === credential.id
+                      ? t("passkeys.removing")
+                      : t("passkeys.remove")}
                   </Button>
                 </div>
               </div>
             ))
           ) : (
             <div className="rounded-2xl border border-dashed border-[#ecdccf] bg-[#fff9f2] p-4 text-sm text-[#8a6d56]">
-              No passkeys added yet.
+              {t("passkeys.empty")}
             </div>
           )}
         </div>

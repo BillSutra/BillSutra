@@ -59,26 +59,29 @@ const emptyForm: CustomerFormState = {
   address: "",
 };
 
-const validateCustomerForm = (form: CustomerFormState) => {
+const validateCustomerForm = (
+  form: CustomerFormState,
+  t: ReturnType<typeof useI18n>["t"],
+) => {
   const errors: Partial<Record<keyof CustomerFormState, string>> = {};
 
   if (!form.name.trim()) {
-    errors.name = "Enter a customer name.";
+    errors.name = t("customersPage.validation.enterName");
   } else if (form.name.trim().length < 2) {
-    errors.name = "Customer name should be at least 2 characters.";
+    errors.name = t("customersPage.validation.nameMin");
   }
 
   if (!form.phone.trim()) {
-    errors.phone = "Enter a phone number.";
+    errors.phone = t("customersPage.validation.enterPhone");
   } else if (!/^\d{10,15}$/.test(form.phone.trim())) {
-    errors.phone = "Phone number should contain 10 to 15 digits.";
+    errors.phone = t("customersPage.validation.phoneDigits");
   }
 
   if (
     form.email.trim() &&
     !/^[\w-.]+@[\w-]+\.[a-zA-Z]{2,}$/.test(form.email.trim())
   ) {
-    errors.email = "Enter a valid email address or leave it blank.";
+    errors.email = t("customersPage.validation.emailOptional");
   }
 
   return errors;
@@ -99,11 +102,13 @@ const buildStatementHtml = ({
   ledger,
   formatCurrency,
   formatDate,
+  t,
 }: {
   customer: Customer;
   ledger: CustomerLedger;
   formatCurrency: ReturnType<typeof useI18n>["formatCurrency"];
   formatDate: ReturnType<typeof useI18n>["formatDate"];
+  t: ReturnType<typeof useI18n>["t"];
 }) => {
   const escapeHtml = (value: string) =>
     value
@@ -131,7 +136,9 @@ const buildStatementHtml = ({
   return `
     <html>
       <head>
-        <title>${escapeHtml(customer.name)} Ledger Statement</title>
+        <title>${escapeHtml(
+          t("customersPage.statement.documentTitle", { name: customer.name }),
+        )}</title>
         <style>
           body { font-family: Arial, sans-serif; padding: 32px; color: #1f1b16; }
           h1, h2, p { margin: 0; }
@@ -146,18 +153,22 @@ const buildStatementHtml = ({
         </style>
       </head>
       <body>
-        <p class="label">Customer ledger statement</p>
+        <p class="label">${escapeHtml(t("customersPage.statement.heading"))}</p>
         <h1 style="margin-top: 8px;">${escapeHtml(customer.name)}</h1>
-        <p class="meta">${escapeHtml(customer.phone ?? "-")} | ${escapeHtml(customer.address ?? "No address")}</p>
-        <p class="meta">Generated on ${escapeHtml(formatDate(new Date(), { day: "numeric", month: "short", year: "numeric" }))}</p>
+        <p class="meta">${escapeHtml(customer.phone ?? t("customersPage.ledger.phoneFallback"))} | ${escapeHtml(customer.address ?? t("customersPage.ledger.addressFallback"))}</p>
+        <p class="meta">${escapeHtml(
+          t("customersPage.statement.generatedOn", {
+            date: formatDate(new Date(), { day: "numeric", month: "short", year: "numeric" }),
+          }),
+        )}</p>
         <div class="summary">
-          <div class="card"><p class="label">Total due</p><p class="value">${escapeHtml(formatCurrency(ledger.summary.outstandingBalance, "INR"))}</p></div>
-          <div class="card"><p class="label">Total billed</p><p class="value">${escapeHtml(formatCurrency(ledger.summary.totalBilled, "INR"))}</p></div>
-          <div class="card"><p class="label">Total paid</p><p class="value">${escapeHtml(formatCurrency(ledger.summary.totalPaid, "INR"))}</p></div>
+          <div class="card"><p class="label">${escapeHtml(t("customersPage.statement.totalDue"))}</p><p class="value">${escapeHtml(formatCurrency(ledger.summary.outstandingBalance, "INR"))}</p></div>
+          <div class="card"><p class="label">${escapeHtml(t("customersPage.statement.totalBilled"))}</p><p class="value">${escapeHtml(formatCurrency(ledger.summary.totalBilled, "INR"))}</p></div>
+          <div class="card"><p class="label">${escapeHtml(t("customersPage.statement.totalPaid"))}</p><p class="value">${escapeHtml(formatCurrency(ledger.summary.totalPaid, "INR"))}</p></div>
         </div>
         <table>
           <thead>
-            <tr><th>Date</th><th>Description</th><th>Note</th><th>Debit</th><th>Credit</th><th>Balance</th></tr>
+            <tr><th>${escapeHtml(t("customersPage.ledger.columns.date"))}</th><th>${escapeHtml(t("customersPage.ledger.columns.description"))}</th><th>${escapeHtml(t("customersPage.ledger.columns.note"))}</th><th>${escapeHtml(t("customersPage.ledger.columns.debit"))}</th><th>${escapeHtml(t("customersPage.ledger.columns.credit"))}</th><th>${escapeHtml(t("customersPage.ledger.columns.balance"))}</th></tr>
           </thead>
           <tbody>${rows}</tbody>
         </table>
@@ -169,7 +180,7 @@ const buildStatementHtml = ({
 const CustomersClient = ({ name, image }: CustomersClientProps) => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { formatCurrency, formatDate } = useI18n();
+  const { formatCurrency, formatDate, t } = useI18n();
   const { data, isLoading, isError } = useCustomersQuery();
   const createCustomer = useCreateCustomerMutation();
   const updateCustomer = useUpdateCustomerMutation();
@@ -253,25 +264,25 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
 
     return [
       {
-        label: "Total outstanding",
+        label: t("customersPage.summary.totalOutstanding"),
         value: formatCurrency(totalOutstanding, "INR"),
         tone: "border-amber-200 bg-amber-50 text-amber-950",
         icon: Wallet,
       },
       {
-        label: "Customers with due",
+        label: t("customersPage.summary.customersWithDue"),
         value: String(customersWithDue),
         tone: "border-rose-200 bg-rose-50 text-rose-950",
         icon: AlertCircle,
       },
       {
-        label: "Settled accounts",
+        label: t("customersPage.summary.settledAccounts"),
         value: String(settledCustomers),
         tone: "border-emerald-200 bg-emerald-50 text-emerald-950",
         icon: CheckCircle2,
       },
     ];
-  }, [customers, formatCurrency]);
+  }, [customers, formatCurrency, t]);
 
   const resetForm = () => {
     setForm(emptyForm);
@@ -294,7 +305,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
   const handleSaveCustomer = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    const errors = validateCustomerForm(form);
+    const errors = validateCustomerForm(form, t);
     setFormErrors(errors);
     if (Object.keys(errors).length > 0) {
       return;
@@ -313,22 +324,22 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
           id: selectedCustomerId,
           payload,
         });
-        toast.success("Customer updated.");
+        toast.success(t("customersPage.messages.updated"));
       } else {
         const created = await createCustomer.mutateAsync(payload);
-        toast.success("Customer added.");
+        toast.success(t("customersPage.messages.added"));
         selectCustomer(created.id);
       }
       resetForm();
     } catch {
-      toast.error("Unable to save customer right now.");
+      toast.error(t("customersPage.messages.saveError"));
     }
   };
 
   const handleDeleteCustomer = async (customerId: number) => {
     try {
       await deleteCustomer.mutateAsync(customerId);
-      toast.success("Customer removed.");
+      toast.success(t("customersPage.messages.removed"));
       if (selectedCustomerId === customerId) {
         const nextCustomer = customers.find((customer) => customer.id !== customerId);
         if (nextCustomer) {
@@ -339,7 +350,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
         }
       }
     } catch {
-      toast.error("Unable to remove customer right now.");
+      toast.error(t("customersPage.messages.removeError"));
     }
   };
 
@@ -353,7 +364,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
 
   const openPaymentModal = () => {
     if (!ledger || ledger.summary.openInvoices.length === 0) {
-      toast.error("This customer does not have any pending invoices.");
+      toast.error(t("customersPage.messages.noPendingInvoices"));
       return;
     }
 
@@ -374,18 +385,20 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     );
 
     if (!targetInvoice) {
-      setPaymentError("Select an invoice to record payment against.");
+      setPaymentError(t("customersPage.messages.selectInvoice"));
       return;
     }
 
     if (!Number.isFinite(amount) || amount <= 0) {
-      setPaymentError("Enter a valid payment amount.");
+      setPaymentError(t("customersPage.messages.enterValidPaymentAmount"));
       return;
     }
 
     if (amount > targetInvoice.remaining) {
       setPaymentError(
-        `Payment cannot exceed ${formatCurrency(targetInvoice.remaining, "INR")}.`,
+        t("customersPage.messages.paymentCannotExceed", {
+          amount: formatCurrency(targetInvoice.remaining, "INR"),
+        }),
       );
       return;
     }
@@ -396,13 +409,13 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
         amount,
         paid_at: new Date().toISOString(),
       });
-      toast.success("Payment recorded in the customer ledger.");
+      toast.success(t("customersPage.messages.paymentRecorded"));
       setPaymentModalOpen(false);
       setPaymentAmount("");
       setPaymentInvoiceId("");
       setPaymentError(null);
     } catch {
-      setPaymentError("Unable to record payment right now.");
+      setPaymentError(t("customersPage.messages.paymentRecordError"));
     }
   };
 
@@ -411,7 +424,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
 
     const printWindow = window.open("", "_blank", "noopener,noreferrer");
     if (!printWindow) {
-      toast.error("Unable to open the statement window.");
+      toast.error(t("customersPage.messages.statementWindowError"));
       return;
     }
 
@@ -421,6 +434,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
         ledger,
         formatCurrency,
         formatDate,
+        t,
       }),
     );
     printWindow.document.close();
@@ -432,9 +446,13 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     if (!selectedCustomer || !ledger) return;
 
     const shareText = [
-      `${selectedCustomer.name} ledger summary`,
-      `Outstanding: ${formatCurrency(ledger.summary.outstandingBalance, "INR")}`,
-      `Last payment: ${formatActivityDate(ledger.summary.lastPaymentDate, formatDate)}`,
+      t("customersPage.ledger.summaryTitle", { name: selectedCustomer.name }),
+      t("customersPage.ledger.shareOutstanding", {
+        amount: formatCurrency(ledger.summary.outstandingBalance, "INR"),
+      }),
+      t("customersPage.ledger.shareLastPayment", {
+        date: formatActivityDate(ledger.summary.lastPaymentDate, formatDate),
+      }),
     ].join("\n");
 
     const shareUrl =
@@ -460,13 +478,13 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
         await navigator.clipboard.writeText(
           shareUrl ? `${shareText}\n${shareUrl}` : shareText,
         );
-        toast.success("Statement summary copied.");
+        toast.success(t("customersPage.messages.statementCopied"));
         return;
       }
 
       toast.success(shareText);
     } catch {
-      toast.error("Unable to share the statement right now.");
+      toast.error(t("customersPage.messages.statementShareError"));
     }
   };
 
@@ -474,8 +492,8 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title="Customer khata"
-      subtitle="Track customer balances, udhaar, and payment history in one modern ledger."
+      title={t("customersPage.pageTitle")}
+      subtitle={t("customersPage.pageSubtitle")}
     >
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
         <section className="grid gap-4 md:grid-cols-3">
@@ -499,64 +517,66 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             <section className="app-panel rounded-[1.9rem] p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="app-kicker">Customer management</p>
+                  <p className="app-kicker">{t("customersPage.managementKicker")}</p>
                   <h2 className="mt-2 text-xl font-semibold text-foreground">
-                    {formMode === "edit" ? "Edit customer" : "Add customer"}
+                    {formMode === "edit"
+                      ? t("customersPage.editTitle")
+                      : t("customers.addTitle")}
                   </h2>
                   <p className="mt-2 text-sm text-muted-foreground">
-                    Keep names and phone numbers clean so billing and collection follow-up stay fast.
+                    {t("customersPage.formHint")}
                   </p>
                 </div>
                 {formMode === "edit" ? (
                   <Button type="button" variant="outline" onClick={resetForm}>
-                    Cancel
+                    {t("common.cancel")}
                   </Button>
                 ) : null}
               </div>
 
               <form className="mt-5 grid gap-4" onSubmit={handleSaveCustomer} noValidate>
                 <div className="grid gap-2">
-                  <Label htmlFor="customer-name">Name</Label>
+                  <Label htmlFor="customer-name">{t("customers.fields.name")}</Label>
                   <Input
                     id="customer-name"
                     value={form.name}
                     onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-                    placeholder="Customer name"
+                    placeholder={t("customers.placeholders.name")}
                   />
                   {formErrors.name ? <p className="text-xs text-amber-700">{formErrors.name}</p> : null}
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="customer-phone">Phone</Label>
+                  <Label htmlFor="customer-phone">{t("customers.fields.phone")}</Label>
                   <Input
                     id="customer-phone"
                     value={form.phone}
                     onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
-                    placeholder="10 digit phone number"
+                    placeholder={t("customersPage.phonePlaceholder")}
                     inputMode="numeric"
                   />
                   {formErrors.phone ? <p className="text-xs text-amber-700">{formErrors.phone}</p> : null}
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="customer-email">Email (optional)</Label>
+                  <Label htmlFor="customer-email">{t("customersPage.emailOptional")}</Label>
                   <Input
                     id="customer-email"
                     value={form.email}
                     onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
-                    placeholder="Email address"
+                    placeholder={t("customers.fields.email")}
                     type="email"
                   />
                   {formErrors.email ? <p className="text-xs text-amber-700">{formErrors.email}</p> : null}
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="customer-address">Address (optional)</Label>
+                  <Label htmlFor="customer-address">{t("customersPage.addressOptional")}</Label>
                   <Input
                     id="customer-address"
                     value={form.address}
                     onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))}
-                    placeholder="Area or full address"
+                    placeholder={t("customersPage.addressPlaceholder")}
                   />
                 </div>
 
@@ -564,7 +584,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                   type="submit"
                   disabled={createCustomer.isPending || updateCustomer.isPending || deleteCustomer.isPending}
                 >
-                  {formMode === "edit" ? "Save customer" : "Add customer"}
+                  {formMode === "edit"
+                    ? t("customersPage.actions.saveCustomer")
+                    : t("customers.actions.add")}
                 </Button>
               </form>
             </section>
@@ -572,12 +594,14 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             <section className="app-panel rounded-[1.9rem] p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="app-kicker">Quick access</p>
-                  <h2 className="mt-2 text-xl font-semibold text-foreground">Recent customers</h2>
+                  <p className="app-kicker">{t("customersPage.recentKicker")}</p>
+                  <h2 className="mt-2 text-xl font-semibold text-foreground">
+                    {t("customersPage.recentTitle")}
+                  </h2>
                 </div>
                 <DataExportDialog
                   resource="customers"
-                  title="Customers"
+                  title={t("customers.title")}
                   selectedIds={selectedCustomerIds}
                   disabled={isLoading || isError}
                 />
@@ -586,7 +610,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
               <div className="mt-4 flex flex-wrap gap-2">
                 {recentCustomers.length === 0 ? (
                   <div className="app-empty-state w-full text-sm">
-                    Add a customer to start building your digital khata.
+                    {t("customers.addDescription")}
                   </div>
                 ) : (
                   recentCustomers.map((customer) => (
@@ -611,10 +635,14 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             <section className="app-panel rounded-[1.9rem] p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="app-kicker">Customers</p>
-                  <h2 className="mt-2 text-xl font-semibold text-foreground">Search and select</h2>
+                  <p className="app-kicker">{t("customersPage.searchKicker")}</p>
+                  <h2 className="mt-2 text-xl font-semibold text-foreground">
+                    {t("customersPage.searchTitle")}
+                  </h2>
                 </div>
-                <span className="app-chip">{customers.length} total</span>
+                <span className="app-chip">
+                  {t("customersPage.totalCount", { count: customers.length })}
+                </span>
               </div>
 
               <div className="relative mt-4">
@@ -622,16 +650,20 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                 <Input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search name, phone, or address"
+                  placeholder={t("customersPage.searchPlaceholder")}
                   className="pl-9"
                 />
               </div>
 
               <div className="mt-4 grid gap-3">
                 {isLoading ? <div className="app-loading-skeleton h-64 w-full" /> : null}
-                {isError ? <p className="text-sm text-amber-700">Unable to load customers.</p> : null}
+                {isError ? (
+                  <p className="text-sm text-amber-700">{t("customers.loadError")}</p>
+                ) : null}
                 {!isLoading && !isError && filteredCustomers.length === 0 ? (
-                  <div className="app-empty-state text-sm">No customers match the current search.</div>
+                  <div className="app-empty-state text-sm">
+                    {t("customersPage.searchEmpty")}
+                  </div>
                 ) : null}
                 {!isLoading && !isError
                   ? filteredCustomers.map((customer) => {
@@ -653,7 +685,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                               className="mt-1"
                               checked={selectedCustomerIds.includes(customer.id)}
                               onChange={() => toggleCustomerSelection(customer.id)}
-                              aria-label={`Select ${customer.name}`}
+                              aria-label={t("customersPage.ledger.selectCustomer", {
+                                name: customer.name,
+                              })}
                             />
 
                             <button
@@ -669,11 +703,15 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                                     due > 0 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700",
                                   )}
                                 >
-                                  {due > 0 ? "Due" : "Settled"}
+                                  {due > 0
+                                    ? t("customersPage.status.due")
+                                    : t("customersPage.status.settled")}
                                 </span>
                               </div>
                               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                <span className="app-chip">{customer.phone || "No phone"}</span>
+                                <span className="app-chip">
+                                  {customer.phone || t("customersPage.ledger.phoneFallback")}
+                                </span>
                                 <span className="app-chip">{formatCurrency(due, "INR")}</span>
                               </div>
                             </button>
@@ -682,11 +720,11 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                           <div className="mt-4 flex flex-wrap gap-2">
                             <Button type="button" variant="outline" size="sm" onClick={() => startEditing(customer)}>
                               <SquarePen className="size-4" />
-                              Edit
+                              {t("customers.actions.edit")}
                             </Button>
                             <Button type="button" variant="destructive" size="sm" onClick={() => void handleDeleteCustomer(customer.id)}>
                               <Trash2 className="size-4" />
-                              Delete
+                              {t("customers.actions.delete")}
                             </Button>
                           </div>
                         </div>
@@ -703,20 +741,24 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                 <section className="rounded-[1.9rem] border border-slate-200 bg-white p-6 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Customer khata</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                        {t("customersPage.ledger.title")}
+                      </p>
                       <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{selectedCustomer.name}</h2>
                       <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
                         <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                           <Phone className="size-3.5" />
-                          {selectedCustomer.phone || "No phone"}
+                          {selectedCustomer.phone || t("customersPage.ledger.phoneFallback")}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                           <MapPin className="size-3.5" />
-                          {selectedCustomer.address || "No address"}
+                          {selectedCustomer.address || t("customersPage.ledger.addressFallback")}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                           <Clock3 className="size-3.5" />
-                          Last payment {formatActivityDate(ledger.summary.lastPaymentDate, formatDate)}
+                          {t("customersPage.ledger.lastPayment", {
+                            date: formatActivityDate(ledger.summary.lastPaymentDate, formatDate),
+                          })}
                         </span>
                       </div>
                     </div>
@@ -725,20 +767,20 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                       <Button asChild variant="outline">
                         <Link href="/invoices">
                           <ArrowUpRight className="size-4" />
-                          Add bill
+                          {t("customersPage.actions.addBill")}
                         </Link>
                       </Button>
                       <Button type="button" variant="outline" onClick={handleShareStatement}>
                         <Share2 className="size-4" />
-                        Share statement
+                        {t("customersPage.actions.shareStatement")}
                       </Button>
                       <Button type="button" variant="outline" onClick={handlePrintStatement}>
                         <Printer className="size-4" />
-                        Print / Save PDF
+                        {t("customersPage.actions.printSavePdf")}
                       </Button>
                       <Button type="button" onClick={openPaymentModal}>
                         <CreditCard className="size-4" />
-                        Add payment
+                        {t("customersPage.actions.addPayment")}
                       </Button>
                     </div>
                   </div>
@@ -746,7 +788,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                   <div className="mt-6 grid gap-4 md:grid-cols-4">
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-3 text-amber-700">
-                        <span className="text-sm">Total due</span>
+                        <span className="text-sm">{t("customersPage.ledger.totalDue")}</span>
                         <Wallet className="size-4" />
                       </div>
                       <p className="mt-3 text-2xl font-semibold text-amber-950">
@@ -755,7 +797,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-3 text-slate-600">
-                        <span className="text-sm">Total billed</span>
+                        <span className="text-sm">{t("customersPage.ledger.totalBilled")}</span>
                         <FileText className="size-4" />
                       </div>
                       <p className="mt-3 text-2xl font-semibold text-slate-950">
@@ -764,7 +806,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                     </div>
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-3 text-emerald-700">
-                        <span className="text-sm">Total paid</span>
+                        <span className="text-sm">{t("customersPage.ledger.totalPaid")}</span>
                         <CircleDollarSign className="size-4" />
                       </div>
                       <p className="mt-3 text-2xl font-semibold text-emerald-950">
@@ -773,7 +815,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-3 text-slate-600">
-                        <span className="text-sm">Open invoices</span>
+                        <span className="text-sm">{t("customersPage.ledger.openInvoices")}</span>
                         <Users className="size-4" />
                       </div>
                       <p className="mt-3 text-2xl font-semibold text-slate-950">
@@ -787,10 +829,14 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                   <section className="rounded-[1.9rem] border border-slate-200 bg-white p-6 shadow-sm">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Ledger history</p>
-                        <h3 className="mt-2 text-xl font-semibold text-slate-950">Smart ledger statement</h3>
+                        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                          {t("customersPage.ledger.historyKicker")}
+                        </p>
+                        <h3 className="mt-2 text-xl font-semibold text-slate-950">
+                          {t("customersPage.ledger.historyTitle")}
+                        </h3>
                         <p className="mt-2 text-sm text-slate-500">
-                          Every invoice and payment updates the running balance automatically.
+                          {t("customersPage.ledger.historyDescription")}
                         </p>
                       </div>
                       <div
@@ -799,24 +845,26 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                           ledger.summary.outstandingBalance > 0 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700",
                         )}
                       >
-                        {ledger.summary.outstandingBalance > 0 ? "Customer owes money" : "Account settled"}
+                        {ledger.summary.outstandingBalance > 0
+                          ? t("customersPage.ledger.customerOwes")
+                          : t("customersPage.ledger.accountSettled")}
                       </div>
                     </div>
 
                     {ledger.entries.length === 0 ? (
                       <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-sm text-slate-500">
-                        No ledger entries yet. Create a bill for this customer to start their khata history.
+                        {t("customersPage.ledger.noEntries")}
                       </div>
                     ) : (
                       <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-200">
                         <table className="min-w-full text-sm">
                           <thead className="bg-slate-50 text-slate-600">
                             <tr>
-                              <th className="px-4 py-3 text-left font-medium">Date</th>
-                              <th className="px-4 py-3 text-left font-medium">Description</th>
-                              <th className="px-4 py-3 text-left font-medium">Debit</th>
-                              <th className="px-4 py-3 text-left font-medium">Credit</th>
-                              <th className="px-4 py-3 text-left font-medium">Balance</th>
+                              <th className="px-4 py-3 text-left font-medium">{t("customersPage.ledger.columns.date")}</th>
+                              <th className="px-4 py-3 text-left font-medium">{t("customersPage.ledger.columns.description")}</th>
+                              <th className="px-4 py-3 text-left font-medium">{t("customersPage.ledger.columns.debit")}</th>
+                              <th className="px-4 py-3 text-left font-medium">{t("customersPage.ledger.columns.credit")}</th>
+                              <th className="px-4 py-3 text-left font-medium">{t("customersPage.ledger.columns.balance")}</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -826,7 +874,10 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                                 <td className="px-4 py-3 align-top">
                                   <p className="font-medium text-slate-950">{entry.description}</p>
                                   <p className="mt-1 text-xs text-slate-500">
-                                    {entry.note || (entry.type === "invoice" ? "Debit entry" : "Credit entry")}
+                                    {entry.note ||
+                                      (entry.type === "invoice"
+                                        ? t("customersPage.ledger.debitEntry")
+                                        : t("customersPage.ledger.creditEntry"))}
                                   </p>
                                 </td>
                                 <td className="px-4 py-3 align-top font-medium text-rose-700">
@@ -848,12 +899,16 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
 
                   <section className="grid gap-4 xl:sticky xl:top-6 xl:self-start">
                     <div className="rounded-[1.9rem] border border-slate-200 bg-white p-6 shadow-sm">
-                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Open invoices</p>
-                      <h3 className="mt-2 text-xl font-semibold text-slate-950">Pending collection</h3>
+                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                        {t("customersPage.ledger.openInvoicesKicker")}
+                      </p>
+                      <h3 className="mt-2 text-xl font-semibold text-slate-950">
+                        {t("customersPage.ledger.openInvoicesTitle")}
+                      </h3>
 
                       {ledger.summary.openInvoices.length === 0 ? (
                         <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-5 text-sm text-emerald-800">
-                          This customer is fully settled.
+                          {t("customersPage.ledger.fullySettled")}
                         </div>
                       ) : (
                         <div className="mt-4 grid gap-3">
@@ -863,16 +918,25 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                                 <div>
                                   <p className="font-semibold text-slate-950">{invoice.invoiceNumber}</p>
                                   <p className="mt-1 text-xs text-slate-500">
-                                    Issued {formatActivityDate(invoice.issueDate, formatDate)}
+                                    {t("customersPage.ledger.issuedOn", {
+                                      date: formatActivityDate(invoice.issueDate, formatDate),
+                                    })}
                                   </p>
                                 </div>
                                 <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                                  {invoice.status.replaceAll("_", " ")}
+                                  {t(`exportDialog.statuses.${invoice.status}`) ===
+                                  `exportDialog.statuses.${invoice.status}`
+                                    ? invoice.status.replaceAll("_", " ")
+                                    : t(`exportDialog.statuses.${invoice.status}`)}
                                 </span>
                               </div>
                               <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-                                <span className="app-chip">Total {formatCurrency(invoice.total, "INR")}</span>
-                                <span className="app-chip">Balance {formatCurrency(invoice.remaining, "INR")}</span>
+                                <span className="app-chip">
+                                  {t("invoiceDetail.totalLabel")}: {formatCurrency(invoice.total, "INR")}
+                                </span>
+                                <span className="app-chip">
+                                  {t("invoiceDetail.remainingLabel")}: {formatCurrency(invoice.remaining, "INR")}
+                                </span>
                               </div>
                             </div>
                           ))}
@@ -881,10 +945,14 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                     </div>
 
                     <div className="rounded-[1.9rem] border border-slate-200 bg-white p-6 shadow-sm">
-                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Collection note</p>
-                      <h3 className="mt-2 text-xl font-semibold text-slate-950">Notebook feel, automatic math</h3>
+                      <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                        {t("customersPage.ledger.collectionNoteKicker")}
+                      </p>
+                      <h3 className="mt-2 text-xl font-semibold text-slate-950">
+                        {t("customersPage.ledger.collectionNoteTitle")}
+                      </h3>
                       <p className="mt-3 text-sm leading-6 text-slate-600">
-                        This ledger behaves like a digital khata: invoices add debit, payments add credit, and the running balance updates after every entry.
+                        {t("customersPage.ledger.collectionNoteBody")}
                       </p>
                     </div>
                   </section>
@@ -893,13 +961,17 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             ) : (
               <section className="rounded-[1.9rem] border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
                 {ledgerLoading ? (
-                  <p className="text-sm text-slate-500">Loading customer ledger...</p>
+                  <p className="text-sm text-slate-500">{t("customersPage.ledger.loading")}</p>
                 ) : (
                   <>
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Customer ledger</p>
-                    <h2 className="mt-2 text-2xl font-semibold text-slate-950">Select a customer to view their khata</h2>
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                      {t("customersPage.ledger.emptyKicker")}
+                    </p>
+                    <h2 className="mt-2 text-2xl font-semibold text-slate-950">
+                      {t("customersPage.ledger.emptyTitle")}
+                    </h2>
                     <p className="mt-3 text-sm text-slate-500">
-                      You will see every bill, payment, and running balance in one place.
+                      {t("customersPage.ledger.emptyDescription")}
                     </p>
                   </>
                 )}
@@ -917,12 +989,12 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             setPaymentError(null);
           }
         }}
-        title="Add payment"
-        description="Record a payment against one of this customer's open invoices."
+        title={t("customersPage.actions.addPayment")}
+        description={t("customersPage.messages.selectInvoice")}
       >
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="ledger-payment-invoice">Invoice</Label>
+            <Label htmlFor="ledger-payment-invoice">{t("customersPage.ledger.selectInvoice")}</Label>
             <select
               id="ledger-payment-invoice"
               value={paymentInvoiceId}
@@ -937,7 +1009,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
               }}
               className="app-field h-10 w-full px-3 py-2"
             >
-              <option value="">Select invoice</option>
+              <option value="">{t("customersPage.ledger.selectInvoice")}</option>
               {(ledger?.summary.openInvoices ?? []).map((invoice) => (
                 <option key={invoice.id} value={invoice.id}>
                   {invoice.invoiceNumber} - {formatCurrency(invoice.remaining, "INR")}
@@ -947,12 +1019,12 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="ledger-payment-amount">Amount paid</Label>
+            <Label htmlFor="ledger-payment-amount">{t("customersPage.ledger.amountPaid")}</Label>
             <Input
               id="ledger-payment-amount"
               value={paymentAmount}
               onChange={(event) => setPaymentAmount(event.target.value)}
-              placeholder="Enter amount"
+              placeholder={t("customersPage.ledger.amountPlaceholder")}
               inputMode="decimal"
             />
           </div>
@@ -961,10 +1033,10 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button type="button" variant="outline" onClick={() => setPaymentModalOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="button" onClick={() => void handleRecordPayment()}>
-              Record payment
+              {t("customersPage.actions.recordPayment")}
             </Button>
           </div>
         </div>

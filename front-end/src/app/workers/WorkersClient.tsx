@@ -49,17 +49,17 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
       case "Enter a valid email address":
         return t("validation.validEmail");
       case "Enter a valid phone number":
-        return "Enter a valid phone number";
+        return t("validation.validPhone");
       case "Password must be at least 6 characters":
-        return "Password must be at least 6 characters";
+        return t("workersPage.validation.passwordMin");
       default:
         return message;
     }
   };
 
   const validatePassword = (value: string) => {
-    if (!value.trim()) return "This field is required";
-    if (value.trim().length < 6) return "Password must be at least 6 characters";
+    if (!value.trim()) return t("workersPage.validation.passwordRequired");
+    if (value.trim().length < 6) return t("workersPage.validation.passwordMin");
     return "";
   };
 
@@ -83,12 +83,12 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
     } catch (error) {
       if (isAxiosError<{ message?: string }>(error)) {
         setCreateError(
-          error.response?.data?.message || "Unable to create the worker right now.",
+          error.response?.data?.message || t("workersPage.messages.createError"),
         );
         return;
       }
 
-      setCreateError("Unable to create the worker right now.");
+      setCreateError(t("workersPage.messages.createError"));
     }
   };
 
@@ -124,12 +124,12 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
     } catch (error) {
       if (isAxiosError<{ message?: string }>(error)) {
         setUpdateError(
-          error.response?.data?.message || "Unable to update the worker right now.",
+          error.response?.data?.message || t("workersPage.messages.updateError"),
         );
         return;
       }
 
-      setUpdateError("Unable to update the worker right now.");
+      setUpdateError(t("workersPage.messages.updateError"));
     }
   };
 
@@ -137,43 +137,40 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title="Worker Panel"
-      subtitle="Create, update, and remove workers that belong to this business."
+      title={t("workersPage.title")}
+      subtitle={t("workersPage.subtitle")}
     >
       <div className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-2">
           <p className="text-sm uppercase tracking-[0.2em] text-[#8a6d56]">
-            Team access
+            {t("workersPage.kicker")}
           </p>
           <p className="max-w-3xl text-base text-[#5c4b3b]">
-            Every worker is tied to this business automatically. The frontend
-            never sends a business id, so membership always comes from the
-            authenticated admin session.
+            {t("workersPage.lead")}
           </p>
         </div>
 
         <section className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="grid gap-6">
             <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
-              <h2 className="text-lg font-semibold">Add Worker</h2>
+              <h2 className="text-lg font-semibold">{t("workersPage.addTitle")}</h2>
               <p className="text-sm text-[#8a6d56]">
-                Create a worker account with an admin-generated password. Workers
-                cannot sign themselves up.
+                {t("workersPage.addDescription")}
               </p>
               <form className="mt-4 grid gap-4" onSubmit={handleCreate} noValidate>
                 <ValidationField
                   id="worker-name"
-                  label="Worker name"
+                  label={t("workersPage.fields.name")}
                   value={form.name}
                   onChange={(value) => setForm((prev) => ({ ...prev, name: value }))}
                   validate={(value) => translateValidationMessage(validateName(value))}
                   required
-                  placeholder="Riya Sharma"
+                  placeholder={t("workersPage.placeholders.name")}
                   success
                 />
                 <ValidationField
                   id="worker-email"
-                  label="Worker email"
+                  label={t("workersPage.fields.email")}
                   type="email"
                   value={form.email}
                   onChange={(value) =>
@@ -183,12 +180,12 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                     value ? translateValidationMessage(validateEmail(value)) : ""
                   }
                   required
-                  placeholder="riya@company.com"
+                  placeholder={t("workersPage.placeholders.email")}
                   success
                 />
                 <ValidationField
                   id="worker-phone"
-                  label="Phone number"
+                  label={t("workersPage.fields.phone")}
                   value={form.phone}
                   onChange={(value) =>
                     setForm((prev) => ({ ...prev, phone: value.replace(/\D/g, "") }))
@@ -197,13 +194,13 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                     translateValidationMessage(validatePhone(value))
                   }
                   required
-                  placeholder="9876543210"
+                  placeholder={t("workersPage.placeholders.phone")}
                   success
                 />
                 <div className="grid gap-2">
                   <ValidationField
                     id="worker-password"
-                    label="Password"
+                    label={t("workersPage.fields.password")}
                     type="password"
                     value={form.password}
                     onChange={(value) =>
@@ -213,7 +210,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                       translateValidationMessage(validatePassword(value))
                     }
                     required
-                    placeholder="Minimum 6 characters"
+                    placeholder={t("workersPage.placeholders.password")}
                     success
                   />
                 </div>
@@ -222,7 +219,9 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                   className="bg-[#1f1b16] text-white hover:bg-[#2c2520]"
                   disabled={createWorker.isPending}
                 >
-                  {createWorker.isPending ? "Creating..." : "Create Worker"}
+                  {createWorker.isPending
+                    ? t("workersPage.actions.creating")
+                    : t("workersPage.actions.create")}
                 </Button>
                 {createError ? (
                   <p className="text-sm text-[#b45309]">
@@ -234,23 +233,22 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
           </div>
 
           <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
-            <h2 className="text-lg font-semibold">Business Workers</h2>
+            <h2 className="text-lg font-semibold">{t("workersPage.listTitle")}</h2>
             <p className="text-sm text-[#8a6d56]">
-              Review every worker connected to this business and remove access
-              when someone no longer needs it.
+              {t("workersPage.listDescription")}
             </p>
             <div className="mt-4">
               {isLoading ? (
-                <p className="text-sm text-[#8a6d56]">Loading workers...</p>
+                <p className="text-sm text-[#8a6d56]">{t("workersPage.loading")}</p>
               ) : null}
               {isError ? (
                 <p className="text-sm text-[#b45309]">
-                  Unable to load workers right now.
+                  {t("workersPage.loadError")}
                 </p>
               ) : null}
               {!isLoading && !isError && workers.length === 0 ? (
                 <p className="text-sm text-[#8a6d56]">
-                  No workers have been added yet.
+                  {t("workersPage.empty")}
                 </p>
               ) : null}
               {!isLoading && !isError && workers.length > 0 ? (
@@ -264,7 +262,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                         <form className="grid gap-3" onSubmit={handleUpdate} noValidate>
                           <ValidationField
                             id={`edit-worker-name-${worker.id}`}
-                            label="Worker name"
+                            label={t("workersPage.fields.name")}
                             value={editingForm.name}
                             onChange={(value) =>
                               setEditingForm((prev) => ({ ...prev, name: value }))
@@ -277,7 +275,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                           />
                           <ValidationField
                             id={`edit-worker-phone-${worker.id}`}
-                            label="Phone number"
+                            label={t("workersPage.fields.phone")}
                             value={editingForm.phone}
                             onChange={(value) =>
                               setEditingForm((prev) => ({
@@ -289,12 +287,12 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                               translateValidationMessage(validatePhone(value))
                             }
                             required
-                            placeholder="9876543210"
+                            placeholder={t("workersPage.placeholders.phone")}
                             success
                           />
                           <ValidationField
                             id={`edit-worker-password-${worker.id}`}
-                            label="New password"
+                            label={t("workersPage.fields.newPassword")}
                             type="password"
                             value={editingForm.password}
                             onChange={(value) =>
@@ -305,12 +303,14 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                                 ? translateValidationMessage(validatePassword(value))
                                 : ""
                             }
-                            placeholder="Leave blank to keep current password"
+                            placeholder={t("workersPage.placeholders.keepPassword")}
                             success
                           />
                           <div className="flex flex-wrap gap-2">
                             <Button type="submit" disabled={updateWorker.isPending}>
-                              {updateWorker.isPending ? "Saving..." : "Save"}
+                              {updateWorker.isPending
+                                ? t("workersPage.actions.saving")
+                                : t("workersPage.actions.save")}
                             </Button>
                             <Button
                               type="button"
@@ -333,10 +333,13 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                             <p className="text-base font-semibold">{worker.name}</p>
                             <p className="text-sm text-[#5c4b3b]">{worker.email}</p>
                             <p className="text-sm text-[#5c4b3b]">
-                              {worker.phone || "No phone number"}
+                              {worker.phone || t("workersPage.messages.noPhone")}
                             </p>
                             <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                              {worker.role} - Added {formatCreatedAt(worker.createdAt)}
+                              {t("workersPage.messages.addedMeta", {
+                                role: worker.role,
+                                date: formatCreatedAt(worker.createdAt),
+                              })}
                             </p>
                           </div>
                           <div className="flex flex-wrap gap-2">
@@ -345,7 +348,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                               variant="outline"
                               onClick={() => handleEdit(worker.id)}
                             >
-                              Edit
+                              {t("workersPage.actions.edit")}
                             </Button>
                             <Button
                               type="button"

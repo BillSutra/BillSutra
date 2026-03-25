@@ -29,6 +29,7 @@ import {
 } from "@/hooks/useInventoryQueries";
 import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const QUICK_ACTION_USAGE_KEY = "billsutra.quick-actions.usage.v1";
 const QUICK_ACTION_RECENT_KEY = "billsutra.quick-actions.recent.v1";
@@ -120,18 +121,21 @@ const buildProductSku = (name: string, barcode: string) => {
   return `${base || "ITEM"}-${suffix}`;
 };
 
-const formatRecentTime = (timestamp: number) => {
+const formatRecentTime = (
+  timestamp: number,
+  t: (key: string, params?: Record<string, string | number>) => string,
+) => {
   const elapsedMs = Date.now() - timestamp;
   const minutes = Math.floor(elapsedMs / 60000);
 
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return t("time.justNow");
+  if (minutes < 60) return t("time.minutesAgo", { count: minutes });
 
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t("time.hoursAgo", { count: hours });
 
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t("time.daysAgo", { count: days });
 };
 
 const getMutationErrorMessage = (error: unknown, fallback: string) => {
@@ -240,6 +244,7 @@ const actionDetails = [
 const QuickActions = ({ className }: { className?: string }) => {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { t, formatNumber } = useI18n();
   const { data: categories = [] } = useCategoriesQuery();
   const createProduct = useCreateProductMutation();
   const createCustomer = useCreateCustomerMutation();
@@ -360,7 +365,14 @@ const QuickActions = ({ className }: { className?: string }) => {
     });
   }, [usage]);
 
-  const mostUsedActionLabel = orderedActions[0]?.label ?? "Quick actions";
+  const actionLabelMap: Record<QuickActionId, string> = {
+    "add-product": t("dashboardQuickDesk.actions.addProduct.label"),
+    "new-bill": t("dashboardQuickDesk.actions.newBill.label"),
+    "add-customer": t("dashboardQuickDesk.actions.addCustomer.label"),
+  };
+
+  const mostUsedActionLabel =
+    orderedActions[0] ? actionLabelMap[orderedActions[0].id] : t("dashboardQuickDesk.title");
   const recentProducts = recentActions.filter(
     (item) => item.actionId === "add-product",
   );
@@ -420,10 +432,14 @@ const QuickActions = ({ className }: { className?: string }) => {
     setFabOpen(false);
 
     if (actionId === "new-bill") {
-      pushRecentAction("new-bill", "Billing desk opened", "Barcode search armed");
-      setSuccessState("New Bill opened");
-      toast.success("Billing desk ready.", {
-        description: "Product search is focused for barcode or keyboard input.",
+      pushRecentAction(
+        "new-bill",
+        t("dashboardQuickDesk.actions.newBill.label"),
+        t("dashboardQuickDesk.actions.newBill.meta"),
+      );
+      setSuccessState(t("dashboardQuickDesk.messages.newBillOpened"));
+      toast.success(t("dashboardQuickDesk.messages.newBillReady"), {
+        description: t("dashboardQuickDesk.messages.newBillDescription"),
       });
       playSuccessFeedback();
       router.push("/invoices?quickAction=new-bill");
@@ -441,13 +457,13 @@ const QuickActions = ({ className }: { className?: string }) => {
     const trimmedBarcode = productForm.barcode.trim();
 
     if (!trimmedName) {
-      toast.error("Enter a product name.");
+      toast.error(t("dashboardQuickDesk.messages.enterProductName"));
       productNameRef.current?.focus();
       return;
     }
 
     if (!trimmedPrice || Number.isNaN(Number(trimmedPrice)) || Number(trimmedPrice) < 0) {
-      toast.error("Enter a valid selling price.");
+      toast.error(t("dashboardQuickDesk.messages.enterValidPrice"));
       return;
     }
 
@@ -480,19 +496,21 @@ const QuickActions = ({ className }: { className?: string }) => {
       pushRecentAction(
         "add-product",
         createdProduct.name,
-        trimmedBarcode ? `Barcode ${trimmedBarcode}` : `Price ${trimmedPrice}`,
+        trimmedBarcode
+          ? `${t("dashboardQuickDesk.productModal.barcode")}: ${trimmedBarcode}`
+          : `${t("dashboardQuickDesk.productModal.price")}: ${trimmedPrice}`,
       );
-      setSuccessState("Product saved");
+      setSuccessState(t("dashboardQuickDesk.messages.productSaved"));
       playSuccessFeedback();
-      toast.success("Product added.", {
+      toast.success(t("dashboardQuickDesk.messages.productAdded"), {
         description: trimmedBarcode
-          ? "Saved and ready for the next barcode."
-          : "Saved with an auto-generated SKU.",
+          ? t("dashboardQuickDesk.messages.productAddedBarcode")
+          : t("dashboardQuickDesk.messages.productAddedSku"),
       });
       setActiveAction(null);
     } catch (error) {
       toast.error(
-        getMutationErrorMessage(error, "Unable to add the product right now."),
+        getMutationErrorMessage(error, t("dashboardQuickDesk.messages.productError")),
       );
     }
   };
@@ -506,13 +524,13 @@ const QuickActions = ({ className }: { className?: string }) => {
     const trimmedPhone = customerForm.phone.trim();
 
     if (!trimmedName) {
-      toast.error("Enter a customer name.");
+      toast.error(t("dashboardQuickDesk.messages.enterCustomerName"));
       customerNameRef.current?.focus();
       return;
     }
 
     if (trimmedPhone && !/^\d{10,15}$/.test(trimmedPhone)) {
-      toast.error("Enter a valid phone number.");
+      toast.error(t("dashboardQuickDesk.messages.enterValidPhone"));
       return;
     }
 
@@ -536,19 +554,19 @@ const QuickActions = ({ className }: { className?: string }) => {
       pushRecentAction(
         "add-customer",
         createdCustomer.name,
-        trimmedPhone || "Saved without a phone number",
+        trimmedPhone || t("dashboardQuickDesk.notSet"),
       );
-      setSuccessState("Customer saved");
+      setSuccessState(t("dashboardQuickDesk.messages.customerSaved"));
       playSuccessFeedback();
-      toast.success("Customer added.", {
+      toast.success(t("dashboardQuickDesk.messages.customerAdded"), {
         description: trimmedPhone
-          ? "Saved and ready for the next entry."
-          : "Saved with the minimum details.",
+          ? t("dashboardQuickDesk.messages.customerAddedPhone")
+          : t("dashboardQuickDesk.messages.customerAddedMinimal"),
       });
       setActiveAction(null);
     } catch (error) {
       toast.error(
-        getMutationErrorMessage(error, "Unable to add the customer right now."),
+        getMutationErrorMessage(error, t("dashboardQuickDesk.messages.customerError")),
       );
     }
   };
@@ -572,20 +590,21 @@ const QuickActions = ({ className }: { className?: string }) => {
                   <Sparkles size={18} />
                 </div>
                 <div>
-                  <p className="app-kicker">Speed desk</p>
+                  <p className="app-kicker">{t("dashboardQuickDesk.kicker")}</p>
                   <CardTitle className="mt-1 text-lg text-foreground">
-                    Quick actions
+                    {t("dashboardQuickDesk.title")}
                   </CardTitle>
                 </div>
               </div>
               <p className="mt-3 text-sm text-muted-foreground">
-                Keep the three highest-frequency tasks one tap away, with smart
-                defaults, recent history, and barcode-first billing entry.
+                {t("dashboardQuickDesk.description")}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="app-chip">Most used: {mostUsedActionLabel}</span>
-              <span className="app-chip">Swipe up on mobile to open</span>
+              <span className="app-chip">
+                {t("dashboardQuickDesk.mostUsed", { label: mostUsedActionLabel })}
+              </span>
+              <span className="app-chip">{t("dashboardQuickDesk.swipeUp")}</span>
             </div>
           </div>
 
@@ -626,15 +645,31 @@ const QuickActions = ({ className }: { className?: string }) => {
                         <Icon size={20} />
                       </div>
                       <div>
-                        <p className="text-base font-semibold">{action.label}</p>
-                        <p className="mt-1 text-sm opacity-80">{action.description}</p>
+                        <p className="text-base font-semibold">
+                          {actionLabelMap[action.id]}
+                        </p>
+                        <p className="mt-1 text-sm opacity-80">
+                          {action.id === "add-product"
+                            ? t("dashboardQuickDesk.actions.addProduct.description")
+                            : action.id === "new-bill"
+                              ? t("dashboardQuickDesk.actions.newBill.description")
+                              : t("dashboardQuickDesk.actions.addCustomer.description")}
+                        </p>
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] opacity-70">
-                        <span>{action.meta}</span>
+                        <span>
+                          {action.id === "add-product"
+                            ? t("dashboardQuickDesk.actions.addProduct.meta")
+                            : action.id === "new-bill"
+                              ? t("dashboardQuickDesk.actions.newBill.meta")
+                              : t("dashboardQuickDesk.actions.addCustomer.meta")}
+                        </span>
                         <span className="rounded-full border border-current/15 px-2 py-1">
                           {usage[action.id] > 0
-                            ? `${usage[action.id]} taps`
-                            : "Ready"}
+                            ? t("dashboardQuickDesk.usage.taps", {
+                                count: formatNumber(usage[action.id]),
+                              })
+                            : t("dashboardQuickDesk.usage.ready")}
                         </span>
                       </div>
                     </div>
@@ -652,7 +687,7 @@ const QuickActions = ({ className }: { className?: string }) => {
             <section className="rounded-[1.4rem] border border-border/70 bg-card/70 p-4 shadow-[0_14px_34px_-26px_rgba(31,27,22,0.2)]">
               <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Clock3 size={16} />
-                <span>Recent actions</span>
+                <span>{t("dashboardQuickDesk.recentActions")}</span>
               </div>
               {recentActions.length > 0 ? (
                 <div className="mt-4 grid gap-3">
@@ -670,14 +705,14 @@ const QuickActions = ({ className }: { className?: string }) => {
                         </p>
                       </div>
                       <span className="shrink-0 text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                        {formatRecentTime(item.timestamp)}
+                        {formatRecentTime(item.timestamp, t)}
                       </span>
                     </div>
                   ))}
                 </div>
               ) : (
                 <p className="mt-4 text-sm text-muted-foreground">
-                  Your latest quick adds will appear here for easy repeat flows.
+                  {t("dashboardQuickDesk.recentEmpty")}
                 </p>
               )}
             </section>
@@ -685,34 +720,42 @@ const QuickActions = ({ className }: { className?: string }) => {
             <section className="rounded-[1.4rem] border border-border/70 bg-card/70 p-4 shadow-[0_14px_34px_-26px_rgba(31,27,22,0.2)]">
               <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <ScanLine size={16} />
-                <span>Smart defaults</span>
+                <span>{t("dashboardQuickDesk.smartDefaults")}</span>
               </div>
               <div className="mt-4 grid gap-3 text-sm text-muted-foreground">
                 <div className="rounded-2xl border border-border/70 bg-background/75 px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
-                    Product
+                    {t("dashboardQuickDesk.productSection")}
                   </p>
                   <p className="mt-2">
-                    Last price: {defaults.product.price || "Not set"}
+                    {t("dashboardQuickDesk.lastPrice", {
+                      value: defaults.product.price || t("dashboardQuickDesk.notSet"),
+                    })}
                   </p>
                   <p className="mt-1">
-                    Category:{" "}
-                    {categories.find(
-                      (category) =>
-                        String(category.id) === defaults.product.categoryId,
-                    )?.name ?? "No category default"}
+                    {t("dashboardQuickDesk.lastCategory", {
+                      value:
+                        categories.find(
+                          (category) =>
+                            String(category.id) === defaults.product.categoryId,
+                        )?.name ?? t("dashboardQuickDesk.noCategoryDefault"),
+                    })}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-border/70 bg-background/75 px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.18em] text-foreground/70">
-                    Customer
+                    {t("dashboardQuickDesk.customerSection")}
                   </p>
                   <p className="mt-2">
-                    Last phone: {defaults.customer.phone || "Not set"}
+                    {t("dashboardQuickDesk.lastPhone", {
+                      value: defaults.customer.phone || t("dashboardQuickDesk.notSet"),
+                    })}
                   </p>
                   <p className="mt-1">
-                    Recent products: {recentProducts.length} | Recent customers:{" "}
-                    {recentCustomers.length}
+                    {t("dashboardQuickDesk.recentCounts", {
+                      products: formatNumber(recentProducts.length),
+                      customers: formatNumber(recentCustomers.length),
+                    })}
                   </p>
                 </div>
               </div>
@@ -783,7 +826,7 @@ const QuickActions = ({ className }: { className?: string }) => {
               fabOpen && "scale-105",
             )}
             onClick={() => setFabOpen((currentOpen) => !currentOpen)}
-            aria-label="Toggle quick actions"
+            aria-label={t("dashboardQuickDesk.toggleAria")}
           >
             <Plus
               size={22}
@@ -799,19 +842,20 @@ const QuickActions = ({ className }: { className?: string }) => {
       <Modal
         open={activeAction === "add-product"}
         onOpenChange={(open) => setActiveAction(open ? "add-product" : null)}
-        title="Quick add product"
-        description="Capture a sellable item in seconds."
+        title={t("dashboardQuickDesk.productModal.title")}
+        description={t("dashboardQuickDesk.productModal.description")}
         contentClassName={modalContentClassName}
       >
         <form className="grid gap-5 p-6" onSubmit={handleProductSubmit} noValidate>
           <div className="rounded-[1.4rem] border border-emerald-200/80 bg-emerald-50/80 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100">
-            Name and price are all you need. Barcode is ready for scanner input,
-            and SKU is auto-generated to keep the form fast.
+            {t("dashboardQuickDesk.productModal.hint")}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="quick-product-name">Name</Label>
+              <Label htmlFor="quick-product-name">
+                {t("dashboardQuickDesk.productModal.name")}
+              </Label>
               <Input
                 ref={productNameRef}
                 id="quick-product-name"
@@ -822,13 +866,15 @@ const QuickActions = ({ className }: { className?: string }) => {
                     name: event.target.value,
                   }))
                 }
-                placeholder="e.g. Fresh milk 500ml"
+                placeholder={t("dashboardQuickDesk.productModal.namePlaceholder")}
                 autoComplete="off"
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="quick-product-price">Price</Label>
+              <Label htmlFor="quick-product-price">
+                {t("dashboardQuickDesk.productModal.price")}
+              </Label>
               <Input
                 id="quick-product-price"
                 type="number"
@@ -842,20 +888,22 @@ const QuickActions = ({ className }: { className?: string }) => {
                     price: event.target.value,
                   }))
                 }
-                placeholder="0.00"
+                placeholder={t("dashboardQuickDesk.productModal.pricePlaceholder")}
               />
             </div>
 
             <div className="grid gap-2">
               <div className="flex items-center justify-between gap-3">
-                <Label htmlFor="quick-product-barcode">Barcode</Label>
+                <Label htmlFor="quick-product-barcode">
+                  {t("dashboardQuickDesk.productModal.barcode")}
+                </Label>
                 <button
                   type="button"
                   className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground transition hover:text-foreground"
                   onClick={() => productBarcodeRef.current?.focus()}
                 >
                   <Barcode size={14} />
-                  <span>Scan next</span>
+                  <span>{t("dashboardQuickDesk.productModal.scanNext")}</span>
                 </button>
               </div>
               <Input
@@ -868,14 +916,16 @@ const QuickActions = ({ className }: { className?: string }) => {
                     barcode: event.target.value,
                   }))
                 }
-                placeholder="Scan or type barcode"
+                placeholder={t("dashboardQuickDesk.productModal.barcodePlaceholder")}
                 inputMode="numeric"
                 autoComplete="off"
               />
             </div>
 
             <div className="grid gap-2 sm:col-span-2">
-              <Label htmlFor="quick-product-category">Category</Label>
+              <Label htmlFor="quick-product-category">
+                {t("dashboardQuickDesk.productModal.category")}
+              </Label>
               <select
                 id="quick-product-category"
                 className="app-field h-10 px-3 text-sm text-foreground"
@@ -887,7 +937,7 @@ const QuickActions = ({ className }: { className?: string }) => {
                   }))
                 }
               >
-                <option value="">No category</option>
+                <option value="">{t("dashboardQuickDesk.productModal.noCategory")}</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
                     {category.name}
@@ -898,12 +948,18 @@ const QuickActions = ({ className }: { className?: string }) => {
           </div>
 
           <div className="flex flex-col gap-2 rounded-[1.3rem] border border-border/70 bg-card/70 px-4 py-3 text-sm text-muted-foreground">
-            <span>Smart default price: {defaults.product.price || "Not set"}</span>
             <span>
-              Last category:{" "}
-              {categories.find(
-                (category) => String(category.id) === defaults.product.categoryId,
-              )?.name ?? "Not set"}
+              {t("dashboardQuickDesk.productModal.defaultPrice", {
+                value: defaults.product.price || t("dashboardQuickDesk.notSet"),
+              })}
+            </span>
+            <span>
+              {t("dashboardQuickDesk.productModal.defaultCategory", {
+                value:
+                  categories.find(
+                    (category) => String(category.id) === defaults.product.categoryId,
+                  )?.name ?? t("dashboardQuickDesk.notSet"),
+              })}
             </span>
           </div>
 
@@ -913,10 +969,10 @@ const QuickActions = ({ className }: { className?: string }) => {
               variant="outline"
               onClick={() => setActiveAction(null)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={createProduct.isPending}>
-              {createProduct.isPending ? "Saving..." : "Save product"}
+              {createProduct.isPending ? t("common.processing") : t("dashboardQuickDesk.productModal.save")}
             </Button>
           </div>
         </form>
@@ -925,19 +981,20 @@ const QuickActions = ({ className }: { className?: string }) => {
       <Modal
         open={activeAction === "add-customer"}
         onOpenChange={(open) => setActiveAction(open ? "add-customer" : null)}
-        title="Quick add customer"
-        description="Create a customer record without leaving the dashboard."
+        title={t("dashboardQuickDesk.customerModal.title")}
+        description={t("dashboardQuickDesk.customerModal.description")}
         contentClassName={modalContentClassName}
       >
         <form className="grid gap-5 p-6" onSubmit={handleCustomerSubmit} noValidate>
           <div className="rounded-[1.4rem] border border-sky-200/80 bg-sky-50/80 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/20 dark:text-sky-100">
-            The form keeps only the essentials so you can capture a customer in a
-            couple of taps and jump straight back into billing.
+            {t("dashboardQuickDesk.customerModal.hint")}
           </div>
 
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="quick-customer-name">Name</Label>
+              <Label htmlFor="quick-customer-name">
+                {t("dashboardQuickDesk.customerModal.name")}
+              </Label>
               <Input
                 ref={customerNameRef}
                 id="quick-customer-name"
@@ -948,13 +1005,15 @@ const QuickActions = ({ className }: { className?: string }) => {
                     name: event.target.value,
                   }))
                 }
-                placeholder="e.g. Ravi Kumar"
+                placeholder={t("dashboardQuickDesk.customerModal.namePlaceholder")}
                 autoComplete="off"
               />
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="quick-customer-phone">Phone</Label>
+              <Label htmlFor="quick-customer-phone">
+                {t("dashboardQuickDesk.customerModal.phone")}
+              </Label>
               <Input
                 id="quick-customer-phone"
                 value={customerForm.phone}
@@ -964,7 +1023,7 @@ const QuickActions = ({ className }: { className?: string }) => {
                     phone: event.target.value.replace(/[^\d]/g, ""),
                   }))
                 }
-                placeholder="Optional phone number"
+                placeholder={t("dashboardQuickDesk.customerModal.phonePlaceholder")}
                 inputMode="tel"
                 autoComplete="tel"
               />
@@ -972,9 +1031,15 @@ const QuickActions = ({ className }: { className?: string }) => {
           </div>
 
           <div className="flex flex-col gap-2 rounded-[1.3rem] border border-border/70 bg-card/70 px-4 py-3 text-sm text-muted-foreground">
-            <span>Last phone default: {defaults.customer.phone || "Not set"}</span>
             <span>
-              Recent quick saves: {recentCustomers.length > 0 ? recentCustomers.length : 0}
+              {t("dashboardQuickDesk.customerModal.defaultPhone", {
+                value: defaults.customer.phone || t("dashboardQuickDesk.notSet"),
+              })}
+            </span>
+            <span>
+              {t("dashboardQuickDesk.customerModal.recentQuickSaves", {
+                count: formatNumber(recentCustomers.length > 0 ? recentCustomers.length : 0),
+              })}
             </span>
           </div>
 
@@ -984,10 +1049,10 @@ const QuickActions = ({ className }: { className?: string }) => {
               variant="outline"
               onClick={() => setActiveAction(null)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={createCustomer.isPending}>
-              {createCustomer.isPending ? "Saving..." : "Save customer"}
+              {createCustomer.isPending ? t("common.processing") : t("dashboardQuickDesk.customerModal.save")}
             </Button>
           </div>
         </form>

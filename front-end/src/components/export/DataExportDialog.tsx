@@ -6,6 +6,7 @@ import Modal from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useI18n } from "@/providers/LanguageProvider";
 import {
   previewDataExport,
   runDataExport,
@@ -110,6 +111,7 @@ const DataExportDialog = ({
   categoryOptions = [],
   disabled = false,
 }: DataExportDialogProps) => {
+  const { t, formatNumber } = useI18n();
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<ExportFormat>("xlsx");
   const [scope, setScope] = useState<ExportScope>(
@@ -148,6 +150,21 @@ const DataExportDialog = ({
     [fieldOptions, selectedFields],
   );
 
+  const localizedTitle =
+    t(`exportDialog.resources.${resource}`) === `exportDialog.resources.${resource}`
+      ? title
+      : t(`exportDialog.resources.${resource}`);
+
+  const getFieldLabel = (fieldId: string, fallback: string) => {
+    const key = `exportDialog.fields.${fieldId}`;
+    return t(key) === key ? fallback : t(key);
+  };
+
+  const getStatusLabel = (status: string) => {
+    const key = `exportDialog.statuses.${status}`;
+    return t(key) === key ? status.replaceAll("_", " ") : t(key);
+  };
+
   const toggleField = (fieldId: string) => {
     setSelectedFields((prev) => {
       if (prev.includes(fieldId)) {
@@ -179,12 +196,12 @@ const DataExportDialog = ({
 
   const handleExport = async () => {
     if (scope === "selected" && selectedIds.length === 0) {
-      toast.error("Select at least one record to export.");
+      toast.error(t("exportDialog.selectedValidation"));
       return;
     }
 
     if (selectedFields.length === 0) {
-      toast.error("Choose at least one field to export.");
+      toast.error(t("exportDialog.fieldValidation"));
       return;
     }
 
@@ -204,7 +221,7 @@ const DataExportDialog = ({
 
       if (result.delivery === "download") {
         downloadBlobFile(result.blob, result.fileName);
-        toast.success(`${title} exported successfully.`);
+        toast.success(t("exportDialog.exportSuccess", { title: localizedTitle }));
       } else {
         toast.success(result.message);
       }
@@ -212,7 +229,7 @@ const DataExportDialog = ({
       setOpen(false);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Unable to export data.";
+        error instanceof Error ? error.message : t("exportDialog.exportError");
       toast.error(message);
     } finally {
       setIsSubmitting(false);
@@ -224,13 +241,13 @@ const DataExportDialog = ({
 
     if (scope === "selected" && selectedIds.length === 0) {
       setPreview(null);
-      setPreviewError("Select at least one record to preview.");
+      setPreviewError(t("exportDialog.previewSelectedValidation"));
       return;
     }
 
     if (selectedFields.length === 0) {
       setPreview(null);
-      setPreviewError("Choose at least one field to preview.");
+      setPreviewError(t("exportDialog.previewFieldValidation"));
       return;
     }
 
@@ -254,7 +271,7 @@ const DataExportDialog = ({
         if (isCancelled) return;
         setPreview(null);
         setPreviewError(
-          error instanceof Error ? error.message : "Unable to preview export.",
+          error instanceof Error ? error.message : t("exportDialog.previewError"),
         );
       } finally {
         if (!isCancelled) {
@@ -267,27 +284,27 @@ const DataExportDialog = ({
       isCancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [filters, open, resource, scope, selectedFields, selectedIds]);
+  }, [filters, open, resource, scope, selectedFields, selectedIds, t]);
 
   return (
     <>
       <Button type="button" variant="outline" onClick={() => setOpen(true)} disabled={disabled}>
-        {triggerLabel}
+        {triggerLabel === "Export" ? t("exportDialog.export") : triggerLabel}
       </Button>
 
       <Modal
         open={open}
         onOpenChange={setOpen}
-        title={`Export ${title}`}
-        description="Choose the format, scope, filters, and columns for this export."
+        title={t("exportDialog.title", { title: localizedTitle })}
+        description={t("exportDialog.description")}
         contentClassName="w-[min(96vw,1100px)] max-w-[min(96vw,1100px)] max-h-[90vh] overflow-hidden"
         footer={
           <>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="button" onClick={handleExport} disabled={isSubmitting}>
-              {isSubmitting ? "Preparing export..." : "Export now"}
+              {isSubmitting ? t("exportDialog.preparing") : t("exportDialog.exportNow")}
             </Button>
           </>
         }
@@ -295,7 +312,7 @@ const DataExportDialog = ({
         <div className="grid max-h-[calc(90vh-140px)] gap-5 overflow-y-auto pr-1">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor={`${resource}-export-format`}>Format</Label>
+              <Label htmlFor={`${resource}-export-format`}>{t("exportDialog.format")}</Label>
               <select
                 id={`${resource}-export-format`}
                 className="app-field h-10 px-3 text-sm text-foreground"
@@ -310,7 +327,7 @@ const DataExportDialog = ({
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor={`${resource}-export-delivery`}>Delivery</Label>
+              <Label htmlFor={`${resource}-export-delivery`}>{t("exportDialog.delivery")}</Label>
               <select
                 id={`${resource}-export-delivery`}
                 className="app-field h-10 px-3 text-sm text-foreground"
@@ -319,15 +336,17 @@ const DataExportDialog = ({
                   setDelivery(event.target.value as ExportRequest["delivery"])
                 }
               >
-                <option value="download">Download now</option>
-                <option value="email">Email file</option>
+                <option value="download">{t("exportDialog.downloadNow")}</option>
+                <option value="email">{t("exportDialog.emailFile")}</option>
               </select>
             </div>
           </div>
 
           {delivery === "email" ? (
             <div className="grid gap-2">
-              <Label htmlFor={`${resource}-export-email`}>Destination email</Label>
+              <Label htmlFor={`${resource}-export-email`}>
+                {t("exportDialog.destinationEmail")}
+              </Label>
               <Input
                 id={`${resource}-export-email`}
                 type="email"
@@ -339,23 +358,27 @@ const DataExportDialog = ({
           ) : null}
 
           <div className="grid gap-3">
-            <Label>Data scope</Label>
+            <Label>{t("exportDialog.scope")}</Label>
             <div className="grid gap-2 md:grid-cols-3">
               <button
                 type="button"
                 className={`rounded-xl border px-4 py-3 text-left text-sm ${scope === "all" ? "border-primary bg-primary/5" : "border-border/70"}`}
                 onClick={() => setScope("all")}
               >
-                <span className="block font-medium">All data</span>
-                <span className="text-muted-foreground">Export every record you can access.</span>
+                <span className="block font-medium">{t("exportDialog.allData")}</span>
+                <span className="text-muted-foreground">
+                  {t("exportDialog.allDataDescription")}
+                </span>
               </button>
               <button
                 type="button"
                 className={`rounded-xl border px-4 py-3 text-left text-sm ${scope === "filtered" ? "border-primary bg-primary/5" : "border-border/70"}`}
                 onClick={() => setScope("filtered")}
               >
-                <span className="block font-medium">Filtered data</span>
-                <span className="text-muted-foreground">Apply the filters below before exporting.</span>
+                <span className="block font-medium">{t("exportDialog.filteredData")}</span>
+                <span className="text-muted-foreground">
+                  {t("exportDialog.filteredDataDescription")}
+                </span>
               </button>
               <button
                 type="button"
@@ -364,11 +387,13 @@ const DataExportDialog = ({
                   if (selectedIds.length > 0) setScope("selected");
                 }}
               >
-                <span className="block font-medium">Selected only</span>
+                <span className="block font-medium">{t("exportDialog.selectedOnly")}</span>
                 <span className="text-muted-foreground">
                   {selectedIds.length > 0
-                    ? `${selectedIds.length} record(s) currently selected.`
-                    : "Select records on the page to enable this option."}
+                    ? t("exportDialog.selectedCount", {
+                        count: formatNumber(selectedIds.length),
+                      })
+                    : t("exportDialog.selectedDisabled")}
                 </span>
               </button>
             </div>
@@ -378,7 +403,7 @@ const DataExportDialog = ({
             <div className="grid gap-4 rounded-2xl border border-border/70 bg-muted/20 p-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="grid gap-2">
-                  <Label htmlFor={`${resource}-start-date`}>Start date</Label>
+                  <Label htmlFor={`${resource}-start-date`}>{t("exportDialog.startDate")}</Label>
                   <Input
                     id={`${resource}-start-date`}
                     type="date"
@@ -392,7 +417,7 @@ const DataExportDialog = ({
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor={`${resource}-end-date`}>End date</Label>
+                  <Label htmlFor={`${resource}-end-date`}>{t("exportDialog.endDate")}</Label>
                   <Input
                     id={`${resource}-end-date`}
                     type="date"
@@ -411,10 +436,10 @@ const DataExportDialog = ({
                 <div className="grid gap-2">
                   <Label htmlFor={`${resource}-search`}>
                     {resource === "products"
-                      ? "Search product"
+                      ? t("exportDialog.searchProduct")
                       : resource === "customers"
-                        ? "Search customer"
-                        : "Search invoice"}
+                        ? t("exportDialog.searchCustomer")
+                        : t("exportDialog.searchInvoice")}
                   </Label>
                   <Input
                     id={`${resource}-search`}
@@ -427,17 +452,17 @@ const DataExportDialog = ({
                     }
                     placeholder={
                       resource === "products"
-                        ? "Name, SKU, or barcode"
+                        ? t("exportDialog.productSearchPlaceholder")
                         : resource === "customers"
-                          ? "Name, email, or phone"
-                          : "Invoice number or customer"
+                          ? t("exportDialog.customerSearchPlaceholder")
+                          : t("exportDialog.invoiceSearchPlaceholder")
                     }
                   />
                 </div>
 
                 {resource === "products" ? (
                   <div className="grid gap-2">
-                    <Label htmlFor={`${resource}-category`}>Category</Label>
+                    <Label htmlFor={`${resource}-category`}>{t("exportDialog.category")}</Label>
                     <select
                       id={`${resource}-category`}
                       className="app-field h-10 px-3 text-sm text-foreground"
@@ -449,7 +474,7 @@ const DataExportDialog = ({
                         }))
                       }
                     >
-                      <option value="">All categories</option>
+                      <option value="">{t("exportDialog.allCategories")}</option>
                       {categoryOptions.map((category) => (
                         <option key={category.id} value={String(category.id)}>
                           {category.name}
@@ -462,7 +487,9 @@ const DataExportDialog = ({
                 {resource === "invoices" ? (
                   <>
                     <div className="grid gap-2">
-                      <Label htmlFor={`${resource}-customer-name`}>Customer name</Label>
+                      <Label htmlFor={`${resource}-customer-name`}>
+                        {t("exportDialog.customerName")}
+                      </Label>
                       <Input
                         id={`${resource}-customer-name`}
                         value={filters.customer_name ?? ""}
@@ -472,11 +499,13 @@ const DataExportDialog = ({
                             customer_name: event.target.value || undefined,
                           }))
                         }
-                        placeholder="Customer name"
+                        placeholder={t("exportDialog.customerName")}
                       />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor={`${resource}-payment-status`}>Payment status</Label>
+                      <Label htmlFor={`${resource}-payment-status`}>
+                        {t("exportDialog.paymentStatus")}
+                      </Label>
                       <select
                         id={`${resource}-payment-status`}
                         className="app-field h-10 px-3 text-sm text-foreground"
@@ -488,10 +517,10 @@ const DataExportDialog = ({
                           }))
                         }
                       >
-                        <option value="">All statuses</option>
+                        <option value="">{t("exportDialog.allStatuses")}</option>
                         {PAYMENT_STATUS_OPTIONS.map((status) => (
                           <option key={status} value={status}>
-                            {status.replaceAll("_", " ")}
+                            {getStatusLabel(status)}
                           </option>
                         ))}
                       </select>
@@ -505,9 +534,9 @@ const DataExportDialog = ({
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="grid min-h-0 gap-3 rounded-2xl border border-border/70 p-4">
               <div>
-                <p className="text-sm font-medium">Fields to include</p>
+                <p className="text-sm font-medium">{t("exportDialog.fieldsToInclude")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Toggle the columns you want in the export file.
+                  {t("exportDialog.fieldsDescription")}
                 </p>
               </div>
               <div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
@@ -522,7 +551,7 @@ const DataExportDialog = ({
                       onChange={() => toggleField(field.id)}
                     />
                     <span className="min-w-0 flex-1 break-words leading-5">
-                      {field.label}
+                      {getFieldLabel(field.id, field.label)}
                     </span>
                   </label>
                 ))}
@@ -531,9 +560,9 @@ const DataExportDialog = ({
 
             <div className="grid min-h-0 gap-3 rounded-2xl border border-border/70 p-4">
               <div>
-                <p className="text-sm font-medium">Column order</p>
+                <p className="text-sm font-medium">{t("exportDialog.columnOrder")}</p>
                 <p className="text-xs text-muted-foreground">
-                  Reorder the selected fields before exporting.
+                  {t("exportDialog.columnOrderDescription")}
                 </p>
               </div>
               <div className="grid max-h-80 gap-2 overflow-y-auto pr-1">
@@ -543,7 +572,7 @@ const DataExportDialog = ({
                     className="grid gap-3 rounded-xl border border-border/60 px-3 py-3 text-sm"
                   >
                     <span className="min-w-0 break-words text-sm font-medium leading-5">
-                      {field.label}
+                      {getFieldLabel(field.id, field.label)}
                     </span>
                     <div className="flex flex-wrap items-center gap-2">
                       <Button
@@ -553,7 +582,7 @@ const DataExportDialog = ({
                         onClick={() => moveField(field.id, -1)}
                         disabled={index === 0}
                       >
-                        Up
+                        {t("exportDialog.moveUp")}
                       </Button>
                       <Button
                         type="button"
@@ -562,7 +591,7 @@ const DataExportDialog = ({
                         onClick={() => moveField(field.id, 1)}
                         disabled={index === selectedFieldOptions.length - 1}
                       >
-                        Down
+                        {t("exportDialog.moveDown")}
                       </Button>
                     </div>
                   </div>
@@ -574,21 +603,26 @@ const DataExportDialog = ({
           <div className="grid gap-3 rounded-2xl border border-border/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <p className="text-sm font-medium">Preview</p>
+                <p className="text-sm font-medium">{t("exportDialog.preview")}</p>
                 <p className="text-xs text-muted-foreground">
-                  First {preview?.previewCount ?? 0} row(s) from the current export configuration.
+                  {t("exportDialog.previewDescription", {
+                    count: formatNumber(preview?.previewCount ?? 0),
+                  })}
                 </p>
               </div>
               {preview ? (
                 <span className="app-chip">
-                  {preview.previewCount} of {preview.totalCount} matching records
+                  {t("exportDialog.previewCount", {
+                    preview: formatNumber(preview.previewCount),
+                    total: formatNumber(preview.totalCount),
+                  })}
                 </span>
               ) : null}
             </div>
 
             {isPreviewLoading ? (
               <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
-                Loading preview...
+                {t("exportDialog.loadingPreview")}
               </div>
             ) : previewError ? (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -596,7 +630,7 @@ const DataExportDialog = ({
               </div>
             ) : !preview || preview.rows.length === 0 ? (
               <div className="rounded-xl border border-dashed border-border/70 px-4 py-8 text-center text-sm text-muted-foreground">
-                No records match the current export settings.
+                {t("exportDialog.noRecords")}
               </div>
             ) : (
               <div className="overflow-x-auto rounded-xl border border-border/70">
@@ -608,7 +642,7 @@ const DataExportDialog = ({
                           key={column.id}
                           className="px-3 py-2 text-left font-medium whitespace-nowrap"
                         >
-                          {column.label}
+                          {getFieldLabel(column.id, column.label)}
                         </th>
                       ))}
                     </tr>
