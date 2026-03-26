@@ -1,53 +1,40 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { type DragEvent, useRef, useState } from "react";
+import {
+  ImagePlus,
+  RefreshCcw,
+  Trash2,
+  UploadCloud,
+} from "lucide-react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { useBusinessLogo } from "@/hooks/useBusinessLogo";
 import { useI18n } from "@/providers/LanguageProvider";
 
-/** Max upload size: 2 MB */
 const MAX_SIZE_BYTES = 2 * 1024 * 1024;
-
-/** Accepted MIME types for the logo file. */
 const ALLOWED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 
 interface LogoUploaderProps {
-  /** Called when a logo is successfully uploaded or removed */
   onLogoChange?: (base64Logo: string | null) => void;
 }
 
-/**
- * Self-contained logo upload / preview / remove widget.
- *
- * - Drag-and-drop or click-to-browse (PNG, JPG, JPEG, WebP ≤ 2 MB)
- * - Converts the file to a Base64 data-URL and stores it in localStorage
- *   via the centralised `useBusinessLogo` hook
- * - Shows a live preview of the uploaded logo
- * - Replace: re-upload with a new file (overwrites localStorage)
- * - Remove: deletes the logo from localStorage
- */
 const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Reactive logo state backed by localStorage
   const { logo, setLogo, removeLogo } = useBusinessLogo();
   const hasLogo = Boolean(logo);
 
-  // ── File → Base64 conversion ─────────────────────────────────────────────
-
-  const convertToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
+  const convertToBase64 = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = () => reject(new Error("Failed to read file."));
       reader.readAsDataURL(file);
     });
-  };
-
-  // ── Validation & upload ──────────────────────────────────────────────────
 
   const validateAndUpload = async (file: File | null | undefined) => {
     if (!file) return;
@@ -65,11 +52,8 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
     try {
       setIsProcessing(true);
       const base64 = await convertToBase64(file);
-
-      // Persist to localStorage and trigger reactive updates app-wide
       setLogo(base64);
       onLogoChange?.(base64);
-
       toast.success(
         hasLogo
           ? t("businessProfilePage.logo.messages.replaced")
@@ -82,141 +66,154 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
     }
   };
 
-  // ── Remove handler ─────────────────────────────────────────────────────
-
   const handleRemove = () => {
     removeLogo();
     onLogoChange?.(null);
     toast.success(t("businessProfilePage.logo.messages.removed"));
   };
 
-  // ── Drag-and-drop handlers ──────────────────────────────────────────────
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragOver(false);
-    validateAndUpload(e.dataTransfer.files?.[0]);
+  const openPicker = () => {
+    if (!isProcessing) {
+      inputRef.current?.click();
+    }
   };
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragOver(false);
+    void validateAndUpload(event.dataTransfer.files?.[0]);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
     setDragOver(true);
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────
-
   return (
-    <div className="space-y-3">
-      <p className="text-sm font-medium text-foreground">
-        {t("businessProfilePage.logo.title")}
-      </p>
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-[#10233f]">
+          {t("businessProfilePage.logo.title")}
+        </p>
+        <p className="text-sm leading-6 text-[#627890]">
+          Upload a crisp square or horizontal mark for invoices, portals, and
+          branded documents.
+        </p>
+      </div>
 
-      {/* Drop zone / preview */}
       <div
         role="button"
         tabIndex={0}
         aria-label={t("businessProfilePage.logo.uploadAriaLabel")}
-        onClick={() => !isProcessing && inputRef.current?.click()}
-        onKeyDown={(e) => e.key === "Enter" && !isProcessing && inputRef.current?.click()}
+        onClick={openPicker}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openPicker();
+          }
+        }}
         onDrop={handleDrop}
         onDragOver={handleDragOver}
         onDragLeave={() => setDragOver(false)}
         className={[
-          "relative flex min-h-[120px] cursor-pointer flex-col items-center justify-center",
-          "rounded-2xl border-2 border-dashed transition-all",
+          "relative overflow-hidden rounded-[1.75rem] border-2 border-dashed transition-all duration-200",
+          "bg-[linear-gradient(180deg,#fbfdff_0%,#f4f8fc_100%)] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
           dragOver
-            ? "border-primary bg-primary/5 scale-[1.01]"
-            : hasLogo
-              ? "border-border bg-white"
-              : "border-[#d6c8b8] bg-[#faf6f1] hover:border-primary/60 hover:bg-primary/5",
-          isProcessing ? "pointer-events-none opacity-60" : "",
+            ? "border-[#1d578c] bg-[#eef6ff] shadow-[0_20px_45px_-35px_rgba(17,37,63,0.45)]"
+            : "border-[#cfe0f0] hover:border-[#7aa8d6] hover:bg-[#f8fbff]",
+          isProcessing ? "pointer-events-none opacity-70" : "cursor-pointer",
         ].join(" ")}
       >
-        {hasLogo && logo ? (
-          /* Logo preview */
-          <div className="flex flex-col items-center gap-3 p-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={logo}
-              alt={t("businessProfilePage.logo.imageAlt")}
-              className="max-h-24 max-w-[200px] rounded-xl object-contain shadow-sm"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              {t("businessProfilePage.logo.replaceHint")}
-            </p>
-          </div>
-        ) : (
-          /* Empty state */
-          <div className="flex flex-col items-center gap-2 px-4 py-6 text-center">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e8ddd4]">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                className="h-5 w-5 text-[#8a6d56]"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-                />
-              </svg>
-            </div>
-            <p className="text-sm font-medium text-[#5c4b3b]">
-              {t("businessProfilePage.logo.uploadTitle")}
-            </p>
-            <p className="text-xs text-muted-foreground">
+        <div className="pointer-events-none absolute inset-x-6 top-0 h-20 rounded-b-[2rem] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.9),rgba(255,255,255,0))]" />
+        <div className="relative space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-white/90 px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab]">
+              <ImagePlus className="h-3.5 w-3.5" />
+              Brand asset
+            </span>
+            <span className="text-xs font-medium text-[#7f95ab]">
               {t("businessProfilePage.logo.uploadDescription")}
-            </p>
+            </span>
           </div>
-        )}
 
-        {/* Loading spinner overlay */}
-        {isProcessing && (
-          <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-white/70">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <div className="rounded-[1.5rem] border border-white/80 bg-white/90 p-4 shadow-[0_24px_50px_-42px_rgba(17,37,63,0.45)]">
+            <div className="flex min-h-[15rem] items-center justify-center rounded-[1.35rem] border border-[#d7e4f1] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-5">
+              {hasLogo && logo ? (
+                <div className="flex w-full flex-col items-center gap-4">
+                  <div className="flex aspect-[4/3] w-full max-w-[16rem] items-center justify-center overflow-hidden rounded-[1.25rem] border border-[#d7e4f1] bg-white p-4 shadow-[0_14px_30px_-26px_rgba(17,37,63,0.45)]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={logo}
+                      alt={t("businessProfilePage.logo.imageAlt")}
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                  <p className="max-w-[18rem] text-center text-sm leading-6 text-[#627890]">
+                    Your uploaded logo will stay proportional and appear on
+                    branded invoice layouts automatically.
+                  </p>
+                </div>
+              ) : (
+                <div className="flex max-w-[18rem] flex-col items-center gap-3 text-center">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#eaf2fa] text-[#123d65] shadow-[0_12px_26px_-20px_rgba(17,37,63,0.4)]">
+                    <UploadCloud className="h-6 w-6" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <p className="text-base font-semibold text-[#10233f]">
+                      {t("businessProfilePage.logo.uploadTitle")}
+                    </p>
+                    <p className="text-sm leading-6 text-[#627890]">
+                      Drag and drop your logo here, or click to choose a file.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        )}
+
+          {isProcessing ? (
+            <div className="absolute inset-0 flex items-center justify-center rounded-[1.75rem] bg-white/78 backdrop-blur-sm">
+              <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#123d65] border-t-transparent" />
+            </div>
+          ) : null}
+        </div>
       </div>
 
-      {/* Hidden file input */}
       <input
         ref={inputRef}
         type="file"
         accept=".png,.jpg,.jpeg,.webp"
         className="hidden"
-        onChange={(e) => validateAndUpload(e.target.files?.[0])}
-        // Reset value so the same file can be re-selected after removal
-        onClick={(e) => ((e.currentTarget as HTMLInputElement).value = "")}
+        onChange={(event) => void validateAndUpload(event.target.files?.[0])}
+        onClick={(event) => {
+          (event.currentTarget as HTMLInputElement).value = "";
+        }}
       />
 
-      {/* Remove button */}
-      {hasLogo && (
-        <button
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
           type="button"
+          variant="outline"
+          className="rounded-full border-[#d7e4f1] bg-white/90"
+          onClick={openPicker}
           disabled={isProcessing}
-          onClick={handleRemove}
-          className="flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-1.5 text-xs text-red-600 transition hover:bg-red-50 disabled:opacity-50"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            className="h-3.5 w-3.5"
+          <RefreshCcw className="h-4 w-4" />
+          {hasLogo ? "Replace logo" : "Choose file"}
+        </Button>
+        {hasLogo ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="rounded-full border-red-200 bg-red-50/70 text-red-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+            onClick={handleRemove}
+            disabled={isProcessing}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-            />
-          </svg>
-          {t("businessProfilePage.logo.remove")}
-        </button>
-      )}
+            <Trash2 className="h-4 w-4" />
+            {t("businessProfilePage.logo.remove")}
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 };

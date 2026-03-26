@@ -1,12 +1,12 @@
 "use client";
 import React, { useActionState, useEffect } from "react";
 
-import {  resetPasswordAction } from "@/actions/authActions";
+import { resetPasswordAction } from "@/actions/authActions";
 import SubmitBtn from "@/components/common/SubmitBtn";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { useSearchParams,useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useI18n } from "@/providers/LanguageProvider";
 
 const ResetPass = () => {
@@ -36,7 +36,7 @@ const ResetPass = () => {
   return (
     <div>
       <form action={formAction}>
-      <input type="hidden"  name="token" value={sParams.get("token") ?? ""} />
+        <input type="hidden" name="token" value={sParams.get("token") ?? ""} />
         <div className="mt-4">
           <Label htmlFor="email">{t("auth.resetForm.emailLabel")}</Label>
           <Input
@@ -47,7 +47,7 @@ const ResetPass = () => {
             readOnly
             value={sParams.get("email") ?? " "}
           />
-          <span className="text-red-500">{state.errors?.email}</span>
+          <span className="text-sm text-[#b97908]">{state.errors?.email}</span>
         </div>
         <div className="mt-4">
           <Label htmlFor="Password">{t("auth.resetForm.passwordLabel")}</Label>
@@ -57,7 +57,7 @@ const ResetPass = () => {
             placeholder={t("auth.resetForm.passwordPlaceholder")}
             type="password"
           />
-          <span className="text-red-500">{state.errors?.password}</span>
+          <span className="text-sm text-[#b97908]">{state.errors?.password}</span>
         </div>
         <div className="mt-4">
           <Label htmlFor="ConfirmPassword">
@@ -69,7 +69,9 @@ const ResetPass = () => {
             placeholder={t("auth.resetForm.confirmPasswordPlaceholder")}
             type="password"
           />
-          <span className="text-red-500">{state.errors?.confirm_password}</span>
+          <span className="text-sm text-[#b97908]">
+            {state.errors?.confirm_password}
+          </span>
         </div>
 
         <div className="mt-4">

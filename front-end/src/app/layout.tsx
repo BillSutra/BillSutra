@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import {
   Fraunces,
@@ -51,6 +51,15 @@ const hindiSans = Noto_Sans_Devanagari({
 export const metadata: Metadata = {
   title: "BillSutra",
   description: "Billing, invoicing, and inventory control for growing teams.",
+  icons: {
+    icon: [{ url: "/brand-icon.png", sizes: "256x256", type: "image/png" }],
+    shortcut: [{ url: "/brand-icon.png", type: "image/png" }],
+    apple: [{ url: "/brand-icon.png", sizes: "256x256", type: "image/png" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#123d65",
 };
 
 export default async function RootLayout({

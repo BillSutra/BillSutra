@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import ThemeToggle from "@/components/theme-toggle";
-import { Hexagon } from "lucide-react";
 import LanguageToggle from "@/components/language-toggle";
 import { useI18n } from "@/providers/LanguageProvider";
+import BrandLogo from "@/components/branding/BrandLogo";
 
 const Navbar = () => {
   const { t } = useI18n();
@@ -18,15 +18,10 @@ const Navbar = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border/60 bg-background/80 backdrop-blur">
+    <header className="sticky top-0 z-50 border-b border-border/70 bg-background/88 backdrop-blur-xl">
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm">
-            <Hexagon size={18} />
-          </span>
-          <span className="text-lg font-semibold tracking-tight">
-            BillSutra
-          </span>
+        <Link href="/" className="min-w-0">
+          <BrandLogo showTagline={false} priority />
         </Link>
 
         <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
@@ -47,10 +42,7 @@ const Navbar = () => {
           <Button asChild className="hidden md:inline-flex">
             <Link href="/register">{t("landing.nav.getStarted")}</Link>
           </Button>
-          <Button
-            asChild
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-          >
+          <Button asChild className="bg-primary text-primary-foreground hover:bg-primary/90">
             <Link href="/register">{t("landing.nav.getStarted")}</Link>
           </Button>
         </div>

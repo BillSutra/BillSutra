@@ -38,7 +38,7 @@ const DashboardLayout = ({
         <div
           className={cn(
             "flex min-h-screen min-w-0 flex-1 flex-col transition-[margin] duration-200",
-            collapsed ? "lg:ml-20" : "lg:ml-64",
+            collapsed ? "lg:ml-20" : "lg:ml-60",
           )}
         >
           <TopNavbar

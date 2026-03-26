@@ -7,8 +7,9 @@ import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { dashboardNavItems } from "./dashboard-nav";
-import { useBusinessLogo } from "@/hooks/useBusinessLogo";
+import BrandLogo from "@/components/branding/BrandLogo";
+import { dashboardNavItems, dashboardNavSections } from "./dashboard-nav";
+import SidebarNavItem from "./SidebarNavItem";
 import { useI18n } from "@/providers/LanguageProvider";
 
 type AppSidebarProps = {
@@ -20,7 +21,6 @@ type AppSidebarProps = {
 
 const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
   const pathname = usePathname();
-  const { logo } = useBusinessLogo();
   const { language, t } = useI18n();
   const { data: session } = useSession();
 
@@ -39,7 +39,18 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
           ...item,
           label: t(item.labelKey),
         })),
-    [language, session?.user?.role, t],
+    [session?.user?.role, t],
+  );
+
+  const groupedNavItems = useMemo(
+    () =>
+      dashboardNavSections
+        .map((section) => ({
+          ...section,
+          items: translatedNavItems.filter((item) => item.section === section.id),
+        }))
+        .filter((section) => section.items.length > 0),
+    [translatedNavItems],
   );
 
   useEffect(() => {
@@ -65,46 +76,60 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
   }, [language, translatedNavItems]);
 
   return (
-    <div className="flex h-full flex-col gap-6 p-3">
-      <div className="flex h-11 items-center rounded-xl bg-primary px-3 text-primary-foreground shadow-sm">
-        <div className="grid h-7 w-7 place-items-center rounded-lg bg-primary-foreground/15 text-xs font-bold overflow-hidden">
-          {/* Show uploaded business logo, or fallback to "BS" text */}
-          {logo ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={logo} alt={t("sidebar.businessLogoAlt")} className="h-6 w-6 object-contain" />
-          ) : (
-            "BS"
-          )}
-        </div>
-        {!collapsed && (
-          <span className="ml-3 text-sm font-semibold">{t("common.appName")}</span>
+    <div className="flex h-full flex-col gap-5 p-3">
+      <div
+        className={cn(
+          "rounded-[1.5rem] border border-[#d7e4f1] bg-white/92 p-4 shadow-[0_20px_40px_-34px_rgba(17,37,63,0.18)] backdrop-blur",
+          collapsed ? "px-2.5" : "px-3.5",
         )}
+      >
+        <div
+          className={cn(
+            "flex items-center gap-3",
+            collapsed ? "justify-center" : "justify-start",
+          )}
+        >
+          <BrandLogo
+            variant={collapsed ? "icon" : "header"}
+            showTagline={false}
+            className={collapsed ? "" : "gap-2.5"}
+            iconClassName={collapsed ? "h-11 w-11 p-1.5" : "h-9 w-9 p-1.5"}
+          />
+        </div>
+        {!collapsed ? (
+          <p className="mt-3 text-xs leading-5 text-[#627890]">
+            Premium billing, inventory, and operations for modern teams.
+          </p>
+        ) : null}
       </div>
 
-      <nav className="grid gap-1">
-        {translatedNavItems.map((item) => {
-          const active =
-            pathname === item.href || pathname.startsWith(`${item.href}/`);
-          const Icon = item.icon;
+      <nav className="space-y-4">
+        {groupedNavItems.map((section) => (
+          <div key={section.id} className="space-y-1.5">
+            {!collapsed ? (
+              <p className="px-3 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#7f95ab]">
+                {section.title}
+              </p>
+            ) : null}
+            <div className="grid gap-1">
+              {section.items.map((item) => {
+                const active =
+                  pathname === item.href || pathname.startsWith(`${item.href}/`);
 
-          return (
-            <Link
-              key={item.href + item.labelKey}
-              href={item.href}
-              className={cn(
-                "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all duration-200",
-                "hover:-translate-y-px hover:bg-sidebar-accent",
-                active
-                  ? "bg-primary/10 text-primary shadow-sm"
-                  : "text-muted-foreground",
-              )}
-              title={collapsed ? item.label : undefined}
-            >
-              <Icon className="h-4 w-4" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
-            </Link>
-          );
-        })}
+                return (
+                  <SidebarNavItem
+                    key={item.href + item.labelKey}
+                    active={active}
+                    collapsed={collapsed}
+                    href={item.href}
+                    icon={item.icon}
+                    label={item.label}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
     </div>
   );
@@ -122,8 +147,8 @@ const AppSidebar = ({
     <>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 hidden border-r border-sidebar-border bg-sidebar/95 backdrop-blur lg:block",
-          collapsed ? "w-20" : "w-64",
+          "fixed inset-y-0 left-0 z-40 hidden border-r border-sidebar-border/80 bg-[#f8fafc]/96 shadow-[0_18px_45px_-38px_rgba(17,37,63,0.2)] backdrop-blur lg:block",
+          collapsed ? "w-20" : "w-60",
         )}
       >
         <div className="flex h-full flex-col">
@@ -132,6 +157,7 @@ const AppSidebar = ({
               type="button"
               size="icon-sm"
               variant="outline"
+              className="rounded-2xl border-[#d7e4f1] bg-white shadow-sm hover:bg-[#f7fbff]"
               onClick={onToggleCollapsed}
               aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
             >
@@ -143,24 +169,8 @@ const AppSidebar = ({
             </Button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto">
             <SidebarContent collapsed={collapsed} />
-          </div>
-
-          <div className="flex items-center justify-end px-3 pb-3">
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="outline"
-              onClick={onToggleCollapsed}
-              aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
-            >
-              {collapsed ? (
-                <PanelLeftOpen className="h-4 w-4" />
-              ) : (
-                <PanelLeftClose className="h-4 w-4" />
-              )}
-            </Button>
           </div>
         </div>
       </aside>
@@ -175,7 +185,7 @@ const AppSidebar = ({
 
       <aside
         className={cn(
-          "fixed top-0 left-0 z-50 h-full w-72 overflow-y-auto border-r border-sidebar-border bg-sidebar transition-transform duration-200 lg:hidden",
+          "app-scrollbar fixed top-0 left-0 z-50 h-full w-72 overflow-y-auto border-r border-sidebar-border/80 bg-[#f8fafc] transition-transform duration-200 lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >

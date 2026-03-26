@@ -421,7 +421,7 @@ export default function Login({ mode = "owner" }: LoginProps) {
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="email"
           />
-          <span className="text-xs text-[#b45309]">{state.errors?.email}</span>
+          <span className="text-xs text-[#b97908]">{state.errors?.email}</span>
         </div>
         <div className="grid gap-2">
           <div className="flex items-center justify-between">
@@ -429,7 +429,7 @@ export default function Login({ mode = "owner" }: LoginProps) {
             {!isWorkerMode ? (
               <Link
                 href="/forgot-password"
-                className="text-xs font-semibold text-[#b45309]"
+                className="text-xs font-semibold text-[#123d65] transition-colors hover:text-[#b97908]"
               >
                 {t("auth.loginForm.forgotPassword")}
               </Link>
@@ -444,7 +444,7 @@ export default function Login({ mode = "owner" }: LoginProps) {
             onChange={(event) => setPassword(event.target.value)}
             autoComplete={isWorkerMode ? "current-password" : "current-password"}
           />
-          <span className="text-xs text-[#b45309]">
+          <span className="text-xs text-[#b97908]">
             {state.errors?.password}
           </span>
         </div>
@@ -455,10 +455,10 @@ export default function Login({ mode = "owner" }: LoginProps) {
         <div className="mt-6 space-y-4">
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-[#ecdccf]" />
+              <span className="w-full border-t border-[#d8e4ef]" />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-[#8a6d56]">
+              <span className="bg-white px-2 text-[#70859d]">
                 {t("auth.loginForm.continueWith")}
               </span>
             </div>
@@ -468,27 +468,27 @@ export default function Login({ mode = "owner" }: LoginProps) {
             <Button
               type="button"
               variant="outline"
-              className="flex items-center justify-center gap-3 border-[#ecdccf] bg-white"
+              className="flex items-center justify-center gap-3 border-[#d8e4ef] bg-white hover:bg-[#f7fbff]"
               onClick={handlePasskeyLogin}
               disabled={isPasskeyLoading || isSigningIn}
             >
               {isPasskeyLoading ? "Checking passkey..." : "Continue with passkey"}
             </Button>
 
-            <div className="rounded-2xl border border-[#ecdccf] bg-[#fff9f2] p-4">
+            <div className="rounded-2xl border border-[#d8e4ef] bg-[#f7fbff] p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-[#1f1b16]">
+                  <p className="text-sm font-semibold text-[#10233f]">
                     Login with email code
                   </p>
-                  <p className="text-xs text-[#8a6d56]">
+                  <p className="text-xs text-[#627890]">
                     We&apos;ll send a 6-digit OTP to your email address.
                   </p>
                 </div>
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-[#ecdccf] bg-white"
+                  className="border-[#d8e4ef] bg-white hover:bg-[#f7fbff]"
                   onClick={handleSendOtp}
                   disabled={
                     isOtpSending ||
@@ -544,13 +544,13 @@ export default function Login({ mode = "owner" }: LoginProps) {
                     >
                       {isOtpVerifying ? "Verifying..." : "Verify code"}
                     </Button>
-                    <span className="text-xs text-[#8a6d56]">
+                    <span className="text-xs text-[#627890]">
                       {otpCooldown > 0
                         ? `You can request a new code in ${otpCooldown}s.`
                         : "You can request a fresh code now."}
                     </span>
                     {otpExpiresIn > 0 ? (
-                      <span className="text-xs text-[#8a6d56]">
+                      <span className="text-xs text-[#627890]">
                         {`Code expires in ${Math.max(1, Math.ceil(otpExpiresIn / 60))} minute(s).`}
                       </span>
                     ) : null}
@@ -562,7 +562,7 @@ export default function Login({ mode = "owner" }: LoginProps) {
             <Button
               type="button"
               variant="outline"
-              className="flex items-center justify-center gap-3 border-[#ecdccf] bg-white"
+              className="flex items-center justify-center gap-3 border-[#d8e4ef] bg-white hover:bg-[#f7fbff]"
               onClick={handleGoogleLogin}
               disabled={isSigningIn}
             >
@@ -576,7 +576,7 @@ export default function Login({ mode = "owner" }: LoginProps) {
             </Button>
 
             {!supportsPasskeys ? (
-              <p className="text-xs text-[#8a6d56]">
+              <p className="text-xs text-[#627890]">
                 This browser does not support passkeys, so OTP and password
                 login remain available.
               </p>
