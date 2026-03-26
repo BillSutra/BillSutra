@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
@@ -28,6 +27,7 @@ import Modal from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { generateInvoicePdf } from "@/lib/pdf/generateInvoicePdf";
 import { cn } from "@/lib/utils";
 import type { Customer, CustomerLedger } from "@/lib/apiClient";
 import {
@@ -198,6 +198,12 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
   const [paymentInvoiceId, setPaymentInvoiceId] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [statementShareAction, setStatementShareAction] = useState<
+    "copy" | "email" | "system" | "whatsapp" | null
+  >(null);
+  const [isPrintingStatement, setIsPrintingStatement] = useState(false);
+  const [isNavigatingToBill, startBillNavigation] = useTransition();
 
   const filteredCustomers = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -249,6 +255,33 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
   const { data: ledger, isLoading: ledgerLoading } = useCustomerLedgerQuery(
     selectedCustomerId ?? undefined,
   );
+  const hasOpenInvoices = (ledger?.summary.openInvoices.length ?? 0) > 0;
+
+  const statementShareText = useMemo(() => {
+    if (!selectedCustomer || !ledger) return "";
+
+    return [
+      t("customersPage.ledger.summaryTitle", { name: selectedCustomer.name }),
+      t("customersPage.ledger.shareOutstanding", {
+        amount: formatCurrency(ledger.summary.outstandingBalance, "INR"),
+      }),
+      t("customersPage.ledger.shareLastPayment", {
+        date: formatActivityDate(ledger.summary.lastPaymentDate, formatDate),
+      }),
+    ].join("\n");
+  }, [formatCurrency, formatDate, ledger, selectedCustomer, t]);
+
+  const statementShareUrl = useMemo(() => {
+    if (!selectedCustomer || typeof window === "undefined") return "";
+    return `${window.location.origin}/customers?customer=${selectedCustomer.id}`;
+  }, [selectedCustomer]);
+
+  const statementSharePayload = useMemo(() => {
+    if (!statementShareText) return "";
+    return statementShareUrl
+      ? `${statementShareText}\n${statementShareUrl}`
+      : statementShareText;
+  }, [statementShareText, statementShareUrl]);
 
   const summaryCards = useMemo(() => {
     const totalOutstanding = customers.reduce(
@@ -375,6 +408,18 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     setPaymentModalOpen(true);
   };
 
+  const handleAddBill = () => {
+    if (!selectedCustomer) return;
+
+    const params = new URLSearchParams();
+    params.set("customer", String(selectedCustomer.id));
+    params.set("quickAction", "new-bill");
+
+    startBillNavigation(() => {
+      router.push(`/invoices?${params.toString()}`, { scroll: false });
+    });
+  };
+
   const handleRecordPayment = async () => {
     if (!ledger) return;
 
@@ -419,72 +464,126 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     }
   };
 
-  const handlePrintStatement = () => {
+  const handlePrintStatement = async () => {
     if (!selectedCustomer || !ledger || typeof window === "undefined") return;
 
-    const printWindow = window.open("", "_blank", "noopener,noreferrer");
-    if (!printWindow) {
-      toast.error(t("customersPage.messages.statementWindowError"));
-      return;
-    }
+    setIsPrintingStatement(true);
 
-    printWindow.document.write(
-      buildStatementHtml({
+    try {
+      const statementHtml = buildStatementHtml({
         customer: selectedCustomer,
         ledger,
         formatCurrency,
         formatDate,
         t,
-      }),
-    );
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+      });
+      const parsedDocument = new DOMParser().parseFromString(
+        statementHtml,
+        "text/html",
+      );
+      const styleContent =
+        parsedDocument.querySelector("style")?.textContent ?? "";
+
+      const exportRoot = document.createElement("div");
+      exportRoot.style.position = "fixed";
+      exportRoot.style.left = "-99999px";
+      exportRoot.style.top = "0";
+      exportRoot.style.width = "794px";
+      exportRoot.style.background = "#ffffff";
+      exportRoot.style.padding = "0";
+      exportRoot.style.zIndex = "-1";
+      exportRoot.setAttribute("aria-hidden", "true");
+      exportRoot.innerHTML = `
+        <style>${styleContent}</style>
+        <div class="customer-statement-export">
+          ${parsedDocument.body.innerHTML}
+        </div>
+      `;
+
+      document.body.appendChild(exportRoot);
+
+      try {
+        await generateInvoicePdf({
+          element: exportRoot,
+          fileName: `${selectedCustomer.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "customer"}-statement.pdf`,
+          imageType: "png",
+          quality: 1,
+        });
+      } finally {
+        exportRoot.remove();
+      }
+    } finally {
+      setIsPrintingStatement(false);
+    }
   };
 
-  const handleShareStatement = async () => {
+  const handleOpenShareStatement = () => {
     if (!selectedCustomer || !ledger) return;
+    setShareModalOpen(true);
+  };
 
-    const shareText = [
-      t("customersPage.ledger.summaryTitle", { name: selectedCustomer.name }),
-      t("customersPage.ledger.shareOutstanding", {
-        amount: formatCurrency(ledger.summary.outstandingBalance, "INR"),
-      }),
-      t("customersPage.ledger.shareLastPayment", {
-        date: formatActivityDate(ledger.summary.lastPaymentDate, formatDate),
-      }),
-    ].join("\n");
+  const handleShareStatement = async (
+    channel: "copy" | "email" | "system" | "whatsapp",
+  ) => {
+    if (!selectedCustomer || !ledger || !statementSharePayload) return;
 
-    const shareUrl =
-      typeof window !== "undefined"
-        ? `${window.location.origin}/customers?customer=${selectedCustomer.id}`
-        : undefined;
+    setStatementShareAction(channel);
 
     try {
-      if (
-        typeof navigator !== "undefined" &&
-        "share" in navigator &&
-        shareUrl
-      ) {
+      if (channel === "system") {
+        if (
+          typeof navigator === "undefined" ||
+          !("share" in navigator) ||
+          !statementShareUrl
+        ) {
+          throw new Error("System share unavailable");
+        }
+
         await navigator.share({
           title: `${selectedCustomer.name} ledger`,
-          text: shareText,
-          url: shareUrl,
+          text: statementShareText,
+          url: statementShareUrl,
         });
+        setShareModalOpen(false);
         return;
       }
 
-      if (typeof navigator !== "undefined" && navigator.clipboard) {
-        await navigator.clipboard.writeText(
-          shareUrl ? `${shareText}\n${shareUrl}` : shareText,
-        );
+      if (channel === "copy") {
+        if (
+          typeof navigator === "undefined" ||
+          !navigator.clipboard?.writeText
+        ) {
+          throw new Error("Clipboard unavailable");
+        }
+
+        await navigator.clipboard.writeText(statementSharePayload);
         toast.success(t("customersPage.messages.statementCopied"));
+        setShareModalOpen(false);
         return;
       }
 
-      toast.success(shareText);
+      if (typeof window === "undefined") {
+        throw new Error("Window unavailable");
+      }
+
+      if (channel === "whatsapp") {
+        const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(statementSharePayload)}`;
+        window.open(whatsappUrl, "_blank", "noopener,noreferrer");
+        setShareModalOpen(false);
+        return;
+      }
+
+      const emailSubject = encodeURIComponent(
+        `${selectedCustomer.name} ledger statement`,
+      );
+      const emailBody = encodeURIComponent(statementSharePayload);
+      const recipient = selectedCustomer.email?.trim() ?? "";
+      window.location.href = `mailto:${recipient}?subject=${emailSubject}&body=${emailBody}`;
+      setShareModalOpen(false);
     } catch {
       toast.error(t("customersPage.messages.statementShareError"));
+    } finally {
+      setStatementShareAction(null);
     }
   };
 
@@ -764,23 +863,46 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                     </div>
 
                     <div className="flex flex-wrap gap-3">
-                      <Button asChild variant="outline">
-                        <Link href="/invoices">
-                          <ArrowUpRight className="size-4" />
-                          {t("customersPage.actions.addBill")}
-                        </Link>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleAddBill}
+                        disabled={isNavigatingToBill}
+                      >
+                        <ArrowUpRight className="size-4" />
+                        {isNavigatingToBill
+                          ? `${t("customersPage.actions.addBill")}...`
+                          : t("customersPage.actions.addBill")}
                       </Button>
-                      <Button type="button" variant="outline" onClick={handleShareStatement}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleOpenShareStatement}
+                      >
                         <Share2 className="size-4" />
                         {t("customersPage.actions.shareStatement")}
                       </Button>
-                      <Button type="button" variant="outline" onClick={handlePrintStatement}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void handlePrintStatement()}
+                        disabled={isPrintingStatement}
+                      >
                         <Printer className="size-4" />
-                        {t("customersPage.actions.printSavePdf")}
+                        {isPrintingStatement
+                          ? `${t("customersPage.actions.printSavePdf")}...`
+                          : t("customersPage.actions.printSavePdf")}
                       </Button>
-                      <Button type="button" onClick={openPaymentModal}>
+                      <Button
+                        type="button"
+                        onClick={openPaymentModal}
+                        disabled={!hasOpenInvoices || createPayment.isPending}
+                        title={!hasOpenInvoices ? t("customersPage.messages.noPendingInvoices") : undefined}
+                      >
                         <CreditCard className="size-4" />
-                        {t("customersPage.actions.addPayment")}
+                        {createPayment.isPending
+                          ? `${t("customersPage.actions.addPayment")}...`
+                          : t("customersPage.actions.addPayment")}
                       </Button>
                     </div>
                   </div>
@@ -1035,8 +1157,83 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             <Button type="button" variant="outline" onClick={() => setPaymentModalOpen(false)}>
               {t("common.cancel")}
             </Button>
-            <Button type="button" onClick={() => void handleRecordPayment()}>
-              {t("customersPage.actions.recordPayment")}
+            <Button
+              type="button"
+              onClick={() => void handleRecordPayment()}
+              disabled={createPayment.isPending}
+            >
+              {createPayment.isPending
+                ? `${t("customersPage.actions.recordPayment")}...`
+                : t("customersPage.actions.recordPayment")}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={shareModalOpen}
+        onOpenChange={(open) => {
+          setShareModalOpen(open);
+          if (!open) {
+            setStatementShareAction(null);
+          }
+        }}
+        title={t("customersPage.actions.shareStatement")}
+        description={t("customersPage.ledger.historyDescription")}
+      >
+        <div className="grid gap-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <p className="text-sm font-semibold text-slate-950">
+              {selectedCustomer?.name ?? "-"}
+            </p>
+            <p className="mt-2 whitespace-pre-line text-sm text-slate-600">
+              {statementShareText}
+            </p>
+            {statementShareUrl ? (
+              <p className="mt-2 break-all text-xs text-slate-500">
+                {statementShareUrl}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {typeof navigator !== "undefined" && "share" in navigator ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleShareStatement("system")}
+                disabled={statementShareAction !== null}
+              >
+                {statementShareAction === "system"
+                  ? "Opening..."
+                  : "Open share sheet"}
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleShareStatement("whatsapp")}
+              disabled={statementShareAction !== null}
+            >
+              {statementShareAction === "whatsapp"
+                ? "Opening..."
+                : "Share on WhatsApp"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleShareStatement("email")}
+              disabled={statementShareAction !== null}
+            >
+              {statementShareAction === "email" ? "Opening..." : "Share by email"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleShareStatement("copy")}
+              disabled={statementShareAction !== null}
+            >
+              {statementShareAction === "copy" ? "Copying..." : "Copy summary"}
             </Button>
           </div>
         </div>

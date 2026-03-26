@@ -137,8 +137,10 @@ type QuickCustomerForm = {
 
 const RECENT_PRODUCT_USAGE_STORAGE_KEY = "invoice-smart-recent-products";
 
-const createEmptyInvoiceForm = (): InvoiceFormState => ({
-  customer_id: "",
+const createEmptyInvoiceForm = (
+  customerId = "",
+): InvoiceFormState => ({
+  customer_id: customerId,
   date: "",
   due_date: "",
   discount: "0",
@@ -212,8 +214,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const [invoiceEmailError, setInvoiceEmailError] = useState<string | null>(
     null,
   );
-
-  const [form, setForm] = useState<InvoiceFormState>(createEmptyInvoiceForm);
+  const initialCustomerId =
+    searchParams.get("customer") ?? searchParams.get("customerId") ?? "";
+  const [form, setForm] = useState<InvoiceFormState>(() =>
+    createEmptyInvoiceForm(initialCustomerId),
+  );
   const [taxMode, setTaxMode] = useState<TaxMode>("CGST_SGST");
   const [items, setItems] = useState<InvoiceItemForm[]>([]);
   const [quickEntryProduct, setQuickEntryProduct] = useState<Product | null>(null);
