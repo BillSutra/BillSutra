@@ -70,7 +70,7 @@ const Register = () => {
             placeholder={t("auth.registerForm.namePlaceholder")}
             type="text"
           />
-          <span className="text-xs text-[#b45309]">{state.errors?.name}</span>
+          <span className="text-xs text-[#b97908]">{state.errors?.name}</span>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="email">{t("auth.registerForm.emailLabel")}</Label>
@@ -80,7 +80,7 @@ const Register = () => {
             placeholder={t("auth.registerForm.emailPlaceholder")}
             type="email"
           />
-          <span className="text-xs text-[#b45309]">{state.errors?.email}</span>
+          <span className="text-xs text-[#b97908]">{state.errors?.email}</span>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="password">{t("auth.registerForm.passwordLabel")}</Label>
@@ -90,7 +90,7 @@ const Register = () => {
             placeholder={t("auth.registerForm.passwordPlaceholder")}
             type="password"
           />
-          <span className="text-xs text-[#b45309]">
+          <span className="text-xs text-[#b97908]">
             {state.errors?.password}
           </span>
         </div>
@@ -104,7 +104,7 @@ const Register = () => {
             placeholder={t("auth.registerForm.confirmPasswordPlaceholder")}
             type="password"
           />
-          <span className="text-xs text-[#b45309]">
+          <span className="text-xs text-[#b97908]">
             {state.errors?.confirm_password}
           </span>
         </div>
@@ -115,10 +115,10 @@ const Register = () => {
       <div className="mt-6">
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t border-[#ecdccf]" />
+            <span className="w-full border-t border-[#d8e4ef]" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-white px-2 text-[#8a6d56]">
+            <span className="bg-white px-2 text-[#70859d]">
               {t("auth.registerForm.continueWith")}
             </span>
           </div>
@@ -126,7 +126,7 @@ const Register = () => {
         <Button
           type="button"
           variant="outline"
-          className="mt-4 flex w-full items-center justify-center gap-3 border-[#ecdccf] bg-white"
+          className="mt-4 flex w-full items-center justify-center gap-3 border-[#d8e4ef] bg-white hover:bg-[#f7fbff]"
           onClick={handleGoogleSignup}
         >
           <Image

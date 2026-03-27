@@ -4,7 +4,7 @@ import SalesClient from "./SalesClient";
 
 const SalesPage = async () => {
   const session: CustomSession | null = await getServerSession(authOptions);
-  const name = session?.user?.name || "Guest";
+  const name = session?.user?.name?.trim() ?? "";
 
   return <SalesClient name={name} image={session?.user?.image || undefined} />;
 };

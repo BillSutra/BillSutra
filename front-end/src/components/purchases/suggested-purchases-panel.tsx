@@ -7,6 +7,7 @@ import {
   usePurchaseSuggestions,
 } from "@/hooks/usePredictionQueries";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
+import { useI18n } from "@/providers/LanguageProvider";
 
 type SuggestedPurchasesPanelProps = {
   warehouseId?: number;
@@ -18,6 +19,7 @@ const SuggestedPurchasesPanel = ({
   onLoadItems,
 }: SuggestedPurchasesPanelProps) => {
   const { currency, dateWithYear, number } = useDashboardFormatters();
+  const { t } = useI18n();
   const { groups, metadata, isLoading, isError, suggestions } =
     usePurchaseSuggestions(warehouseId ? { warehouseId } : undefined);
 
@@ -30,13 +32,13 @@ const SuggestedPurchasesPanel = ({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8a6d56]">
-            Suggested purchases
+            {t("suggestedPurchases.kicker")}
           </p>
           <h2 className="mt-1 text-lg font-semibold text-[#1f1b16]">
-            Prediction-driven restocks
+            {t("suggestedPurchases.title")}
           </h2>
           <p className="mt-1 text-sm text-[#8a6d56]">
-            Load critical items directly into the purchase form without creating a separate planning page.
+            {t("suggestedPurchases.description")}
           </p>
         </div>
         <Button
@@ -52,14 +54,18 @@ const SuggestedPurchasesPanel = ({
             onLoadItems(criticalSuggestions);
           }}
         >
-          Load Critical Restocks
+          {t("suggestedPurchases.loadCritical")}
         </Button>
       </div>
 
       <div className="mt-2 text-xs text-[#8a6d56]">
         {metadata
-          ? `Generated ${dateWithYear(metadata.generatedAt)} | ${metadata.basisWindowDays}-day basis | ${metadata.dataCoverageDays} days of coverage`
-          : "Predictions refresh from the batched inventory-demand endpoint."}
+          ? t("suggestedPurchases.metadata", {
+              date: dateWithYear(metadata.generatedAt),
+              basisDays: metadata.basisWindowDays,
+              coverageDays: metadata.dataCoverageDays,
+            })
+          : t("suggestedPurchases.metadataPending")}
       </div>
 
       <div className="mt-4">
@@ -76,13 +82,13 @@ const SuggestedPurchasesPanel = ({
 
         {isError ? (
           <p className="text-sm text-[#b45309]">
-            Unable to load purchase suggestions right now.
+            {t("suggestedPurchases.loadError")}
           </p>
         ) : null}
 
         {!isLoading && !isError && groups.length === 0 ? (
           <div className="rounded-2xl border border-[#f2e6dc] bg-[#fff9f2] px-4 py-6 text-sm text-[#8a6d56]">
-            No critical restocks are currently suggested.
+            {t("suggestedPurchases.empty")}
           </div>
         ) : null}
 
@@ -99,8 +105,12 @@ const SuggestedPurchasesPanel = ({
                       {group.supplierName}
                     </p>
                     <p className="mt-1 text-xs text-[#8a6d56]">
-                      {group.warehouseName} | {number(group.items.length)} suggested line
-                      {group.items.length === 1 ? "" : "s"} | {currency(group.totalReorderValue)}
+                      {t("suggestedPurchases.suggestedLines", {
+                        warehouse: group.warehouseName,
+                        count: number(group.items.length),
+                        suffix: group.items.length === 1 ? "" : "s",
+                        amount: currency(group.totalReorderValue),
+                      })}
                     </p>
                   </div>
                   <Button
@@ -116,7 +126,7 @@ const SuggestedPurchasesPanel = ({
                       onLoadItems(group.items);
                     }}
                   >
-                    Load group
+                    {t("suggestedPurchases.loadGroup")}
                   </Button>
                 </div>
 
@@ -132,11 +142,13 @@ const SuggestedPurchasesPanel = ({
                             {item.product_name}
                           </p>
                           <p className="mt-1 text-xs text-[#8a6d56]">
-                            {item.stock_left} left | {item.predicted_daily_sales.toFixed(1)} / day | confidence{" "}
-                            {number(item.confidence * 100, {
-                              maximumFractionDigits: 0,
+                            {t("suggestedPurchases.stockLine", {
+                              stockLeft: item.stock_left,
+                              dailySales: item.predicted_daily_sales.toFixed(1),
+                              confidence: number(item.confidence * 100, {
+                                maximumFractionDigits: 0,
+                              }),
                             })}
-                            %
                           </p>
                         </div>
                         <span className="rounded-full border border-[#e8d2bf] bg-white px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#8a6d56]">
@@ -146,17 +158,17 @@ const SuggestedPurchasesPanel = ({
                       <div className="mt-3 grid gap-2 sm:grid-cols-4">
                         <div>
                           <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
-                            Days left
+                            {t("suggestedPurchases.daysLeft")}
                           </p>
                           <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
                             {item.days_until_stockout >= 999
-                              ? "Not projected"
+                              ? t("suggestedPurchases.notProjected")
                               : number(item.days_until_stockout)}
                           </p>
                         </div>
                         <div>
                           <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
-                            Suggested qty
+                            {t("suggestedPurchases.suggestedQty")}
                           </p>
                           <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
                             {number(item.recommended_reorder_quantity)}
@@ -164,17 +176,17 @@ const SuggestedPurchasesPanel = ({
                         </div>
                         <div>
                           <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
-                            Runout date
+                            {t("suggestedPurchases.runoutDate")}
                           </p>
                           <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
                             {item.expectedRunoutDate
                               ? dateWithYear(item.expectedRunoutDate)
-                              : "Not projected"}
+                              : t("suggestedPurchases.notProjected")}
                           </p>
                         </div>
                         <div>
                           <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
-                            Reorder value
+                            {t("suggestedPurchases.reorderValue")}
                           </p>
                           <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
                             {currency(

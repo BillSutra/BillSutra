@@ -1,35 +1,44 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ValidationField } from "@/components/ui/ValidationField";
 import {
-  validateName,
-  validatePhone,
-  validateEmail,
-  validateRequired,
-} from "@/lib/validation";
+  Building2,
+  CheckCircle2,
+  Eye,
+  LayoutTemplate,
+  Palette,
+  Sparkles,
+} from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
-import A4PreviewStack from "@/components/invoice/A4PreviewStack";
 import LogoUploader from "@/components/business-profile/LogoUploader";
+import A4PreviewStack from "@/components/invoice/A4PreviewStack";
+import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
+import { ValidationField } from "@/components/ui/ValidationField";
+import { Button } from "@/components/ui/button";
 import {
   BUSINESS_TYPES,
   SECTION_LABELS,
   TEMPLATE_CATALOG,
 } from "@/lib/invoiceTemplateData";
 import { PREVIEW_INVOICE } from "@/lib/invoicePreviewData";
-import type {
-  BusinessProfileInput,
-  SectionKey,
-} from "@/types/invoice-template";
+import {
+  validateEmail,
+  validateName,
+  validatePhone,
+  validateRequired,
+} from "@/lib/validation";
 import {
   fetchBusinessProfile,
   fetchTemplates,
   saveBusinessProfile,
 } from "@/lib/apiClient";
 import { useI18n } from "@/providers/LanguageProvider";
+import type {
+  BusinessProfileInput,
+  SectionKey,
+} from "@/types/invoice-template";
 
 const BusinessProfileClient = ({
   name,
@@ -62,9 +71,21 @@ const BusinessProfileClient = ({
   const [profileTouched, setProfileTouched] = useState(false);
 
   const steps = [
-    { id: 1, label: t("businessProfilePage.steps.businessType") },
-    { id: 2, label: t("businessProfilePage.steps.businessDetails") },
-    { id: 3, label: t("businessProfilePage.steps.template") },
+    {
+      id: 1,
+      label: t("businessProfilePage.steps.businessType"),
+      accent: "Map the operating model and default invoice sections.",
+    },
+    {
+      id: 2,
+      label: t("businessProfilePage.steps.businessDetails"),
+      accent: "Organize business details and branding in one polished setup.",
+    },
+    {
+      id: 3,
+      label: t("businessProfilePage.steps.template"),
+      accent: "Choose the invoice style customers will see.",
+    },
   ];
 
   const { data: templateRecords = [] } = useQuery({
@@ -131,11 +152,15 @@ const BusinessProfileClient = ({
     }));
   }, [templateRecords]);
 
-  const selectedTemplate = useMemo(() => {
-    return (
-      templates.find((item) => item.id === selectedTemplateId) ?? templates[0]
-    );
-  }, [selectedTemplateId, templates]);
+  const selectedTemplate = useMemo(
+    () => templates.find((item) => item.id === selectedTemplateId) ?? templates[0],
+    [selectedTemplateId, templates],
+  );
+
+  const selectedBusinessType = useMemo(
+    () => BUSINESS_TYPES.find((item) => item.id === businessTypeId) ?? BUSINESS_TYPES[0],
+    [businessTypeId],
+  );
 
   useEffect(() => {
     if (!templates.length) return;
@@ -144,15 +169,16 @@ const BusinessProfileClient = ({
     }
   }, [templates, selectedTemplateId]);
 
-  const previewData = useMemo(() => {
-    return {
+  const previewData = useMemo(
+    () => ({
       ...PREVIEW_INVOICE,
       business: {
         ...PREVIEW_INVOICE.business,
         ...profile,
       },
-    };
-  }, [profile]);
+    }),
+    [profile],
+  );
 
   const handleBusinessTypeChange = (value: string) => {
     setBusinessTypeId(value);
@@ -172,16 +198,12 @@ const BusinessProfileClient = ({
     }));
   };
 
-  // Validate all fields before submit
-  const validateAll = () => {
-    return (
-      !validateName(profile.businessName) &&
-      !validatePhone(profile.phone) &&
-      !validateEmail(profile.email) &&
-      !validateRequired(profile.address) &&
-      !validateRequired(profile.currency)
-    );
-  };
+  const validateAll = () =>
+    !validateName(profile.businessName) &&
+    !validatePhone(profile.phone) &&
+    !validateEmail(profile.email) &&
+    !validateRequired(profile.address) &&
+    !validateRequired(profile.currency);
 
   const handleFinish = async () => {
     setProfileTouched(true);
@@ -202,6 +224,367 @@ const BusinessProfileClient = ({
     setProfileTouched(false);
   };
 
+  const toggleOptions = [
+    {
+      key: "showLogoOnInvoice" as const,
+      label: t("businessProfilePage.toggles.showLogoOnInvoice"),
+      description: t("businessProfilePage.toggleDescriptions.showLogoOnInvoice"),
+    },
+    {
+      key: "showTaxNumber" as const,
+      label: t("businessProfilePage.toggles.showTaxNumber"),
+      description: t("businessProfilePage.toggleDescriptions.showTaxNumber"),
+    },
+    {
+      key: "showPaymentQr" as const,
+      label: t("businessProfilePage.toggles.showPaymentQr"),
+      description: t("businessProfilePage.toggleDescriptions.showPaymentQr"),
+    },
+  ];
+
+  const currentStepSummary =
+    steps.find((step) => step.id === currentStep) ?? steps[0];
+
+  const renderLeftPanel = () => {
+    if (currentStep === 1) {
+      return (
+        <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur sm:p-7">
+          <div className="space-y-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab]">
+              <Sparkles className="h-3.5 w-3.5" />
+              {t("businessProfilePage.content.setupBadge")}
+            </span>
+            <h2 className="text-2xl font-semibold tracking-tight text-[#10233f]">
+              {t("businessProfilePage.stepTitles.businessType")}
+            </h2>
+            <p className="max-w-3xl text-sm leading-6 text-[#627890]">
+              {t("businessProfilePage.content.businessTypeDescription")}
+            </p>
+          </div>
+
+          <div className="mt-6 grid gap-4 lg:grid-cols-2">
+            {BUSINESS_TYPES.map((type) => {
+              const active = businessTypeId === type.id;
+              return (
+                <button
+                  key={type.id}
+                  type="button"
+                  onClick={() => handleBusinessTypeChange(type.id)}
+                  className={[
+                    "rounded-[1.5rem] border px-5 py-5 text-left transition-all duration-200",
+                    active
+                      ? "border-[#123d65] bg-[linear-gradient(180deg,#eef6ff_0%,#f8fbff_100%)] shadow-[0_24px_50px_-38px_rgba(17,37,63,0.45)]"
+                      : "border-[#d7e4f1] bg-white hover:border-[#7aa8d6] hover:bg-[#f9fbff]",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-base font-semibold text-[#10233f]">
+                        {type.label}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[#627890]">
+                        {t("businessProfilePage.content.businessTypeCardDescription")}
+                      </p>
+                    </div>
+                    <span
+                      className={[
+                        "mt-1 inline-flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold",
+                        active
+                          ? "border-[#123d65] bg-[#123d65] text-white"
+                          : "border-[#d7e4f1] bg-white text-[#7f95ab]",
+                      ].join(" ")}
+                    >
+                      {active ? <CheckCircle2 className="h-4 w-4" /> : "."}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      );
+    }
+
+    if (currentStep === 3) {
+      return (
+        <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur sm:p-7">
+          <div className="space-y-2">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab]">
+              <LayoutTemplate className="h-3.5 w-3.5" />
+              {t("businessProfilePage.content.templateBadge")}
+            </span>
+            <h2 className="text-2xl font-semibold tracking-tight text-[#10233f]">
+              {t("businessProfilePage.stepTitles.templateSelection")}
+            </h2>
+            <p className="max-w-3xl text-sm leading-6 text-[#627890]">
+              {t("businessProfilePage.content.templateDescription")}
+            </p>
+          </div>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            {templates.map((template) => {
+              const selected = selectedTemplateId === template.id;
+              return (
+                <button
+                  key={template.id}
+                  type="button"
+                  onClick={() => setSelectedTemplateId(template.id)}
+                  className={[
+                    "rounded-[1.5rem] border px-5 py-5 text-left transition-all duration-200",
+                    selected
+                      ? "border-[#123d65] bg-[linear-gradient(180deg,#eef6ff_0%,#f8fbff_100%)] shadow-[0_24px_50px_-38px_rgba(17,37,63,0.45)]"
+                      : "border-[#d7e4f1] bg-white hover:border-[#7aa8d6] hover:bg-[#f9fbff]",
+                  ].join(" ")}
+                >
+                  <div
+                    className="h-2.5 w-16 rounded-full"
+                    style={{ backgroundColor: template.theme.primaryColor }}
+                  />
+                  <div className="mt-4 flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-base font-semibold text-[#10233f]">
+                        {template.name}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-[#627890]">
+                        {template.description}
+                      </p>
+                    </div>
+                    {selected ? (
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#123d65] text-white">
+                        <CheckCircle2 className="h-4 w-4" />
+                      </span>
+                    ) : null}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      );
+    }
+
+    return (
+      <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur sm:p-7">
+        <div className="space-y-2">
+          <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab]">
+            <Building2 className="h-3.5 w-3.5" />
+            {t("businessProfilePage.content.detailsBadge")}
+          </span>
+          <h2 className="text-2xl font-semibold tracking-tight text-[#10233f]">
+            {t("businessProfilePage.content.detailsTitle")}
+          </h2>
+          <p className="max-w-3xl text-sm leading-6 text-[#627890]">
+            {t("businessProfilePage.content.detailsDescription")}
+          </p>
+        </div>
+
+        <div className="mt-7 grid gap-x-5 gap-y-5 md:grid-cols-2">
+          <ValidationField
+            id="businessName"
+            label={t("businessProfilePage.fields.businessName")}
+            value={profile.businessName}
+            onChange={(value) => updateProfile("businessName", value)}
+            validate={validateName}
+            required
+            placeholder={t("businessProfilePage.placeholders.businessName")}
+            success
+            className="mb-0"
+          />
+          <ValidationField
+            id="phone"
+            label={t("businessProfilePage.fields.phone")}
+            value={profile.phone}
+            onChange={(value) => updateProfile("phone", value)}
+            validate={validatePhone}
+            required
+            placeholder={t("businessProfilePage.placeholders.phone")}
+            success
+            className="mb-0"
+          />
+          <ValidationField
+            id="address"
+            label={t("businessProfilePage.fields.address")}
+            value={profile.address}
+            onChange={(value) => updateProfile("address", value)}
+            validate={validateRequired}
+            required
+            placeholder={t("businessProfilePage.placeholders.address")}
+            success
+            className="mb-0 md:col-span-2"
+          />
+          <ValidationField
+            id="email"
+            label={t("businessProfilePage.fields.email")}
+            value={profile.email}
+            onChange={(value) => updateProfile("email", value)}
+            validate={validateEmail}
+            required
+            placeholder={t("businessProfilePage.placeholders.email")}
+            success
+            className="mb-0"
+          />
+          <ValidationField
+            id="website"
+            label={t("businessProfilePage.fields.website")}
+            value={profile.website}
+            onChange={(value) => updateProfile("website", value)}
+            validate={() => ""}
+            placeholder={t("businessProfilePage.placeholders.website")}
+            success
+            className="mb-0"
+          />
+          <ValidationField
+            id="taxId"
+            label={t("businessProfilePage.fields.taxId")}
+            value={profile.taxId}
+            onChange={(value) => updateProfile("taxId", value)}
+            validate={() => ""}
+            placeholder={t("businessProfilePage.placeholders.taxId")}
+            success
+            className="mb-0"
+          />
+          <ValidationField
+            id="currency"
+            label={t("businessProfilePage.fields.currency")}
+            value={profile.currency}
+            onChange={(value) => updateProfile("currency", value)}
+            validate={validateRequired}
+            required
+            placeholder={t("businessProfilePage.placeholders.currency")}
+            success
+            className="mb-0"
+          />
+        </div>
+      </section>
+    );
+  };
+
+  const renderRightTopCard = () => {
+    if (currentStep === 1) {
+      return (
+        <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5fb] text-[#123d65]">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[#10233f]">
+                {t("businessProfilePage.content.enabledSectionsTitle")}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-[#627890]">
+                {t("businessProfilePage.content.enabledSectionsDescription", {
+                  label: selectedBusinessType.label,
+                })}
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {enabledSections.map((section) => (
+              <span
+                key={section}
+                className="inline-flex rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1.5 text-xs font-medium text-[#4f6882]"
+              >
+                {SECTION_LABELS[section]}
+              </span>
+            ))}
+          </div>
+        </section>
+      );
+    }
+
+    if (currentStep === 3) {
+      return (
+        <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5fb] text-[#123d65]">
+              <Palette className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[#10233f]">
+                {t("businessProfilePage.content.selectedStyleTitle")}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-[#627890]">
+                {t("businessProfilePage.content.selectedStyleDescription", {
+                  name:
+                    selectedTemplate?.name ??
+                    t("businessProfilePage.templateFallback"),
+                })}
+              </p>
+            </div>
+          </div>
+          <div className="mt-5 rounded-[1.5rem] border border-[#d7e4f1] bg-[#f8fbff] p-4">
+            <div
+              className="h-2.5 w-20 rounded-full"
+              style={{ backgroundColor: selectedTemplate?.theme.primaryColor }}
+            />
+            <p className="mt-4 text-base font-semibold text-[#10233f]">
+              {selectedTemplate?.name ?? t("businessProfilePage.templateFallback")}
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[#627890]">
+              {selectedTemplate?.description ??
+                t("businessProfilePage.content.selectedStyleFallback")}
+            </p>
+          </div>
+        </section>
+      );
+    }
+
+    return (
+      <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5fb] text-[#123d65]">
+            <Palette className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-[#10233f]">
+              {t("businessProfilePage.content.brandingTitle")}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-[#627890]">
+              {t("businessProfilePage.content.brandingDescription")}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <LogoUploader />
+        </div>
+
+        <div className="mt-6 rounded-[1.5rem] border border-[#d7e4f1] bg-[#f8fbff] p-4">
+          <p className="text-sm font-semibold text-[#10233f]">
+            {t("businessProfilePage.content.brandingControlsTitle")}
+          </p>
+          <div className="mt-4 space-y-3">
+            {toggleOptions.map((option) => (
+              <label
+                key={option.key}
+                className="flex items-start gap-3 rounded-[1.2rem] border border-white/80 bg-white/90 p-3.5 shadow-[0_18px_36px_-34px_rgba(17,37,63,0.45)]"
+              >
+                <input
+                  type="checkbox"
+                  checked={profile[option.key]}
+                  onChange={() => updateProfile(option.key, !profile[option.key])}
+                  className="mt-1 h-4 w-4 rounded border-[#b9d1e6] text-[#123d65] accent-[#123d65]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-[#10233f]">
+                    {option.label}
+                  </span>
+                  <span className="mt-1 block text-sm leading-6 text-[#627890]">
+                    {option.description}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  };
+
+  const actionDisabled =
+    saveProfileMutation.isPending ||
+    (currentStep === 3 && profileTouched && !validateAll());
+
   return (
     <DashboardLayout
       name={name}
@@ -209,263 +592,87 @@ const BusinessProfileClient = ({
       title={t("businessProfilePage.title")}
       subtitle={t("businessProfilePage.subtitle")}
     >
-      <div className="mx-auto w-full max-w-6xl">
-        <header className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-              {t("businessProfilePage.kicker")}
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold">
-              {t("businessProfilePage.heading")}
-            </h1>
+      <div className="mx-auto w-full max-w-[1280px] space-y-6">
+        <section className="rounded-[2rem] border border-white/75 bg-white/78 p-6 shadow-[0_28px_90px_-70px_rgba(17,37,63,0.55)] backdrop-blur-xl sm:p-8">
+          <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-3xl">
+              <p className="app-kicker">{t("businessProfilePage.kicker")}</p>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#10233f] sm:text-[2.4rem]">
+                {t("businessProfilePage.heading")}
+              </h2>
+              <p className="mt-3 text-sm leading-6 text-[#627890] sm:text-[0.98rem]">
+                {currentStepSummary.accent}
+              </p>
+            </div>
+
+            <ol className="grid gap-3 sm:grid-cols-3">
+              {steps.map((step) => {
+                const isActive = currentStep === step.id;
+                const isCompleted = currentStep > step.id;
+
+                return (
+                  <li
+                    key={step.id}
+                    aria-current={isActive ? "step" : undefined}
+                    className={[
+                      "min-w-[180px] rounded-[1.45rem] border px-4 py-3 transition-all duration-200",
+                      isActive
+                        ? "border-[#123d65] bg-[#eef6ff] shadow-[0_20px_40px_-34px_rgba(17,37,63,0.4)]"
+                        : isCompleted
+                          ? "border-emerald-200 bg-emerald-50/80"
+                          : "border-[#d7e4f1] bg-white/85",
+                    ].join(" ")}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span
+                        className={[
+                          "flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold",
+                          isActive
+                            ? "bg-[#123d65] text-white"
+                            : isCompleted
+                              ? "bg-emerald-600 text-white"
+                              : "bg-[#edf5fb] text-[#7f95ab]",
+                        ].join(" ")}
+                      >
+                        {step.id}
+                      </span>
+                      <span
+                        className={[
+                          "text-[0.72rem] font-semibold uppercase tracking-[0.22em]",
+                          isActive
+                            ? "text-[#123d65]"
+                            : isCompleted
+                              ? "text-emerald-700"
+                              : "text-[#7f95ab]",
+                        ].join(" ")}
+                      >
+                        {step.label}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
           </div>
-          <ol className="grid w-full gap-2 text-xs sm:w-auto sm:grid-cols-3 sm:gap-3">
-            {steps.map((step) => {
-              const isActive = currentStep === step.id;
-              const isCompleted = currentStep > step.id;
+        </section>
 
-              return (
-                <li
-                  key={step.id}
-                  aria-current={isActive ? "step" : undefined}
-                  className={`flex min-w-[165px] items-center gap-2 rounded-xl border px-3 py-2 transition sm:min-w-[180px] ${
-                    isActive
-                      ? "border-primary bg-primary/10"
-                      : isCompleted
-                        ? "border-emerald-200 bg-emerald-50/70"
-                        : "border-border bg-white"
-                  }`}
-                >
-                  <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold ${
-                      isActive
-                        ? "bg-primary text-primary-foreground"
-                        : isCompleted
-                          ? "bg-emerald-600 text-white"
-                          : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {step.id}
-                  </span>
-                  <span
-                    className={`font-medium uppercase tracking-[0.12em] ${
-                      isActive
-                        ? "text-primary"
-                        : isCompleted
-                          ? "text-emerald-700"
-                          : "text-[#8a6d56]"
-                    }`}
-                  >
-                    {step.label}
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
-        </header>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.02fr)_minmax(360px,0.98fr)]">
+          <div className="space-y-6">
+            {renderLeftPanel()}
 
-        <div className="mt-8 grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-          <section className="rounded-3xl border border-border bg-white p-6">
-            {currentStep === 1 && (
-              <div>
-                <h2 className="text-sm font-semibold">
-                  {t("businessProfilePage.stepTitles.businessType")}
-                </h2>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  {BUSINESS_TYPES.map((type) => (
-                    <button
-                      key={type.id}
-                      type="button"
-                      onClick={() => handleBusinessTypeChange(type.id)}
-                      className={`rounded-2xl border px-4 py-3 text-left text-sm transition ${
-                        businessTypeId === type.id
-                          ? "border-primary bg-primary/5 text-primary"
-                          : "border-border text-[#5c4b3b] hover:border-primary/50"
-                      }`}
-                    >
-                      {type.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-6 rounded-2xl border border-border bg-[#faf6f1] p-4 text-sm text-[#5c4b3b]">
-                  <p className="font-semibold">
-                    {t("businessProfilePage.enabledSections")}
-                  </p>
-                  <p className="mt-2 text-xs">
-                    {enabledSections
-                      .map((section) => SECTION_LABELS[section])
-                      .join(", ")}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {currentStep === 2 && (
-              <div>
-                <h2 className="text-sm font-semibold">
-                  {t("businessProfilePage.stepTitles.businessProfile")}
-                </h2>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <ValidationField
-                    id="businessName"
-                    label={t("businessProfilePage.fields.businessName")}
-                    value={profile.businessName}
-                    onChange={(value) => updateProfile("businessName", value)}
-                    validate={validateName}
-                    required
-                    placeholder={t("businessProfilePage.placeholders.businessName")}
-                    success
-                  />
-                  <ValidationField
-                    id="phone"
-                    label={t("businessProfilePage.fields.phone")}
-                    value={profile.phone}
-                    onChange={(value) => updateProfile("phone", value)}
-                    validate={validatePhone}
-                    required
-                    placeholder={t("businessProfilePage.placeholders.phone")}
-                    success
-                  />
-                  <ValidationField
-                    id="address"
-                    label={t("businessProfilePage.fields.address")}
-                    value={profile.address}
-                    onChange={(value) => updateProfile("address", value)}
-                    validate={validateRequired}
-                    required
-                    placeholder={t("businessProfilePage.placeholders.address")}
-                    success
-                    className="sm:col-span-2"
-                  />
-                  <ValidationField
-                    id="email"
-                    label={t("businessProfilePage.fields.email")}
-                    value={profile.email}
-                    onChange={(value) => updateProfile("email", value)}
-                    validate={validateEmail}
-                    required
-                    placeholder={t("businessProfilePage.placeholders.email")}
-                    success
-                  />
-                  <ValidationField
-                    id="website"
-                    label={t("businessProfilePage.fields.website")}
-                    value={profile.website}
-                    onChange={(value) => updateProfile("website", value)}
-                    validate={() => ""}
-                    placeholder={t("businessProfilePage.placeholders.website")}
-                    success
-                  />
-                  <div className="sm:col-span-2">
-                    {/* Logo is stored in localStorage via the hook inside LogoUploader.
-                        We intentionally do NOT pipe the Base64 into profile.logoUrl
-                        to avoid sending a multi-MB payload to the server API. */}
-                    <LogoUploader />
-                  </div>
-                  <ValidationField
-                    id="taxId"
-                    label={t("businessProfilePage.fields.taxId")}
-                    value={profile.taxId}
-                    onChange={(value) => updateProfile("taxId", value)}
-                    validate={() => ""}
-                    placeholder={t("businessProfilePage.placeholders.taxId")}
-                    success
-                  />
-                  <ValidationField
-                    id="currency"
-                    label={t("businessProfilePage.fields.currency")}
-                    value={profile.currency}
-                    onChange={(value) => updateProfile("currency", value)}
-                    validate={validateRequired}
-                    required
-                    placeholder={t("businessProfilePage.placeholders.currency")}
-                    success
-                  />
-                </div>
-                <div className="mt-5 grid gap-3 text-sm">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={profile.showLogoOnInvoice}
-                      onChange={() =>
-                        updateProfile(
-                          "showLogoOnInvoice",
-                          !profile.showLogoOnInvoice,
-                        )
-                      }
-                      className="h-4 w-4 rounded border-[#d6c8b8] text-primary"
-                    />
-                    {t("businessProfilePage.toggles.showLogoOnInvoice")}
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={profile.showTaxNumber}
-                      onChange={() =>
-                        updateProfile("showTaxNumber", !profile.showTaxNumber)
-                      }
-                      className="h-4 w-4 rounded border-[#d6c8b8] text-primary"
-                    />
-                    {t("businessProfilePage.toggles.showTaxNumber")}
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={profile.showPaymentQr}
-                      onChange={() =>
-                        updateProfile("showPaymentQr", !profile.showPaymentQr)
-                      }
-                      className="h-4 w-4 rounded border-[#d6c8b8] text-primary"
-                    />
-                    {t("businessProfilePage.toggles.showPaymentQr")}
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {currentStep === 3 && (
-              <div>
-                <h2 className="text-sm font-semibold">
-                  {t("businessProfilePage.stepTitles.templateSelection")}
-                </h2>
-                <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                  {templates.map((template) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      onClick={() => setSelectedTemplateId(template.id)}
-                      className={`rounded-2xl border px-4 py-4 text-left transition ${
-                        selectedTemplateId === template.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                    >
-                      <div
-                        className="h-2 w-10 rounded-full"
-                        style={{ backgroundColor: template.theme.primaryColor }}
-                      />
-                      <p className="mt-3 text-base font-semibold">
-                        {template.name}
-                      </p>
-                      <p className="mt-2 text-xs text-[#5c4b3b]">
-                        {template.description}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="mt-6 flex items-center justify-between">
-              <button
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.8rem] border border-white/75 bg-white/78 px-5 py-4 shadow-[0_24px_70px_-60px_rgba(17,37,63,0.48)] backdrop-blur-xl">
+              <Button
                 type="button"
+                variant="outline"
+                className="rounded-full border-[#d7e4f1] bg-white/90 px-5"
                 onClick={() => setCurrentStep((prev) => Math.max(prev - 1, 1))}
-                className="rounded-full border border-border px-4 py-2 text-sm"
+                disabled={currentStep === 1}
               >
                 {t("businessProfilePage.actions.back")}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
+                className="rounded-full px-6"
                 onClick={async () => {
                   if (currentStep === 3) {
                     await handleFinish();
@@ -473,46 +680,59 @@ const BusinessProfileClient = ({
                   }
                   setCurrentStep((prev) => Math.min(prev + 1, 3));
                 }}
-                disabled={
-                  saveProfileMutation.isPending ||
-                  (currentStep === 3 && profileTouched && !validateAll())
-                }
-                aria-disabled={
-                  saveProfileMutation.isPending ||
-                  (currentStep === 3 && profileTouched && !validateAll())
-                }
-                className="rounded-full bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-60"
+                disabled={actionDisabled}
+                aria-disabled={actionDisabled}
               >
                 {currentStep === 3
                   ? saveProfileMutation.isPending
                     ? t("businessProfilePage.actions.saving")
                     : t("businessProfilePage.actions.finish")
                   : t("businessProfilePage.actions.next")}
-              </button>
+              </Button>
             </div>
-          </section>
+          </div>
 
-          <section className="rounded-3xl border border-border bg-white p-6">
-            <h2 className="text-sm font-semibold">
-              {t("businessProfilePage.previewTitle")}
-            </h2>
-            <p className="mt-2 text-xs text-[#8a6d56]">
-              {t("businessProfilePage.previewDescription")}
-            </p>
-            <div className="mt-5 rounded-2xl border border-border bg-white p-2.5">
-              <A4PreviewStack
-                stackKey={`business-profile-${selectedTemplate.id}-${enabledSections.join(",")}`}
-              >
-                <TemplatePreviewRenderer
-                  key={`${selectedTemplate.id}-${enabledSections.join(",")}`}
-                  templateId={selectedTemplate.id}
-                  data={previewData}
-                  enabledSections={enabledSections}
-                  theme={selectedTemplate.theme}
-                />
-              </A4PreviewStack>
-            </div>
-          </section>
+          <div className="space-y-6">
+            {renderRightTopCard()}
+
+            <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur">
+              <div className="flex items-start gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5fb] text-[#123d65]">
+                  <Eye className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-[#10233f]">
+                    {t("businessProfilePage.previewTitle")}
+                  </h3>
+                  <p className="mt-1 text-sm leading-6 text-[#627890]">
+                    {t("businessProfilePage.previewDescription")}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-[1.65rem] border border-[#d7e4f1] bg-[linear-gradient(180deg,#fbfdff_0%,#f4f8fc_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+                <div className="max-h-[72rem] overflow-auto rounded-[1.35rem] border border-white/80 bg-white/92 p-2 shadow-[0_28px_55px_-50px_rgba(17,37,63,0.5)]">
+                  <A4PreviewStack
+                    stackKey={`business-profile-${selectedTemplate?.id ?? "template"}-${enabledSections.join(",")}`}
+                  >
+                    <TemplatePreviewRenderer
+                      key={`${selectedTemplate?.id ?? "template"}-${enabledSections.join(",")}`}
+                      templateId={selectedTemplate?.id}
+                      data={previewData}
+                      enabledSections={enabledSections}
+                      theme={
+                        selectedTemplate?.theme ?? {
+                          primaryColor: "#123d65",
+                          fontFamily: "var(--font-geist-sans)",
+                          tableStyle: "minimal",
+                        }
+                      }
+                    />
+                  </A4PreviewStack>
+                </div>
+              </div>
+            </section>
+          </div>
         </div>
       </div>
     </DashboardLayout>

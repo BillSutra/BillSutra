@@ -6,6 +6,7 @@ import {
   DASHBOARD_REALTIME_ENABLED,
   DASHBOARD_REFRESH_INTERVAL_MS,
 } from "@/lib/dashboardRefresh";
+import { useI18n } from "@/providers/LanguageProvider";
 import { cn } from "@/lib/utils";
 
 type StatusVariant = "live" | "updating" | "error";
@@ -20,24 +21,6 @@ type DashboardCardStatusProps = {
   className?: string;
 };
 
-const statusMeta: Record<StatusVariant, { label: string; dot: string; text: string }> = {
-  live: {
-    label: "Live",
-    dot: "bg-emerald-500",
-    text: "text-emerald-700",
-  },
-  updating: {
-    label: "Updating",
-    dot: "bg-amber-500",
-    text: "text-amber-700",
-  },
-  error: {
-    label: "Error",
-    dot: "bg-rose-500",
-    text: "text-rose-700",
-  },
-};
-
 const DashboardCardStatus = ({
   isLoading,
   isFetching,
@@ -47,6 +30,7 @@ const DashboardCardStatus = ({
   showNextUpdate = true,
   className,
 }: DashboardCardStatusProps) => {
+  const { t } = useI18n();
   const [now, setNow] = useState(() => Date.now());
   const effectiveRefreshInterval = DASHBOARD_REALTIME_ENABLED
     ? 0
@@ -73,6 +57,24 @@ const DashboardCardStatus = ({
     ? Math.max(0, Math.ceil((nextUpdateAt - now) / 1000))
     : undefined;
 
+  const statusMeta: Record<StatusVariant, { label: string; dot: string; text: string }> = {
+    live: {
+      label: t("dashboard.status.live"),
+      dot: "bg-emerald-500",
+      text: "text-emerald-700",
+    },
+    updating: {
+      label: t("dashboard.status.updating"),
+      dot: "bg-amber-500",
+      text: "text-amber-700",
+    },
+    error: {
+      label: t("dashboard.status.error"),
+      dot: "bg-rose-500",
+      text: "text-rose-700",
+    },
+  };
+
   const meta = statusMeta[status];
 
   return (
@@ -82,10 +84,16 @@ const DashboardCardStatus = ({
         {meta.label}
       </span>
       <span className="text-muted-foreground">
-        Last updated {dataUpdatedAt ? formatTimeLabel(dataUpdatedAt) : "--"}
+        {t("dashboard.status.lastUpdated", {
+          time: dataUpdatedAt ? formatTimeLabel(dataUpdatedAt) : "--",
+        })}
       </span>
       {nextUpdateInSeconds !== undefined ? (
-        <span className="text-muted-foreground">Next update in {nextUpdateInSeconds}s</span>
+        <span className="text-muted-foreground">
+          {t("dashboard.status.nextUpdateIn", {
+            seconds: nextUpdateInSeconds,
+          })}
+        </span>
       ) : null}
     </div>
   );

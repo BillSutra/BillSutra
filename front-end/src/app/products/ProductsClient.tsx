@@ -418,11 +418,10 @@ export default function ProductsClient({
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h2 className="text-lg font-semibold text-foreground">
-                  Bulk Product Import
+                  {t("productsPage.import.title")}
                 </h2>
                 <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                  Upload a CSV or Excel file, review the validation report, and
-                  confirm only the clean rows.
+                  {t("productsPage.import.description")}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -433,22 +432,26 @@ export default function ProductsClient({
                   disabled={isDownloadingTemplate}
                 >
                   {isDownloadingTemplate
-                    ? "Preparing template..."
-                    : "Download Template"}
+                    ? t("productsPage.import.actions.preparingTemplate")
+                    : t("productsPage.import.actions.downloadTemplate")}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  {selectedImportFile ? "Change File" : "Choose File"}
+                  {selectedImportFile
+                    ? t("productsPage.import.actions.changeFile")
+                    : t("productsPage.import.actions.chooseFile")}
                 </Button>
                 <Button
                   type="button"
                   onClick={handlePreviewImport}
                   disabled={isPreviewingImport || !selectedImportFile}
                 >
-                  {isPreviewingImport ? "Validating..." : "Preview Import"}
+                  {isPreviewingImport
+                    ? t("productsPage.import.actions.validating")
+                    : t("productsPage.import.actions.previewImport")}
                 </Button>
               </div>
             </div>
@@ -463,27 +466,30 @@ export default function ProductsClient({
 
             <div className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
               <div className="rounded-2xl border border-border/70 bg-background/80 p-4 text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">Import requirements</p>
-                <p className="mt-3">Accepted files: `.xlsx` and `.csv`</p>
-                <p>Maximum file size: 5MB</p>
-                <p>Required columns: name, sku, selling_price</p>
-                <p>
-                  Optional columns: barcode, cost_price, gst_rate, opening_stock,
-                  reorder_level, category
+                <p className="font-medium text-foreground">
+                  {t("productsPage.import.requirements.title")}
                 </p>
-                <p>Category names must already exist if you include a category.</p>
+                <p className="mt-3">
+                  {t("productsPage.import.requirements.acceptedFiles")}
+                </p>
+                <p>{t("productsPage.import.requirements.maxFileSize")}</p>
+                <p>{t("productsPage.import.requirements.requiredColumns")}</p>
+                <p>{t("productsPage.import.requirements.optionalColumns")}</p>
+                <p>{t("productsPage.import.requirements.categoryNote")}</p>
                 {selectedImportFile ? (
                   <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
                     <p className="font-medium">{selectedImportFile.name}</p>
                     <p className="mt-1">
-                      {(selectedImportFile.size / 1024 / 1024).toFixed(2)} MB
+                      {t("productsPage.import.requirements.fileSize", {
+                        size: (selectedImportFile.size / 1024 / 1024).toFixed(2),
+                      })}
                     </p>
                   </div>
                 ) : null}
                 {isPreviewingImport ? (
                   <div className="mt-4">
                     <div className="mb-2 flex items-center justify-between text-xs uppercase tracking-[0.2em]">
-                      <span>Upload Progress</span>
+                      <span>{t("productsPage.import.progress.title")}</span>
                       <span>{uploadProgress}%</span>
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-slate-200">
@@ -496,9 +502,13 @@ export default function ProductsClient({
                 ) : null}
                 {importSummary ? (
                   <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800">
-                    {importSummary.importedCount} products imported successfully.
+                    {t("productsPage.import.summary.success", {
+                      count: importSummary.importedCount,
+                    })}
                     {importSummary.skippedCount > 0
-                      ? ` ${importSummary.skippedCount} rows were skipped during confirmation.`
+                      ? ` ${t("productsPage.import.summary.skipped", {
+                          count: importSummary.skippedCount,
+                        })}`
                       : ""}
                   </div>
                 ) : null}
@@ -506,14 +516,14 @@ export default function ProductsClient({
 
               <div className="rounded-2xl border border-border/70 bg-background/80 p-4">
                 <p className="text-sm font-medium text-foreground">
-                  Preview summary
+                  {t("productsPage.import.preview.summaryTitle")}
                 </p>
                 {importPreview ? (
                   <>
                     <div className="mt-4 grid gap-3 sm:grid-cols-3">
                       <div className="rounded-2xl border border-border bg-muted/40 p-4">
                         <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                          Total rows
+                          {t("productsPage.import.preview.totalRows")}
                         </p>
                         <p className="mt-2 text-2xl font-semibold text-foreground">
                           {importPreview.summary.totalRows}
@@ -521,7 +531,7 @@ export default function ProductsClient({
                       </div>
                       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
                         <p className="text-xs uppercase tracking-[0.2em] text-emerald-700">
-                          Valid rows
+                          {t("productsPage.import.preview.validRows")}
                         </p>
                         <p className="mt-2 text-2xl font-semibold text-emerald-900">
                           {importPreview.summary.validRows}
@@ -529,7 +539,7 @@ export default function ProductsClient({
                       </div>
                       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
                         <p className="text-xs uppercase tracking-[0.2em] text-amber-700">
-                          Errors
+                          {t("productsPage.import.preview.errors")}
                         </p>
                         <p className="mt-2 text-2xl font-semibold text-amber-900">
                           {importPreview.summary.invalidRows}
@@ -545,7 +555,9 @@ export default function ProductsClient({
                           importPreview.validRows.length === 0
                         }
                       >
-                        {isConfirmingImport ? "Importing..." : "Confirm Import"}
+                        {isConfirmingImport
+                          ? t("productsPage.import.actions.importing")
+                          : t("productsPage.import.actions.confirmImport")}
                       </Button>
                       <Button
                         type="button"
@@ -553,7 +565,7 @@ export default function ProductsClient({
                         onClick={handleDownloadErrorReport}
                         disabled={importPreview.invalidRows.length === 0}
                       >
-                        Download Error Report
+                        {t("productsPage.import.actions.downloadErrorReport")}
                       </Button>
                       <Button
                         type="button"
@@ -561,13 +573,13 @@ export default function ProductsClient({
                         onClick={resetImportState}
                         disabled={isConfirmingImport}
                       >
-                        Clear Preview
+                        {t("productsPage.import.actions.clearPreview")}
                       </Button>
                     </div>
                   </>
                 ) : (
                   <div className="mt-4 rounded-2xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
-                    Generate a preview to inspect valid rows and row-level errors.
+                    {t("productsPage.import.preview.empty")}
                   </div>
                 )}
               </div>
@@ -581,10 +593,10 @@ export default function ProductsClient({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-semibold text-foreground">
-                    Valid rows
+                    {t("productsPage.import.preview.validRows")}
                   </h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    These rows are ready to import.
+                    {t("productsPage.import.preview.validDescription")}
                   </p>
                 </div>
                 <span className="app-chip">{importPreview.validRows.length}</span>
@@ -593,12 +605,12 @@ export default function ProductsClient({
                 <table className="min-w-full text-sm">
                   <thead className="bg-muted/50 text-left text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2 font-medium">Row</th>
-                      <th className="px-3 py-2 font-medium">Name</th>
-                      <th className="px-3 py-2 font-medium">SKU</th>
-                      <th className="px-3 py-2 font-medium">Category</th>
-                      <th className="px-3 py-2 font-medium">Selling price</th>
-                      <th className="px-3 py-2 font-medium">Opening stock</th>
+                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.row")}</th>
+                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.name")}</th>
+                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.sku")}</th>
+                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.category")}</th>
+                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.sellingPrice")}</th>
+                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.openingStock")}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -613,7 +625,10 @@ export default function ProductsClient({
                             {row.name}
                           </td>
                           <td className="px-3 py-3">{row.sku}</td>
-                          <td className="px-3 py-3">{row.category || "Uncategorized"}</td>
+                          <td className="px-3 py-3">
+                            {row.category ||
+                              t("productsPage.import.preview.uncategorized")}
+                          </td>
                           <td className="px-3 py-3">{formatCurrency(row.price)}</td>
                           <td className="px-3 py-3">{row.stock}</td>
                         </tr>
@@ -624,7 +639,7 @@ export default function ProductsClient({
                           colSpan={6}
                           className="px-3 py-8 text-center text-muted-foreground"
                         >
-                          No valid rows found in this file.
+                          {t("productsPage.import.preview.noValidRows")}
                         </td>
                       </tr>
                     )}
@@ -637,10 +652,10 @@ export default function ProductsClient({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-base font-semibold text-foreground">
-                    Invalid rows
+                    {t("productsPage.import.preview.invalidRows")}
                   </h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Review row-level errors before confirming the import.
+                    {t("productsPage.import.preview.invalidDescription")}
                   </p>
                 </div>
                 <span className="app-chip">{importPreview.invalidRows.length}</span>
@@ -654,27 +669,41 @@ export default function ProductsClient({
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="text-sm font-semibold text-amber-900">
-                          Row {row.rowNumber}
+                          {t("productsPage.import.preview.rowLabel", {
+                            row: row.rowNumber,
+                          })}
                         </p>
                         <p className="text-xs text-amber-800">
-                          {row.values.sku || row.values.name || "Unnamed product"}
+                          {row.values.sku ||
+                            row.values.name ||
+                            t("productsPage.import.preview.unnamedProduct")}
                         </p>
                       </div>
                       <p className="mt-2 text-sm text-amber-900">
                         {row.errors.join(" | ")}
                       </p>
                       <p className="mt-2 text-xs text-amber-800">
-                        Name: {row.values.name || "N/A"} | SKU:{" "}
-                        {row.values.sku || "N/A"} | Selling price:{" "}
-                        {row.values.sellingPrice || "N/A"} | Opening stock:{" "}
-                        {row.values.openingStock || "0"} | Category:{" "}
-                        {row.values.category || "Uncategorized"}
+                        {t("productsPage.import.preview.invalidRowSummary", {
+                          name:
+                            row.values.name ||
+                            t("productsPage.import.preview.notAvailable"),
+                          sku:
+                            row.values.sku ||
+                            t("productsPage.import.preview.notAvailable"),
+                          sellingPrice:
+                            row.values.sellingPrice ||
+                            t("productsPage.import.preview.notAvailable"),
+                          openingStock: row.values.openingStock || "0",
+                          category:
+                            row.values.category ||
+                            t("productsPage.import.preview.uncategorized"),
+                        })}
                       </p>
                     </div>
                   ))
                 ) : (
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-8 text-center text-sm text-emerald-800">
-                    No validation errors found.
+                    {t("productsPage.import.preview.noErrors")}
                   </div>
                 )}
               </div>
@@ -877,14 +906,16 @@ export default function ProductsClient({
                 <Input
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="Search by product name, SKU, or barcode"
+                  placeholder={t("productsPage.filters.searchPlaceholder")}
                 />
                 <select
                   className="app-field h-10 px-3 text-sm text-foreground"
                   value={selectedCategoryFilter}
                   onChange={(event) => setSelectedCategoryFilter(event.target.value)}
                 >
-                  <option value="">All categories</option>
+                  <option value="">
+                    {t("productsPage.filters.allCategories")}
+                  </option>
                   {categoryOptions.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
@@ -893,12 +924,16 @@ export default function ProductsClient({
                 </select>
                 <div className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
                   <span>
-                    Showing {showingFrom}-{showingTo} of {totalProducts}
+                    {t("productsPage.filters.resultsCount", {
+                      from: showingFrom,
+                      to: showingTo,
+                      total: totalProducts,
+                    })}
                   </span>
                   {isFetching && !isLoading ? (
                     <span className="ml-3 inline-flex items-center gap-2">
                       <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                      Updating
+                      {t("productsPage.filters.updating")}
                     </span>
                   ) : null}
                 </div>
@@ -912,7 +947,7 @@ export default function ProductsClient({
               {!isLoading && !isError && products.length === 0 ? (
                 <div className="app-empty-state text-sm">
                   {debouncedSearch || selectedCategoryFilter
-                    ? "No products found for the current search or category."
+                    ? t("productsPage.filters.empty")
                     : t("productsPage.empty")}
                 </div>
               ) : null}

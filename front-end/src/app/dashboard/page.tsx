@@ -11,7 +11,7 @@ const Page = async () => {
     redirect("/login");
   }
 
-  const name = session?.user?.name || "Guest";
+  const name = session?.user?.name?.trim() ?? "";
 
   return (
     <DashboardClient

@@ -14,7 +14,7 @@ const WorkersPage = async () => {
     redirect("/dashboard");
   }
 
-  const name = session.user.name || "Guest";
+  const name = session?.user?.name?.trim() ?? "";
 
   return <WorkersClient name={name} image={session.user.image || undefined} />;
 };

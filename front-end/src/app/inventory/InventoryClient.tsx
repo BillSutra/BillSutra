@@ -31,7 +31,7 @@ type InventoryRow = Inventory & {
 };
 
 const InventoryClient = ({ name, image }: InventoryClientProps) => {
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
   const [alertFilter, setAlertFilter] = useState<"all" | "critical" | "warning" | "normal">("all");
   const [selectedInventoryId, setSelectedInventoryId] = useState<number | null>(null);
@@ -190,27 +190,31 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                Prediction view
+                {t("inventory.predictions.title")}
               </p>
               <p className="mt-1 text-sm text-gray-500">
-                Batched demand predictions are merged into inventory rows and sorted by days until stockout.
+                {t("inventory.predictions.description")}
               </p>
               <p className="mt-2 text-xs text-gray-500">
                 {predictionsQuery.data?.metadata
-                  ? `Generated ${new Date(
-                      predictionsQuery.data.metadata.generatedAt,
-                    ).toLocaleDateString()} | ${predictionsQuery.data.metadata.basisWindowDays}-day basis | ${
-                      predictionsQuery.data.metadata.warehouseScope.mode === "warehouse"
-                        ? "warehouse-specific stock"
-                        : "all inventory"
-                    }`
-                  : "Prediction metadata will appear here after the batch request completes."}
+                  ? t("inventory.predictions.metadata", {
+                      date: new Date(
+                        predictionsQuery.data.metadata.generatedAt,
+                      ).toLocaleDateString(locale),
+                      basisDays: predictionsQuery.data.metadata.basisWindowDays,
+                      scope:
+                        predictionsQuery.data.metadata.warehouseScope.mode ===
+                        "warehouse"
+                          ? t("inventory.predictions.warehouseSpecific")
+                          : t("inventory.predictions.allInventory"),
+                    })
+                  : t("inventory.predictions.metadataPending")}
               </p>
             </div>
             <div className="grid gap-3 sm:grid-cols-[minmax(220px,1fr)_auto]">
               <div className="grid gap-2">
                 <Label htmlFor="inventory-warehouse-scope" className="text-xs text-gray-500">
-                  Warehouse scope
+                  {t("inventory.predictions.warehouseScope")}
                 </Label>
                 <select
                   id="inventory-warehouse-scope"
@@ -218,7 +222,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   value={selectedWarehouseId}
                   onChange={(event) => setSelectedWarehouseId(event.target.value)}
                 >
-                  <option value="">All warehouses</option>
+                  <option value="">{t("inventory.predictions.allWarehouses")}</option>
                   {(warehouses ?? []).map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name}
@@ -228,10 +232,10 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
               </div>
               <div className="flex flex-wrap items-end gap-2">
                 {([
-                  ["all", "All"],
-                  ["critical", "Critical"],
-                  ["warning", "Warning"],
-                  ["normal", "Normal"],
+                  ["all", t("inventory.predictions.filters.all")],
+                  ["critical", t("inventory.predictions.filters.critical")],
+                  ["warning", t("inventory.predictions.filters.warning")],
+                  ["normal", t("inventory.predictions.filters.normal")],
                 ] as const).map(([value, label]) => (
                   <button
                     key={value}
@@ -436,7 +440,9 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
               <p className="text-sm text-gray-500">{t("inventory.loading")}</p>
             )}
             {predictionsQuery.isLoading && !isLoading && (
-              <p className="text-sm text-gray-500">Loading demand predictions...</p>
+              <p className="text-sm text-gray-500">
+                {t("inventory.predictions.loading")}
+              </p>
             )}
             {isError && (
               <p className="text-sm text-destructive">
@@ -445,7 +451,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
             )}
             {predictionsQuery.isError && (
               <p className="text-sm text-destructive">
-                Unable to load demand predictions.
+                {t("inventory.predictions.loadError")}
               </p>
             )}
             {!isLoading && !isError && grouped.length === 0 && (
@@ -460,12 +466,12 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   >
                     <h2 className="text-lg font-semibold">{group.name}</h2>
                     <div className="mt-4 hidden grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,0.9fr))_auto] gap-3 px-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 lg:grid">
-                      <span>Product</span>
-                      <span>Stock left</span>
-                      <span>Daily sales</span>
-                      <span>Days to stockout</span>
-                      <span>Reorder qty</span>
-                      <span>Action</span>
+                      <span>{t("inventory.predictions.columns.product")}</span>
+                      <span>{t("inventory.predictions.columns.stockLeft")}</span>
+                      <span>{t("inventory.predictions.columns.dailySales")}</span>
+                      <span>{t("inventory.predictions.columns.daysToStockout")}</span>
+                      <span>{t("inventory.predictions.columns.reorderQty")}</span>
+                      <span>{t("inventory.predictions.columns.action")}</span>
                     </div>
                     <div className="mt-4 grid gap-3">
                       {group.items?.map((item) => (
@@ -493,19 +499,19 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                           <div className="text-sm text-gray-500">
                             {item.prediction
                               ? item.prediction.predicted_daily_sales.toFixed(1)
-                              : "n/a"}
+                              : t("inventory.predictions.notAvailable")}
                           </div>
                           <div className="text-sm text-gray-500">
                             {item.prediction
                               ? item.prediction.days_until_stockout >= 999
-                                ? "Not projected"
+                                ? t("inventory.predictions.notProjected")
                                 : item.prediction.days_until_stockout
-                              : "n/a"}
+                              : t("inventory.predictions.notAvailable")}
                           </div>
                           <div className="text-sm text-gray-500">
                             {item.prediction
                               ? item.prediction.recommended_reorder_quantity
-                              : "n/a"}
+                              : t("inventory.predictions.notAvailable")}
                           </div>
                           <div className="flex flex-wrap gap-2">
                             <Button
@@ -513,14 +519,14 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                               variant="outline"
                               onClick={() => setSelectedInventoryId(item.id)}
                             >
-                              View insight
+                              {t("inventory.predictions.viewInsight")}
                             </Button>
                             {item.prediction ? (
                               <Button asChild type="button" variant="outline">
                                 <Link
                                   href={`/purchases?productId=${item.product.id}&warehouseId=${item.warehouse.id}&quantity=${item.prediction.recommended_reorder_quantity}&unitCost=${item.prediction.unit_cost}&productLabel=${encodeURIComponent(`${item.product.name} - ${item.product.sku}`)}`}
                                 >
-                                  Create Purchase from Suggestion
+                                  {t("inventory.predictions.createPurchaseSuggestion")}
                                 </Link>
                               </Button>
                             ) : null}

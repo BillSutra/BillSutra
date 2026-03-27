@@ -4,7 +4,7 @@ import InvoicesClient from "./InvoicesClient";
 
 const InvoicesPage = async () => {
   const session: CustomSession | null = await getServerSession(authOptions);
-  const name = session?.user?.name || "Guest";
+  const name = session?.user?.name?.trim() ?? "";
 
   return (
     <InvoicesClient name={name} image={session?.user?.image || undefined} />

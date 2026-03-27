@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ValidationField } from "@/components/ui/ValidationField";
 import {
+  translateValidationMessage,
   validateName,
   validateEmail,
   validatePhone,
@@ -47,24 +48,9 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
 
   const suppliers = useMemo(() => data ?? [], [data]);
 
-  const translateValidationMessage = (message: string) => {
-    switch (message) {
-      case "This field is required":
-        return t("validation.required");
-      case "Please enter a valid name (letters only)":
-        return t("validation.validName");
-      case "Enter a valid email address":
-        return t("validation.validEmail");
-      case "Enter a valid phone number":
-        return t("validation.validPhone");
-      default:
-        return message;
-    }
-  };
-
   const withTranslatedValidation =
     (validator: (value: string) => string) => (value: string) =>
-      translateValidationMessage(validator(value));
+      translateValidationMessage(t, validator(value));
 
   const isMutating =
     createSupplier.isPending ||
@@ -164,7 +150,7 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                 }
                 validate={(value) =>
                   value
-                    ? translateValidationMessage(validateEmail(value))
+                    ? translateValidationMessage(t, validateEmail(value))
                     : ""
                 }
                 placeholder={t("suppliersPage.placeholders.email")}
@@ -179,7 +165,7 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                 }
                 validate={(value) =>
                   value
-                    ? translateValidationMessage(validatePhone(value))
+                    ? translateValidationMessage(t, validatePhone(value))
                     : ""
                 }
                 placeholder={t("suppliersPage.placeholders.phone")}
@@ -275,6 +261,7 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                             validate={(value) =>
                               value
                                 ? translateValidationMessage(
+                                    t,
                                     validateEmail(value),
                                   )
                                 : ""
@@ -294,6 +281,7 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                             validate={(value) =>
                               value
                                 ? translateValidationMessage(
+                                    t,
                                     validatePhone(value),
                                   )
                                 : ""

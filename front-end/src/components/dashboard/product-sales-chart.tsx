@@ -20,18 +20,23 @@ import { Button } from "@/components/ui/button";
 import { formatCurrency, formatNumber, sumBy } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
+import { useI18n } from "@/providers/LanguageProvider";
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+const CustomTooltip = ({ active, payload, label, t }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload as DashboardProductSales["products"][number];
     return (
       <div className="rounded-lg border border-[#ecdccf] bg-white p-3 shadow-sm">
         <p className="mb-1 font-semibold text-[#1f1b16]">{label}</p>
         <p className="text-sm text-[#0f766e]">
-          Units Sold: <span className="font-medium">{formatNumber(data.quantity)}</span>
+          {t("dashboard.productSales.tooltipUnitsSold", {
+            count: formatNumber(data.quantity),
+          })}{" "}
         </p>
         <p className="text-sm text-[#8a6d56]">
-          Revenue: <span className="font-medium">{formatCurrency(data.revenue)}</span>
+          {t("dashboard.productSales.tooltipRevenue", {
+            amount: formatCurrency(data.revenue),
+          })}
         </p>
       </div>
     );
@@ -40,6 +45,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 const ProductSalesChart = ({ className }: { className?: string }) => {
+  const { t } = useI18n();
   const [period, setPeriod] = useState<"lifetime" | "month" | "week" | "year">(
     "lifetime",
   );
@@ -66,13 +72,13 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
-              Product momentum
+              {t("dashboard.productSales.kicker")}
             </p>
             <CardTitle className="mt-2 text-2xl text-[#1f1b16]">
-              Product sales performance
+              {t("dashboard.productSales.title")}
             </CardTitle>
             <p className="mt-2 text-sm text-[#8a6d56]">
-              Best-selling products ranked by units sold for the selected window.
+              {t("dashboard.productSales.description")}
             </p>
           </div>
           <div className="flex flex-col items-start gap-2 sm:items-end">
@@ -87,10 +93,10 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
             <div className="flex rounded-lg border border-[#ecdccf] bg-[#fdf7f1] p-1">
               {(
                 [
-                  { id: "week", label: "This Week" },
-                  { id: "month", label: "This Month" },
-                  { id: "year", label: "This Year" },
-                  { id: "lifetime", label: "Lifetime" },
+                  { id: "week", label: t("dashboard.productSales.periodWeek") },
+                  { id: "month", label: t("dashboard.productSales.periodMonth") },
+                  { id: "year", label: t("dashboard.productSales.periodYear") },
+                  { id: "lifetime", label: t("dashboard.productSales.periodLifetime") },
                 ] as const
               ).map((option) => (
                 <Button
@@ -116,7 +122,7 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="dashboard-chart-metric rounded-2xl p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                Units sold
+                {t("dashboard.productSales.unitsSold")}
               </p>
               <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
                 {formatNumber(totals.totalUnits)}
@@ -124,7 +130,7 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
             </div>
             <div className="dashboard-chart-metric rounded-2xl p-4">
               <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
-                Revenue captured
+                {t("dashboard.productSales.revenueCaptured")}
               </p>
               <p className="mt-2 text-lg font-semibold text-[#1f1b16]">
                 {formatCurrency(totals.totalRevenue)}
@@ -137,7 +143,9 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
         )}
         {isError && (
           <div className="flex h-64 items-center justify-center rounded-xl bg-[#fdf7f1]">
-            <p className="text-sm text-[#b45309]">Unable to load sales data.</p>
+            <p className="text-sm text-[#b45309]">
+              {t("dashboard.productSales.loadError")}
+            </p>
           </div>
         )}
         {!isLoading && !isError && data && (
@@ -145,7 +153,7 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
             {data.products.length === 0 ? (
               <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-[#ecdccf] bg-[#fdf7f1]">
                 <p className="text-sm text-[#8a6d56]">
-                  No products sold during this period.
+                  {t("dashboard.productSales.empty")}
                 </p>
               </div>
             ) : (
@@ -175,7 +183,10 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
                       tickLine={false}
                       axisLine={false}
                     />
-                    <Tooltip content={<CustomTooltip />} cursor={{ fill: "#fdf7f1" }} />
+                    <Tooltip
+                      content={<CustomTooltip t={t} />}
+                      cursor={{ fill: "#fdf7f1" }}
+                    />
                     <Bar
                       dataKey="quantity"
                       fill="#0f766e"
@@ -187,7 +198,9 @@ const ProductSalesChart = ({ className }: { className?: string }) => {
               </div>
             )}
             <p className="mt-4 text-center text-xs text-[#8a6d56]">
-              Showing top {Math.min(15, data.products.length)} products by units sold
+              {t("dashboard.productSales.topProducts", {
+                count: Math.min(15, data.products.length),
+              })}
             </p>
           </>
         )}

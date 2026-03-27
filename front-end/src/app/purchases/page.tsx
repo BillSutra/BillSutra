@@ -4,7 +4,7 @@ import PurchasesClient from "./PurchasesClient";
 
 const PurchasesPage = async () => {
   const session: CustomSession | null = await getServerSession(authOptions);
-  const name = session?.user?.name || "Guest";
+  const name = session?.user?.name?.trim() ?? "";
 
   return (
     <PurchasesClient name={name} image={session?.user?.image || undefined} />

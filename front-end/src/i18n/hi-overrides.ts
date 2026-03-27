@@ -8,6 +8,8 @@ export const hiOverrides: TranslationMap = {
   common: {
     looksGood: "\u0938\u092c \u0920\u0940\u0915 \u0939\u0948",
     selectOption: "\u0915\u0943\u092a\u092f\u093e \u090f\u0915 \u0935\u093f\u0915\u0932\u094d\u092a \u091a\u0941\u0928\u0947\u0902",
+    retry: "\u092b\u093f\u0930 \u0938\u0947 \u0915\u094b\u0936\u093f\u0936 \u0915\u0930\u0947\u0902",
+    close: "बंद करें",
   },
   insights: {
     title: "\u0907\u0928\u0938\u093e\u0907\u091f\u094d\u0938 \u0914\u0930 \u092b\u094b\u0930\u0915\u093e\u0938\u094d\u091f\u093f\u0902\u0917",
@@ -37,6 +39,12 @@ export const hiOverrides: TranslationMap = {
         title: "\u0938\u093e\u092b \u0914\u0930 \u0915\u093e\u092e \u0915\u0940 \u0938\u0932\u093e\u0939",
         description:
           "\u0930\u093f\u0938\u0940\u092a\u094d\u091f, \u0916\u0930\u094d\u091a \u0914\u0930 \u0905\u0917\u0932\u0947 \u0930\u0941\u091d\u093e\u0928 \u0915\u0947 \u092c\u0947\u0938 \u092a\u0930 \u0938\u0930\u0932 \u092d\u093e\u0937\u093e \u092e\u0947\u0902 \u0938\u0932\u093e\u0939\u0964",
+      },
+      demandSupply: {
+        kicker: "\u092e\u093e\u0902\u0917 \u091c\u093e\u0928\u0915\u093e\u0930\u0940",
+        title: "\u092a\u0942\u0930\u094d\u0935\u093e\u0928\u0941\u092e\u093e\u0928-\u0906\u0927\u093e\u0930\u093f\u0924 \u0907\u0928\u094d\u0935\u0947\u0902\u091f\u0930\u0940 \u0926\u092c\u093e\u0935",
+        description:
+          "\u092c\u093f\u0915\u094d\u0930\u0940 \u0915\u0940 \u0930\u092b\u094d\u0924\u093e\u0930 \u0914\u0930 \u0938\u094d\u091f\u0949\u0915\u0906\u0909\u091f \u0930\u093f\u0938\u094d\u0915 \u0915\u094b \u090f\u0915 \u0938\u093e\u0925 \u0926\u0947\u0916\u0947\u0902 \u0924\u093e\u0915\u093f \u0916\u0930\u0940\u0926 \u091f\u0940\u092e \u0926\u0947\u0930 \u0938\u0947 \u092a\u0939\u0932\u0947 \u0915\u093e\u0930\u094d\u0930\u0935\u093e\u0908 \u0915\u0930 \u0938\u0915\u0947\u0964",
       },
     },
     cards: {
@@ -92,97 +100,228 @@ export const hiOverrides: TranslationMap = {
   },
   landing: {
     nav: {
-      features: "\u0938\u0941\u0935\u093f\u0927\u093e\u090f\u0901",
-      pricing: "\u092e\u0942\u0932\u094d\u092f",
-      docs: "\u0921\u0949\u0915\u094d\u0938",
-      login: "\u0932\u0949\u0917\u093f\u0928",
-      getStarted: "\u0936\u0941\u0930\u0942 \u0915\u0930\u0947\u0902",
+      features: "सुविधाएं",
+      pricing: "मूल्य",
+      docs: "डॉक्स",
+      login: "लॉगिन",
+      getStarted: "मुफ्त शुरू करें",
     },
     hero: {
-      kicker: "\u092c\u093f\u091c\u0928\u0947\u0938 \u092e\u0948\u0928\u0947\u091c\u092e\u0947\u0902\u091f \u092a\u094d\u0932\u0947\u091f\u092b\u0949\u0930\u094d\u092e",
-      title:
-        "BillSutra \u0915\u0947 \u0938\u093e\u0925 \u0905\u092a\u0928\u093e \u092c\u093f\u091c\u0928\u0947\u0938 \u0914\u0930 \u0938\u094d\u092e\u093e\u0930\u094d\u091f \u0924\u0930\u0940\u0915\u0947 \u0938\u0947 \u091a\u0932\u093e\u090f\u0902",
+      kicker: "स्मार्ट बिलिंग सिस्टम",
+      title: "आधुनिक टीमों के लिए स्मार्ट बिलिंग और बिज़नेस मैनेजमेंट",
       description:
-        "\u0907\u0928\u0935\u0949\u0907\u0938 \u092c\u0928\u093e\u090f\u0902, \u0907\u0928\u094d\u0935\u0947\u0902\u091f\u0930\u0940 \u091f\u094d\u0930\u0948\u0915 \u0915\u0930\u0947\u0902, \u0917\u094d\u0930\u093e\u0939\u0915 \u0914\u0930 \u092d\u0941\u0917\u0924\u093e\u0928 \u092e\u0948\u0928\u0947\u091c \u0915\u0930\u0947\u0902, \u0938\u092c \u0915\u0941\u091b \u090f\u0915 \u0939\u0940 \u092a\u094d\u0932\u0947\u091f\u092b\u0949\u0930\u094d\u092e \u092e\u0947\u0902\u0964",
-      primaryCta: "\u092e\u0941\u092b\u094d\u0924 \u0936\u0941\u0930\u0942 \u0915\u0930\u0947\u0902",
-      secondaryCta: "\u0921\u0947\u092e\u094b \u0926\u0947\u0916\u0947\u0902",
-      previewLabel: "\u0921\u0948\u0936\u092c\u094b\u0930\u094d\u0921 \u092a\u094d\u0930\u0940\u0935\u094d\u092f\u0942",
-      live: "\u0932\u093e\u0907\u0935",
+        "इनवॉइस बनाएं, इन्वेंटरी संभालें, बिक्री ट्रैक करें और अपना बिज़नेस बढ़ाएं - सब कुछ एक ही जगह पर।",
+      primaryCta: "मुफ्त शुरू करें",
+      secondaryCta: "डेमो देखें",
+      previewLabel: "प्लेटफॉर्म प्रीव्यू",
+      previewTitle: "ऑपरेशंस कॉकपिट",
+      previewSubtitle: "बिलिंग, इन्वेंटरी और ग्रोथ एक ही जगह",
+      previewAction: "वर्कस्पेस खोलें",
+      live: "रीयलटाइम",
+      trustIndicator: "10,000+ बिज़नेस द्वारा उपयोग किया गया",
+      secondaryIndicator: "तेजी से काम करने वाली भारतीय टीमों के लिए बनाया गया",
+      pillBilling: "इनवॉइस, भुगतान और फॉलो-अप",
+      pillInventory: "इन्वेंटरी, SKU और वेयरहाउस",
+      pillInsights: "इनसाइट्स, ट्रेंड और फोरकास्ट",
+      floatingCardLabel: "कलेक्शन",
+      floatingCardValue:
+        "इनवॉइस ड्राफ्ट से भुगतान तक पहुंचते हैं, बिना स्प्रेडशीट के पीछे भागे",
+      floatingInsightLabel: "ग्रोथ व्यू",
+      floatingInsightValue:
+        "राजस्व, स्टॉक दबाव और टीम गतिविधि को साथ में ट्रैक करें",
+      statRevenueLabel: "मासिक कलेक्शन",
+      statRevenueValue: "रु 8.4 लाख",
+      statRevenueHint: "भुगतान हुए इनवॉइस और बिक्री के आधार पर",
+      statInventoryLabel: "इन्वेंटरी स्थिति",
+      statInventoryValue: "94%",
+      statInventoryHint: "इस महीने स्वस्थ स्टॉक कवरेज",
+      statGrowthLabel: "ग्रोथ ट्रेंड",
+      statGrowthValue: "+18%",
+      statGrowthHint: "पिछले महीने की तुलना में",
+      chartTitle: "राजस्व गति",
+      chartRange: "पिछले 7 महीने",
+      chartLabels: {
+        "1": "जन",
+        "2": "फर",
+        "3": "मार्च",
+        "4": "अप्रै",
+        "5": "मई",
+        "6": "जून",
+        "7": "जुल",
+      },
+      sideCardOneLabel: "लंबित फॉलो-अप",
+      sideCardOneValue: "24 इनवॉइस कार्रवाई की प्रतीक्षा में",
+      sideCardOneDescription:
+        "कैश फ्लो पर असर पड़ने से पहले रिसीवेबल्स को साफ रखें और फॉलो-अप सौंपें।",
+      sideCardTwoLabel: "इन्वेंटरी वॉच",
+      sideCardTwoValue: "6 SKU को रीप्लेनिशमेंट चाहिए",
+      sideCardTwoDescription:
+        "फोरकास्ट-आधारित अलर्ट आपकी अगली खरीद का निर्णय साफ रखते हैं।",
     },
     features: {
-      trustedBy: "\u092c\u0922\u093c\u0924\u0947 \u0939\u0941\u090f \u092c\u093f\u091c\u0928\u0947\u0938 \u0915\u093e \u092d\u0930\u094b\u0938\u093e",
-      title: "\u0906\u092a\u0915\u094b \u091c\u094b \u0915\u0941\u091b \u091a\u093e\u0939\u093f\u090f, \u0938\u092c \u092f\u0939\u093e\u0901 \u0939\u0948",
+      kicker: "मुख्य क्षमताएं",
+      trustedBy: "अलग-अलग टूल और मैनुअल लेजर को बदलने के लिए बनाया गया",
+      title: "आपकी टीम को बिलिंग, ऑपरेशन और ग्रोथ के लिए जो चाहिए, सब यहां है",
       description:
-        "\u0907\u0928\u0935\u0949\u0907\u0938, \u0907\u0928\u094d\u0935\u0947\u0902\u091f\u0930\u0940 \u0914\u0930 \u0915\u0948\u0936 \u092b\u094d\u0932\u094b \u0938\u0902\u092d\u093e\u0932\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f \u090f\u0915 \u0939\u0940 \u0935\u0930\u094d\u0915\u0938\u094d\u092a\u0947\u0938, \u092c\u093f\u0928\u093e \u0938\u094d\u092a\u094d\u0930\u0947\u0921\u0936\u0940\u091f \u0915\u0947 \u091d\u0902\u091d\u091f \u0915\u0947\u0964",
+        "BillSutra इनवॉइसिंग, ऑपरेशन और रिपोर्टिंग को एक साफ वर्कफ्लो में लाता है ताकि आपकी टीम कम टैब बदले और ज्यादा काम आगे बढ़ाए।",
+      cardEyebrow: "ऑपरेशनल वर्कफ्लो",
       items: {
-        invoiceManagementTitle: "\u0907\u0928\u0935\u0949\u0907\u0938 \u092e\u0948\u0928\u0947\u091c\u092e\u0947\u0902\u091f",
+        invoiceManagementTitle: "इनवॉइस मैनेजमेंट",
         invoiceManagementDescription:
-          "\u0924\u0941\u0930\u0902\u0924 \u0907\u0928\u0935\u0949\u0907\u0938 \u092c\u0928\u093e\u090f\u0902 \u0914\u0930 \u092a\u094d\u0930\u093f\u0902\u091f \u0915\u0930\u0947\u0902",
-        inventoryTrackingTitle: "\u0907\u0928\u094d\u0935\u0947\u0902\u091f\u0930\u0940 \u091f\u094d\u0930\u0948\u0915\u093f\u0902\u0917",
+          "पॉलिश्ड इनवॉइस बनाएं, भुगतान स्थिति ट्रैक करें और कलेक्शन को गति दें।",
+        inventoryTrackingTitle: "इन्वेंटरी ट्रैकिंग",
         inventoryTrackingDescription:
-          "\u092a\u094d\u0930\u094b\u0921\u0915\u094d\u091f \u0938\u094d\u091f\u0949\u0915 \u091f\u094d\u0930\u0948\u0915 \u0915\u0930\u0947\u0902 \u0914\u0930 \u0932\u094b \u0938\u094d\u091f\u0949\u0915 \u0905\u0932\u0930\u094d\u091f \u092a\u093e\u090f\u0902",
-        customerManagementTitle: "\u0917\u094d\u0930\u093e\u0939\u0915 \u092e\u0948\u0928\u0947\u091c\u092e\u0947\u0902\u091f",
-        customerManagementDescription:
-          "\u0917\u094d\u0930\u093e\u0939\u0915 \u0930\u093f\u0915\u0949\u0930\u094d\u0921 \u0914\u0930 \u0932\u0947\u0928\u0926\u0947\u0928 \u092e\u0948\u0928\u0947\u091c \u0915\u0930\u0947\u0902",
-        supplierManagementTitle: "\u0938\u092a\u094d\u0932\u093e\u092f\u0930 \u092e\u0948\u0928\u0947\u091c\u092e\u0947\u0902\u091f",
-        supplierManagementDescription:
-          "\u0916\u0930\u0940\u0926 \u0914\u0930 \u0938\u092a\u094d\u0932\u093e\u092f\u0930 \u092d\u0941\u0917\u0924\u093e\u0928 \u091f\u094d\u0930\u0948\u0915 \u0915\u0930\u0947\u0902",
-        businessAnalyticsTitle: "\u092c\u093f\u091c\u0928\u0947\u0938 \u090f\u0928\u093e\u0932\u093f\u091f\u093f\u0915\u094d\u0938",
-        businessAnalyticsDescription:
-          "\u092c\u093f\u0915\u094d\u0930\u0940, \u0932\u093e\u092d \u0914\u0930 \u092a\u0930\u092b\u0949\u0930\u094d\u092e\u0947\u0902\u0938 \u0915\u094b \u0938\u092e\u091d\u0947\u0902",
-        paymentTrackingTitle: "\u092d\u0941\u0917\u0924\u093e\u0928 \u091f\u094d\u0930\u0948\u0915\u093f\u0902\u0917",
-        paymentTrackingDescription:
-          "\u0932\u0902\u092c\u093f\u0924 \u092d\u0941\u0917\u0924\u093e\u0928 \u0914\u0930 \u0915\u0948\u0936 \u092b\u094d\u0932\u094b \u092a\u0930 \u0928\u091c\u0930 \u0930\u0916\u0947\u0902",
+          "स्टॉक, वेयरहाउस और रीऑर्डर जोखिम को पहले से देखिए।",
+        clientSupplierTitle: "क्लाइंट और सप्लायर मैनेजमेंट",
+        clientSupplierDescription:
+          "हर बिज़नेस रिलेशन, बकाया राशि और खरीद इतिहास को व्यवस्थित रखें।",
+        insightsTitle: "रीयलटाइम इनसाइट्स और रिपोर्ट्स",
+        insightsDescription:
+          "राजस्व, कैश मूवमेंट, प्रोडक्ट डिमांड और प्रदर्शन को एक नजर में देखें।",
+        gstSupportTitle: "GST और टैक्स सपोर्ट",
+        gstSupportDescription:
+          "भारतीय बिलिंग वर्कफ्लो के लिए टैक्स-फ्रेंडली इनवॉइस स्ट्रक्चर और नियंत्रण के साथ तैयार रहें।",
+        smartAssistantTitle: "स्मार्ट असिस्टेंट",
+        smartAssistantDescription:
+          "साधारण भाषा में सवाल पूछें और लाइव बिज़नेस डेटा से तुरंत जवाब पाएं।",
       },
     },
-    pricing: {
-      kicker: "\u092e\u0942\u0932\u094d\u092f",
-      title: "\u092c\u0922\u093c\u0924\u0940 \u091f\u0940\u092e\u094d\u0938 \u0915\u0947 \u0932\u093f\u090f \u0938\u0930\u0932 \u092a\u094d\u0932\u093e\u0928",
+    preview: {
+      kicker: "ऑल-इन-वन प्लेटफॉर्म",
+      title: "पूरे बिज़नेस को एक साफ वर्कस्पेस में देखें",
       description:
-        "\u0905\u092a\u0928\u0947 \u092c\u093f\u091c\u0928\u0947\u0938 \u0915\u0947 \u0939\u093f\u0938\u093e\u092c \u0938\u0947 \u0920\u0940\u0915 \u092a\u094d\u0932\u093e\u0928 \u0915\u0947 \u0932\u093f\u090f \u0939\u092e\u0938\u0947 \u092c\u093e\u0924 \u0915\u0930\u0947\u0902\u0964",
-      tiers: {
-        starterName: "\u0938\u094d\u091f\u093e\u0930\u094d\u091f\u0930",
-        starterPrice: "\u092e\u0941\u092b\u094d\u0924",
-        starterDescription: "\u0936\u0941\u0930\u0941\u0906\u0924\u0940 \u092c\u093f\u091c\u0928\u0947\u0938 \u0915\u0947 \u0932\u093f\u090f",
-        growthName: "\u0917\u094d\u0930\u094b\u0925",
-        growthPrice: "\u20b91,499/\u092e\u0939\u0940\u0928\u093e",
-        growthDescription: "\u0938\u094d\u0915\u0947\u0932 \u0915\u0930\u0924\u0940 \u091f\u0940\u092e\u094d\u0938 \u0915\u0947 \u0932\u093f\u090f",
-        proName: "\u092a\u094d\u0930\u094b",
-        proPrice: "\u0915\u0938\u094d\u091f\u092e",
-        proDescription:
-          "\u092e\u0932\u094d\u091f\u0940-\u0932\u094b\u0915\u0947\u0936\u0928 \u0911\u092a\u0930\u0947\u0936\u0928\u094d\u0938 \u0915\u0947 \u0932\u093f\u090f",
+        "रिसीवेबल्स और इनवॉइस से लेकर स्टॉक मूवमेंट और टीम एक्शन तक, BillSutra आपको आत्मविश्वास से बिज़नेस चलाने की एक जगह देता है।",
+      pointOne:
+        "बिलिंग, इन्वेंटरी और खरीद को अलग-अलग टूल में बांटने के बजाय एक साथ रखें।",
+      pointTwo:
+        "कैश दबाव, स्टॉक संकेत और ग्राहक फॉलो-अप को मैनुअल रिपोर्ट के बिना देखें।",
+      pointThree:
+        "टीम को ऐसा साफ वर्कस्पेस दें जो रोज़ की बिलिंग से ग्रोथ प्लानिंग तक साथ दे।",
+      surfaceLabel: "डैशबोर्ड स्नैपशॉट",
+      surfaceStatus: "लाइव प्रीव्यू",
+      metricOneLabel: "भेजे गए इनवॉइस",
+      metricOneValue: "1,248",
+      metricTwoLabel: "स्टॉक अलर्ट",
+      metricTwoValue: "12 सक्रिय",
+      metricThreeLabel: "टीम थ्रूपुट",
+      metricThreeValue: "98 कार्य",
+      chartTitle: "बिज़नेस ओवरव्यू",
+      chartRange: "साप्ताहिक ट्रेंड",
+      cardOneLabel: "एकाउंट्स रिसीवेबल",
+      cardOneValue: "लंबित कलेक्शन पर आगे रहें",
+      cardOneDescription:
+        "फॉलो-अप को महीने के अंत की भागदौड़ के बजाय रोज़ की आदत बनाइए।",
+      cardTwoLabel: "ऑपरेशनल स्पष्टता",
+      cardTwoValue: "देखें अगला ध्यान कहां चाहिए",
+      cardTwoDescription:
+        "इन्वेंटरी जोखिम, भुगतान अंतर और वर्कफ्लो हेल्थ को एक ही व्यू में ट्रैक करें।",
+    },
+    howItWorks: {
+      kicker: "यह कैसे काम करता है",
+      title: "अपनी टीम को तीन आसान चरणों में चालू करें",
+      stepReady: "लॉन्च के लिए तैयार",
+      steps: {
+        one: {
+          step: "चरण 1",
+          title: "अपना बिज़नेस सेट करें",
+          description:
+            "ब्रांड, बिलिंग डिफॉल्ट, ग्राहक और प्रोडक्ट कैटलॉग को एक गाइडेड फ्लो में जोड़ें।",
+        },
+        two: {
+          step: "चरण 2",
+          title: "इनवॉइस बनाएं और इन्वेंटरी संभालें",
+          description:
+            "रोज़ की बिलिंग, खरीद, स्टॉक समायोजन और पेमेंट फॉलो-अप एक ही वर्कस्पेस से चलाएं।",
+        },
+        three: {
+          step: "चरण 3",
+          title: "इनसाइट्स से ग्रोथ ट्रैक करें",
+          description:
+            "डैशबोर्ड, ट्रेंड और फोरकास्ट का उपयोग करके बिज़नेस बढ़ने पर बेहतर फैसले लें।",
+        },
+      },
+    },
+    usp: {
+      kicker: "क्यों BillSutra",
+      title: "ऑपरेटरों के लिए सरल, निर्णय लेने वालों के लिए शक्तिशाली",
+      description:
+        "BillSutra उन टीमों के लिए बनाया गया है जो आधुनिक सॉफ्टवेयर चाहते हैं लेकिन रोज़ के भारतीय बिज़नेस वर्कफ्लो भी बनाए रखना चाहते हैं।",
+      items: {
+        platformTitle: "ऑल-इन-वन प्लेटफॉर्म",
+        platformDescription:
+          "बिलिंग, इन्वेंटरी, खरीद, कॉन्टैक्ट और ऑपरेशन एक ही सिस्टम में रहते हैं।",
+        gstTitle: "भारतीय बिज़नेस के लिए तैयार",
+        gstDescription:
+          "GST-रेडी इनवॉइसिंग और स्थानीय प्राइसिंग फ्लो रोज़ के काम को भरोसेमंद बनाते हैं।",
+        simpleTitle: "सरल लेकिन शक्तिशाली UI",
+        simpleDescription:
+          "साफ इंटरफेस टीम को तेजी देता है, बिना एडवांस कंट्रोल छोड़े।",
+        insightsTitle: "रीयलटाइम इनसाइट्स और फोरकास्टिंग",
+        insightsDescription:
+          "डिमांड संकेत, कैश विजिबिलिटी और रिपोर्टिंग से बाधाओं से पहले तैयारी करें।",
+        languageTitle: "मल्टी-लैंग्वेज सपोर्ट",
+        languageDescription:
+          "English और Hindi के बीच स्विच करें ताकि हर यूजर आराम से काम कर सके।",
+      },
+    },
+    testimonials: {
+      kicker: "ग्राहक प्रमाण",
+      title: "टीमें BillSutra से मैनुअल बिलिंग अव्यवस्था को शांत ऑपरेशन में बदल रही हैं",
+      description:
+        "रिटेलर, डिस्ट्रीब्यूटर और सर्विस बिज़नेस BillSutra पर भरोसा करते हैं ताकि बिलिंग और ऑपरेशन एक ही सिस्टम में रहें।",
+      items: {
+        one: {
+          quote:
+            "BillSutra ने हमें बिखरी हुई स्प्रेडशीट से एक डैशबोर्ड पर ला दिया जहां इनवॉइसिंग, स्टॉक चेक और ग्राहक बैलेंस अब एक साथ रहते हैं।",
+          name: "प्रिया शर्मा",
+          role: "रिटेल स्टोर मालिक",
+        },
+        two: {
+          quote:
+            "अब हमारी वेयरहाउस और सेल्स टीम एक ही सिस्टम पर काम करती है, इसलिए हम स्टॉक दबाव जल्दी पकड़ते हैं और तेजी से बिल बनाते हैं।",
+          name: "आरव मेहता",
+          role: "होलसेल डिस्ट्रीब्यूटर",
+        },
+        three: {
+          quote:
+            "इंटरफेस इतना सरल है कि पूरी टीम इसे आसानी से अपना लेती है, लेकिन इतना मजबूत भी है कि मुझे हर हफ्ते जरूरी रिपोर्ट मिल जाती है।",
+          name: "नेहा वर्मा",
+          role: "सर्विस बिज़नेस ऑपरेटर",
+        },
       },
     },
     cta: {
-      kicker: "\u0936\u0941\u0930\u0942 \u0915\u0930\u0928\u0947 \u0915\u0947 \u0932\u093f\u090f \u0924\u0948\u092f\u093e\u0930",
-      title:
-        "\u0906\u091c \u0938\u0947 \u0905\u092a\u0928\u093e \u092c\u093f\u091c\u0928\u0947\u0938 \u092e\u0948\u0928\u0947\u091c \u0915\u0930\u0928\u093e \u0936\u0941\u0930\u0942 \u0915\u0930\u0947\u0902",
+      kicker: "अंतिम कॉल टू एक्शन",
+      title: "आज ही अपने बिज़नेस को ज्यादा स्मार्ट तरीके से संभालना शुरू करें।",
       description:
-        "\u0939\u091c\u093e\u0930\u094b\u0902 \u091b\u094b\u091f\u0947 \u092c\u093f\u091c\u0928\u0947\u0938 BillSutra \u0915\u093e \u0909\u092a\u092f\u094b\u0917 \u0915\u0930\u0915\u0947 \u092c\u093f\u0932\u093f\u0902\u0917 \u0914\u0930 \u0907\u0928\u094d\u0935\u0947\u0902\u091f\u0930\u0940 \u0915\u094b \u0938\u0930\u0932 \u092c\u0928\u093e \u0930\u0939\u0947 \u0939\u0948\u0902\u0964",
-      primaryCta: "\u092e\u0941\u092b\u094d\u0924 \u0936\u0941\u0930\u0942 \u0915\u0930\u0947\u0902",
-      secondaryCta: "\u0921\u0947\u092e\u094b \u092c\u0941\u0915 \u0915\u0930\u0947\u0902",
+        "बिलिंग, इन्वेंटरी, बिक्री और इनसाइट्स को एक आधुनिक वर्कस्पेस में लाएं जिस पर आपकी पूरी टीम भरोसा कर सके।",
+      primaryCta: "मुफ्त शुरू करें",
+      secondaryCta: "डेमो देखें",
     },
     footer: {
       description:
-        "\u091b\u094b\u091f\u0940 \u091f\u0940\u092e\u094d\u0938 \u0915\u0947 \u0932\u093f\u090f \u092c\u0928\u093e\u092f\u093e \u0917\u092f\u093e \u092c\u093f\u091c\u0928\u0947\u0938 \u092e\u0948\u0928\u0947\u091c\u092e\u0947\u0902\u091f\u0964",
-      product: "\u092a\u094d\u0930\u094b\u0921\u0915\u094d\u091f",
-      company: "\u0915\u0902\u092a\u0928\u0940",
-      resources: "\u0938\u0902\u0938\u093e\u0927\u0928",
-      legal: "\u0915\u093e\u0928\u0942\u0928\u0940",
+        "BillSutra आधुनिक टीमों को बिलिंग, इन्वेंटरी और बिज़नेस ऑपरेशन एक ही पॉलिश्ड वर्कस्पेस से चलाने में मदद करता है।",
+      product: "प्रोडक्ट",
+      company: "कंपनी",
+      resources: "संसाधन",
+      legal: "कानूनी",
+      contactEmail: "hello@billsutra.com",
+      contactPhone: "+91 98765 43210",
+      contactLocation: "बेंगलुरु, भारत",
       links: {
-        features: "\u0938\u0941\u0935\u093f\u0927\u093e\u090f\u0901",
-        pricing: "\u092e\u0942\u0932\u094d\u092f",
-        updates: "\u0905\u092a\u0921\u0947\u091f\u094d\u0938",
-        about: "\u0939\u092e\u093e\u0930\u0947 \u092c\u093e\u0930\u0947 \u092e\u0947\u0902",
-        contact: "\u0938\u0902\u092a\u0930\u094d\u0915",
-        careers: "\u0915\u0948\u0930\u093f\u092f\u0930",
-        documentation: "\u0921\u0949\u0915\u094d\u092f\u0942\u092e\u0947\u0902\u091f\u0947\u0936\u0928",
-        blog: "\u092c\u094d\u0932\u0949\u0917",
-        helpCenter: "\u0939\u0947\u0932\u094d\u092a \u0938\u0947\u0902\u091f\u0930",
-        privacy: "\u092a\u094d\u0930\u093e\u0907\u0935\u0947\u0938\u0940",
-        terms: "\u0936\u0930\u094d\u0924\u0947\u0902",
+        features: "सुविधाएं",
+        productTour: "प्रोडक्ट टूर",
+        pricing: "मूल्य",
+        about: "यह कैसे काम करता है",
+        contact: "संपर्क",
+        customers: "ग्राहक",
+        documentation: "डॉक्यूमेंटेशन",
+        pricingGuide: "प्राइसिंग गाइड",
+        helpCenter: "हेल्प सेंटर",
+        privacy: "प्राइवेसी",
+        terms: "शर्तें",
       },
-      copyright: "\u00a9 2026 BillSutra. \u0938\u0930\u094d\u0935\u093e\u0927\u093f\u0915\u093e\u0930 \u0938\u0941\u0930\u0915\u094d\u0937\u093f\u0924\u0964",
+      copyright: "© 2026 BillSutra. सर्वाधिकार सुरक्षित।",
     },
   },
   dashboard: {
@@ -368,6 +507,38 @@ export const hiOverrides: TranslationMap = {
       SALE: "\u092c\u093f\u0915\u094d\u0930\u0940",
       RETURN: "\u0935\u093e\u092a\u0938\u0940",
       DAMAGE: "\u0915\u094d\u0937\u0924\u093f",
+    },
+    predictions: {
+      title: "प्रिडिक्शन दृश्य",
+      description:
+        "बैच्ड डिमांड प्रिडिक्शन इन्वेंटरी पंक्तियों में जोड़े जाते हैं और स्टॉकआउट तक बचे दिनों के अनुसार क्रमबद्ध रहते हैं।",
+      metadata: "{date} को तैयार | {basisDays}-दिन का आधार | {scope}",
+      metadataPending:
+        "बैच अनुरोध पूरा होने के बाद प्रिडिक्शन मेटाडेटा यहां दिखाई देगा।",
+      warehouseSpecific: "वेयरहाउस-विशिष्ट स्टॉक",
+      allInventory: "सारी इन्वेंटरी",
+      warehouseScope: "वेयरहाउस दायरा",
+      allWarehouses: "सभी वेयरहाउस",
+      filters: {
+        all: "सभी",
+        critical: "गंभीर",
+        warning: "चेतावनी",
+        normal: "सामान्य",
+      },
+      loading: "डिमांड प्रिडिक्शन लोड हो रहे हैं...",
+      loadError: "डिमांड प्रिडिक्शन लोड नहीं हो सके।",
+      columns: {
+        product: "प्रोडक्ट",
+        stockLeft: "बचा स्टॉक",
+        dailySales: "दैनिक बिक्री",
+        daysToStockout: "स्टॉकआउट तक दिन",
+        reorderQty: "रीऑर्डर मात्रा",
+        action: "कार्य",
+      },
+      notAvailable: "उपलब्ध नहीं",
+      notProjected: "अनुमानित नहीं",
+      viewInsight: "जानकारी देखें",
+      createPurchaseSuggestion: "सुझाव से खरीद बनाएं",
     },
   },
   customersPage: {
@@ -1017,6 +1188,200 @@ export const hiOverrides: TranslationMap = {
       paid_total: "भुगतान राशि",
       balance_due: "बाकी राशि",
       notes: "नोट्स",
+    },
+  },
+  businessProfilePage: {
+    stepAccents: {
+      businessType: "ऑपरेटिंग मॉडल और डिफॉल्ट इनवॉइस सेक्शन तय करें।",
+      businessDetails:
+        "बिज़नेस विवरण और ब्रांडिंग को एक सुव्यवस्थित सेटअप में रखें।",
+      template: "वह इनवॉइस शैली चुनें जो ग्राहक देखेंगे।",
+    },
+    content: {
+      setupBadge: "सेटअप आधार",
+      businessTypeDescription:
+        "अपने बिज़नेस के लिए सही संरचना चुनें। BillSutra उसी के अनुसार ज़रूरी इनवॉइस सेक्शन तैयार करेगा।",
+      businessTypeCardDescription:
+        "डिफॉल्ट इनवॉइस सेक्शन इस बिज़नेस मॉडल के अनुसार सेट रहेंगे।",
+      templateBadge: "ग्राहक-उन्मुख डिज़ाइन",
+      templateDescription:
+        "ऐसा लेआउट चुनें जो आपकी ब्रांड पहचान को साफ, पढ़ने में आसान और इनवॉइस-तैयार तरीके से दिखाए।",
+      detailsBadge: "बिज़नेस विवरण",
+      detailsTitle: "अपने मुख्य बिज़नेस विवरण व्यवस्थित करें",
+      detailsDescription:
+        "ज़रूरी संपर्क, बिलिंग और टैक्स जानकारी को अपनी टीम और ग्राहकों दोनों के लिए साफ और आसान रखें।",
+      enabledSectionsTitle: "सक्रिय सेक्शन",
+      enabledSectionsDescription:
+        "{label} इनवॉइस में इसी कार्यप्रवाह के अनुरूप सेक्शन शामिल रहेंगे।",
+      selectedStyleTitle: "चयनित शैली",
+      selectedStyleDescription:
+        "{name} इस समय आपके सेव किए गए बिज़नेस विवरण और इनवॉइस सेक्शन के साथ जोड़ा गया है।",
+      selectedStyleFallback:
+        "वह इनवॉइस लुक चुनें जो आपके ब्रांड को सबसे अच्छे तरीके से दर्शाए।",
+      brandingTitle: "ब्रांडिंग",
+      brandingDescription:
+        "बिज़नेस लोगो अपलोड करें और तय करें कि ब्रांडेड विवरण इनवॉइस और पेमेंट-रेडी दस्तावेज़ों पर कैसे दिखें।",
+      brandingControlsTitle: "इनवॉइस ब्रांडिंग नियंत्रण",
+    },
+    toggleDescriptions: {
+      showLogoOnInvoice:
+        "अपलोड किया गया लोगो ग्राहक-उन्मुख इनवॉइस पर दिखाई देता रहे।",
+      showTaxNumber:
+        "इनवॉइस सारांश क्षेत्र में GST या टैक्स विवरण दिखाएँ।",
+      showPaymentQr:
+        "QR-आधारित कलेक्शन और तुरंत पेमेंट के लिए स्थान सुरक्षित रखें।",
+    },
+    templateFallback: "टेम्पलेट",
+  },
+  globalError: {
+    kicker: "अनपेक्षित त्रुटि",
+    title: "कुछ गलत हो गया",
+    description:
+      "इस त्रुटि को जांच के लिए रिकॉर्ड कर लिया गया है। फिर से प्रयास करें या पेज रीफ्रेश करें।",
+    action: "फिर से कोशिश करें",
+  },
+  demandSupplyPanel: {
+    kicker: "मांग संकेत",
+    title: "पूर्वानुमान-आधारित इन्वेंटरी दबाव",
+    description:
+      "बिक्री की गति और स्टॉकआउट जोखिम को एक साथ देखें ताकि खरीदार समय रहते कार्रवाई कर सकें।",
+    alertTitle: "संयुक्त सप्लाई अलर्ट",
+    alertDescription:
+      "बिक्री रुझान {trend}% ऊपर है और {count} प्रोडक्ट{suffix} को पहले से रीस्टॉक योजना की ज़रूरत है।",
+    balancedTitle: "पूर्वानुमान और इन्वेंटरी संतुलित हैं",
+    balancedDescription:
+      "अभी कोई भी पूर्वानुमान-आधारित स्टॉक दबाव इतना अधिक नहीं है कि उसे संयुक्त अलर्ट में दिखाया जाए।",
+    forecastTrend: "पूर्वानुमान रुझान",
+    atRiskSkus: "जोखिम वाले SKU",
+    suggestedSpend: "सुझावित खर्च",
+    empty: "अभी कोई मांग-आधारित सप्लाई जोखिम खुला नहीं है।",
+    stockLine: "{stockLeft} बचा | {dailySales} / दिन | भरोसा {confidence}%",
+    runout: "रनआउट",
+    reorderQty: "रीऑर्डर मात्रा",
+    reorderValue: "रीऑर्डर मूल्य",
+    notProjected: "अनुमानित नहीं",
+  },
+  inventoryPredictionDrawer: {
+    kicker: "इन्वेंटरी जानकारी",
+    titleFallback: "इन्वेंटरी प्रिडिक्शन",
+    descriptionFallback: "प्रिडिक्शन विवरण",
+    empty:
+      "डिमांड संकेत और रीस्टॉक मार्गदर्शन देखने के लिए किसी इन्वेंटरी पंक्ति को चुनें।",
+    salesBasis: "30-दिन बिक्री आधार",
+    unitsPerDay: "{value} यूनिट / दिन",
+    confidence: "भरोसा",
+    stockoutEstimate: "स्टॉकआउट अनुमान",
+    stockLeft: "बचा स्टॉक",
+    daysUntilStockout: "स्टॉकआउट तक दिन",
+    reorderSuggestion: "रीऑर्डर सुझाव",
+    units: "{value} यूनिट",
+    notProjected: "अनुमानित नहीं",
+    metadataTitle: "प्रिडिक्शन मेटाडेटा",
+    generatedAt: "तैयार किया गया:",
+    unavailable: "उपलब्ध नहीं",
+    basisWindow: "आधार विंडो:",
+    dataCoverage: "डेटा कवरेज:",
+    warehouseScope: "वेयरहाउस दायरा:",
+    allInventory: "सारी इन्वेंटरी",
+    createPurchaseSuggestion: "सुझाव से खरीद बनाएं",
+    close: "बंद करें",
+  },
+  invoiceLabels: {
+    from: "से",
+    businessDetails: "बिज़नेस विवरण",
+    taxId: "GST / टैक्स आईडी",
+    currency: "मुद्रा",
+  },
+  suggestedPurchases: {
+    kicker: "सुझाई गई खरीद",
+    title: "पूर्वानुमान-आधारित रीस्टॉक",
+    description:
+      "अलग योजना पेज बनाए बिना गंभीर आइटम सीधे खरीद फ़ॉर्म में लोड करें।",
+    loadCritical: "गंभीर रीस्टॉक लोड करें",
+    metadata: "{date} को तैयार | {basisDays}-दिन का आधार | {coverageDays} दिनों की कवरेज",
+    metadataPending:
+      "प्रिडिक्शन बैच्ड inventory-demand endpoint से रीफ्रेश होते हैं।",
+    loadError: "अभी खरीद सुझाव लोड नहीं हो सके।",
+    empty: "अभी कोई गंभीर रीस्टॉक सुझाया नहीं गया है।",
+    suggestedLines: "{warehouse} | {count} सुझावित पंक्ति{suffix} | {amount}",
+    loadGroup: "समूह लोड करें",
+    stockLine: "{stockLeft} बचा | {dailySales} / दिन | भरोसा {confidence}%",
+    daysLeft: "बचे दिन",
+    suggestedQty: "सुझावित मात्रा",
+    runoutDate: "रनआउट तारीख",
+    reorderValue: "रीऑर्डर मूल्य",
+    notProjected: "अनुमानित नहीं",
+  },
+  productsPage: {
+    filters: {
+      searchPlaceholder: "प्रोडक्ट नाम, SKU या बारकोड से खोजें",
+      allCategories: "सभी श्रेणियां",
+      resultsCount: "{total} में से {from}-{to} दिख रहे हैं",
+      updating: "अपडेट हो रहा है",
+      empty: "मौजूदा खोज या श्रेणी के लिए कोई प्रोडक्ट नहीं मिला।",
+    },
+    import: {
+      title: "बल्क प्रोडक्ट इम्पोर्ट",
+      description:
+        "CSV या Excel फ़ाइल अपलोड करें, वैलिडेशन रिपोर्ट देखें और केवल साफ पंक्तियों की पुष्टि करें।",
+      actions: {
+        preparingTemplate: "टेम्पलेट तैयार हो रहा है...",
+        downloadTemplate: "टेम्पलेट डाउनलोड करें",
+        changeFile: "फ़ाइल बदलें",
+        chooseFile: "फ़ाइल चुनें",
+        validating: "जांच हो रही है...",
+        previewImport: "इम्पोर्ट प्रीव्यू",
+        importing: "इम्पोर्ट हो रहा है...",
+        confirmImport: "इम्पोर्ट की पुष्टि करें",
+        downloadErrorReport: "त्रुटि रिपोर्ट डाउनलोड करें",
+        clearPreview: "प्रीव्यू साफ करें",
+      },
+      requirements: {
+        title: "इम्पोर्ट आवश्यकताएँ",
+        acceptedFiles: "स्वीकार्य फ़ाइलें: `.xlsx` और `.csv`",
+        maxFileSize: "अधिकतम फ़ाइल आकार: 5MB",
+        requiredColumns: "आवश्यक कॉलम: name, sku, selling_price",
+        optionalColumns:
+          "वैकल्पिक कॉलम: barcode, cost_price, gst_rate, opening_stock, reorder_level, category",
+        categoryNote:
+          "यदि आप category शामिल करते हैं, तो उसके नाम पहले से मौजूद होने चाहिए।",
+        fileSize: "{size} MB",
+      },
+      progress: {
+        title: "अपलोड प्रगति",
+      },
+      summary: {
+        success: "{count} प्रोडक्ट सफलतापूर्वक इम्पोर्ट हुए।",
+        skipped: "पुष्टि के दौरान {count} पंक्तियां छोड़ दी गईं।",
+      },
+      preview: {
+        summaryTitle: "प्रीव्यू सारांश",
+        totalRows: "कुल पंक्तियां",
+        validRows: "मान्य पंक्तियां",
+        errors: "त्रुटियां",
+        empty:
+          "मान्य पंक्तियों और पंक्ति-स्तर त्रुटियों की जांच के लिए प्रीव्यू बनाएं।",
+        validDescription: "ये पंक्तियां इम्पोर्ट के लिए तैयार हैं।",
+        invalidRows: "अमान्य पंक्तियां",
+        invalidDescription:
+          "इम्पोर्ट की पुष्टि से पहले पंक्ति-स्तर त्रुटियों की समीक्षा करें।",
+        rowLabel: "पंक्ति {row}",
+        unnamedProduct: "बिना नाम का प्रोडक्ट",
+        uncategorized: "बिना श्रेणी",
+        notAvailable: "उपलब्ध नहीं",
+        noValidRows: "इस फ़ाइल में कोई मान्य पंक्ति नहीं मिली।",
+        invalidRowSummary:
+          "नाम: {name} | SKU: {sku} | बिक्री मूल्य: {sellingPrice} | ओपनिंग स्टॉक: {openingStock} | श्रेणी: {category}",
+        noErrors: "कोई वैलिडेशन त्रुटि नहीं मिली।",
+      },
+      table: {
+        row: "पंक्ति",
+        name: "नाम",
+        sku: "SKU",
+        category: "श्रेणी",
+        sellingPrice: "बिक्री मूल्य",
+        openingStock: "ओपनिंग स्टॉक",
+      },
     },
   },
 };

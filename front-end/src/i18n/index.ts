@@ -1,5 +1,5 @@
-import en from "@/i18n/translations/en.json";
-import hi from "@/i18n/translations/hi.json";
+import en from "../../locales/en.json";
+import hi from "../../locales/hi.json";
 import { hiOverrides } from "@/i18n/hi-overrides";
 
 export type Language = "en" | "hi";
