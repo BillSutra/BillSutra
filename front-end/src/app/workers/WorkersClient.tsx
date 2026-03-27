@@ -11,7 +11,12 @@ import {
   useUpdateWorkerMutation,
   useWorkersQuery,
 } from "@/hooks/useInventoryQueries";
-import { validateEmail, validateName, validatePhone } from "@/lib/validation";
+import {
+  translateValidationMessage,
+  validateEmail,
+  validateName,
+  validatePhone,
+} from "@/lib/validation";
 import { useI18n } from "@/providers/LanguageProvider";
 
 type WorkersClientProps = {
@@ -42,19 +47,12 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
 
   const workers = useMemo(() => data ?? [], [data]);
 
-  const translateValidationMessage = (message: string) => {
-    switch (message) {
-      case "Please enter a valid name (letters only)":
-        return t("validation.validName");
-      case "Enter a valid email address":
-        return t("validation.validEmail");
-      case "Enter a valid phone number":
-        return t("validation.validPhone");
-      case "Password must be at least 6 characters":
-        return t("workersPage.validation.passwordMin");
-      default:
-        return message;
+  const localizeValidation = (message: string) => {
+    if (message === "Password must be at least 6 characters") {
+      return t("workersPage.validation.passwordMin");
     }
+
+    return translateValidationMessage(t, message);
   };
 
   const validatePassword = (value: string) => {
@@ -163,7 +161,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                   label={t("workersPage.fields.name")}
                   value={form.name}
                   onChange={(value) => setForm((prev) => ({ ...prev, name: value }))}
-                  validate={(value) => translateValidationMessage(validateName(value))}
+                  validate={(value) => localizeValidation(validateName(value))}
                   required
                   placeholder={t("workersPage.placeholders.name")}
                   success
@@ -177,7 +175,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                     setForm((prev) => ({ ...prev, email: value }))
                   }
                   validate={(value) =>
-                    value ? translateValidationMessage(validateEmail(value)) : ""
+                    value ? localizeValidation(validateEmail(value)) : ""
                   }
                   required
                   placeholder={t("workersPage.placeholders.email")}
@@ -191,7 +189,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                     setForm((prev) => ({ ...prev, phone: value.replace(/\D/g, "") }))
                   }
                   validate={(value) =>
-                    translateValidationMessage(validatePhone(value))
+                    localizeValidation(validatePhone(value))
                   }
                   required
                   placeholder={t("workersPage.placeholders.phone")}
@@ -207,7 +205,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                       setForm((prev) => ({ ...prev, password: value }))
                     }
                     validate={(value) =>
-                      translateValidationMessage(validatePassword(value))
+                      localizeValidation(validatePassword(value))
                     }
                     required
                     placeholder={t("workersPage.placeholders.password")}
@@ -268,7 +266,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                               setEditingForm((prev) => ({ ...prev, name: value }))
                             }
                             validate={(value) =>
-                              translateValidationMessage(validateName(value))
+                              localizeValidation(validateName(value))
                             }
                             required
                             success
@@ -284,7 +282,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                               }))
                             }
                             validate={(value) =>
-                              translateValidationMessage(validatePhone(value))
+                              localizeValidation(validatePhone(value))
                             }
                             required
                             placeholder={t("workersPage.placeholders.phone")}
@@ -300,7 +298,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                             }
                             validate={(value) =>
                               value
-                                ? translateValidationMessage(validatePassword(value))
+                                ? localizeValidation(validatePassword(value))
                                 : ""
                             }
                             placeholder={t("workersPage.placeholders.keepPassword")}

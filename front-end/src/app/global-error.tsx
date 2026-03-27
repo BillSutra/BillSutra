@@ -1,8 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import * as Sentry from "@sentry/nextjs";
 import { Button } from "@/components/ui/button";
+import {
+  DEFAULT_LANGUAGE,
+  isLanguage,
+  LANGUAGE_STORAGE_KEY,
+  translate,
+} from "@/i18n";
 
 export default function GlobalError({
   error,
@@ -15,21 +21,33 @@ export default function GlobalError({
     Sentry.captureException(error);
   }, [error]);
 
+  const language = useMemo(() => {
+    if (typeof window === "undefined") {
+      return DEFAULT_LANGUAGE;
+    }
+
+    const stored = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    return isLanguage(stored) ? stored : DEFAULT_LANGUAGE;
+  }, []);
+
   return (
     <html>
       <body className="bg-background text-foreground">
         <main className="flex min-h-screen items-center justify-center px-6 py-16">
           <div className="w-full max-w-lg rounded-3xl border border-border bg-card p-8 text-center shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              Unexpected error
+              {translate(language, "globalError.kicker")}
             </p>
-            <h1 className="mt-3 text-2xl font-semibold">Something went wrong</h1>
+            <h1 className="mt-3 text-2xl font-semibold">
+              {translate(language, "globalError.title")}
+            </h1>
             <p className="mt-3 text-sm text-muted-foreground">
-              The error was captured for investigation. Try the action again or
-              refresh the page.
+              {translate(language, "globalError.description")}
             </p>
             <div className="mt-6 flex justify-center">
-              <Button onClick={() => reset()}>Try again</Button>
+              <Button onClick={() => reset()}>
+                {translate(language, "globalError.action")}
+              </Button>
             </div>
           </div>
         </main>

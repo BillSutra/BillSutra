@@ -2,6 +2,7 @@ import React, { useCallback, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/providers/LanguageProvider";
+import { translateValidationMessage } from "@/lib/validation";
 
 interface ValidationFieldProps {
   id: string;
@@ -125,7 +126,7 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
           className="mt-1 block text-xs text-red-600 dark:text-red-400"
           role="alert"
         >
-          {error}
+          {translateValidationMessage(t, error)}
         </span>
       )}
       {showSuccess && (

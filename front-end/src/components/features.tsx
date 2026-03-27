@@ -2,16 +2,16 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import {
-  Wallet,
+  Bot,
   Boxes,
-  Users,
-  Truck,
   LineChart,
-  Receipt,
+  ReceiptText,
+  ShieldCheck,
+  Sparkles,
+  UsersRound,
+  WalletCards,
 } from "lucide-react";
 import { useI18n } from "@/providers/LanguageProvider";
-
-const brandList = ["StudioNine", "KiteSupply", "UrbanMart", "ByteCraft"];
 
 const Features = () => {
   const { t } = useI18n();
@@ -20,7 +20,7 @@ const Features = () => {
     {
       title: t("landing.features.items.invoiceManagementTitle"),
       description: t("landing.features.items.invoiceManagementDescription"),
-      icon: Receipt,
+      icon: ReceiptText,
     },
     {
       title: t("landing.features.items.inventoryTrackingTitle"),
@@ -28,69 +28,67 @@ const Features = () => {
       icon: Boxes,
     },
     {
-      title: t("landing.features.items.customerManagementTitle"),
-      description: t("landing.features.items.customerManagementDescription"),
-      icon: Users,
+      title: t("landing.features.items.clientSupplierTitle"),
+      description: t("landing.features.items.clientSupplierDescription"),
+      icon: UsersRound,
     },
     {
-      title: t("landing.features.items.supplierManagementTitle"),
-      description: t("landing.features.items.supplierManagementDescription"),
-      icon: Truck,
-    },
-    {
-      title: t("landing.features.items.businessAnalyticsTitle"),
-      description: t("landing.features.items.businessAnalyticsDescription"),
+      title: t("landing.features.items.insightsTitle"),
+      description: t("landing.features.items.insightsDescription"),
       icon: LineChart,
     },
     {
-      title: t("landing.features.items.paymentTrackingTitle"),
-      description: t("landing.features.items.paymentTrackingDescription"),
-      icon: Wallet,
+      title: t("landing.features.items.gstSupportTitle"),
+      description: t("landing.features.items.gstSupportDescription"),
+      icon: ShieldCheck,
+    },
+    {
+      title: t("landing.features.items.smartAssistantTitle"),
+      description: t("landing.features.items.smartAssistantDescription"),
+      icon: Bot,
     },
   ];
 
   return (
-    <section id="features" className="bg-background py-16 text-foreground">
-      <div className="mx-auto w-full max-w-6xl px-6">
-        <div className="flex flex-col gap-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.3em] text-muted-foreground">
-            {t("landing.features.trustedBy")}
-          </p>
-          <div className="grid grid-cols-2 gap-4 text-sm text-muted-foreground sm:grid-cols-4">
-            {brandList.map((brand) => (
-              <div
-                key={brand}
-                className="rounded-full border border-border bg-card px-4 py-2 text-center"
-              >
-                {brand}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-12 flex items-end justify-between gap-6">
-          <div>
-            <h2 className="text-3xl font-semibold">
+    <section id="features" className="bg-white py-20 text-foreground sm:py-24">
+      <div className="mx-auto w-full max-w-7xl px-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#7a8ea4]">
+              {t("landing.features.kicker")}
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#10233f] sm:text-4xl">
               {t("landing.features.title")}
             </h2>
-            <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+            <p className="mt-3 max-w-2xl text-base leading-7 text-[#627890]">
               {t("landing.features.description")}
             </p>
           </div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-[#dce7f1] bg-[#f8fbff] px-4 py-2 text-sm font-medium text-[#4f6882]">
+            <Sparkles className="h-4 w-4 text-[#123d65]" />
+            {t("landing.features.trustedBy")}
+          </div>
         </div>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {features.map((feature) => (
             <Card
               key={feature.title}
-              className="border-border bg-card transition-all hover:-translate-y-1 hover:shadow-lg"
+              className="group overflow-hidden rounded-[1.75rem] border border-[#dce7f1] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] shadow-[0_24px_60px_-46px_rgba(18,61,101,0.3)] transition-all duration-300 hover:-translate-y-1 hover:border-[#bfd3e7] hover:shadow-[0_30px_80px_-44px_rgba(18,61,101,0.38)]"
             >
-              <CardContent className="flex h-full flex-col gap-3 p-6">
-                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                  <feature.icon size={18} />
+              <CardContent className="relative flex h-full flex-col gap-4 p-6">
+                <div className="absolute right-0 top-0 h-28 w-28 rounded-full bg-[radial-gradient(circle_at_center,rgba(18,61,101,0.12),rgba(18,61,101,0))] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#123d65] text-white shadow-[0_18px_36px_-28px_rgba(18,61,101,0.55)]">
+                  <feature.icon size={20} />
                 </span>
-                <h3 className="text-lg font-semibold">{feature.title}</h3>
-                <p className="text-sm text-muted-foreground">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#8b7558]">
+                  <WalletCards className="h-3.5 w-3.5" />
+                  {t("landing.features.cardEyebrow")}
+                </div>
+                <h3 className="text-xl font-semibold tracking-tight text-[#10233f]">
+                  {feature.title}
+                </h3>
+                <p className="text-sm leading-6 text-[#627890]">
                   {feature.description}
                 </p>
               </CardContent>

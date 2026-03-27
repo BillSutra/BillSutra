@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ValidationField } from "@/components/ui/ValidationField";
 import {
+  translateValidationMessage,
   validateName,
   validateEmail,
   validatePhone,
@@ -116,30 +117,9 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
   const [supplierError, setSupplierError] = useState<string | null>(null);
   const [hasAppliedSearchPrefill, setHasAppliedSearchPrefill] = useState(false);
 
-  const translateValidationMessage = (message: string) => {
-    switch (message) {
-      case "This field is required":
-        return t("validation.required");
-      case "Please enter a valid name (letters only)":
-        return t("validation.validName");
-      case "Enter a valid email address":
-        return t("validation.validEmail");
-      case "Enter a valid phone number":
-        return t("validation.validPhone");
-      case "Enter a valid number":
-        return t("validation.validNumber");
-      case "Select a valid date":
-        return t("validation.validDate");
-      case "Please select an option":
-        return t("common.selectOption");
-      default:
-        return message;
-    }
-  };
-
   const withTranslatedValidation =
     (validator: (value: string) => string) => (value: string) =>
-      translateValidationMessage(validator(value));
+      translateValidationMessage(t, validator(value));
 
   const formatPurchaseDate = (value: string) =>
     formatDate(new Date(value), { dateStyle: "medium" });
@@ -658,7 +638,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                 }
                 validate={(value) =>
                   value
-                    ? translateValidationMessage(validateNumber(value))
+                    ? translateValidationMessage(t, validateNumber(value))
                     : ""
                 }
                 placeholder={t("purchasesPage.placeholders.amountPaid")}

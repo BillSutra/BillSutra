@@ -8,9 +8,11 @@ import {
   useInventoryDemandPredictions,
 } from "@/hooks/usePredictionQueries";
 import { DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
+import { useI18n } from "@/providers/LanguageProvider";
 
 const DemandSupplyPanel = () => {
   const { currency, dateWithYear, number } = useDashboardFormatters();
+  const { t } = useI18n();
   const forecastQuery = useForecastSales();
   const predictionsQuery = useInventoryDemandPredictions({ limit: 8 });
 
@@ -41,12 +43,12 @@ const DemandSupplyPanel = () => {
               <Boxes size={18} />
             </div>
             <div>
-              <p className="app-kicker">Demand vs supply</p>
+              <p className="app-kicker">{t("demandSupplyPanel.kicker")}</p>
               <h3 className="mt-1 text-lg font-semibold text-foreground">
-                Forecast movement mapped to inventory risk
+                {t("demandSupplyPanel.title")}
               </h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Surface forecast-led shortages here so the dashboard can stay focused on execution.
+                {t("demandSupplyPanel.description")}
               </p>
             </div>
           </div>
@@ -85,15 +87,19 @@ const DemandSupplyPanel = () => {
                 <div>
                   <p className="text-sm font-semibold text-foreground">
                     {risingDemandAndRisk
-                      ? "Combined supply alert"
-                      : "Forecast and inventory are balanced"}
+                      ? t("demandSupplyPanel.alertTitle")
+                      : t("demandSupplyPanel.balancedTitle")}
                   </p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {risingDemandAndRisk
-                      ? `Sales trend is up ${number(trendPercent, {
-                          maximumFractionDigits: 1,
-                        })}% and ${riskItems.length} product${riskItems.length === 1 ? "" : "s"} already need restock planning.`
-                      : "No forecast-led stock pressure is currently elevated enough to merge into a combined alert."}
+                      ? t("demandSupplyPanel.alertDescription", {
+                          trend: number(trendPercent, {
+                            maximumFractionDigits: 1,
+                          }),
+                          count: riskItems.length,
+                          suffix: riskItems.length === 1 ? "" : "s",
+                        })
+                      : t("demandSupplyPanel.balancedDescription")}
                   </p>
                 </div>
               </div>
@@ -102,7 +108,7 @@ const DemandSupplyPanel = () => {
             <div className="grid gap-3 md:grid-cols-3">
               <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Forecast trend
+                  {t("demandSupplyPanel.forecastTrend")}
                 </p>
                 <p className="mt-2 text-xl font-semibold text-foreground">
                   {trendPercent >= 0 ? "+" : ""}
@@ -111,7 +117,7 @@ const DemandSupplyPanel = () => {
               </div>
               <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  At-risk SKUs
+                  {t("demandSupplyPanel.atRiskSkus")}
                 </p>
                 <p className="mt-2 text-xl font-semibold text-foreground">
                   {number(riskItems.length)}
@@ -119,7 +125,7 @@ const DemandSupplyPanel = () => {
               </div>
               <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Suggested spend
+                  {t("demandSupplyPanel.suggestedSpend")}
                 </p>
                 <p className="mt-2 text-xl font-semibold text-foreground">
                   {currency(totalReorderValue)}
@@ -131,7 +137,7 @@ const DemandSupplyPanel = () => {
           <div className="grid gap-3">
             {riskItems.length === 0 ? (
               <div className="app-empty-state px-4 py-10 text-sm">
-                No demand-driven supply risks are currently open.
+                {t("demandSupplyPanel.empty")}
               </div>
             ) : (
               riskItems.map((item) => (
@@ -145,8 +151,13 @@ const DemandSupplyPanel = () => {
                         {item.product_name}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {item.stock_left} left | {item.predicted_daily_sales.toFixed(1)} / day | confidence{" "}
-                        {number(item.confidence * 100, { maximumFractionDigits: 0 })}%
+                        {t("demandSupplyPanel.stockLine", {
+                          stockLeft: item.stock_left,
+                          dailySales: item.predicted_daily_sales.toFixed(1),
+                          confidence: number(item.confidence * 100, {
+                            maximumFractionDigits: 0,
+                          }),
+                        })}
                       </p>
                     </div>
                     <span className="inline-flex items-center gap-1 rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -157,11 +168,11 @@ const DemandSupplyPanel = () => {
                   <div className="grid gap-2 sm:grid-cols-3">
                     <div className="rounded-xl border border-border/70 bg-background px-3 py-2">
                       <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                        Runout
+                        {t("demandSupplyPanel.runout")}
                       </p>
                       <p className="mt-1 text-sm font-semibold text-foreground">
                         {item.days_until_stockout >= 999
-                          ? "Not projected"
+                          ? t("demandSupplyPanel.notProjected")
                           : dateWithYear(
                               new Date(
                                 Date.now() +
@@ -172,7 +183,7 @@ const DemandSupplyPanel = () => {
                     </div>
                     <div className="rounded-xl border border-border/70 bg-background px-3 py-2">
                       <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                        Reorder qty
+                        {t("demandSupplyPanel.reorderQty")}
                       </p>
                       <p className="mt-1 text-sm font-semibold text-foreground">
                         {number(item.recommended_reorder_quantity)}
@@ -180,7 +191,7 @@ const DemandSupplyPanel = () => {
                     </div>
                     <div className="rounded-xl border border-border/70 bg-background px-3 py-2">
                       <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                        Reorder value
+                        {t("demandSupplyPanel.reorderValue")}
                       </p>
                       <p className="mt-1 text-sm font-semibold text-foreground">
                         {currency(item.recommended_reorder_quantity * item.unit_cost)}

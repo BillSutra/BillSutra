@@ -7,7 +7,7 @@ import InvoiceDetailClient from "./InvoiceDetailClient";
 
 const InvoiceDetailPage = async () => {
   const session: CustomSession | null = await getServerSession(authOptions);
-  const name = session?.user?.name || "Guest";
+  const name = session?.user?.name?.trim() ?? "";
 
   return <InvoiceDetailClient name={name} />;
 };

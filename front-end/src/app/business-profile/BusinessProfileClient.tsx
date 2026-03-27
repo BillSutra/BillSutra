@@ -228,17 +228,17 @@ const BusinessProfileClient = ({
     {
       key: "showLogoOnInvoice" as const,
       label: t("businessProfilePage.toggles.showLogoOnInvoice"),
-      description: "Keep the uploaded logo visible on customer-facing invoices.",
+      description: t("businessProfilePage.toggleDescriptions.showLogoOnInvoice"),
     },
     {
       key: "showTaxNumber" as const,
       label: t("businessProfilePage.toggles.showTaxNumber"),
-      description: "Display GST or tax details in the invoice summary area.",
+      description: t("businessProfilePage.toggleDescriptions.showTaxNumber"),
     },
     {
       key: "showPaymentQr" as const,
       label: t("businessProfilePage.toggles.showPaymentQr"),
-      description: "Reserve space for QR-based collections and instant payments.",
+      description: t("businessProfilePage.toggleDescriptions.showPaymentQr"),
     },
   ];
 
@@ -252,14 +252,13 @@ const BusinessProfileClient = ({
           <div className="space-y-2">
             <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab]">
               <Sparkles className="h-3.5 w-3.5" />
-              Setup foundation
+              {t("businessProfilePage.content.setupBadge")}
             </span>
             <h2 className="text-2xl font-semibold tracking-tight text-[#10233f]">
               {t("businessProfilePage.stepTitles.businessType")}
             </h2>
             <p className="max-w-3xl text-sm leading-6 text-[#627890]">
-              Choose the structure that best matches your business. BillSutra
-              will automatically prepare the most relevant invoice sections.
+              {t("businessProfilePage.content.businessTypeDescription")}
             </p>
           </div>
 
@@ -284,8 +283,7 @@ const BusinessProfileClient = ({
                         {type.label}
                       </p>
                       <p className="mt-2 text-sm leading-6 text-[#627890]">
-                        Default invoice sections stay aligned with this business
-                        model.
+                        {t("businessProfilePage.content.businessTypeCardDescription")}
                       </p>
                     </div>
                     <span
@@ -313,14 +311,13 @@ const BusinessProfileClient = ({
           <div className="space-y-2">
             <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab]">
               <LayoutTemplate className="h-3.5 w-3.5" />
-              Customer-facing design
+              {t("businessProfilePage.content.templateBadge")}
             </span>
             <h2 className="text-2xl font-semibold tracking-tight text-[#10233f]">
               {t("businessProfilePage.stepTitles.templateSelection")}
             </h2>
             <p className="max-w-3xl text-sm leading-6 text-[#627890]">
-              Pick a layout that reflects your business identity while staying
-              clean, readable, and invoice-ready.
+              {t("businessProfilePage.content.templateDescription")}
             </p>
           </div>
 
@@ -371,14 +368,13 @@ const BusinessProfileClient = ({
         <div className="space-y-2">
           <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab]">
             <Building2 className="h-3.5 w-3.5" />
-            Business details
+            {t("businessProfilePage.content.detailsBadge")}
           </span>
           <h2 className="text-2xl font-semibold tracking-tight text-[#10233f]">
-            Organize your core business information
+            {t("businessProfilePage.content.detailsTitle")}
           </h2>
           <p className="max-w-3xl text-sm leading-6 text-[#627890]">
-            Keep essential contact, billing, and tax information clean and easy
-            to scan for both your team and your customers.
+            {t("businessProfilePage.content.detailsDescription")}
           </p>
         </div>
 
@@ -473,11 +469,12 @@ const BusinessProfileClient = ({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-[#10233f]">
-                Enabled sections
+                {t("businessProfilePage.content.enabledSectionsTitle")}
               </p>
               <p className="mt-1 text-sm leading-6 text-[#627890]">
-                {selectedBusinessType.label} invoices will include the sections
-                best suited to this workflow.
+                {t("businessProfilePage.content.enabledSectionsDescription", {
+                  label: selectedBusinessType.label,
+                })}
               </p>
             </div>
           </div>
@@ -504,11 +501,14 @@ const BusinessProfileClient = ({
             </div>
             <div className="min-w-0">
               <p className="text-sm font-semibold text-[#10233f]">
-                Selected style
+                {t("businessProfilePage.content.selectedStyleTitle")}
               </p>
               <p className="mt-1 text-sm leading-6 text-[#627890]">
-                {selectedTemplate?.name ?? "Template"} is currently matched with
-                your saved business details and invoice sections.
+                {t("businessProfilePage.content.selectedStyleDescription", {
+                  name:
+                    selectedTemplate?.name ??
+                    t("businessProfilePage.templateFallback"),
+                })}
               </p>
             </div>
           </div>
@@ -518,11 +518,11 @@ const BusinessProfileClient = ({
               style={{ backgroundColor: selectedTemplate?.theme.primaryColor }}
             />
             <p className="mt-4 text-base font-semibold text-[#10233f]">
-              {selectedTemplate?.name ?? "Template"}
+              {selectedTemplate?.name ?? t("businessProfilePage.templateFallback")}
             </p>
             <p className="mt-2 text-sm leading-6 text-[#627890]">
               {selectedTemplate?.description ??
-                "Choose the invoice look that best represents your brand."}
+                t("businessProfilePage.content.selectedStyleFallback")}
             </p>
           </div>
         </section>
@@ -536,10 +536,11 @@ const BusinessProfileClient = ({
             <Palette className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-[#10233f]">Branding</p>
+            <p className="text-sm font-semibold text-[#10233f]">
+              {t("businessProfilePage.content.brandingTitle")}
+            </p>
             <p className="mt-1 text-sm leading-6 text-[#627890]">
-              Upload a business logo and control how branded details appear on
-              invoices and payment-ready documents.
+              {t("businessProfilePage.content.brandingDescription")}
             </p>
           </div>
         </div>
@@ -550,7 +551,7 @@ const BusinessProfileClient = ({
 
         <div className="mt-6 rounded-[1.5rem] border border-[#d7e4f1] bg-[#f8fbff] p-4">
           <p className="text-sm font-semibold text-[#10233f]">
-            Invoice branding controls
+            {t("businessProfilePage.content.brandingControlsTitle")}
           </p>
           <div className="mt-4 space-y-3">
             {toggleOptions.map((option) => (

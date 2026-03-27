@@ -7,6 +7,7 @@ import Benefits from "@/components/benefits";
 import Cta from "@/components/cta";
 import Footer from "@/components/footer";
 import Pricing from "@/components/pricing";
+import Testimonials from "@/components/testimonials";
 import AccountDeletedNotice from "@/components/account/AccountDeletedNotice";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
@@ -17,7 +18,7 @@ export default async function LandingPage() {
     redirect("/dashboard");
   }
   return (
-    <div className="min-h-screen bg-[#f7f2ea] text-[#1f1b16] dark:bg-slate-950 dark:text-white">
+    <div className="min-h-screen bg-white text-[#1f1b16] dark:bg-slate-950 dark:text-white">
       <AccountDeletedNotice />
       <Navbar />
       <Hero />
@@ -26,6 +27,7 @@ export default async function LandingPage() {
       <HowItWorks />
       <Benefits />
       <Pricing />
+      <Testimonials />
       <Cta />
       <Footer />
     </div>

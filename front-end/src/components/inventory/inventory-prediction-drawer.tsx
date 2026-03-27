@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useDashboardFormatters } from "@/components/dashboard/use-dashboard-formatters";
+import { useI18n } from "@/providers/LanguageProvider";
 import type {
   Inventory,
   InventoryDemandPrediction,
@@ -32,6 +33,7 @@ const InventoryPredictionDrawer = ({
   metadata,
 }: InventoryPredictionDrawerProps) => {
   const { dateWithYear, number } = useDashboardFormatters();
+  const { t } = useI18n();
 
   const purchaseHref =
     inventoryItem && prediction
@@ -46,36 +48,39 @@ const InventoryPredictionDrawer = ({
       >
         <DialogHeader className="text-left">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Inventory insight
+            {t("inventoryPredictionDrawer.kicker")}
           </p>
           <DialogTitle>
-            {inventoryItem?.product.name ?? "Inventory prediction"}
+            {inventoryItem?.product.name ??
+              t("inventoryPredictionDrawer.titleFallback")}
           </DialogTitle>
           <DialogDescription>
             {inventoryItem
               ? `${inventoryItem.warehouse.name} | ${inventoryItem.product.sku}`
-              : "Prediction details"}
+              : t("inventoryPredictionDrawer.descriptionFallback")}
           </DialogDescription>
         </DialogHeader>
 
         {!inventoryItem || !prediction ? (
           <div className="rounded-2xl border border-border bg-card/80 px-4 py-6 text-sm text-muted-foreground">
-            Select an inventory row to review demand signals and restock guidance.
+            {t("inventoryPredictionDrawer.empty")}
           </div>
         ) : (
           <div className="grid gap-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  30-day sales basis
+                  {t("inventoryPredictionDrawer.salesBasis")}
                 </p>
                 <p className="mt-2 text-lg font-semibold text-foreground">
-                  {prediction.predicted_daily_sales.toFixed(1)} units / day
+                  {t("inventoryPredictionDrawer.unitsPerDay", {
+                    value: prediction.predicted_daily_sales.toFixed(1),
+                  })}
                 </p>
               </div>
               <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                  Confidence
+                  {t("inventoryPredictionDrawer.confidence")}
                 </p>
                 <p className="mt-2 text-lg font-semibold text-foreground">
                   {number(prediction.confidence * 100, {
@@ -87,11 +92,13 @@ const InventoryPredictionDrawer = ({
             </div>
 
             <div className="rounded-2xl border border-border bg-card/80 p-4">
-              <p className="text-sm font-semibold text-foreground">Stockout estimate</p>
+              <p className="text-sm font-semibold text-foreground">
+                {t("inventoryPredictionDrawer.stockoutEstimate")}
+              </p>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    Stock left
+                    {t("inventoryPredictionDrawer.stockLeft")}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-foreground">
                     {number(prediction.stock_left)}
@@ -99,54 +106,58 @@ const InventoryPredictionDrawer = ({
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    Days until stockout
+                    {t("inventoryPredictionDrawer.daysUntilStockout")}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-foreground">
                     {prediction.days_until_stockout >= 999
-                      ? "Not projected"
+                      ? t("inventoryPredictionDrawer.notProjected")
                       : number(prediction.days_until_stockout)}
                   </p>
                 </div>
                 <div>
                   <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                    Reorder suggestion
+                    {t("inventoryPredictionDrawer.reorderSuggestion")}
                   </p>
                   <p className="mt-1 text-sm font-semibold text-foreground">
-                    {number(prediction.recommended_reorder_quantity)} units
+                    {t("inventoryPredictionDrawer.units", {
+                      value: number(prediction.recommended_reorder_quantity),
+                    })}
                   </p>
                 </div>
               </div>
             </div>
 
             <div className="rounded-2xl border border-border bg-card/80 p-4">
-              <p className="text-sm font-semibold text-foreground">Prediction metadata</p>
+              <p className="text-sm font-semibold text-foreground">
+                {t("inventoryPredictionDrawer.metadataTitle")}
+              </p>
               <div className="mt-3 grid gap-3 text-sm text-muted-foreground">
                 <p>
-                  Generated at:{" "}
+                  {t("inventoryPredictionDrawer.generatedAt")}{" "}
                   <span className="font-medium text-foreground">
                     {metadata?.generatedAt
                       ? dateWithYear(metadata.generatedAt)
-                      : "Unavailable"}
+                      : t("inventoryPredictionDrawer.unavailable")}
                   </span>
                 </p>
                 <p>
-                  Basis window:{" "}
+                  {t("inventoryPredictionDrawer.basisWindow")}{" "}
                   <span className="font-medium text-foreground">
                     {number(metadata?.basisWindowDays ?? prediction.basis_window_days)} days
                   </span>
                 </p>
                 <p>
-                  Data coverage:{" "}
+                  {t("inventoryPredictionDrawer.dataCoverage")}{" "}
                   <span className="font-medium text-foreground">
                     {number(metadata?.dataCoverageDays ?? prediction.basis_window_days)} days
                   </span>
                 </p>
                 <p>
-                  Warehouse scope:{" "}
+                  {t("inventoryPredictionDrawer.warehouseScope")}{" "}
                   <span className="font-medium text-foreground">
                     {metadata?.warehouseScope.mode === "warehouse"
                       ? inventoryItem.warehouse.name
-                      : "All inventory"}
+                      : t("inventoryPredictionDrawer.allInventory")}
                   </span>
                 </p>
               </div>
@@ -154,14 +165,16 @@ const InventoryPredictionDrawer = ({
 
             <div className="flex flex-wrap gap-3">
               <Button asChild>
-                <Link href={purchaseHref}>Create Purchase from Suggestion</Link>
+                <Link href={purchaseHref}>
+                  {t("inventoryPredictionDrawer.createPurchaseSuggestion")}
+                </Link>
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
               >
-                Close
+                {t("inventoryPredictionDrawer.close")}
               </Button>
             </div>
           </div>

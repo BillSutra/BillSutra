@@ -11,7 +11,7 @@ const WarehouseDetailPage = async ({
   params: Promise<{ id: string }>;
 }) => {
   const session: CustomSession | null = await getServerSession(authOptions);
-  const name = session?.user?.name || "Guest";
+  const name = session?.user?.name?.trim() ?? "";
   const { id } = await params;
   const warehouseId = Number(id);
 

@@ -6,7 +6,7 @@ import PlanManagementCard from "@/components/pricing/PlanManagementCard";
 
 const SettingsPage = async () => {
   const session: CustomSession | null = await getServerSession(authOptions);
-  const name = session?.user?.name || "Guest";
+  const name = session?.user?.name?.trim() ?? "";
 
   return (
     <DashboardLayout

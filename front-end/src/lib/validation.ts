@@ -1,10 +1,31 @@
 // validation.ts
-// Reusable validation utilities for Bill Sutra forms
-// Each function returns an error message string if invalid, or an empty string if valid
+// Reusable validation utilities for BillSutra forms.
+// Validators return stable English messages that can be translated centrally.
+
+type TranslateFn = (key: string) => string;
+
+const VALIDATION_TRANSLATION_KEYS: Record<string, string> = {
+  "This field is required": "validation.required",
+  "Please enter a valid name (letters only)": "validation.validName",
+  "Enter a valid phone number": "validation.validPhone",
+  "Enter a valid email address": "validation.validEmail",
+  "Enter a valid number": "validation.validNumber",
+  "Select a valid date": "validation.validDate",
+  "Please select an option": "common.selectOption",
+};
+
+export function translateValidationMessage(
+  t: TranslateFn,
+  message: string,
+): string {
+  if (!message) return "";
+  const key = VALIDATION_TRANSLATION_KEYS[message];
+  return key ? t(key) : message;
+}
 
 export function validateName(value: string): string {
   if (!value.trim()) return "This field is required";
-  if (!/^[A-Za-z ]+$/.test(value))
+  if (!/^[\p{L}\p{M}\s.'-]+$/u.test(value.trim()))
     return "Please enter a valid name (letters only)";
   if (value.trim().length < 2)
     return "Please enter a valid name (letters only)";
@@ -27,7 +48,8 @@ export function validateEmail(value: string): string {
 
 export function validateNumber(value: string, allowNegative = false): string {
   if (!value.trim()) return "This field is required";
-  if (!/^\d+(\.\d+)?$/.test(value)) return "Enter a valid number";
+  const pattern = allowNegative ? /^-?\d+(\.\d+)?$/ : /^\d+(\.\d+)?$/;
+  if (!pattern.test(value)) return "Enter a valid number";
   if (!allowNegative && parseFloat(value) < 0) return "Enter a valid number";
   return "";
 }

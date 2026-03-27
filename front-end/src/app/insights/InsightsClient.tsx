@@ -133,7 +133,7 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
     { label: t("dashboard.sectionLinks.overview"), href: "#summary" },
     { label: t("dashboard.sectionLinks.performance"), href: "#performance" },
     { label: t("dashboard.sectionLinks.forecasting"), href: "#forecasting" },
-    { label: "Demand vs Supply", href: "#demand-supply" },
+    { label: t("insights.sections.demandSupply.title"), href: "#demand-supply" },
     { label: t("insights.sections.ai.title"), href: "#intelligence" },
     { label: t("dashboard.sectionLinks.records"), href: "#records" },
   ];
