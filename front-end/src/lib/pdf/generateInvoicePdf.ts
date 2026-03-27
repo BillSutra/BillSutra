@@ -5,6 +5,53 @@ import type { InvoicePdfInput } from "@/types/invoice";
 const A4_WIDTH_PX = 794;
 const A4_HEIGHT_PX = 1123;
 const DEFAULT_FILE_NAME = "invoice-preview.pdf";
+const PDF_COLOR_FALLBACK_STYLE = `
+  :root,
+  .dark,
+  .dashboard-root,
+  .invoice-content-root,
+  .customer-statement-export {
+    --background: #f8fafc !important;
+    --foreground: #0f172a !important;
+    --card: #ffffff !important;
+    --card-foreground: #0f172a !important;
+    --popover: #ffffff !important;
+    --popover-foreground: #0f172a !important;
+    --primary: #6366f1 !important;
+    --primary-foreground: #f8fafc !important;
+    --secondary: #eef2f7 !important;
+    --secondary-foreground: #334155 !important;
+    --muted: #eef2f7 !important;
+    --muted-foreground: #64748b !important;
+    --accent: #eef2f7 !important;
+    --accent-foreground: #334155 !important;
+    --destructive: #dc2626 !important;
+    --border: #d7dee7 !important;
+    --input: #d7dee7 !important;
+    --ring: #818cf8 !important;
+    --sidebar: #ffffff !important;
+    --sidebar-foreground: #0f172a !important;
+    --sidebar-primary: #111827 !important;
+    --sidebar-primary-foreground: #f8fafc !important;
+    --sidebar-accent: #f1f5f9 !important;
+    --sidebar-accent-foreground: #0f172a !important;
+    --sidebar-border: #d7dee7 !important;
+    --sidebar-ring: #818cf8 !important;
+    color-scheme: light !important;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    outline-color: transparent !important;
+  }
+`;
 
 const getTargetElement = (input: InvoicePdfInput) => {
   if (input.element instanceof HTMLElement) return input.element;
@@ -32,6 +79,19 @@ const waitForStableLayout = async () => {
   await nextFrame();
 };
 
+const applyPdfColorFallbacks = (clonedDocument: Document) => {
+  const styleElement = clonedDocument.createElement("style");
+  styleElement.setAttribute("data-pdf-color-fallbacks", "true");
+  styleElement.textContent = PDF_COLOR_FALLBACK_STYLE;
+
+  if (clonedDocument.head) {
+    clonedDocument.head.appendChild(styleElement);
+    return;
+  }
+
+  clonedDocument.documentElement.appendChild(styleElement);
+};
+
 const capturePageCanvas = async (
   pageElement: HTMLElement,
   imageType: "png" | "jpeg",
@@ -47,6 +107,7 @@ const capturePageCanvas = async (
     logging: false,
     scale: Math.min(3, Math.max(2, window.devicePixelRatio || 1)),
     imageTimeout: 0,
+    onclone: applyPdfColorFallbacks,
   });
 
   return canvas.toDataURL(
