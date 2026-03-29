@@ -2,12 +2,21 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Bot, SendHorizontal, User2 } from "lucide-react";
+import { Bot, Mic, SendHorizontal, Square, User2, Volume2, VolumeX } from "lucide-react";
 import { translate, type Language } from "@/i18n";
-import { askAssistant, type AssistantReply } from "@/lib/apiClient";
+import {
+  askAssistant,
+  type AssistantHistoryMessage,
+  type AssistantReply,
+} from "@/lib/apiClient";
+import {
+  detectAssistantChatLanguage,
+  type AssistantChatLanguage,
+} from "@/lib/assistantLanguage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
 import { useI18n } from "@/providers/LanguageProvider";
 
 type AssistantChatMessage = {
@@ -17,51 +26,43 @@ type AssistantChatMessage = {
   highlights?: AssistantReply["highlights"];
   examples?: string[];
   pending?: boolean;
+  language?: AssistantChatLanguage;
 };
 
 type AssistantCopy = {
+  thinking: string;
+  error: string;
+  examplesTitle: string;
+  roleUser: string;
+  roleAssistant: string;
+};
+
+type AssistantUiCopy = AssistantCopy & {
   title: string;
   description: string;
   placeholder: string;
   send: string;
-  thinking: string;
-  error: string;
   welcome: string;
-  examplesTitle: string;
   understandsTitle: string;
-  roleUser: string;
-  roleAssistant: string;
   quickPrompts: string[];
   understands: string[];
 };
 
-const HINDI_SCRIPT_PATTERN = /[\u0900-\u097F]/;
-const HINDI_ROMANIZED_HINTS = [
-  "kitna",
-  "kitni",
-  "kitne",
-  "aapka",
-  "aapki",
-  "mahina",
-  "mahine",
-  "batao",
-  "bakaya",
-  "baki",
-  "munafa",
-  "labh",
-  "nakdi",
-];
-
-const detectMessageLanguage = (message: string): Language => {
-  const normalized = message.toLowerCase();
-  if (HINDI_SCRIPT_PATTERN.test(message)) {
-    return "hi";
-  }
-
-  return HINDI_ROMANIZED_HINTS.some((hint) => normalized.includes(hint)) ? "hi" : "en";
+type VoiceCopy = {
+  start: string;
+  stop: string;
+  replay: string;
+  stopReplay: string;
+  listening: string;
+  thinking: string;
+  speaking: string;
+  transcriptTitle: string;
+  fallback: string;
+  helper: string;
+  errorTitle: string;
 };
 
-const buildAssistantCopy = (language: Language): AssistantCopy => ({
+const buildBaseAssistantCopy = (language: Language): AssistantUiCopy => ({
   title: translate(language, "assistant.chatTitle"),
   description: translate(language, "assistant.chatDescription"),
   placeholder: translate(language, "assistant.placeholder"),
@@ -87,16 +88,91 @@ const buildAssistantCopy = (language: Language): AssistantCopy => ({
   ],
 });
 
+const buildMessageCopy = (
+  language: AssistantChatLanguage,
+  fallbackLanguage: Language,
+): AssistantCopy => {
+  if (language === "hinglish") {
+    return {
+      thinking: "Soch raha hoon...",
+      error: "Thoda issue aa gaya. Ek baar phir try karo.",
+      examplesTitle: "Try these",
+      roleUser: "You",
+      roleAssistant: "Bill Sutra Buddy",
+    };
+  }
+
+  const baseCopy = buildBaseAssistantCopy(language ?? fallbackLanguage);
+  return {
+    thinking: baseCopy.thinking,
+    error: baseCopy.error,
+    examplesTitle: baseCopy.examplesTitle,
+    roleUser: baseCopy.roleUser,
+    roleAssistant: baseCopy.roleAssistant,
+  };
+};
+
+const buildVoiceCopy = (
+  language: AssistantChatLanguage,
+): VoiceCopy => {
+  if (language === "hi") {
+    return {
+      start: "बोलें",
+      stop: "रोकें",
+      replay: "सुनें",
+      stopReplay: "आवाज़ रोकें",
+      listening: "सुन रहा हूँ...",
+      thinking: "सोच रहा हूँ...",
+      speaking: "बोल रहा हूँ...",
+      transcriptTitle: "Live transcript",
+      fallback: "इस browser में voice input available नहीं है. आप text से पूछ सकते हैं.",
+      helper: "Mic दबाकर Hindi, English या Hinglish में सवाल बोलिए.",
+      errorTitle: "Voice issue",
+    };
+  }
+
+  if (language === "hinglish") {
+    return {
+      start: "Bolna start karo",
+      stop: "Rok do",
+      replay: "Reply suno",
+      stopReplay: "Voice roko",
+      listening: "Sun raha hoon...",
+      thinking: "Soch raha hoon...",
+      speaking: "Bol raha hoon...",
+      transcriptTitle: "Live transcript",
+      fallback: "Is browser mein voice input available nahi hai. Aap text se pooch sakte ho.",
+      helper: "Mic dabao aur Hindi, English ya Hinglish mein apna sawaal bolo.",
+      errorTitle: "Voice issue",
+    };
+  }
+
+  return {
+    start: "Start voice",
+    stop: "Stop voice",
+    replay: "Play reply",
+    stopReplay: "Stop audio",
+    listening: "Listening...",
+    thinking: "Thinking...",
+    speaking: "Speaking...",
+    transcriptTitle: "Live transcript",
+    fallback: "Voice input is not available in this browser. You can still type your question.",
+    helper: "Tap the mic and ask your question in Hindi, English, or Hinglish.",
+    errorTitle: "Voice issue",
+  };
+};
+
 const AssistantChat = () => {
   const { language } = useI18n();
   const [input, setInput] = useState("");
-  const uiCopy = useMemo(() => buildAssistantCopy(language), [language]);
+  const uiCopy = useMemo(() => buildBaseAssistantCopy(language), [language]);
   const [messages, setMessages] = useState<AssistantChatMessage[]>(() => [
     {
       id: "welcome-message",
       role: "assistant",
       content: uiCopy.welcome,
       examples: uiCopy.quickPrompts,
+      language,
     },
   ]);
 
@@ -112,26 +188,41 @@ const AssistantChat = () => {
           role: "assistant",
           content: uiCopy.welcome,
           examples: uiCopy.quickPrompts,
+          language,
         },
       ];
     });
-  }, [uiCopy.quickPrompts, uiCopy.welcome]);
+  }, [language, uiCopy.quickPrompts, uiCopy.welcome]);
 
   const assistantQuery = useMutation({
-    mutationFn: askAssistant,
+    mutationFn: ({
+      message,
+      history,
+    }: {
+      message: string;
+      history: AssistantHistoryMessage[];
+    }) => askAssistant(message, history),
   });
 
-  const submitMessage = async (rawMessage: string) => {
+  const submitMessage = async (
+    rawMessage: string,
+    options?: {
+      source?: "text" | "voice";
+      languageOverride?: AssistantChatLanguage;
+    },
+  ): Promise<AssistantReply | null> => {
     const message = rawMessage.trim();
-    if (!message || assistantQuery.isPending) return;
+    if (!message || assistantQuery.isPending) return null;
 
-    const replyLanguage = detectMessageLanguage(message);
-    const replyCopy = buildAssistantCopy(replyLanguage);
+    const replyLanguage =
+      options?.languageOverride ?? detectAssistantChatLanguage(message);
+    const replyCopy = buildMessageCopy(replyLanguage, language);
     const requestTime = Date.now();
     const userMessage: AssistantChatMessage = {
       id: `user-${requestTime}`,
       role: "user",
       content: message,
+      language: replyLanguage,
     };
     const pendingId = `assistant-pending-${requestTime}`;
     const pendingMessage: AssistantChatMessage = {
@@ -139,13 +230,21 @@ const AssistantChat = () => {
       role: "assistant",
       content: replyCopy.thinking,
       pending: true,
+      language: replyLanguage,
     };
+    const history = messages
+      .filter((entry) => !entry.pending)
+      .slice(-6)
+      .map<AssistantHistoryMessage>((entry) => ({
+        role: entry.role,
+        content: entry.content,
+      }));
 
     setMessages((current) => [...current, userMessage, pendingMessage]);
     setInput("");
 
     try {
-      const reply = await assistantQuery.mutateAsync(message);
+      const reply = await assistantQuery.mutateAsync({ message, history });
       setMessages((current) =>
         current.map((entry) =>
           entry.id === pendingId
@@ -155,10 +254,12 @@ const AssistantChat = () => {
                 content: reply.answer,
                 highlights: reply.highlights,
                 examples: reply.examples,
+                language: reply.language,
               }
             : entry,
         ),
       );
+      return reply;
     } catch {
       setMessages((current) =>
         current.map((entry) =>
@@ -167,12 +268,68 @@ const AssistantChat = () => {
                 id: `assistant-error-${requestTime}`,
                 role: "assistant",
                 content: replyCopy.error,
+                language: replyLanguage,
               }
             : entry,
         ),
       );
+
+      if (options?.source === "voice") {
+        throw new Error(replyCopy.error);
+      }
+
+      return null;
     }
   };
+
+  const voiceAssistant = useVoiceAssistant({
+    preferredLanguage: language,
+    onVoiceQuery: async (transcript, transcriptLanguage) => {
+      const reply = await submitMessage(transcript, {
+        source: "voice",
+        languageOverride: transcriptLanguage,
+      });
+
+      if (!reply) {
+        return null;
+      }
+
+      return {
+        text: reply.answer,
+        language: reply.language,
+      };
+    },
+  });
+
+  const voiceUiLanguage =
+    voiceAssistant.transcript?.language ??
+    (voiceAssistant.isSpeaking
+      ? messages
+          .slice()
+          .reverse()
+          .find((message) => message.role === "assistant" && !message.pending)
+          ?.language
+      : null) ??
+    language;
+  const voiceCopy = buildVoiceCopy(voiceUiLanguage);
+  const latestAssistantReply = messages
+    .slice()
+    .reverse()
+    .find(
+      (message) =>
+        message.role === "assistant" &&
+        !message.pending &&
+        message.id !== "welcome-message",
+    );
+  const voiceStatusLabel = voiceAssistant.isListening
+    ? voiceCopy.listening
+    : voiceAssistant.isProcessing
+      ? voiceCopy.thinking
+      : voiceAssistant.isSpeaking
+        ? voiceCopy.speaking
+        : !voiceAssistant.sttSupported
+          ? voiceCopy.fallback
+          : voiceCopy.helper;
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1.25fr)_320px]">
@@ -190,61 +347,73 @@ const AssistantChat = () => {
         </CardHeader>
         <CardContent className="dashboard-chart-content flex flex-col gap-4">
           <div className="grid max-h-[540px] gap-3 overflow-y-auto rounded-3xl border border-border/70 bg-background/60 p-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-              >
+            {messages.map((message) => {
+              const messageCopy = buildMessageCopy(
+                message.language ??
+                  (message.role === "user"
+                    ? detectAssistantChatLanguage(message.content)
+                    : language),
+                language,
+              );
+
+              return (
                 <div
-                  className={`max-w-[85%] rounded-3xl px-4 py-3 ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border bg-card text-foreground"
-                  }`}
+                  key={message.id}
+                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                 >
-                  <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] opacity-80">
-                    {message.role === "user" ? <User2 size={14} /> : <Bot size={14} />}
-                    <span>
-                      {message.role === "user" ? uiCopy.roleUser : uiCopy.roleAssistant}
-                    </span>
-                  </div>
-                  <p className="text-sm leading-6">{message.content}</p>
-
-                  {message.highlights && message.highlights.length > 0 ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {message.highlights.map((item) => (
-                        <span
-                          key={`${message.id}-${item.label}`}
-                          className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground"
-                        >
-                          {item.label}: {item.value}
-                        </span>
-                      ))}
+                  <div
+                    className={`max-w-[85%] rounded-3xl px-4 py-3 ${
+                      message.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "border border-border bg-card text-foreground"
+                    }`}
+                  >
+                    <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] opacity-80">
+                      {message.role === "user" ? <User2 size={14} /> : <Bot size={14} />}
+                      <span>
+                        {message.role === "user"
+                          ? messageCopy.roleUser
+                          : messageCopy.roleAssistant}
+                      </span>
                     </div>
-                  ) : null}
+                    <p className="text-sm leading-6">{message.content}</p>
 
-                  {message.examples && message.examples.length > 0 ? (
-                    <div className="mt-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                        {uiCopy.examplesTitle}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {message.examples.map((example) => (
-                          <button
-                            key={`${message.id}-${example}`}
-                            type="button"
-                            onClick={() => void submitMessage(example)}
-                            className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground transition hover:border-primary/40 hover:text-primary"
+                    {message.highlights && message.highlights.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {message.highlights.map((item) => (
+                          <span
+                            key={`${message.id}-${item.label}`}
+                            className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground"
                           >
-                            {example}
-                          </button>
+                            {item.label}: {item.value}
+                          </span>
                         ))}
                       </div>
-                    </div>
-                  ) : null}
+                    ) : null}
+
+                    {message.examples && message.examples.length > 0 ? (
+                      <div className="mt-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                          {messageCopy.examplesTitle}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {message.examples.map((example) => (
+                            <button
+                              key={`${message.id}-${example}`}
+                              type="button"
+                              onClick={() => void submitMessage(example)}
+                              className="rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-foreground transition hover:border-primary/40 hover:text-primary"
+                            >
+                              {example}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <form
@@ -258,18 +427,91 @@ const AssistantChat = () => {
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder={uiCopy.placeholder}
-              disabled={assistantQuery.isPending}
+              disabled={assistantQuery.isPending || voiceAssistant.isProcessing}
               className="h-12 rounded-2xl"
             />
             <Button
+              type="button"
+              variant={voiceAssistant.isListening ? "secondary" : "outline"}
+              size="icon"
+              disabled={assistantQuery.isPending || voiceAssistant.isProcessing}
+              onClick={() => {
+                if (voiceAssistant.isListening) {
+                  voiceAssistant.stopListening();
+                  return;
+                }
+
+                voiceAssistant.startListening();
+              }}
+              aria-label={voiceAssistant.isListening ? voiceCopy.stop : voiceCopy.start}
+              className="h-12 w-12 rounded-2xl"
+            >
+              {voiceAssistant.isListening ? <Square size={16} /> : <Mic size={16} />}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              disabled={!latestAssistantReply}
+              onClick={() => {
+                if (voiceAssistant.isSpeaking) {
+                  voiceAssistant.stopSpeaking();
+                  return;
+                }
+
+                if (!latestAssistantReply) {
+                  return;
+                }
+
+                void voiceAssistant.speakReply(
+                  latestAssistantReply.content,
+                  latestAssistantReply.language ??
+                    detectAssistantChatLanguage(latestAssistantReply.content),
+                );
+              }}
+              aria-label={
+                voiceAssistant.isSpeaking ? voiceCopy.stopReplay : voiceCopy.replay
+              }
+              className="h-12 w-12 rounded-2xl"
+            >
+              {voiceAssistant.isSpeaking ? <VolumeX size={16} /> : <Volume2 size={16} />}
+            </Button>
+            <Button
               type="submit"
-              disabled={assistantQuery.isPending || input.trim().length === 0}
+              disabled={
+                assistantQuery.isPending ||
+                voiceAssistant.isProcessing ||
+                input.trim().length === 0
+              }
               className="h-12 rounded-2xl px-5"
             >
               <SendHorizontal size={16} />
               {uiCopy.send}
             </Button>
           </form>
+
+          <div className="rounded-3xl border border-border/70 bg-background/70 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-foreground">{voiceStatusLabel}</p>
+              {voiceAssistant.liveTranscript ? (
+                <span className="rounded-full border border-border bg-card px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                  {voiceCopy.transcriptTitle}
+                </span>
+              ) : null}
+            </div>
+
+            {voiceAssistant.liveTranscript ? (
+              <p className="mt-3 text-sm leading-6 text-foreground">
+                {voiceAssistant.liveTranscript}
+              </p>
+            ) : null}
+
+            {voiceAssistant.error ? (
+              <p className="mt-3 text-sm text-destructive">
+                {voiceCopy.errorTitle}: {voiceAssistant.error}
+              </p>
+            ) : null}
+          </div>
         </CardContent>
       </Card>
 

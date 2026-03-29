@@ -82,6 +82,7 @@ import importRoutes from "../modules/import/import.routes.js";
 import forecastRoutes from "../modules/forecast/forecast.routes.js";
 import inventoryDemandRoutes from "../modules/inventory-demand/inventoryDemand.routes.js";
 import assistantRoutes from "../modules/assistant/assistant.routes.js";
+import copilotRoutes from "../modules/copilot/copilot.routes.js";
 import ExportController from "../modules/export/export.controller.js";
 
 const router = Router();
@@ -549,6 +550,9 @@ router.use("/inventory-demand", inventoryDemandRoutes);
 
 // Assistant
 router.use("/assistant", assistantRoutes);
+
+// Financial copilot
+router.use("/copilot", copilotRoutes);
 
 // Payments
 router.get("/payments", AuthMiddleware, PaymentsController.index);

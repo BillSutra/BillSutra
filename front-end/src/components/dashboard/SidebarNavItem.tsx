@@ -28,22 +28,22 @@ const SidebarNavItem = ({
         "group relative flex h-10 items-center rounded-xl px-3 py-2 text-sm transition-all duration-200",
         collapsed ? "justify-center" : "gap-3",
         active
-          ? "border border-[#d7e4f1] bg-[#eef4fb] text-[#123d65]"
-          : "text-[#5f758d] hover:bg-white hover:text-[#123d65]",
+          ? "border border-border/80 bg-primary/10 text-primary dark:border-white/8 dark:bg-primary/16"
+          : "text-muted-foreground hover:bg-card/75 hover:text-foreground dark:hover:bg-white/[0.04]",
       )}
     >
       <span
         className={cn(
           "absolute inset-y-2 left-0 w-1 rounded-r-full transition-opacity",
-          active ? "bg-[#123d65] opacity-100" : "opacity-0",
+          active ? "bg-primary opacity-100" : "opacity-0",
         )}
       />
       <span
         className={cn(
           "flex h-7 w-7 items-center justify-center rounded-lg transition-colors",
           active
-            ? "bg-white text-[#123d65]"
-            : "bg-transparent text-[#6b829a] group-hover:bg-[#eef4fb] group-hover:text-[#123d65]",
+            ? "bg-card/88 text-primary dark:bg-white/[0.06]"
+            : "bg-transparent text-muted-foreground group-hover:bg-card/88 group-hover:text-foreground dark:group-hover:bg-white/[0.04]",
         )}
       >
         <Icon className="h-4 w-4" />

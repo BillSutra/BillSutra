@@ -971,14 +971,159 @@ export type DashboardForecastResponse = {
 };
 
 export type AssistantReply = {
-  language: "en" | "hi";
-  intent: "profit" | "total_sales" | "pending_payments" | "cashflow" | "help";
+  language: "en" | "hi" | "hinglish";
+  intent:
+    | "profit"
+    | "total_sales"
+    | "pending_payments"
+    | "cashflow"
+    | "top_spend"
+    | "vendor_spend"
+    | "budget_plan"
+    | "savings_suggestion"
+    | "bill_reminder"
+    | "health_score"
+    | "behavior_insights"
+    | "goal_tracking"
+    | "affordability"
+    | "help";
   answer: string;
   highlights: Array<{
     label: string;
     value: string;
   }>;
   examples: string[];
+};
+
+export type AssistantHistoryMessage = {
+  role: "assistant" | "user";
+  content: string;
+};
+
+export type FinancialCopilotPayload = {
+  generatedAt: string;
+  language: "en" | "hi" | "hinglish";
+  overview: {
+    headline: string;
+    summary: string;
+    action: string;
+  };
+  budget: {
+    suggestedMonthlyBudget: number;
+    remainingSafeToSpend: number;
+    fixedExpensesEstimate: number;
+    spentThisMonth: number;
+    projectedMonthSpend: number;
+    dailySafeSpend: number;
+    status: "on_track" | "caution" | "over_budget";
+    summary: string;
+    action: string;
+  };
+  savings: {
+    summary: string;
+    monthlySavingsPotential: number;
+    opportunities: Array<{
+      id: string;
+      title: string;
+      description: string;
+      potentialMonthlySavings: number;
+      category: string;
+      priority: "high" | "medium" | "low";
+    }>;
+  };
+  reminders: {
+    summary: string;
+    items: Array<{
+      id: string;
+      title: string;
+      description: string;
+      dueDate: string | null;
+      daysUntilDue: number | null;
+      monthlyAmount: number;
+      priority: "high" | "medium" | "low";
+      suggestedAction: string;
+      behavior: "early" | "on_time" | "late";
+    }>;
+  };
+  healthScore: {
+    score: number;
+    band: "excellent" | "good" | "needs_improvement" | "poor";
+    summary: string;
+    nextBestAction: string;
+    breakdown: Array<{
+      label: string;
+      score: number;
+      outOf: number;
+    }>;
+  };
+  behaviorInsights: {
+    summary: string;
+    items: Array<{
+      id: string;
+      title: string;
+      description: string;
+      priority: "high" | "medium" | "low";
+    }>;
+  };
+  nudges: Array<{
+    id: string;
+    tone: "positive" | "warning" | "critical" | "info";
+    message: string;
+    action: string;
+  }>;
+  goals: {
+    projectedMonthlySavings: number;
+    summary: string;
+    items: Array<{
+      id: number;
+      title: string;
+      emoji: string | null;
+      targetAmount: number;
+      currentAmount: number;
+      monthlyContributionTarget: number | null;
+      targetDate: string | null;
+      progressPercent: number;
+      remainingAmount: number;
+      projectedCompletionDate: string | null;
+      monthsToGoal: number | null;
+      summary: string;
+    }>;
+  };
+  decision: {
+    amount: number;
+    verdict: "safe" | "warning" | "risky";
+    summary: string;
+    explanation: string;
+    suggestedDelayDays: number;
+    impactOnBudget: number;
+    safeRoomAfterPurchase: number;
+    reserveForUpcomingExpenses: number;
+    currentBalanceEstimate: number;
+    projectedClosingBalance: number;
+  } | null;
+  examples: string[];
+};
+
+export type FinancialGoalRecord = {
+  id: number;
+  userId: number;
+  title: string;
+  emoji: string | null;
+  targetAmount: number;
+  currentAmount: number;
+  monthlyContributionTarget: number | null;
+  targetDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type FinancialGoalInput = {
+  title: string;
+  emoji?: string | null;
+  targetAmount: number;
+  currentAmount?: number;
+  monthlyContributionTarget?: number | null;
+  targetDate?: string | null;
 };
 
 export type UserProfile = {
@@ -1773,8 +1918,43 @@ export const fetchDashboardForecast =
     return response.data.data as DashboardForecastResponse;
   };
 
-export const askAssistant = async (message: string): Promise<AssistantReply> => {
-  const response = await apiClient.post("/assistant/query", { message });
+export const fetchFinancialCopilot = async (params?: {
+  language?: "en" | "hi" | "hinglish";
+  amount?: number;
+}): Promise<FinancialCopilotPayload> => {
+  const response = await apiClient.get("/copilot/summary", { params });
+  return response.data.data as FinancialCopilotPayload;
+};
+
+export const fetchFinancialGoals = async (): Promise<FinancialGoalRecord[]> => {
+  const response = await apiClient.get("/copilot/goals");
+  return response.data.data as FinancialGoalRecord[];
+};
+
+export const createFinancialGoal = async (
+  payload: FinancialGoalInput,
+): Promise<FinancialGoalRecord> => {
+  const response = await apiClient.post("/copilot/goals", payload);
+  return response.data.data as FinancialGoalRecord;
+};
+
+export const updateFinancialGoal = async (
+  id: number,
+  payload: Partial<FinancialGoalInput>,
+): Promise<FinancialGoalRecord> => {
+  const response = await apiClient.put(`/copilot/goals/${id}`, payload);
+  return response.data.data as FinancialGoalRecord;
+};
+
+export const deleteFinancialGoal = async (id: number): Promise<void> => {
+  await apiClient.delete(`/copilot/goals/${id}`);
+};
+
+export const askAssistant = async (
+  message: string,
+  history: AssistantHistoryMessage[] = [],
+): Promise<AssistantReply> => {
+  const response = await apiClient.post("/assistant/query", { message, history });
   return response.data.data as AssistantReply;
 };
 

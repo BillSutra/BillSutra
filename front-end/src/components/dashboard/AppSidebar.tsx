@@ -79,7 +79,7 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
     <div className="flex h-full flex-col gap-5 p-3">
       <div
         className={cn(
-          "rounded-[1.5rem] border border-[#d7e4f1] bg-white/92 p-4 shadow-[0_20px_40px_-34px_rgba(17,37,63,0.18)] backdrop-blur",
+          "app-panel rounded-[1.5rem] p-4",
           collapsed ? "px-2.5" : "px-3.5",
         )}
       >
@@ -97,7 +97,7 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
           />
         </div>
         {!collapsed ? (
-          <p className="mt-3 text-xs leading-5 text-[#627890]">
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">
             Premium billing, inventory, and operations for modern teams.
           </p>
         ) : null}
@@ -107,7 +107,7 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
         {groupedNavItems.map((section) => (
           <div key={section.id} className="space-y-1.5">
             {!collapsed ? (
-              <p className="px-3 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-[#7f95ab]">
+              <p className="px-3 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-muted-foreground/80">
                 {section.title}
               </p>
             ) : null}
@@ -147,7 +147,7 @@ const AppSidebar = ({
     <>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 hidden border-r border-sidebar-border/80 bg-[#f8fafc]/96 shadow-[0_18px_45px_-38px_rgba(17,37,63,0.2)] backdrop-blur lg:block",
+          "fixed inset-y-0 left-0 z-40 hidden border-r border-sidebar-border/80 bg-sidebar/92 text-sidebar-foreground shadow-[0_18px_45px_-38px_rgba(17,37,63,0.2)] backdrop-blur-xl dark:shadow-[0_18px_48px_-36px_rgba(1,4,9,0.82)] lg:block",
           collapsed ? "w-20" : "w-60",
         )}
       >
@@ -157,7 +157,7 @@ const AppSidebar = ({
               type="button"
               size="icon-sm"
               variant="outline"
-              className="rounded-2xl border-[#d7e4f1] bg-white shadow-sm hover:bg-[#f7fbff]"
+              className="rounded-2xl"
               onClick={onToggleCollapsed}
               aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
             >
@@ -185,7 +185,7 @@ const AppSidebar = ({
 
       <aside
         className={cn(
-          "app-scrollbar fixed top-0 left-0 z-50 h-full w-72 overflow-y-auto border-r border-sidebar-border/80 bg-[#f8fafc] transition-transform duration-200 lg:hidden",
+          "app-scrollbar fixed top-0 left-0 z-50 h-full w-72 overflow-y-auto border-r border-sidebar-border/80 bg-sidebar/96 text-sidebar-foreground shadow-[0_20px_48px_-32px_rgba(1,4,9,0.78)] transition-transform duration-200 lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
