@@ -68,6 +68,10 @@ const ForecastInsightsPanel = dynamic(
   () => import("@/components/dashboard/forecast-insights-panel"),
   { loading: () => dashboardSectionFallback("h-[320px]") },
 );
+const FinancialCopilotPanel = dynamic(
+  () => import("@/components/dashboard/financial-copilot-panel"),
+  { loading: () => dashboardSectionFallback("h-[420px]") },
+);
 const DemandSupplyPanel = dynamic(
   () => import("@/components/dashboard/demand-supply-panel"),
   { loading: () => dashboardSectionFallback("h-[360px]") },
@@ -135,6 +139,7 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
     { label: t("dashboard.sectionLinks.forecasting"), href: "#forecasting" },
     { label: t("insights.sections.demandSupply.title"), href: "#demand-supply" },
     { label: t("insights.sections.ai.title"), href: "#intelligence" },
+    { label: "Copilot", href: "#copilot" },
     { label: t("dashboard.sectionLinks.records"), href: "#records" },
   ];
 
@@ -339,6 +344,16 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
             </div>
             <ForecastInsightsPanel className="h-full" />
           </div>
+        </section>
+
+        <section id="copilot" className="grid gap-4">
+          <DashboardSectionIntro
+            headingId="insights-copilot-heading"
+            kicker="Level 4 + 5"
+            title="Predictive finance copilot"
+            description="Dynamic budgets, savings guidance, nudges, bill reminders, goal tracking, and real-time spending decisions now live in one place."
+          />
+          <FinancialCopilotPanel />
         </section>
 
         <section className="grid gap-4">

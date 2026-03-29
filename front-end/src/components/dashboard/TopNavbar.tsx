@@ -20,7 +20,7 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
   const { t } = useI18n();
 
   return (
-    <header className="sticky top-0 z-30 border-b border-[#d7e4f1]/90 bg-white/88 shadow-[0_1px_0_rgba(17,37,63,0.05)] backdrop-blur-xl">
+    <header className="sticky top-0 z-30 border-b border-border/70 bg-background/78 shadow-[0_1px_0_rgba(17,37,63,0.05)] backdrop-blur-xl dark:bg-background/72 dark:shadow-[0_12px_30px_-26px_rgba(1,4,9,0.9)]">
       <div className="px-4 py-3 sm:px-6 lg:px-8">
         <div className="flex min-h-[3.75rem] items-center gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -28,7 +28,7 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
               type="button"
               size="icon"
               variant="outline"
-              className="rounded-2xl border-[#d7e4f1] bg-white shadow-sm lg:hidden"
+              className="rounded-2xl lg:hidden"
               aria-label={t("topNavbar.openSidebar")}
               onClick={onOpenMobileMenu}
             >
@@ -44,10 +44,10 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
             </Link>
 
             <div className="relative hidden w-full max-w-[32rem] md:block">
-              <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-[#7f95ab]" />
+              <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder={t("topNavbar.searchPlaceholder")}
-                className="h-11 rounded-full border-[#d7e4f1] bg-[#f8fbff] pl-11 pr-4 shadow-sm placeholder:text-[#8ea2b8] focus-visible:border-[#1d578c] focus-visible:ring-[#1d578c]/15"
+                className="h-11 rounded-full pl-11 pr-4 placeholder:text-muted-foreground"
               />
             </div>
           </div>
@@ -57,7 +57,7 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
               type="button"
               variant="outline"
               size="icon"
-              className="rounded-2xl border-[#d7e4f1] bg-white shadow-sm hover:bg-[#f7fbff]"
+              className="rounded-2xl"
               aria-label={t("topNavbar.notifications")}
             >
               <Bell className="h-4 w-4" />
@@ -69,10 +69,10 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
         </div>
 
         <div className="relative mt-3 md:hidden">
-          <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-[#7f95ab]" />
+          <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={t("topNavbar.searchPlaceholder")}
-            className="h-11 rounded-full border-[#d7e4f1] bg-[#f8fbff] pl-11 pr-4 shadow-sm placeholder:text-[#8ea2b8] focus-visible:border-[#1d578c] focus-visible:ring-[#1d578c]/15"
+            className="h-11 rounded-full pl-11 pr-4 placeholder:text-muted-foreground"
           />
         </div>
       </div>

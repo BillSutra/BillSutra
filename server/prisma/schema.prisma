@@ -30,6 +30,7 @@ model User {
   sales                       Sale[]
   invoices                    Invoice[]
   recurring_invoice_templates RecurringInvoiceTemplate[]
+  financial_goals             FinancialGoal[]
   payments                    Payment[]
   resets                      PasswordResetToken[]
   business_profile            BusinessProfile?
@@ -167,6 +168,23 @@ model UserSavedTemplate {
   @@index([user_id])
   @@index([base_template_id])
   @@map("user_saved_templates")
+}
+
+model FinancialGoal {
+  id                          Int       @id @default(autoincrement())
+  user                        User      @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id                     Int
+  title                       String    @db.VarChar(191)
+  emoji                       String?   @db.VarChar(32)
+  target_amount               Decimal   @db.Decimal(12, 2)
+  current_amount              Decimal   @default(0) @db.Decimal(12, 2)
+  monthly_contribution_target Decimal?  @db.Decimal(12, 2)
+  target_date                 DateTime?
+  created_at                  DateTime  @default(now())
+  updated_at                  DateTime  @updatedAt
+
+  @@index([user_id])
+  @@map("financial_goals")
 }
 
 model Customer {

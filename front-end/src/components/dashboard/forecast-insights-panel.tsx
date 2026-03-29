@@ -11,22 +11,22 @@ import { useDashboardForecast } from "@/components/dashboard/use-dashboard-forec
 const toneStyles = {
   positive: {
     icon: CheckCircle2,
-    card: "border-emerald-200 bg-emerald-50/60",
+    card: "border-emerald-200 bg-emerald-50/60 dark:border-emerald-400/12 dark:bg-emerald-400/[0.06]",
     iconClass: "text-emerald-600",
   },
   warning: {
     icon: AlertTriangle,
-    card: "border-amber-200 bg-amber-50/70",
+    card: "border-amber-200 bg-amber-50/70 dark:border-amber-400/12 dark:bg-amber-400/[0.06]",
     iconClass: "text-amber-600",
   },
   critical: {
     icon: TrendingDown,
-    card: "border-rose-200 bg-rose-50/70",
+    card: "border-rose-200 bg-rose-50/70 dark:border-rose-400/12 dark:bg-rose-400/[0.06]",
     iconClass: "text-rose-600",
   },
   info: {
     icon: Info,
-    card: "border-slate-200 bg-slate-50/70",
+    card: "border-slate-200 bg-slate-50/70 dark:border-white/8 dark:bg-white/[0.03]",
     iconClass: "text-slate-600",
   },
 } as const;
@@ -57,6 +57,7 @@ const ForecastInsightsPanel = ({ className }: { className?: string }) => {
     >
       <CardHeader className="dashboard-chart-content">
         <p className="text-xs uppercase tracking-[0.26em] text-[#8a6d56]">
+          {/* Insight cards intentionally use softer copy colors in dark mode for lower eye strain. */}
           Smart insights
         </p>
         <CardTitle className="mt-2 text-2xl text-[#1f1b16]">
@@ -76,9 +77,9 @@ const ForecastInsightsPanel = ({ className }: { className?: string }) => {
       </CardHeader>
       <CardContent className="dashboard-chart-content flex min-h-0 flex-1 flex-col gap-5">
         {isLoading ? (
-          <div className="h-48 animate-pulse rounded-xl bg-[#fdf7f1]" />
+          <div className="h-48 animate-pulse rounded-xl bg-muted/70" />
         ) : isError ? (
-          <p className="text-sm text-[#b45309]">Unable to load forecast insights.</p>
+          <p className="text-sm text-destructive">Unable to load forecast insights.</p>
         ) : (
           <>
             <div className="grid gap-3 sm:grid-cols-3">
@@ -110,6 +111,7 @@ const ForecastInsightsPanel = ({ className }: { className?: string }) => {
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-[#1f1b16]">
+                          {/* Titles stay high-contrast while body copy remains slightly muted. */}
                           {insight.title}
                         </p>
                         <p className="mt-1 text-sm leading-6 text-[#5f5144]">

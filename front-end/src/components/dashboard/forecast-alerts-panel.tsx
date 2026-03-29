@@ -45,9 +45,9 @@ const ForecastAlertsPanel = ({ className }: { className?: string }) => {
       </CardHeader>
       <CardContent className="dashboard-chart-content flex min-h-0 flex-1 flex-col gap-4">
         {isLoading ? (
-          <div className="h-40 animate-pulse rounded-xl bg-[#fdf7f1]" />
+          <div className="h-40 animate-pulse rounded-xl bg-muted/70" />
         ) : isError ? (
-          <p className="text-sm text-[#b45309]">Unable to load alerts.</p>
+          <p className="text-sm text-destructive">Unable to load alerts.</p>
         ) : alerts.length === 0 ? (
           <div className="app-empty-state px-4 py-6 text-sm">{t("insights.alerts.empty")}</div>
         ) : (
@@ -58,8 +58,8 @@ const ForecastAlertsPanel = ({ className }: { className?: string }) => {
                 key={alert.id}
                 className={`rounded-2xl border px-4 py-4 ${
                   alert.tone === "critical"
-                    ? "border-rose-200 bg-rose-50"
-                    : "border-amber-200 bg-amber-50"
+                    ? "border-rose-200 bg-rose-50 dark:border-rose-400/12 dark:bg-rose-400/[0.06]"
+                    : "border-amber-200 bg-amber-50 dark:border-amber-400/12 dark:bg-amber-400/[0.06]"
                 }`}
               >
                 <div className="flex items-start gap-3">

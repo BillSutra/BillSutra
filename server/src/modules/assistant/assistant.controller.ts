@@ -15,6 +15,7 @@ class AssistantController {
       const reply = await answerAssistantQuery({
         userId,
         message: body.message,
+        history: body.history,
       });
 
       return sendResponse(res, 200, { data: reply });
