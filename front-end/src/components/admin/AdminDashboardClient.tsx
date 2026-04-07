@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { isAxiosError } from "axios";
 import { useRouter } from "next/navigation";
@@ -543,6 +544,9 @@ export default function AdminDashboardClient() {
                   </div>
                   <p>{lastSyncedAt ? formatDateTime(lastSyncedAt) : "Just now"}</p>
                 </div>
+                <Button asChild variant="outline">
+                  <Link href="/admin/payments">Review payments</Link>
+                </Button>
                 <div className="flex flex-wrap gap-2 lg:hidden">
                   {sectionMeta.map((item) => {
                     const Icon = item.icon;

@@ -1,9 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import AppSidebar from "./AppSidebar";
 import TopNavbar from "./TopNavbar";
+import BeginnerOnboardingModal from "@/components/onboarding/BeginnerOnboardingModal";
+import HelpCenterDialog from "@/components/help/HelpCenterDialog";
+import {
+  getBeginnerState,
+  invalidateBeginnerQueries,
+  markOnboardingSeen,
+  resetBeginnerExperience,
+  seedDemoWorkspace,
+} from "@/lib/firstRun";
 
 type DashboardLayoutProps = {
   name: string;
@@ -24,6 +35,47 @@ const DashboardLayout = ({
 }: DashboardLayoutProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [demoSeeded, setDemoSeeded] = useState(false);
+  const [isSeedingDemo, setIsSeedingDemo] = useState(false);
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const state = getBeginnerState();
+    setDemoSeeded(state.demoSeeded);
+    setOnboardingOpen(!state.onboardingSeen);
+  }, []);
+
+  const handleCompleteOnboarding = () => {
+    markOnboardingSeen();
+    setOnboardingOpen(false);
+  };
+
+  const handleReplayOnboarding = () => {
+    resetBeginnerExperience();
+    setDemoSeeded(false);
+    setHelpOpen(false);
+    setOnboardingOpen(true);
+  };
+
+  const handleSeedDemo = async () => {
+    if (isSeedingDemo) return;
+
+    try {
+      setIsSeedingDemo(true);
+      await seedDemoWorkspace();
+      await invalidateBeginnerQueries(queryClient);
+      setDemoSeeded(true);
+      toast.success("Sample data is ready. You can edit or delete it anytime.");
+      markOnboardingSeen();
+      setOnboardingOpen(false);
+    } catch {
+      toast.error("Could not load sample data right now. Please try again.");
+    } finally {
+      setIsSeedingDemo(false);
+    }
+  };
 
   return (
     <div className="dashboard-root min-h-screen text-foreground">
@@ -45,6 +97,7 @@ const DashboardLayout = ({
             name={name}
             image={image}
             onOpenMobileMenu={() => setMobileOpen(true)}
+            onOpenHelp={() => setHelpOpen(true)}
           />
 
           <main className="page-fade-in dashboard-grid flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -68,6 +121,29 @@ const DashboardLayout = ({
           </main>
         </div>
       </div>
+
+      <BeginnerOnboardingModal
+        open={onboardingOpen}
+        onOpenChange={(open) => {
+          setOnboardingOpen(open);
+          if (!open) {
+            markOnboardingSeen();
+          }
+        }}
+        onComplete={handleCompleteOnboarding}
+        onSeedDemo={() => void handleSeedDemo()}
+        isSeedingDemo={isSeedingDemo}
+        demoSeeded={demoSeeded}
+      />
+
+      <HelpCenterDialog
+        open={helpOpen}
+        onOpenChange={setHelpOpen}
+        onReplayOnboarding={handleReplayOnboarding}
+        onSeedDemo={() => void handleSeedDemo()}
+        isSeedingDemo={isSeedingDemo}
+        demoSeeded={demoSeeded}
+      />
     </div>
   );
 };

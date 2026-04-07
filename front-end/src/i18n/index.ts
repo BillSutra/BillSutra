@@ -2,7 +2,7 @@ import en from "../../locales/en.json";
 import hi from "../../locales/hi.json";
 import { hiOverrides } from "@/i18n/hi-overrides";
 
-export type Language = "en" | "hi";
+export type Language = "en" | "hi" | "hinglish";
 
 export interface TranslationMap {
   [key: string]: string | TranslationMap;
@@ -13,11 +13,12 @@ export const LANGUAGE_STORAGE_KEY = "billSutra:language";
 export const LANGUAGE_COOKIE_KEY = "billSutra-language";
 
 export const isLanguage = (value: unknown): value is Language =>
-  value === "en" || value === "hi";
+  value === "en" || value === "hi" || value === "hinglish";
 
 export const LOCALE_BY_LANGUAGE: Record<Language, string> = {
   en: "en-IN",
   hi: "hi-IN",
+  hinglish: "en-IN",
 };
 
 const mergeTranslations = (
@@ -47,6 +48,26 @@ const mergeTranslations = (
 export const translations = {
   en,
   hi: mergeTranslations(hi as TranslationMap, hiOverrides),
+  hinglish: {
+    common: {
+      language: "Language",
+      english: "English",
+      hindi: "Hindi",
+      hinglish: "Hinglish",
+    },
+    navigation: {
+      invoices: "Bills",
+      invoiceRecords: "Bill History",
+      clients: "Customers",
+    },
+    dashboardQuickDesk: {
+      actions: {
+        newBill: {
+          label: "Create Bill",
+        },
+      },
+    },
+  },
 } satisfies Record<Language, TranslationMap>;
 
 export const resolveTranslation = (
@@ -90,10 +111,7 @@ export const translate = (
   params?: Record<string, string | number>,
 ) => {
   const active = resolveTranslation(translations[language], key);
-  const fallback =
-    language === DEFAULT_LANGUAGE
-      ? resolveTranslation(translations[DEFAULT_LANGUAGE], key)
-      : undefined;
+  const fallback = resolveTranslation(translations[DEFAULT_LANGUAGE], key);
 
   return interpolate(active ?? fallback ?? key, params);
 };

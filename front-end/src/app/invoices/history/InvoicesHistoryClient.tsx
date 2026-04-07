@@ -2,11 +2,12 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Clock3, Wallet } from "lucide-react";
+import { CheckCircle2, Clock3, ReceiptText, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import InvoicePaymentStatusBadge from "@/components/invoice/InvoicePaymentStatusBadge";
 import DataExportDialog from "@/components/export/DataExportDialog";
+import FriendlyEmptyState from "@/components/ui/FriendlyEmptyState";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -47,7 +48,7 @@ const humanizeEnum = (status: string) =>
     .join(" ");
 
 const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
-  const { t, formatCurrency, formatDate } = useI18n();
+  const { language, t, formatCurrency, formatDate } = useI18n();
   const { data, isLoading, isError } = useInvoicesQuery();
   const updateInvoice = useUpdateInvoiceMutation();
   const createPayment = useCreatePaymentMutation();
@@ -292,6 +293,30 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
       },
     );
   }, [filtered]);
+  const emptyStateCopy =
+    language === "hi"
+      ? {
+          title: "अभी कोई बिल नहीं है",
+          description: "पहला बिल बनते ही उसका रिकॉर्ड यहां दिखेगा।",
+          hint: "शुरुआत के लिए एक ग्राहक और कम से कम एक प्रोडक्ट जोड़ें, फिर पहला बिल बनाएं।",
+          primary: "बिल बनाएं",
+          secondary: "प्रोडक्ट जोड़ें",
+        }
+      : language === "hinglish"
+        ? {
+            title: "Abhi koi bill nahi hai",
+            description: "Pehla bill bante hi uska record yahan dikhega.",
+            hint: "Shuruaat ke liye ek customer aur kam se kam ek product jodiye, phir pehla bill banaiye.",
+            primary: "Bill Banaiye",
+            secondary: "Product Jodiye",
+          }
+        : {
+            title: "No bills yet",
+            description: "Your bill history will appear here after you create the first bill.",
+            hint: "Start by adding a customer and at least one product, then create your first bill.",
+            primary: "Create Bill",
+            secondary: "Add Product",
+          };
 
   return (
     <DashboardLayout
@@ -434,9 +459,21 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                 </p>
               )}
               {!isLoading && !isError && filtered.length === 0 && (
-                <p className="text-sm text-gray-500">
-                  {t("invoiceHistory.empty")}
-                </p>
+                <FriendlyEmptyState
+                  icon={ReceiptText}
+                  title={emptyStateCopy.title}
+                  description={emptyStateCopy.description}
+                  hint={emptyStateCopy.hint}
+                  primaryAction={{
+                    label: emptyStateCopy.primary,
+                    href: "/invoices",
+                  }}
+                  secondaryAction={{
+                    label: emptyStateCopy.secondary,
+                    href: "/products",
+                    variant: "outline",
+                  }}
+                />
               )}
               {!isLoading && !isError && filtered.length > 0 && (
                 <DataTable

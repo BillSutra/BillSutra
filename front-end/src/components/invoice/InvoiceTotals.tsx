@@ -44,13 +44,13 @@ const InvoiceTotals = ({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
-            Checkout
+            Step 3
           </p>
           <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-            Live bill summary
+            Review this bill
           </h3>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            Totals refresh instantly as the cart changes.
+            Check the total, then generate the bill when everything looks right.
           </p>
         </div>
         <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -60,7 +60,7 @@ const InvoiceTotals = ({
 
       <div className="mt-5 rounded-[1.6rem] bg-slate-950 px-5 py-5 text-white shadow-[0_24px_50px_-34px_rgba(15,23,42,0.45)] dark:bg-slate-900">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
-          Grand total
+          Bill total
         </p>
         <p className="mt-2 text-4xl font-semibold tracking-tight">
           {formatCurrency(totals.total)}

@@ -7,6 +7,7 @@ import AsyncProductSelect, {
   type AsyncProductSelectHandle,
 } from "@/components/products/AsyncProductSelect";
 import { Button } from "@/components/ui/button";
+import FirstTimeHint from "@/components/ui/FirstTimeHint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { Product } from "@/lib/apiClient";
@@ -100,56 +101,62 @@ const InvoiceTable = ({
           </span>
         </div>
 
-        <div className="mt-5 rounded-[1.7rem] bg-slate-50/80 p-5 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
-          <Label
-            htmlFor="pos-product-search"
-            className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400"
-          >
-            {t("invoiceComposer.searchOrScan")}
-          </Label>
-          <div className="mt-3 grid gap-3 2xl:grid-cols-[minmax(0,1fr)_minmax(188px,auto)]">
-            <AsyncProductSelect
-              ref={quickEntryRef}
-              value={quickEntryProduct ? String(quickEntryProduct.id) : ""}
-              selectedLabel={quickEntryProduct?.name ?? ""}
-              selectedProduct={quickEntryProduct}
-              autoFocus={autoFocusProductSearch}
-              onSelect={onQuickEntrySelect}
-              onSubmitSelection={(candidate) =>
-                onQuickEntrySubmit(candidate ?? quickEntryProduct)
-              }
-              placeholder={t("invoiceComposer.searchPlaceholder")}
-              className="min-w-0"
-              inputClassName="h-13 rounded-[1.15rem] border-slate-200 bg-white pr-4 text-[15px] shadow-[0_14px_28px_-22px_rgba(15,23,42,0.22)] focus-visible:border-primary/40 focus-visible:ring-primary/10 dark:border-slate-700 dark:bg-slate-950 dark:focus-visible:border-primary/40 dark:focus-visible:ring-primary/20"
-            />
-            <Button
-              type="button"
-              onClick={() => {
-                if (quickEntryRef && "current" in quickEntryRef) {
-                  quickEntryRef.current?.submit();
-                  return;
-                }
-                onQuickEntrySubmit(quickEntryProduct);
-              }}
-              className="h-13 w-full rounded-[1.15rem] px-6 text-sm font-semibold"
+        <FirstTimeHint
+          id="invoice-product-search"
+          message="Search or scan the product here, then press Add to put it into the bill."
+          bubbleClassName="max-w-sm"
+        >
+          <div className="mt-5 rounded-[1.7rem] bg-slate-50/80 p-5 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
+            <Label
+              htmlFor="pos-product-search"
+              className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400"
             >
-              {t("invoiceComposer.addToCart")}
-            </Button>
+              {t("invoiceComposer.searchOrScan")}
+            </Label>
+            <div className="mt-3 grid gap-3 2xl:grid-cols-[minmax(0,1fr)_minmax(188px,auto)]">
+              <AsyncProductSelect
+                ref={quickEntryRef}
+                value={quickEntryProduct ? String(quickEntryProduct.id) : ""}
+                selectedLabel={quickEntryProduct?.name ?? ""}
+                selectedProduct={quickEntryProduct}
+                autoFocus={autoFocusProductSearch}
+                onSelect={onQuickEntrySelect}
+                onSubmitSelection={(candidate) =>
+                  onQuickEntrySubmit(candidate ?? quickEntryProduct)
+                }
+                placeholder={t("invoiceComposer.searchPlaceholder")}
+                className="min-w-0"
+                inputClassName="h-13 rounded-[1.15rem] border-slate-200 bg-white pr-4 text-[15px] shadow-[0_14px_28px_-22px_rgba(15,23,42,0.22)] focus-visible:border-primary/40 focus-visible:ring-primary/10 dark:border-slate-700 dark:bg-slate-950 dark:focus-visible:border-primary/40 dark:focus-visible:ring-primary/20"
+              />
+              <Button
+                type="button"
+                onClick={() => {
+                  if (quickEntryRef && "current" in quickEntryRef) {
+                    quickEntryRef.current?.submit();
+                    return;
+                  }
+                  onQuickEntrySubmit(quickEntryProduct);
+                }}
+                className="h-13 w-full rounded-[1.15rem] px-6 text-sm font-semibold"
+              >
+                {t("invoiceComposer.addToCart")}
+              </Button>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className={shortcutBadgeClassName}>
+                {t("invoiceComposer.enterAddsSelection")}
+              </span>
+              <span className={shortcutBadgeClassName}>
+                {t("invoiceComposer.refocusSearch", { key: shortcutMetaLabel })}
+              </span>
+              <span className={shortcutBadgeClassName}>
+                {t("invoiceComposer.quickProductShortcut", {
+                  key: shortcutMetaLabel,
+                })}
+              </span>
+            </div>
           </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <span className={shortcutBadgeClassName}>
-              {t("invoiceComposer.enterAddsSelection")}
-            </span>
-            <span className={shortcutBadgeClassName}>
-              {t("invoiceComposer.refocusSearch", { key: shortcutMetaLabel })}
-            </span>
-            <span className={shortcutBadgeClassName}>
-              {t("invoiceComposer.quickProductShortcut", {
-                key: shortcutMetaLabel,
-              })}
-            </span>
-          </div>
-        </div>
+        </FirstTimeHint>
 
         <div className="mt-4 grid gap-3 2xl:grid-cols-2">
           <div className="rounded-[1.45rem] bg-white p-4 ring-1 ring-slate-200/80 dark:bg-slate-950/70 dark:ring-slate-700/70">

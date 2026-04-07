@@ -4,11 +4,15 @@ export const hiOverrides: TranslationMap = {
   navigation: {
     insights: "\u0907\u0928\u0938\u093e\u0907\u091f\u094d\u0938",
     assistant: "AI \u0905\u0938\u093f\u0938\u094d\u091f\u0947\u0902\u091f",
+    invoices: "\u092c\u093f\u0932",
+    invoiceRecords: "\u092c\u093f\u0932 \u0907\u0924\u093f\u0939\u093e\u0938",
+    clients: "\u0917\u094d\u0930\u093e\u0939\u0915",
   },
   common: {
     looksGood: "\u0938\u092c \u0920\u0940\u0915 \u0939\u0948",
     selectOption: "\u0915\u0943\u092a\u092f\u093e \u090f\u0915 \u0935\u093f\u0915\u0932\u094d\u092a \u091a\u0941\u0928\u0947\u0902",
     retry: "\u092b\u093f\u0930 \u0938\u0947 \u0915\u094b\u0936\u093f\u0936 \u0915\u0930\u0947\u0902",
+    hinglish: "\u0939\u093f\u0902\u0917\u094d\u0932\u093f\u0936",
     close: "बंद करें",
   },
   insights: {

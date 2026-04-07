@@ -2,9 +2,12 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { PackagePlus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import BeginnerGuideCard from "@/components/beginner/BeginnerGuideCard";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import DataExportDialog from "@/components/export/DataExportDialog";
+import FriendlyEmptyState from "@/components/ui/FriendlyEmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,7 +60,7 @@ export default function ProductsClient({
   image,
   canManageProducts,
 }: ProductsClientProps) {
-  const { t, formatCurrency } = useI18n();
+  const { language, t, formatCurrency } = useI18n();
   const queryClient = useQueryClient();
   const { data: categories } = useCategoriesQuery();
   const createCategory = useCreateCategoryMutation();
@@ -397,6 +400,148 @@ export default function ProductsClient({
     );
   };
 
+  const scrollToCreateForm = () => {
+    document.getElementById("product-create-form")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+  const emptyStateCopy =
+    language === "hi"
+      ? {
+          title: "अभी कोई प्रोडक्ट नहीं है",
+          description: "अपना पहला प्रोडक्ट जोड़ें ताकि आप तुरंत बिल बनाना शुरू कर सकें।",
+          hint: "शुरुआत के लिए सिर्फ प्रोडक्ट नाम और बिक्री कीमत काफी है।",
+          primary: "प्रोडक्ट जोड़ें",
+          secondary: "बिल बनाएं",
+        }
+      : language === "hinglish"
+        ? {
+            title: "Abhi koi product nahi hai",
+            description: "Apna pehla product jodiye taki aap turant bill banana shuru kar saken.",
+            hint: "Shuruaat ke liye sirf product naam aur selling price kaafi hai.",
+            primary: "Product Jodiye",
+            secondary: "Bill Banaiye",
+          }
+        : {
+            title: "No products yet",
+            description: "Add your first product so you can start making bills right away.",
+            hint: "Start by adding one item you sell. Product name and selling price are enough to begin.",
+            primary: "Add Product",
+            secondary: "Create Bill",
+          };
+  const showBeginnerGuide =
+    !isLoading &&
+    !isError &&
+    totalProducts === 0 &&
+    !debouncedSearch &&
+    !selectedCategoryFilter;
+  const beginnerGuideCopy =
+    language === "hi"
+      ? {
+          kicker: "स्टेप 2",
+          title: "अब अपना पहला प्रोडक्ट जोड़ें",
+          description:
+            "शुरुआत के लिए सिर्फ प्रोडक्ट का नाम और बिक्री कीमत भरें। SKU, बारकोड और bulk import बाद में भी कर सकते हैं।",
+          progressLabel: "अभी यही सबसे जरूरी काम है",
+          steps: [
+            {
+              title: "दुकान की जानकारी",
+              description: "अगर अभी नहीं भरी है तो पहले दुकान का नाम और फोन जोड़ें।",
+              href: "/business-profile",
+              actionLabel: "दुकान सेट करें",
+            },
+            {
+              title: "पहला प्रोडक्ट जोड़ें",
+              description: "नाम और कीमत भरते ही आप बिल बनाना शुरू कर सकते हैं।",
+              active: true,
+            },
+            {
+              title: "फिर ग्राहक जोड़ें",
+              description: "ग्राहक का नाम और फोन बाद वाले स्टेप में जोड़ें।",
+              href: "/customers",
+              actionLabel: "ग्राहक पेज खोलें",
+            },
+            {
+              title: "फिर बिल बनाएं",
+              description: "जब प्रोडक्ट तैयार हो जाए तो सीधा बिल स्क्रीन खोलें।",
+              href: "/invoices?quickAction=new-bill",
+              actionLabel: "बिल स्क्रीन खोलें",
+            },
+          ],
+          primary: "फॉर्म तक जाएं",
+          secondary: "सीधा बिल पेज खोलें",
+        }
+      : language === "hinglish"
+        ? {
+            kicker: "Step 2",
+            title: "Ab apna pehla product jodiye",
+            description:
+              "Shuruaat ke liye sirf product ka naam aur selling price bhariye. SKU, barcode, aur bulk import baad mein bhi kar sakte hain.",
+            progressLabel: "Abhi yahi sabse zaroori kaam hai",
+            steps: [
+              {
+                title: "Shop details",
+                description: "Agar abhi nahi bhari hai to pehle shop ka naam aur phone jodiye.",
+                href: "/business-profile",
+                actionLabel: "Shop set kijiye",
+              },
+              {
+                title: "Pehla product jodiye",
+                description: "Naam aur price bharte hi aap bill banana start kar sakte hain.",
+                active: true,
+              },
+              {
+                title: "Phir customer jodiye",
+                description: "Customer ka naam aur phone next step mein jod sakte hain.",
+                href: "/customers",
+                actionLabel: "Customers kholiye",
+              },
+              {
+                title: "Phir bill banaiye",
+                description: "Product ready hote hi seedha bill screen kholiye.",
+                href: "/invoices?quickAction=new-bill",
+                actionLabel: "Bill screen kholiye",
+              },
+            ],
+            primary: "Form tak jaiye",
+            secondary: "Bill page kholiye",
+          }
+        : {
+            kicker: "Step 2",
+            title: "Add your first product now",
+            description:
+              "Start with only the product name and selling price. SKU, barcode, and bulk import can wait until later.",
+            progressLabel: "This is the only product step you need right now",
+            steps: [
+              {
+                title: "Shop details",
+                description: "If needed, add your shop name and phone first.",
+                href: "/business-profile",
+                actionLabel: "Set up shop",
+              },
+              {
+                title: "Add your first product",
+                description: "Once the name and price are saved, you can start making bills.",
+                active: true,
+              },
+              {
+                title: "Add a customer next",
+                description: "Customer name and phone can be added in the next step.",
+                href: "/customers",
+                actionLabel: "Open customers",
+              },
+              {
+                title: "Then create a bill",
+                description: "As soon as the product is ready, open the bill screen.",
+                href: "/invoices?quickAction=new-bill",
+                actionLabel: "Open bill screen",
+              },
+            ],
+            primary: "Jump to form",
+            secondary: "Open bill page",
+          };
+
   return (
     <DashboardLayout
       name={name}
@@ -413,17 +558,42 @@ export default function ProductsClient({
           <p className="app-lead">{t("productsPage.lead")}</p>
         </div>
 
+        {showBeginnerGuide ? (
+          <BeginnerGuideCard
+            kicker={beginnerGuideCopy.kicker}
+            title={beginnerGuideCopy.title}
+            description={beginnerGuideCopy.description}
+            icon={Sparkles}
+            progressLabel={beginnerGuideCopy.progressLabel}
+            steps={beginnerGuideCopy.steps}
+            primaryAction={{
+              label: beginnerGuideCopy.primary,
+              onClick: scrollToCreateForm,
+            }}
+            secondaryAction={{
+              label: beginnerGuideCopy.secondary,
+              href: "/invoices?quickAction=new-bill",
+              variant: "outline",
+            }}
+          />
+        ) : null}
+
         {canManageProducts ? (
           <section className="app-panel rounded-3xl p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-foreground">
-                  {t("productsPage.import.title")}
-                </h2>
-                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                  {t("productsPage.import.description")}
-                </p>
-              </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-foreground">
+                    {t("productsPage.import.title")}
+                  </h2>
+                  <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                    {t("productsPage.import.description")}
+                  </p>
+                  {showBeginnerGuide ? (
+                    <p className="mt-3 inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
+                      Bulk import is optional. Most beginners can skip this and add one product manually.
+                    </p>
+                  ) : null}
+                </div>
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -719,7 +889,12 @@ export default function ProductsClient({
             <p className="mt-1 text-sm text-muted-foreground">
               {t("productsPage.addDescription")}
             </p>
-            <form className="mt-5 grid gap-4" onSubmit={handleCreate} noValidate>
+            <form
+              id="product-create-form"
+              className="mt-5 grid gap-4"
+              onSubmit={handleCreate}
+              noValidate
+            >
               <ValidationField
                 id="name"
                 label={t("productsPage.fields.name")}
@@ -945,11 +1120,27 @@ export default function ProductsClient({
                 </p>
               ) : null}
               {!isLoading && !isError && products.length === 0 ? (
-                <div className="app-empty-state text-sm">
-                  {debouncedSearch || selectedCategoryFilter
-                    ? t("productsPage.filters.empty")
-                    : t("productsPage.empty")}
-                </div>
+                debouncedSearch || selectedCategoryFilter ? (
+                  <div className="app-empty-state text-sm">
+                    {t("productsPage.filters.empty")}
+                  </div>
+                ) : (
+                  <FriendlyEmptyState
+                    icon={PackagePlus}
+                    title={emptyStateCopy.title}
+                    description={emptyStateCopy.description}
+                    hint={emptyStateCopy.hint}
+                    primaryAction={{
+                      label: emptyStateCopy.primary,
+                      onClick: scrollToCreateForm,
+                    }}
+                    secondaryAction={{
+                      label: emptyStateCopy.secondary,
+                      href: "/invoices",
+                      variant: "outline",
+                    }}
+                  />
+                )
               ) : null}
               {!isLoading && !isError && products.length > 0 ? (
                 <>

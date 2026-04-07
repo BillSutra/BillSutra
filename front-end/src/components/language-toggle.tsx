@@ -19,6 +19,7 @@ const LanguageToggle = ({ className }: { className?: string }) => {
         [
           { id: "en", label: "EN", fullLabel: t("common.english") },
           { id: "hi", label: "HI", fullLabel: t("common.hindi") },
+          { id: "hinglish", label: "HG", fullLabel: t("common.hinglish") },
         ] as const
       ).map((option) => {
         const active = language === option.id;

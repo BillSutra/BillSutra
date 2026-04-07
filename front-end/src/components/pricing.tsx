@@ -83,8 +83,8 @@ const planAction = (planId: string, isAuthenticated: boolean) => {
   }
 
   return {
-    href: "/pricing#compare-plans",
-    label: planId === "pro" ? "Review Pro upgrade" : "Review Pro Plus upgrade",
+    href: `/payments?plan=${planId}`,
+    label: planId === "pro" ? "Upgrade to Pro" : "Upgrade to Pro Plus",
   };
 };
 

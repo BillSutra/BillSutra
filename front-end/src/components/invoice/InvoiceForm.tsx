@@ -5,6 +5,7 @@ import { ValidationField } from "@/components/ui/ValidationField";
 import { validateDate, validateNumber } from "@/lib/validation";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import FirstTimeHint from "@/components/ui/FirstTimeHint";
 import type { InvoiceFormState, TaxMode } from "@/types/invoice";
 import { useI18n } from "@/providers/LanguageProvider";
 
@@ -49,26 +50,30 @@ const InvoiceForm = ({
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
-            Billing details
+            Step 1
           </p>
           <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-            Customer, tax, and invoice settings
+            Choose customer and basic bill details
           </h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            Keep supporting details close by while the cart and checkout stay in focus.
+            Start with the customer first. You can keep the default settings and review the full bill in Step 3.
           </p>
         </div>
         <div className="rounded-[1.4rem] border border-slate-200 bg-white/80 px-4 py-3 text-right shadow-sm dark:border-gray-700 dark:bg-gray-900/70">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
-            Billing mode
+            What happens next
           </p>
           <p className="mt-2 text-sm font-medium text-slate-900 dark:text-slate-100">
-            POS workflow active
+            Add products in Step 2
           </p>
         </div>
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
-        <div className="grid gap-2">
+        <FirstTimeHint
+          id="invoice-customer-field"
+          message="Pick the customer here first. It makes the rest of the bill easier."
+          className="grid gap-2"
+        >
           <Label
             className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
             htmlFor="customer"
@@ -102,7 +107,7 @@ const InvoiceForm = ({
               {t("invoiceForm.selectOptionError")}
             </span>
           )}
-        </div>
+        </FirstTimeHint>
         <ValidationField
           id="invoice_date"
           label={t("invoiceForm.invoiceDate")}
@@ -281,7 +286,7 @@ const InvoiceForm = ({
           </Button>
         ) : (
           <div className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-            Checkout stays in the sticky summary rail
+            Review and generate the bill in Step 3
           </div>
         )}
       </div>

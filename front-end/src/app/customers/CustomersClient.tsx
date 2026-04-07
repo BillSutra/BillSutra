@@ -15,14 +15,17 @@ import {
   Printer,
   Search,
   Share2,
+  Sparkles,
   SquarePen,
   Trash2,
   Users,
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
+import BeginnerGuideCard from "@/components/beginner/BeginnerGuideCard";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import DataExportDialog from "@/components/export/DataExportDialog";
+import FriendlyEmptyState from "@/components/ui/FriendlyEmptyState";
 import Modal from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -180,7 +183,7 @@ const buildStatementHtml = ({
 const CustomersClient = ({ name, image }: CustomersClientProps) => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { formatCurrency, formatDate, t } = useI18n();
+  const { formatCurrency, formatDate, language, t } = useI18n();
   const { data, isLoading, isError } = useCustomersQuery();
   const createCustomer = useCreateCustomerMutation();
   const updateCustomer = useUpdateCustomerMutation();
@@ -517,6 +520,138 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     }
   };
 
+  const scrollToCustomerForm = () => {
+    document.getElementById("customer-create-form")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+  const customerEmptyCopy =
+    language === "hi"
+      ? {
+          title: "अभी कोई ग्राहक नहीं है",
+          description: "अपना पहला ग्राहक जोड़ें ताकि बिल बनाते समय ग्राहक चुनना आसान हो।",
+          hint: "शुरुआत के लिए ग्राहक का नाम और फोन नंबर काफी है। बाकी जानकारी बाद में भर सकते हैं।",
+          primary: "ग्राहक जोड़ें",
+          secondary: "बिल बनाएं",
+        }
+      : language === "hinglish"
+        ? {
+            title: "Abhi koi customer nahi hai",
+            description: "Apna pehla customer jodiye taki bill banate waqt customer select karna easy ho.",
+            hint: "Shuruaat ke liye customer ka naam aur phone number kaafi hai. Baaki details baad mein bhar sakte hain.",
+            primary: "Customer Jodiye",
+            secondary: "Bill Banaiye",
+          }
+        : {
+            title: "No customers yet",
+            description: "Add your first customer so selecting someone while making a bill feels easy.",
+            hint: "Start with customer name and phone number. You can fill the rest later.",
+            primary: "Add Customer",
+            secondary: "Create Bill",
+          };
+  const showBeginnerGuide =
+    !isLoading && !isError && customers.length === 0 && !query.trim();
+  const beginnerGuideCopy =
+    language === "hi"
+      ? {
+          kicker: "स्टेप 3",
+          title: "अब पहला ग्राहक जोड़ें",
+          description:
+            "ग्राहक का नाम और फोन जोड़ते ही बिल बनाते समय सही व्यक्ति चुनना आसान हो जाएगा।",
+          progressLabel: "ग्राहक जोड़ना बिल बनाने से ठीक पहले वाला स्टेप है",
+          steps: [
+            {
+              title: "दुकान और प्रोडक्ट तैयार करें",
+              description: "अगर अभी तक नहीं किया है तो पहले दुकान और प्रोडक्ट सेट करें।",
+              href: "/products",
+              actionLabel: "प्रोडक्ट पेज खोलें",
+            },
+            {
+              title: "पहला ग्राहक जोड़ें",
+              description: "नाम और फोन भरना काफी है। बाकी जानकारी बाद में जोड़ सकते हैं।",
+              active: true,
+            },
+            {
+              title: "फिर बिल बनाएं",
+              description: "ग्राहक सेव होते ही सीधे बिल स्क्रीन पर जा सकते हैं।",
+              href: "/invoices?quickAction=new-bill",
+              actionLabel: "बिल बनाएं",
+            },
+            {
+              title: "जरूरत हो तो भुगतान ट्रैक करें",
+              description: "यह स्क्रीन बाद में ग्राहक का बकाया और हिसाब भी दिखाएगी।",
+            },
+          ],
+          primary: "फॉर्म तक जाएं",
+          secondary: "सीधे बिल पेज खोलें",
+        }
+      : language === "hinglish"
+        ? {
+            kicker: "Step 3",
+            title: "Ab pehla customer jodiye",
+            description:
+              "Customer ka naam aur phone jodte hi bill banate waqt sahi aadmi select karna easy ho jayega.",
+            progressLabel: "Customer add karna bill banane se just pehle wala step hai",
+            steps: [
+              {
+                title: "Shop aur products ready rakhiye",
+                description: "Agar abhi tak nahi kiya hai to pehle shop aur product set kijiye.",
+                href: "/products",
+                actionLabel: "Products kholiye",
+              },
+              {
+                title: "Pehla customer jodiye",
+                description: "Naam aur phone enough hai. Baaki details baad mein bhar sakte hain.",
+                active: true,
+              },
+              {
+                title: "Phir bill banaiye",
+                description: "Customer save hote hi seedha bill screen par ja sakte hain.",
+                href: "/invoices?quickAction=new-bill",
+                actionLabel: "Bill banaiye",
+              },
+              {
+                title: "Need ho to payment track kijiye",
+                description: "Yahi screen baad mein customer ka due aur hisaab bhi dikhayegi.",
+              },
+            ],
+            primary: "Form tak jaiye",
+            secondary: "Bill page kholiye",
+          }
+        : {
+            kicker: "Step 3",
+            title: "Add your first customer now",
+            description:
+              "Once the customer name and phone are saved, choosing the right person while creating a bill becomes easy.",
+            progressLabel: "This is the step right before creating the first bill",
+            steps: [
+              {
+                title: "Keep your shop and products ready",
+                description: "If needed, finish the product step first.",
+                href: "/products",
+                actionLabel: "Open products",
+              },
+              {
+                title: "Add your first customer",
+                description: "Customer name and phone are enough for now.",
+                active: true,
+              },
+              {
+                title: "Create the bill next",
+                description: "As soon as the customer is saved, you can jump straight to billing.",
+                href: "/invoices?quickAction=new-bill",
+                actionLabel: "Create bill",
+              },
+              {
+                title: "Track payments later",
+                description: "This page will also show dues and payment history after you start billing.",
+              },
+            ],
+            primary: "Jump to form",
+            secondary: "Open bill page",
+          };
+
   const handleOpenShareStatement = () => {
     if (!selectedCustomer || !ledger) return;
     setShareModalOpen(true);
@@ -595,6 +730,26 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
       subtitle={t("customersPage.pageSubtitle")}
     >
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
+        {showBeginnerGuide ? (
+          <BeginnerGuideCard
+            kicker={beginnerGuideCopy.kicker}
+            title={beginnerGuideCopy.title}
+            description={beginnerGuideCopy.description}
+            icon={Sparkles}
+            progressLabel={beginnerGuideCopy.progressLabel}
+            steps={beginnerGuideCopy.steps}
+            primaryAction={{
+              label: beginnerGuideCopy.primary,
+              onClick: scrollToCustomerForm,
+            }}
+            secondaryAction={{
+              label: beginnerGuideCopy.secondary,
+              href: "/invoices?quickAction=new-bill",
+              variant: "outline",
+            }}
+          />
+        ) : null}
+
         <section className="grid gap-4 md:grid-cols-3">
           {summaryCards.map((card) => {
             const Icon = card.icon;
@@ -633,7 +788,12 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                 ) : null}
               </div>
 
-              <form className="mt-5 grid gap-4" onSubmit={handleSaveCustomer} noValidate>
+              <form
+                id="customer-create-form"
+                className="mt-5 grid gap-4"
+                onSubmit={handleSaveCustomer}
+                noValidate
+              >
                 <div className="grid gap-2">
                   <Label htmlFor="customer-name">{t("customers.fields.name")}</Label>
                   <Input
@@ -760,9 +920,27 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                   <p className="text-sm text-amber-700">{t("customers.loadError")}</p>
                 ) : null}
                 {!isLoading && !isError && filteredCustomers.length === 0 ? (
-                  <div className="app-empty-state text-sm">
-                    {t("customersPage.searchEmpty")}
-                  </div>
+                  customers.length === 0 && !query.trim() ? (
+                    <FriendlyEmptyState
+                      icon={Users}
+                      title={customerEmptyCopy.title}
+                      description={customerEmptyCopy.description}
+                      hint={customerEmptyCopy.hint}
+                      primaryAction={{
+                        label: customerEmptyCopy.primary,
+                        onClick: scrollToCustomerForm,
+                      }}
+                      secondaryAction={{
+                        label: customerEmptyCopy.secondary,
+                        href: "/invoices",
+                        variant: "outline",
+                      }}
+                    />
+                  ) : (
+                    <div className="app-empty-state text-sm">
+                      {t("customersPage.searchEmpty")}
+                    </div>
+                  )
                 ) : null}
                 {!isLoading && !isError
                   ? filteredCustomers.map((customer) => {

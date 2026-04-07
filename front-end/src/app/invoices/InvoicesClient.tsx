@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { CheckCircle2, Circle, PackagePlus, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
@@ -22,6 +23,8 @@ import {
   normalizeDesignConfig,
 } from "@/components/invoice/DesignConfigContext";
 import { Button } from "@/components/ui/button";
+import FriendlyEmptyState from "@/components/ui/FriendlyEmptyState";
+import FirstTimeHint from "@/components/ui/FirstTimeHint";
 import Modal from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -165,7 +168,7 @@ const buildProductSku = (name: string, barcode: string) => {
 };
 
 const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
-  const { formatDate, locale, t } = useI18n();
+  const { formatDate, language, locale, t } = useI18n();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const { data: customers } = useCustomersQuery();
@@ -280,6 +283,167 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     return /Mac|iPhone|iPad/i.test(navigator.platform);
   }, []);
   const shortcutModifierLabel = isMacShortcutPlatform ? "Cmd" : "Ctrl";
+  const noCustomers = (customers?.length ?? 0) === 0;
+  const noProducts = products.length === 0;
+  const guidedStep = !form.customer_id ? 1 : items.length === 0 ? 2 : 3;
+  const guidedFlowCopy =
+    language === "hi"
+      ? {
+          bannerTitle: "पहला बिल आसान तरीके से बनाएं",
+          bannerDescription:
+            "नीचे दिए गए 3 स्टेप्स पूरे करें। पहले ग्राहक, फिर प्रोडक्ट, फिर बिल की जांच करके बनाएं।",
+          steps: [
+            {
+              title: "ग्राहक चुनें या जोड़ें",
+              description: "पहले ग्राहक चुनें ताकि बिल सही व्यक्ति के नाम से बने।",
+            },
+            {
+              title: "प्रोडक्ट जोड़ें",
+              description: "अब वे प्रोडक्ट जोड़ें जो ग्राहक खरीद रहा है।",
+            },
+            {
+              title: "जांचें और बिल बनाएं",
+              description: "कुल राशि देखकर बिल बनाएं और चाहें तो PDF या ईमेल भी करें।",
+            },
+          ],
+        }
+      : language === "hinglish"
+        ? {
+            bannerTitle: "Pehla bill easy tareeke se banaiye",
+            bannerDescription:
+              "Neeche diye gaye 3 steps follow kijiye. Pehle customer, phir products, aur last mein review karke bill banaiye.",
+            steps: [
+              {
+                title: "Customer chuniye ya jodiye",
+                description: "Sabse pehle customer chuniye taki bill sahi naam se bane.",
+              },
+              {
+                title: "Products jodiye",
+                description: "Ab wo products jodiye jo customer kharid raha hai.",
+              },
+              {
+                title: "Review kijiye aur bill banaiye",
+                description: "Total check kijiye, phir bill generate kijiye. Zarurat ho to PDF ya email bhi bhejiye.",
+              },
+            ],
+          }
+        : {
+            bannerTitle: "Create your first bill in 3 simple steps",
+            bannerDescription:
+              "Start with the customer, then add products, then review and generate the bill.",
+            steps: [
+              {
+                title: "Select or add a customer",
+                description: "Choose the customer first so the bill is created for the right person.",
+              },
+              {
+                title: "Add products",
+                description: "Add the products your customer is buying.",
+              },
+              {
+                title: "Review and generate the bill",
+                description: "Check the total, then create the bill and share it if needed.",
+              },
+            ],
+          };
+  const helperCopy =
+    language === "hi"
+      ? {
+          noCustomersTitle: "अभी कोई ग्राहक नहीं है",
+          noCustomersDescription:
+            "पहला बिल बनाने से पहले एक ग्राहक जोड़ें ताकि बिल सही व्यक्ति के नाम पर बने।",
+          noCustomersHint:
+            "शुरुआत के लिए सिर्फ ग्राहक का नाम काफी है। फोन नंबर बाद में भी जोड़ सकते हैं।",
+          addCustomer: "ग्राहक जोड़ें",
+          openCustomers: "ग्राहक खोलें",
+          missingCustomerQuestion: "ग्राहक नहीं दिख रहा?",
+          missingCustomerAnswer:
+            "ऊपर Add Customer का इस्तेमाल करें। नया ग्राहक तुरंत इसी बिल में चुन लिया जाएगा।",
+          noProductsTitle: "अभी कोई प्रोडक्ट नहीं है",
+          noProductsDescription:
+            "बिल बनाने से पहले कम से कम एक प्रोडक्ट जोड़ना जरूरी है।",
+          noProductsHint:
+            "शुरुआत एक प्रोडक्ट से करें। बाद में और प्रोडक्ट जोड़ सकते हैं।",
+          addProduct: "प्रोडक्ट जोड़ें",
+          openProducts: "प्रोडक्ट खोलें",
+          reviewMissing: "आगे बढ़ने के लिए कम से कम एक प्रोडक्ट जोड़ें।",
+          reviewReady: "सब तैयार है। अब आख़िरी बिल बनाया जा सकता है।",
+          reviewMissingHelp: "कृपया बिल बनाने के लिए कम से कम एक प्रोडक्ट जोड़ें।",
+        }
+      : language === "hinglish"
+        ? {
+            noCustomersTitle: "Abhi koi customer nahi hai",
+            noCustomersDescription:
+              "Pehla bill banane se pehle ek customer jodiye taki bill sahi naam par bane.",
+            noCustomersHint:
+              "Shuruaat ke liye sirf customer ka naam kaafi hai. Phone number baad mein bhi jod sakte hain.",
+            addCustomer: "Customer Jodiye",
+            openCustomers: "Customers Kholiye",
+            missingCustomerQuestion: "Customer nahi dikh raha?",
+            missingCustomerAnswer:
+              "Upar Add Customer use kijiye. Naya customer turant isi bill mein select ho jayega.",
+            noProductsTitle: "Abhi koi product nahi hai",
+            noProductsDescription:
+              "Bill banane se pehle kam se kam ek product jodna zaroori hai.",
+            noProductsHint:
+              "Shuruaat ek product se kijiye. Baad mein aur products jod sakte hain.",
+              addProduct: "Product Jodiye",
+              openProducts: "Products Kholiye",
+              reviewMissing: "Aage badhne ke liye kam se kam ek product jodiye.",
+              reviewReady: "Sab ready hai. Ab final bill ban sakta hai.",
+              reviewMissingHelp: "Please bill banane ke liye kam se kam ek product jodiye.",
+              reviewAction: "Bill review kijiye",
+              advancedHelpTitle: "Default settings ke saath shuru kar sakte hain",
+              advancedHelpBody:
+                "GST mode, PDF, aur email optional hain. Pehla bill banane ke liye sirf customer aur product kaafi hai.",
+            }
+          : {
+            noCustomersTitle: "No customers yet",
+            noCustomersDescription:
+              "Add your first customer before making a bill so the bill goes to the right person.",
+            noCustomersHint:
+              "You only need a customer name to get started. Phone number is optional.",
+            addCustomer: "Add Customer",
+            openCustomers: "Open Customers",
+            missingCustomerQuestion: "Do not see the customer yet?",
+            missingCustomerAnswer:
+              "Use Add Customer and the new customer will be selected in this bill right away.",
+            noProductsTitle: "No products yet",
+            noProductsDescription:
+              "Add at least one product before creating a bill.",
+            noProductsHint:
+              "Start with one item you sell most often. You can add more products later.",
+              addProduct: "Add Product",
+              openProducts: "Open Products",
+              reviewMissing: "Add at least one product to continue.",
+              reviewReady: "Everything looks ready for the final bill.",
+              reviewMissingHelp: "Please add at least one product to create a bill.",
+              reviewAction: "Review bill",
+              advancedHelpTitle: "You can start with the default settings",
+              advancedHelpBody:
+                "GST mode, PDF, and email are optional. For the first bill, you only need a customer and at least one product.",
+            };
+  const reviewActionLabel =
+    language === "hi"
+      ? "बिल रिव्यू करें"
+      : language === "hinglish"
+        ? "Bill review kijiye"
+        : "Review bill";
+  const advancedHelpCopy =
+    language === "hi"
+      ? {
+          title: "डिफॉल्ट सेटिंग के साथ शुरू कर सकते हैं",
+          body: "GST mode, PDF, और email optional हैं. पहला बिल बनाने के लिए सिर्फ ग्राहक और प्रोडक्ट काफी है.",
+        }
+      : language === "hinglish"
+        ? {
+            title: "Default settings ke saath shuru kar sakte hain",
+            body: "GST mode, PDF, aur email optional hain. Pehla bill banane ke liye sirf customer aur product kaafi hai.",
+          }
+        : {
+            title: "You can start with the default settings",
+            body: "GST mode, PDF, and email are optional. For the first bill, you only need a customer and at least one product.",
+          };
 
   const parseServerErrors = useCallback((error: unknown, fallback: string) => {
     if (axios.isAxiosError(error)) {
@@ -303,6 +467,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     window.setTimeout(() => {
       quickEntryRef.current?.focus({ select });
     }, 70);
+  }, []);
+  const scrollToCheckout = useCallback(() => {
+    document.getElementById("bill-create-button")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
   }, []);
 
   const flashShortcutSection = useCallback((section: ShortcutHighlightSection) => {
@@ -1214,118 +1384,290 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title={t("invoice.pageTitle")}
-      subtitle={t("invoice.pageSubtitle")}
+      title={
+        language === "hi"
+          ? "बिल बनाएं"
+          : language === "hinglish"
+            ? "Bill Banaiye"
+            : "Create Bill"
+      }
+      subtitle={
+        language === "hi"
+          ? "ग्राहक चुनें, प्रोडक्ट जोड़ें और कुछ ही स्टेप्स में बिल तैयार करें।"
+          : language === "hinglish"
+            ? "Customer chuniye, products jodiye, aur kuch hi steps mein bill tayyar kijiye."
+            : "Choose a customer, add products, and create a bill in a few simple steps."
+      }
       actions={headerActions}
     >
       <div className="mx-auto w-full max-w-[1500px] font-[var(--font-sora),var(--font-geist-sans)]">
-        <div className="mb-6 flex flex-wrap items-center gap-2 rounded-[1.4rem] bg-white/85 px-4 py-3 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.12)] ring-1 ring-slate-200/80 dark:bg-slate-900/75 dark:text-slate-300 dark:ring-slate-700/70">
-          <span className="font-semibold text-slate-950 dark:text-slate-100">
-            {t("invoiceComposer.keyboardFirst")}
-          </span>
-          <span>{t("invoiceComposer.bannerEnter")}</span>
-          <span>{t("invoiceComposer.bannerRefocus", { key: shortcutModifierLabel })}</span>
-          <span>{t("invoiceComposer.bannerFinish", { key: shortcutModifierLabel })}</span>
-        </div>
+        <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-6 shadow-[0_24px_54px_-38px_rgba(15,23,42,0.16)] ring-1 ring-slate-200/70 dark:border-slate-700 dark:bg-slate-900/75 dark:ring-slate-700/60">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                Guided bill flow
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                {guidedFlowCopy.bannerTitle}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                {guidedFlowCopy.bannerDescription}
+              </p>
+            </div>
 
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.72fr)_minmax(340px,0.62fr)] xl:items-start xl:gap-8">
-          <div className="min-w-0">
-            <InvoiceTable
-              items={items}
-              errors={itemErrors}
-              quickEntryProduct={quickEntryProduct}
-              quickEntryRef={quickEntryRef}
-              autoFocusProductSearch={autoFocusProductSearch}
-              selectedItemIndex={resolvedSelectedItemIndex}
-              recentProductId={recentCartProductId}
-              suggestedProducts={suggestedProducts}
-              recentProducts={quickAccessProducts}
-              shortcutMetaLabel={shortcutModifierLabel}
-              entryHighlighted={shortcutHighlight === "entry"}
-              itemsHighlighted={shortcutHighlight === "items"}
-              onFocusEntry={() => focusProductSearch()}
-              onQuickEntrySelect={setQuickEntryProduct}
-              onQuickEntrySubmit={handleQuickEntrySubmit}
-              onSelectItem={setSelectedItemIndex}
-              onItemChange={handleItemChange}
-              onRemoveItem={removeItem}
-              onAddSuggestedProduct={handleSuggestedProductAdd}
-            />
+            <div className="rounded-[1.4rem] border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100">
+              <p className="font-semibold">Step {guidedStep} of 3</p>
+              <p className="mt-1">
+                {guidedFlowCopy.steps[guidedStep - 1]?.description}
+              </p>
+            </div>
           </div>
 
-          <aside className="xl:sticky xl:top-24">
-            <InvoiceTotals
-              totals={totals}
-              taxMode={taxMode}
-              discountValue={form.discount}
-              discountType={form.discount_type}
-              className="xl:max-w-[390px]"
-              action={
-                <div className="mt-6 grid gap-3">
-                  <Button
-                    type="button"
-                    size="lg"
-                    className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
-                    disabled={createInvoice.isPending || items.length === 0}
-                    onClick={() => void submitInvoice()}
-                  >
-                    {createInvoice.isPending
-                      ? t("invoiceComposer.generating")
-                      : t("invoiceComposer.checkout")}
-                  </Button>
-                  <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
-                    <span>
-                      {items.length === 0
-                        ? t("invoiceComposer.addItemsToContinue")
-                        : t("invoiceComposer.readyToCheckout")}
-                    </span>
-                    <span className="font-semibold">
-                      {t("invoiceComposer.lineItemsCount", { count: items.length })}
-                    </span>
+            <div className="mt-5 grid gap-3 lg:grid-cols-3">
+              {guidedFlowCopy.steps.map((step, index) => {
+                const stepNumber = index + 1;
+                const isDone = guidedStep > stepNumber;
+                const isActive = guidedStep === stepNumber;
+
+              return (
+                <div
+                  key={step.title}
+                  className={[
+                    "rounded-[1.45rem] border px-4 py-4 transition",
+                    isActive
+                      ? "border-primary/40 bg-primary/5"
+                      : isDone
+                        ? "border-emerald-200 bg-emerald-50/80"
+                        : "border-slate-200 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-900/60",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 text-primary">
+                      {isDone ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                        Step {stepNumber}
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-950 dark:text-slate-100">
+                        {step.title}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                        {step.description}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {items.length === 0
-                      ? t("invoiceComposer.scanToCheckout")
-                      : t("invoiceComposer.keyboardCheckout", {
-                          key: shortcutModifierLabel,
-                        })}
-                  </p>
                 </div>
-              }
-            />
-          </aside>
-        </section>
+                );
+              })}
+            </div>
+
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              {noCustomers ? (
+                <>
+                  <Button type="button" onClick={() => setQuickAddCustomerOpen(true)}>
+                    {helperCopy.addCustomer}
+                  </Button>
+                  <Button type="button" variant="outline" asChild>
+                    <Link href="/customers">{helperCopy.openCustomers}</Link>
+                  </Button>
+                </>
+              ) : noProducts ? (
+                <>
+                  <Button type="button" onClick={() => setQuickAddProductOpen(true)}>
+                    {helperCopy.addProduct}
+                  </Button>
+                  <Button type="button" variant="outline" asChild>
+                    <Link href="/products">{helperCopy.openProducts}</Link>
+                  </Button>
+                </>
+              ) : (
+                <Button type="button" onClick={scrollToCheckout}>
+                  {reviewActionLabel}
+                </Button>
+              )}
+            </div>
+          </section>
 
         <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.64fr)]">
-          <div
-            className={
-              shortcutHighlight === "form"
-                ? "rounded-[2rem] shadow-[0_0_0_4px_rgba(37,99,235,0.12)]"
-                : undefined
-            }
-          >
-            <InvoiceForm
-              form={form}
-              customers={customers ?? []}
-              warehouses={warehouses ?? []}
-              taxMode={taxMode}
-              onFormChange={handleFormChange}
-              onTaxModeChange={handleTaxModeChange}
-              onSubmit={handleSubmit}
-              isSubmitting={createInvoice.isPending}
-              summaryErrors={summaryErrors}
-              serverError={serverError}
-              hideSubmit
-            />
+          <div className="grid gap-4">
+            <div className="rounded-[1.6rem] border border-slate-200 bg-white/90 px-5 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                Step 1
+              </p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-950 dark:text-slate-100">
+                {guidedFlowCopy.steps[0]?.title}
+              </h3>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                {guidedFlowCopy.steps[0]?.description}
+              </p>
+            </div>
+
+            {noCustomers ? (
+              <FriendlyEmptyState
+                icon={UsersRound}
+                title={helperCopy.noCustomersTitle}
+                description={helperCopy.noCustomersDescription}
+                hint={helperCopy.noCustomersHint}
+                primaryAction={{
+                  label: helperCopy.addCustomer,
+                  onClick: () => setQuickAddCustomerOpen(true),
+                }}
+                secondaryAction={{
+                  label: helperCopy.openCustomers,
+                  href: "/customers",
+                  variant: "outline",
+                }}
+              />
+            ) : null}
+
+            <FirstTimeHint
+              id="bill-step-customer"
+              message="Choose the customer first. This makes the rest of the bill easier."
+            >
+              <div
+                className={
+                  shortcutHighlight === "form"
+                    ? "rounded-[2rem] shadow-[0_0_0_4px_rgba(37,99,235,0.12)]"
+                    : undefined
+                }
+              >
+                <InvoiceForm
+                  form={form}
+                  customers={customers ?? []}
+                  warehouses={warehouses ?? []}
+                  taxMode={taxMode}
+                  onFormChange={handleFormChange}
+                  onTaxModeChange={handleTaxModeChange}
+                  onSubmit={handleSubmit}
+                  isSubmitting={createInvoice.isPending}
+                  summaryErrors={summaryErrors}
+                  serverError={serverError}
+                  hideSubmit
+                />
+              </div>
+            </FirstTimeHint>
           </div>
 
           <aside className="grid gap-4">
-            <div className="no-print rounded-[1.7rem] bg-white/90 p-6 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.14)] ring-1 ring-slate-200/80 dark:bg-slate-900/80 dark:text-slate-300 dark:ring-slate-700/70">
+            <div className="rounded-[1.7rem] bg-white/90 p-6 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.14)] ring-1 ring-slate-200/80 dark:bg-slate-900/80 dark:text-slate-300 dark:ring-slate-700/70">
               <p className="font-semibold text-slate-950 dark:text-slate-100">
-                {t("invoice.gstNoteTitle")}
+                {helperCopy.missingCustomerQuestion}
               </p>
-              <p className="mt-2 leading-6">{t("invoice.gstNoteBody")}</p>
+              <p className="mt-2 leading-6">
+                {helperCopy.missingCustomerAnswer}
+              </p>
             </div>
+              <div className="no-print rounded-[1.7rem] bg-white/90 p-6 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.14)] ring-1 ring-slate-200/80 dark:bg-slate-900/80 dark:text-slate-300 dark:ring-slate-700/70">
+                <p className="font-semibold text-slate-950 dark:text-slate-100">
+                  {advancedHelpCopy.title}
+                </p>
+                <p className="mt-2 leading-6">{advancedHelpCopy.body}</p>
+              </div>
+            </aside>
+          </section>
+
+        <section className="mt-8 grid gap-6">
+          <div className="rounded-[1.6rem] border border-slate-200 bg-white/90 px-5 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+              Step 2
+            </p>
+            <h3 className="mt-2 text-xl font-semibold text-slate-950 dark:text-slate-100">
+              {guidedFlowCopy.steps[1]?.title}
+            </h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              {guidedFlowCopy.steps[1]?.description}
+            </p>
+          </div>
+
+          {noProducts ? (
+            <FriendlyEmptyState
+              icon={PackagePlus}
+              title={helperCopy.noProductsTitle}
+              description={helperCopy.noProductsDescription}
+              hint={helperCopy.noProductsHint}
+              primaryAction={{
+                label: helperCopy.addProduct,
+                onClick: () => setQuickAddProductOpen(true),
+              }}
+              secondaryAction={{
+                label: helperCopy.openProducts,
+                href: "/products",
+                variant: "outline",
+              }}
+            />
+          ) : (
+            <FirstTimeHint
+              id="bill-step-products"
+              message="Search or scan a product here, then add it to the bill."
+            >
+              <InvoiceTable
+                items={items}
+                errors={itemErrors}
+                quickEntryProduct={quickEntryProduct}
+                quickEntryRef={quickEntryRef}
+                autoFocusProductSearch={autoFocusProductSearch}
+                selectedItemIndex={resolvedSelectedItemIndex}
+                recentProductId={recentCartProductId}
+                suggestedProducts={suggestedProducts}
+                recentProducts={quickAccessProducts}
+                shortcutMetaLabel={shortcutModifierLabel}
+                entryHighlighted={shortcutHighlight === "entry"}
+                itemsHighlighted={shortcutHighlight === "items"}
+                onFocusEntry={() => focusProductSearch()}
+                onQuickEntrySelect={setQuickEntryProduct}
+                onQuickEntrySubmit={handleQuickEntrySubmit}
+                onSelectItem={setSelectedItemIndex}
+                onItemChange={handleItemChange}
+                onRemoveItem={removeItem}
+                onAddSuggestedProduct={handleSuggestedProductAdd}
+              />
+            </FirstTimeHint>
+          )}
+        </section>
+
+        <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.72fr)_minmax(340px,0.62fr)] xl:items-start xl:gap-8">
+          <div className="grid gap-6">
+            <div className="rounded-[1.6rem] border border-slate-200 bg-white/90 px-5 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                Step 3
+              </p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-950 dark:text-slate-100">
+                {guidedFlowCopy.steps[2]?.title}
+              </h3>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                {guidedFlowCopy.steps[2]?.description}
+              </p>
+            </div>
+
+            <div className="printable">
+              <DesignConfigProvider
+                value={{
+                  designConfig: activeDesignConfig,
+                  updateSection: () => {},
+                  resetSection: () => {},
+                  resetAll: () => {},
+                }}
+              >
+                <div
+                  id="invoice-preview-pdf-root"
+                  className="rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none"
+                >
+                  <A4PreviewStack
+                    stackKey={`invoices-preview-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
+                  >
+                    <TemplatePreviewRenderer
+                      key={`${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
+                      data={invoicePreviewData}
+                      enabledSections={activeEnabledSections}
+                      sectionOrder={activeSectionOrder}
+                      theme={activeTheme}
+                    />
+                  </A4PreviewStack>
+                </div>
+              </DesignConfigProvider>
+            </div>
+
             <div
               className={
                 shortcutHighlight === "actions"
@@ -1340,52 +1682,71 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 isSendingEmail={sendInvoiceEmailMutation.isPending}
               />
             </div>
-          </aside>
-        </section>
-
-        <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1.28fr)]">
-          <div className="grid gap-6">
-            <InvoiceDraftPanel
-              isDirty={isDirty}
-              lastSavedAt={lastSavedAt}
-              onSaveDraft={saveNewDraft}
-            />
-            <InvoiceDraftList
-              drafts={drafts}
-              currentDraftId={draftId}
-              customerNameById={customerNameById}
-              onLoadDraft={loadDraft}
-              onDeleteDraft={deleteDraft}
-            />
           </div>
 
-          <div className="printable">
-            <DesignConfigProvider
-              value={{
-                designConfig: activeDesignConfig,
-                updateSection: () => {},
-                resetSection: () => {},
-                resetAll: () => {},
-              }}
-            >
-              <div
-                id="invoice-preview-pdf-root"
-                className="rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none"
-              >
-                <A4PreviewStack
-                  stackKey={`invoices-preview-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
+          <aside className="grid gap-6 xl:sticky xl:top-24">
+            <InvoiceTotals
+              totals={totals}
+              taxMode={taxMode}
+              discountValue={form.discount}
+              discountType={form.discount_type}
+              className="xl:max-w-[390px]"
+              action={
+                <FirstTimeHint
+                  id="bill-step-generate"
+                  message="When the customer and products are ready, use this button to create the bill."
+                  position="bottom"
                 >
-                  <TemplatePreviewRenderer
-                    key={`${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
-                    data={invoicePreviewData}
-                    enabledSections={activeEnabledSections}
-                    sectionOrder={activeSectionOrder}
-                    theme={activeTheme}
-                  />
-                </A4PreviewStack>
-              </div>
-            </DesignConfigProvider>
-          </div>
+                  <div className="mt-6 grid gap-3">
+                    <Button
+                      id="bill-create-button"
+                      type="button"
+                      size="lg"
+                      className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
+                      disabled={createInvoice.isPending || items.length === 0}
+                      onClick={() => void submitInvoice()}
+                    >
+                      {createInvoice.isPending
+                        ? t("invoiceComposer.generating")
+                        : t("invoiceComposer.checkout")}
+                    </Button>
+                    <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
+                      <span>
+                        {items.length === 0
+                          ? helperCopy.reviewMissing
+                          : helperCopy.reviewReady}
+                      </span>
+                      <span className="font-semibold">
+                        {t("invoiceComposer.lineItemsCount", { count: items.length })}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      {items.length === 0
+                        ? helperCopy.reviewMissingHelp
+                        : t("invoiceComposer.keyboardCheckout", {
+                            key: shortcutModifierLabel,
+                          })}
+                    </p>
+                  </div>
+                </FirstTimeHint>
+              }
+            />
+
+            <div className="grid gap-6">
+              <InvoiceDraftPanel
+                isDirty={isDirty}
+                lastSavedAt={lastSavedAt}
+                onSaveDraft={saveNewDraft}
+              />
+              <InvoiceDraftList
+                drafts={drafts}
+                currentDraftId={draftId}
+                customerNameById={customerNameById}
+                onLoadDraft={loadDraft}
+                onDeleteDraft={deleteDraft}
+              />
+            </div>
+          </aside>
         </section>
 
         <Modal

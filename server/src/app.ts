@@ -18,6 +18,10 @@ app.use(requestObservabilityMiddleware);
 // Logs: METHOD route status response-time (e.g. GET /invoices 200 45ms)
 app.use(morgan(":method :url :status :response-time[0]ms"));
 app.use(cors());
+app.use(
+  "/api/payments/access/webhooks/razorpay",
+  express.raw({ type: "application/json" }),
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 

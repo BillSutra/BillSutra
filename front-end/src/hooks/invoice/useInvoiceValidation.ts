@@ -15,9 +15,40 @@ export const useInvoiceValidation = (
   form: InvoiceFormState,
   items: InvoiceItemForm[],
 ) => {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
 
   return useMemo<InvoiceValidationResult>(() => {
+    const copy =
+      language === "hi"
+        ? {
+            chooseCustomer: "बिल बनाने से पहले ग्राहक चुनें।",
+            chooseWarehouse: "अगर आप स्टॉक सिंक करना चाहते हैं, तो वेयरहाउस चुनें।",
+            chooseProduct: "बिल बनाने के लिए कम से कम एक प्रोडक्ट जोड़ें।",
+            warehouseSummary: "वेयरहाउस चुनने के बाद ही स्टॉक अपडेट होगा।",
+            quantitySummary: "हर प्रोडक्ट की मात्रा सही रखें।",
+            priceSummary: "हर प्रोडक्ट की सही कीमत भरें।",
+            taxSummary: "जहां टैक्स हो, वहां सही टैक्स रेट भरें।",
+          }
+        : language === "hinglish"
+          ? {
+              chooseCustomer: "Bill banane se pehle customer chuniye.",
+              chooseWarehouse: "Agar stock sync karna hai to warehouse chuniye.",
+              chooseProduct: "Bill banane ke liye kam se kam ek product jodiye.",
+              warehouseSummary: "Warehouse chunne ke baad hi stock update hoga.",
+              quantitySummary: "Har product ki quantity sahi rakhiye.",
+              priceSummary: "Har product ki sahi price bhariye.",
+              taxSummary: "Jahan tax ho, wahan sahi tax rate bhariye.",
+            }
+          : {
+              chooseCustomer: "Please choose a customer before creating the bill.",
+              chooseWarehouse:
+                "Please choose a warehouse if you want stock to update automatically.",
+              chooseProduct: "Please add at least one product to create the bill.",
+              warehouseSummary: "Pick a warehouse before syncing stock.",
+              quantitySummary: "Please check the quantity for each product.",
+              priceSummary: "Please enter a valid price for each product.",
+              taxSummary: "Please enter a valid tax rate wherever tax is used.",
+            };
     const errors: InvoiceItemError[] = items.map(() => ({}));
     const summary: string[] = [];
     let missingCustomer = false;
@@ -29,12 +60,12 @@ export const useInvoiceValidation = (
 
     if (!form.customer_id) {
       missingCustomer = true;
-      summary.push(t("validation.invoiceSelectCustomer"));
+      summary.push(copy.chooseCustomer);
     }
 
     if (form.sync_sales && !form.warehouse_id) {
       missingWarehouse = true;
-      summary.push(t("validation.invoiceSelectWarehouse"));
+      summary.push(copy.chooseWarehouse);
     }
 
     if (items.length === 0) {
@@ -79,16 +110,16 @@ export const useInvoiceValidation = (
       invalidPrice ||
       invalidTax
     ) {
-      if (missingProduct) summary.push(t("validation.invoiceEachLineItem"));
+      if (missingProduct) summary.push(copy.chooseProduct);
       if (missingWarehouse)
-        summary.push(t("validation.invoiceWarehouseSync"));
+        summary.push(copy.warehouseSummary);
       if (invalidQuantity)
-        summary.push(t("validation.invoiceQuantitySummary"));
-      if (invalidPrice) summary.push(t("validation.invoicePriceSummary"));
+        summary.push(copy.quantitySummary);
+      if (invalidPrice) summary.push(copy.priceSummary);
       if (invalidTax)
-        summary.push(t("validation.invoiceTaxSummary"));
+        summary.push(copy.taxSummary);
     }
 
     return { errors, summary };
-  }, [form, items, t]);
+  }, [form, items, language, t]);
 };

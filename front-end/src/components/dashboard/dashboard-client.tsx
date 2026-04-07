@@ -6,6 +6,7 @@ import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   fetchDashboardCardMetrics,
+  fetchBusinessProfile,
   fetchDashboardOverview,
   fetchInvoices,
   fetchProducts,
@@ -19,6 +20,7 @@ import {
   dashboardSectionFallback,
 } from "@/components/dashboard/dashboard-section-shared";
 import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
+import { useCustomersQuery } from "@/hooks/useInventoryQueries";
 import DashboardFilters, {
   type DashboardFilters as DashboardFilterState,
 } from "@/components/dashboard/dashboard-filters";
@@ -33,6 +35,8 @@ import {
   Landmark,
   Minus,
   Package,
+  ReceiptText,
+  Sparkles,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -47,8 +51,17 @@ import { useI18n } from "@/providers/LanguageProvider";
 import { useDashboardFormatters } from "@/components/dashboard/use-dashboard-formatters";
 import DashboardPlanCard from "@/components/dashboard/dashboard-plan-card";
 import InventoryRiskSummaryBanner from "@/components/dashboard/inventory-risk-summary-banner";
+import SetupProgressCard from "@/components/dashboard/SetupProgressCard";
+import BeginnerGuideCard from "@/components/beginner/BeginnerGuideCard";
 import { cn } from "@/lib/utils";
 import { formatPercent } from "@/lib/dashboardUtils";
+import {
+  getBeginnerState,
+  invalidateBeginnerQueries,
+  seedDemoWorkspace,
+} from "@/lib/firstRun";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
 const QuickActions = dynamic(() => import("@/components/dashboard/quick-actions"), {
   loading: () => dashboardSectionFallback("h-[300px]"),
@@ -69,7 +82,8 @@ type DashboardClientProps = {
 };
 
 const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
-  const { t } = useI18n();
+  const { language, t } = useI18n();
+  const queryClient = useQueryClient();
   const { currency, dateLabel, dateWithYear, timeLabel, translateEnum } =
     useDashboardFormatters();
   const hydrated = useHydrated();
@@ -133,6 +147,19 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     placeholderData: keepPreviousData,
     ...dashboardQueryDefaults,
   });
+  const { data: customers = [] } = useCustomersQuery();
+  const { data: businessProfile } = useQuery({
+    queryKey: ["business-profile"],
+    queryFn: fetchBusinessProfile,
+    enabled: hydrated && hasValidSessionToken,
+  });
+  const [isSeedingDemo, setIsSeedingDemo] = useState(false);
+  const [demoSeeded, setDemoSeeded] = useState(false);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setDemoSeeded(getBeginnerState().demoSeeded);
+  }, [hydrated]);
 
   const metrics = metricsQuery.data?.metrics;
   const metricsUpdatedAt = metricsQuery.dataUpdatedAt;
@@ -156,6 +183,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     );
   }).length;
   const productCount = productsPage?.total ?? 0;
+  const customerCount = customers.length;
   const prioritizedPendingSalesPayments = [...pendingSalesPayments]
     .sort((left, right) => right.pendingAmount - left.pendingAmount)
     .slice(0, 4);
@@ -325,6 +353,148 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         "border-border/80 bg-card/90 text-foreground dark:border-border/70 dark:bg-card/70",
     },
   ];
+  const setupProgress = {
+    businessReady: Boolean(businessProfile?.business_name?.trim()),
+    productsReady: productCount > 0,
+    customersReady: customerCount > 0,
+    billsReady: allInvoices.length > 0,
+  };
+  const shouldShowSetupProgress = Object.values(setupProgress).some((done) => !done);
+  const isBeginnerWorkspace = shouldShowSetupProgress && allInvoices.length === 0;
+
+  const beginnerGuideCopy =
+    language === "hi"
+      ? {
+          kicker: "नया काम शुरू करें",
+          title: "पहला बिल 2 मिनट में बनाने का आसान रास्ता",
+          description:
+            "अभी बस इन्हीं जरूरी स्टेप्स पर ध्यान दें। बाकी फीचर्स बाद में भी देखे जा सकते हैं।",
+          progressLabel: `अभी स्टेप ${setupProgress.businessReady ? setupProgress.productsReady ? setupProgress.customersReady ? 4 : 3 : 2 : 1} पर हैं`,
+          stepLabels: [
+            {
+              title: "दुकान की जानकारी भरें",
+              description: "दुकान का नाम और फोन भरने से बिल तैयार दिखेगा।",
+              href: "/business-profile",
+              actionLabel: "दुकान सेट करें",
+            },
+            {
+              title: "कम से कम एक प्रोडक्ट जोड़ें",
+              description: "नाम और कीमत भरना काफी है।",
+              href: "/products",
+              actionLabel: "प्रोडक्ट जोड़ें",
+            },
+            {
+              title: "एक ग्राहक जोड़ें",
+              description: "नाम और फोन से शुरुआत कर सकते हैं।",
+              href: "/customers",
+              actionLabel: "ग्राहक जोड़ें",
+            },
+            {
+              title: "अब पहला बिल बनाएं",
+              description: "ग्राहक चुनें, प्रोडक्ट जोड़ें, और बिल बनाएं।",
+              href: "/invoices?quickAction=new-bill",
+              actionLabel: "बिल बनाएं",
+            },
+          ],
+          primary: "डेमो डेटा जोड़ें",
+          secondary: "सीधे बिल स्क्रीन खोलें",
+          focusTitle: "अभी आपको बस 3 चीजें दिखेंगी",
+          focusDescription:
+            "Create Bill, Add Product, और Add Customer. यही सबसे जरूरी शॉर्टकट हैं।",
+        }
+      : language === "hinglish"
+        ? {
+            kicker: "Nayi shuruaat",
+            title: "Pehla bill 2 minute ke andar banane ka simple raasta",
+            description:
+              "Abhi sirf in zaroori steps par dhyaan dijiye. Baaki features baad mein dekh sakte hain.",
+            progressLabel: `Abhi step ${setupProgress.businessReady ? setupProgress.productsReady ? setupProgress.customersReady ? 4 : 3 : 2 : 1} par hain`,
+            stepLabels: [
+              {
+                title: "Dukaan ki details bhariye",
+                description: "Shop ka naam aur phone bharne se bill ready dikhega.",
+                href: "/business-profile",
+                actionLabel: "Shop set kijiye",
+              },
+              {
+                title: "Kam se kam ek product jodiye",
+                description: "Naam aur price bharna enough hai.",
+                href: "/products",
+                actionLabel: "Product jodiye",
+              },
+              {
+                title: "Ek customer jodiye",
+                description: "Naam aur phone se start ho jayega.",
+                href: "/customers",
+                actionLabel: "Customer jodiye",
+              },
+              {
+                title: "Ab pehla bill banaiye",
+                description: "Customer chuniye, product jodiye, aur bill banaiye.",
+                href: "/invoices?quickAction=new-bill",
+                actionLabel: "Bill banaiye",
+              },
+            ],
+            primary: "Demo data jodiye",
+            secondary: "Seedha bill screen kholiye",
+            focusTitle: "Abhi bas 3 main buttons dikhaye jayenge",
+            focusDescription:
+              "Create Bill, Add Product, aur Add Customer. Inse aap bina confusion ke start kar sakte hain.",
+          }
+        : {
+            kicker: "Start Simple",
+            title: "The easiest path to your first bill in under 2 minutes",
+            description:
+              "Focus only on the essentials for now. The rest of the business tools can wait until after your first bill.",
+            progressLabel: `You are on step ${setupProgress.businessReady ? setupProgress.productsReady ? setupProgress.customersReady ? 4 : 3 : 2 : 1} of 4`,
+            stepLabels: [
+              {
+                title: "Fill in your shop details",
+                description: "Your shop name and phone are enough to get started.",
+                href: "/business-profile",
+                actionLabel: "Set up shop",
+              },
+              {
+                title: "Add at least one product",
+                description: "Product name and selling price are enough.",
+                href: "/products",
+                actionLabel: "Add product",
+              },
+              {
+                title: "Add one customer",
+                description: "A name and phone number are enough for the first bill.",
+                href: "/customers",
+                actionLabel: "Add customer",
+              },
+              {
+                title: "Create your first bill",
+                description: "Pick the customer, add products, and generate the bill.",
+                href: "/invoices?quickAction=new-bill",
+                actionLabel: "Create bill",
+              },
+            ],
+            primary: "Load demo data",
+            secondary: "Open bill screen",
+            focusTitle: "You only need 3 main actions right now",
+            focusDescription:
+              "Create Bill, Add Product, and Add Customer are the only shortcuts you need to start selling.",
+          };
+
+  const handleSeedDemo = async () => {
+    if (isSeedingDemo) return;
+
+    try {
+      setIsSeedingDemo(true);
+      await seedDemoWorkspace();
+      await invalidateBeginnerQueries(queryClient);
+      setDemoSeeded(true);
+      toast.success("Sample data is ready. You can change or delete it anytime.");
+    } catch {
+      toast.error("Could not load sample data right now.");
+    } finally {
+      setIsSeedingDemo(false);
+    }
+  };
 
   const sectionLinks = [
     { label: t("dashboard.sectionLinks.overview"), href: "#overview" },
@@ -945,6 +1115,106 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     </section>
   );
 
+  const beginnerExperienceSection = (
+    <>
+      <BeginnerGuideCard
+        kicker={beginnerGuideCopy.kicker}
+        title={beginnerGuideCopy.title}
+        description={beginnerGuideCopy.description}
+        icon={Sparkles}
+        progressLabel={beginnerGuideCopy.progressLabel}
+        steps={beginnerGuideCopy.stepLabels.map((step, index) => ({
+          ...step,
+          done:
+            index === 0
+              ? setupProgress.businessReady
+              : index === 1
+                ? setupProgress.productsReady
+                : index === 2
+                  ? setupProgress.customersReady
+                  : setupProgress.billsReady,
+          active:
+            (index === 0 && !setupProgress.businessReady) ||
+            (index === 1 && setupProgress.businessReady && !setupProgress.productsReady) ||
+            (index === 2 &&
+              setupProgress.businessReady &&
+              setupProgress.productsReady &&
+              !setupProgress.customersReady) ||
+            (index === 3 &&
+              setupProgress.businessReady &&
+              setupProgress.productsReady &&
+              setupProgress.customersReady &&
+              !setupProgress.billsReady),
+        }))}
+        primaryAction={{
+          label: beginnerGuideCopy.primary,
+          onClick: () => void handleSeedDemo(),
+        }}
+        secondaryAction={{
+          label: beginnerGuideCopy.secondary,
+          href: "/invoices?quickAction=new-bill",
+          variant: "outline",
+        }}
+      />
+
+      <section className="grid gap-5 xl:grid-cols-12">
+        <div className="xl:col-span-8">
+          <QuickActions className="w-full self-auto" />
+        </div>
+        <aside className="grid gap-5 xl:col-span-4">
+          <div className="dashboard-chart-surface rounded-[1.85rem]">
+            <div className="dashboard-chart-content p-6">
+              <div className="flex items-start gap-3">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+                  <ReceiptText size={18} />
+                </div>
+                <div>
+                  <p className="app-kicker">{beginnerGuideCopy.focusTitle}</p>
+                  <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
+                    {t("dashboard.sections.records.title")}
+                  </h2>
+                </div>
+              </div>
+              <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                {beginnerGuideCopy.focusDescription}
+              </p>
+              <div className="mt-5 grid gap-3">
+                {focusCards.slice(0, 3).map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className={`group rounded-[1.35rem] border px-4 py-4 transition hover:-translate-y-0.5 ${item.tone}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-70">
+                          {item.label}
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold leading-none">
+                          {item.value}
+                        </p>
+                        <p className="mt-2 text-sm leading-5 opacity-80">{item.meta}</p>
+                      </div>
+                      <ArrowRight
+                        size={16}
+                        className="mt-1 shrink-0 transition-transform group-hover:translate-x-1"
+                      />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DashboardPlanCard
+            monthlyInvoiceCount={monthlyInvoiceCount}
+            productCount={productCount}
+          />
+        </aside>
+      </section>
+    </>
+  );
+
   return (
     <DashboardLayout
       name={displayName}
@@ -952,20 +1222,37 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
       title={t("dashboard.title", { name: displayName })}
       subtitle={t("dashboard.subtitle")}
       actions={
-        <DashboardFilters
-          filters={filters}
-          onChange={(next) => startTransition(() => setFilters(next))}
-          disabled={showLoadingState}
-          className="w-full sm:w-auto"
-        />
+        isBeginnerWorkspace ? undefined : (
+          <DashboardFilters
+            filters={filters}
+            onChange={(next) => startTransition(() => setFilters(next))}
+            disabled={showLoadingState}
+            className="w-full sm:w-auto"
+          />
+        )
       }
     >
       <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-7">
-        {heroSection}
-        <InventoryRiskSummaryBanner />
-        {performanceSection}
-        {operationsSection}
-        {recordsSection}
+        {shouldShowSetupProgress ? (
+          <SetupProgressCard
+            language={language}
+            progress={setupProgress}
+            onSeedDemo={() => void handleSeedDemo()}
+            isSeedingDemo={isSeedingDemo}
+            demoSeeded={demoSeeded}
+          />
+        ) : null}
+        {isBeginnerWorkspace ? (
+          beginnerExperienceSection
+        ) : (
+          <>
+            {heroSection}
+            <InventoryRiskSummaryBanner />
+            {performanceSection}
+            {operationsSection}
+            {recordsSection}
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

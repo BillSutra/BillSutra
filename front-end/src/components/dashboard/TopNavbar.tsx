@@ -1,7 +1,10 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, Menu, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Bell, CircleHelp, Menu, Search } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ThemeToggle from "@/components/theme-toggle";
@@ -14,10 +17,77 @@ type TopNavbarProps = {
   name: string;
   image?: string;
   onOpenMobileMenu: () => void;
+  onOpenHelp: () => void;
 };
 
-const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
+const TopNavbar = ({
+  name,
+  image,
+  onOpenMobileMenu,
+  onOpenHelp,
+}: TopNavbarProps) => {
+  const router = useRouter();
   const { t } = useI18n();
+  const [query, setQuery] = useState("");
+  const quickLinks = useMemo(
+    () => [
+      {
+        href: "/dashboard",
+        label: "dashboard",
+        keywords: ["dashboard", "home", "overview"],
+      },
+      {
+        href: "/invoices",
+        label: "bills",
+        keywords: ["bill", "bills", "invoice", "invoices", "create bill"],
+      },
+      {
+        href: "/products",
+        label: "products",
+        keywords: ["product", "products", "item", "items", "stock"],
+      },
+      {
+        href: "/customers",
+        label: "customers",
+        keywords: ["customer", "customers", "client", "clients"],
+      },
+      {
+        href: "/invoices/history",
+        label: "bill history",
+        keywords: ["history", "records", "bill history", "invoice history"],
+      },
+      {
+        href: "/business-profile",
+        label: "shop details",
+        keywords: ["shop", "business", "profile", "settings"],
+      },
+    ],
+    [],
+  );
+
+  const handleSearchSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalized = query.trim().toLowerCase();
+    if (!normalized) return;
+
+    const match = quickLinks.find(
+      (item) =>
+        item.label.includes(normalized) ||
+        item.keywords.some(
+          (keyword) =>
+            keyword.includes(normalized) || normalized.includes(keyword),
+        ),
+    );
+
+    if (!match) {
+      toast.error("Try bills, products, customers, or shop details.");
+      return;
+    }
+
+    router.push(match.href);
+    setQuery("");
+  };
 
   return (
     <header className="sticky top-0 z-30 border-b border-border/70 bg-background/78 shadow-[0_1px_0_rgba(17,37,63,0.05)] backdrop-blur-xl dark:bg-background/72 dark:shadow-[0_12px_30px_-26px_rgba(1,4,9,0.9)]">
@@ -43,16 +113,31 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
               />
             </Link>
 
-            <div className="relative hidden w-full max-w-[32rem] md:block">
+            <form
+              className="relative hidden w-full max-w-[32rem] md:block"
+              onSubmit={handleSearchSubmit}
+            >
               <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder={t("topNavbar.searchPlaceholder")}
                 className="h-11 rounded-full pl-11 pr-4 placeholder:text-muted-foreground"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
               />
-            </div>
+            </form>
           </div>
 
           <div className="ml-auto flex items-center gap-2 sm:gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="rounded-2xl"
+              aria-label="Help"
+              onClick={onOpenHelp}
+            >
+              <CircleHelp className="h-4 w-4" />
+            </Button>
             <Button
               type="button"
               variant="outline"
@@ -68,13 +153,15 @@ const TopNavbar = ({ name, image, onOpenMobileMenu }: TopNavbarProps) => {
           </div>
         </div>
 
-        <div className="relative mt-3 md:hidden">
+        <form className="relative mt-3 md:hidden" onSubmit={handleSearchSubmit}>
           <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={t("topNavbar.searchPlaceholder")}
             className="h-11 rounded-full pl-11 pr-4 placeholder:text-muted-foreground"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
           />
-        </div>
+        </form>
       </div>
     </header>
   );

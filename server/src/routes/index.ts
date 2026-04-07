@@ -5,6 +5,7 @@ import CustomersController from "../controllers/CustomersController.js";
 import CategoriesController from "../controllers/CategoriesController.js";
 import ProductsController from "../controllers/ProductsController.js";
 import PaymentsController from "../controllers/PaymentsController.js";
+import AccessPaymentsController from "../controllers/AccessPaymentsController.js";
 import ReportsController from "../controllers/ReportsController.js";
 import AnalyticsController from "../controllers/AnalyticsController.js";
 import DashboardController from "../controllers/DashboardController.js";
@@ -25,10 +26,20 @@ import AuthMiddleware from "../middlewares/AuthMIddleware.js";
 import AdminAuthMiddleware from "../middlewares/AdminAuthMiddleware.js";
 import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
 import RequireAdminMiddleware from "../middlewares/RequireAdminMiddleware.js";
+import RequirePaymentAccessMiddleware from "../middlewares/RequirePaymentAccessMiddleware.js";
 import { logoUploadMiddleware } from "../middlewares/logo.upload.js";
-import { authRateLimiter } from "../middlewares/rateLimit.middleware.js";
+import { paymentProofUploadMiddleware } from "../middlewares/paymentProof.upload.js";
+import {
+  adminPaymentRateLimiter,
+  authRateLimiter,
+  paymentRateLimiter,
+} from "../middlewares/rateLimit.middleware.js";
 import validate from "../middlewares/validate.js";
 import {
+  accessRazorpayOrderSchema,
+  accessRazorpayVerifySchema,
+  accessUpiSubmitSchema,
+  adminAccessPaymentVerifySchema,
   idParamSchema,
   invoiceIdParamSchema,
   publicInvoiceParamSchema,
@@ -119,6 +130,18 @@ router.get(
   "/admin/workers",
   AdminAuthMiddleware,
   AdminController.listWorkers,
+);
+router.get(
+  "/admin/payments",
+  AdminAuthMiddleware,
+  AccessPaymentsController.listAdminPayments,
+);
+router.post(
+  "/admin/verify",
+  AdminAuthMiddleware,
+  adminPaymentRateLimiter,
+  validate({ body: adminAccessPaymentVerifySchema }),
+  AccessPaymentsController.verifyAdminPayment,
 );
 
 // Auth routes
@@ -567,6 +590,43 @@ router.post(
   AuthMiddleware,
   validate({ body: paymentCreateSchema }),
   PaymentsController.store,
+);
+router.get(
+  "/payments/access/status",
+  AuthMiddleware,
+  AccessPaymentsController.status,
+);
+router.post(
+  "/payments/access/razorpay/order",
+  AuthMiddleware,
+  paymentRateLimiter,
+  validate({ body: accessRazorpayOrderSchema }),
+  AccessPaymentsController.createRazorpayOrder,
+);
+router.post(
+  "/payments/access/razorpay/verify",
+  AuthMiddleware,
+  paymentRateLimiter,
+  validate({ body: accessRazorpayVerifySchema }),
+  AccessPaymentsController.verifyRazorpayPayment,
+);
+router.post(
+  "/payments/access/webhooks/razorpay",
+  AccessPaymentsController.razorpayWebhook,
+);
+router.post(
+  "/submit-upi",
+  AuthMiddleware,
+  paymentRateLimiter,
+  paymentProofUploadMiddleware,
+  validate({ body: accessUpiSubmitSchema }),
+  AccessPaymentsController.submitUpi,
+);
+router.get(
+  "/payments/access/protected",
+  AuthMiddleware,
+  RequirePaymentAccessMiddleware,
+  AccessPaymentsController.protectedContent,
 );
 
 // Reports

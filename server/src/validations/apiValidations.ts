@@ -156,6 +156,9 @@ export const adminLoginSchema = z.object({
   password: z.string().min(6),
 });
 
+export const accessPlanSchema = z.enum(["pro", "pro-plus"]);
+export const accessBillingCycleSchema = z.enum(["monthly", "yearly"]);
+
 export const workerLoginSchema = authLoginSchema;
 
 export const workerCreateSchema = z.object({
@@ -323,6 +326,29 @@ export const paymentCreateSchema = z.object({
   transaction_id: z.string().min(1).max(191).optional(),
   reference: z.string().optional(),
   paid_at: z.coerce.date().optional(),
+});
+
+export const accessRazorpayOrderSchema = z.object({
+  plan_id: accessPlanSchema,
+  billing_cycle: accessBillingCycleSchema,
+});
+
+export const accessRazorpayVerifySchema = z.object({
+  razorpay_order_id: z.string().min(1).max(191),
+  razorpay_payment_id: z.string().min(1).max(191),
+  razorpay_signature: z.string().min(1).max(191),
+});
+
+export const accessUpiSubmitSchema = z.object({
+  plan_id: accessPlanSchema,
+  billing_cycle: accessBillingCycleSchema,
+  name: z.string().trim().min(2).max(191),
+  utr: z.string().trim().min(8).max(22),
+});
+
+export const adminAccessPaymentVerifySchema = z.object({
+  paymentId: z.string().trim().min(1),
+  status: z.enum(["approved", "rejected"]),
 });
 
 const purchaseItemSchema = z.object({

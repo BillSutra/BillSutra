@@ -69,7 +69,9 @@ export const LanguageProvider = ({
   }, []);
 
   const toggleLanguage = useCallback(() => {
-    setLanguageState((current) => (current === "en" ? "hi" : "en"));
+    setLanguageState((current) =>
+      current === "en" ? "hi" : current === "hi" ? "hinglish" : "en",
+    );
   }, []);
 
   const t = useCallback(

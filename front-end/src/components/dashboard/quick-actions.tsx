@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -30,6 +31,7 @@ import {
 import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/providers/LanguageProvider";
+import FirstTimeHint from "@/components/ui/FirstTimeHint";
 
 const QUICK_ACTION_USAGE_KEY = "billsutra.quick-actions.usage.v1";
 const QUICK_ACTION_RECENT_KEY = "billsutra.quick-actions.recent.v1";
@@ -244,7 +246,7 @@ const actionDetails = [
 const QuickActions = ({ className }: { className?: string }) => {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { t, formatNumber } = useI18n();
+  const { language, t, formatNumber } = useI18n();
   const { data: categories = [] } = useCategoriesQuery();
   const createProduct = useCreateProductMutation();
   const createCustomer = useCreateCustomerMutation();
@@ -574,6 +576,40 @@ const QuickActions = ({ className }: { className?: string }) => {
   const modalContentClassName =
     "top-auto right-0 bottom-0 left-0 max-h-[92vh] max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-t-[1.9rem] rounded-b-none border-border/80 bg-background/98 p-0 sm:top-[50%] sm:right-auto sm:bottom-auto sm:left-[50%] sm:max-w-xl sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-[1.75rem]";
 
+  const quickStartCopy =
+    language === "hi"
+      ? {
+          heading: "शुरू करने के लिए सबसे आसान काम",
+          description: "अगर आप नए हैं, तो पहले यही तीन बटन इस्तेमाल करें।",
+          createBill: "बिल बनाएं",
+          addProduct: "प्रोडक्ट जोड़ें",
+          viewReports: "रिपोर्ट देखें",
+          billHint: "यहीं से ग्राहक चुनकर पहला बिल बनता है।",
+          productHint: "जो सामान आप बेचते हैं, उसे यहां जोड़ें।",
+          reportsHint: "बिक्री और कमाई की आसान झलक यहां मिलेगी।",
+        }
+      : language === "hinglish"
+        ? {
+            heading: "Shuruaat ke liye sabse easy kaam",
+            description: "Agar aap naye hain, to pehle in teen buttons se shuru kijiye.",
+            createBill: "Bill Banaiye",
+            addProduct: "Product Jodiye",
+            viewReports: "Reports Dekhiye",
+            billHint: "Yahin se customer chun kar pehla bill banta hai.",
+            productHint: "Jo saman aap bechte hain, use yahan jodiye.",
+            reportsHint: "Sales aur kamai ka simple view yahan milega.",
+          }
+        : {
+            heading: "Start with these simple actions",
+            description: "If you are new, use these three buttons first.",
+            createBill: "Create Bill",
+            addProduct: "Add Product",
+            viewReports: "View Reports",
+            billHint: "Use this to choose a customer and create your first bill.",
+            productHint: "Use this to add items you sell.",
+            reportsHint: "Use this to quickly check sales and earnings.",
+          };
+
   return (
     <>
       <Card
@@ -617,6 +653,67 @@ const QuickActions = ({ className }: { className?: string }) => {
         </CardHeader>
 
         <CardContent className="dashboard-chart-content space-y-4">
+          <section className="rounded-[1.4rem] border border-border/70 bg-card/70 p-4 shadow-[0_14px_34px_-26px_rgba(31,27,22,0.2)]">
+            <div className="flex flex-col gap-1">
+              <p className="text-sm font-semibold text-foreground">
+                {quickStartCopy.heading}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {quickStartCopy.description}
+              </p>
+            </div>
+
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <FirstTimeHint
+                id="dashboard-create-bill"
+                message={quickStartCopy.billHint}
+                className="w-full"
+              >
+                <Button
+                  type="button"
+                  className="h-12 w-full justify-between rounded-[1rem] text-base font-semibold"
+                  onClick={() => handleActionPress("new-bill")}
+                >
+                  {quickStartCopy.createBill}
+                  <ArrowRight size={16} />
+                </Button>
+              </FirstTimeHint>
+
+              <FirstTimeHint
+                id="dashboard-add-product"
+                message={quickStartCopy.productHint}
+                className="w-full"
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 w-full justify-between rounded-[1rem] text-base font-semibold"
+                  onClick={() => handleActionPress("add-product")}
+                >
+                  {quickStartCopy.addProduct}
+                  <ArrowRight size={16} />
+                </Button>
+              </FirstTimeHint>
+
+              <FirstTimeHint
+                id="dashboard-view-reports"
+                message={quickStartCopy.reportsHint}
+                className="w-full"
+              >
+                <Button
+                  asChild
+                  variant="outline"
+                  className="h-12 w-full justify-between rounded-[1rem] text-base font-semibold"
+                >
+                  <Link href="/insights">
+                    {quickStartCopy.viewReports}
+                    <ArrowRight size={16} />
+                  </Link>
+                </Button>
+              </FirstTimeHint>
+            </div>
+          </section>
+
           <div className="grid gap-3 lg:grid-cols-3">
             {orderedActions.map((action) => {
               const Icon = action.icon;
@@ -812,7 +909,7 @@ const QuickActions = ({ className }: { className?: string }) => {
                   )}
                 >
                   <Icon size={16} />
-                  <span>{action.label}</span>
+                  <span>{actionLabelMap[action.id]}</span>
                 </button>
               );
             })}

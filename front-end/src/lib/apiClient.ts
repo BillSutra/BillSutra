@@ -707,6 +707,83 @@ export type PaymentInput = {
   paid_at?: string | Date;
 };
 
+export type AccessPaymentRecord = {
+  id: string;
+  userId: number;
+  planId: "pro" | "pro-plus";
+  billingCycle: "monthly" | "yearly";
+  method: "razorpay" | "upi";
+  amount: number;
+  status: "pending" | "approved" | "rejected" | "success";
+  name?: string | null;
+  utr?: string | null;
+  screenshotUrl?: string | null;
+  paymentId?: string | null;
+  orderId?: string | null;
+  provider?: string | null;
+  providerReference?: string | null;
+  reviewedByAdminId?: string | null;
+  reviewedByAdminEmail?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AccessPlanOption = {
+  id: "pro" | "pro-plus";
+  name: string;
+  description: string;
+  amounts: {
+    monthly: number;
+    yearly: number;
+  };
+  currency: "INR";
+  upiLink: {
+    monthly: string;
+    yearly: string;
+  };
+};
+
+export type AccessPaymentStatusResponse = {
+  hasAccess: boolean;
+  activePayment: AccessPaymentRecord | null;
+  payments: AccessPaymentRecord[];
+  upi: {
+    upiId: string;
+    payeeName: string;
+  };
+  razorpay: {
+    keyId: string | null;
+    enabled: boolean;
+  };
+  plans: AccessPlanOption[];
+};
+
+export type CreateAccessRazorpayOrderInput = {
+  plan_id: "pro" | "pro-plus";
+  billing_cycle: "monthly" | "yearly";
+};
+
+export type CreateAccessRazorpayOrderResponse = {
+  paymentRecordId: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+  plan: {
+    planId: "pro" | "pro-plus";
+    billingCycle: "monthly" | "yearly";
+    amount: number;
+    currency: string;
+    name: string;
+  };
+};
+
+export type VerifyAccessRazorpayPaymentInput = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
+};
+
 export type DashboardSales = {
   last7Days: Array<{ date: string; sales: number; purchases: number }>;
   last30Days: Array<{ date: string; sales: number; purchases: number }>;
@@ -1550,6 +1627,35 @@ export const deleteInvoice = async (invoiceId: number): Promise<void> => {
 
 export const createPayment = async (payload: PaymentInput): Promise<void> => {
   await apiClient.post("/payments", payload);
+};
+
+export const fetchAccessPaymentStatus =
+  async (): Promise<AccessPaymentStatusResponse> => {
+    const response = await apiClient.get("/payments/access/status");
+    return response.data.data as AccessPaymentStatusResponse;
+  };
+
+export const createAccessRazorpayOrder = async (
+  payload: CreateAccessRazorpayOrderInput,
+): Promise<CreateAccessRazorpayOrderResponse> => {
+  const response = await apiClient.post("/payments/access/razorpay/order", payload);
+  return response.data.data as CreateAccessRazorpayOrderResponse;
+};
+
+export const verifyAccessRazorpayPayment = async (
+  payload: VerifyAccessRazorpayPaymentInput,
+): Promise<AccessPaymentRecord> => {
+  const response = await apiClient.post("/payments/access/razorpay/verify", payload);
+  return response.data.data as AccessPaymentRecord;
+};
+
+export const submitAccessUpiPayment = async (
+  payload: FormData,
+): Promise<AccessPaymentRecord> => {
+  const response = await apiClient.post("/submit-upi", payload, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data.data as AccessPaymentRecord;
 };
 
 export const sendInvoiceEmail = async (
