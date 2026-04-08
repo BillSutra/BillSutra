@@ -89,6 +89,7 @@ export type InvoicePreviewData = {
     paidAmount: number;
     remainingAmount: number;
     history?: Array<{
+      id?: number | string;
       amount: number;
       paidAt?: string | null;
       method?: string | null;

@@ -1,4 +1,4 @@
-cd import type { Request, Response } from "express";
+import type { Request, Response } from "express";
 import { AuthMethod, type User } from "@prisma/client";
 import {
   generateAuthenticationOptions,

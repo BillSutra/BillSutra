@@ -569,13 +569,15 @@
   },
   "navigation": {
     "dashboard": "Dashboard",
-    "insights": "Insights",
+    "simpleBill": "Simple Bill",
+    "simpleBillBadge": "Easy",
+    "insights": "Reports",
     "assistant": "Assistant",
     "products": "Products",
     "inventory": "Inventory",
     "warehouses": "Warehouses",
-    "invoices": "Bills",
-    "invoiceRecords": "Bill History",
+    "invoices": "Invoices",
+    "invoiceRecords": "Past Bills",
     "clients": "Customers",
     "workers": "Worker Panel",
     "suppliers": "Suppliers",
@@ -686,6 +688,7 @@
   "dashboard": {
     "title": "Welcome back, {name}.",
     "subtitle": "A sharper view of sales, cash movement, profit trend, and inventory demand.",
+    "createBillCta": "+ Simple Bill",
     "sectionLinks": {
       "overview": "Overview",
       "performance": "Performance",

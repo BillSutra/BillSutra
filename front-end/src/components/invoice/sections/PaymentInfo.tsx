@@ -53,7 +53,10 @@ const PaymentInfo = ({ data, theme }: InvoiceSectionProps) => {
               <div className="mt-3 grid gap-2 text-[0.78em] text-slate-600">
                 {paymentSummary.history.slice(0, 3).map((payment, index) => (
                   <div
-                    key={`${payment.amount}-${payment.paidAt ?? index}`}
+                    key={
+                      payment.id ??
+                      `${index}-${payment.amount}-${payment.paidAt ?? "undated"}-${payment.method ?? "manual"}`
+                    }
                     className="flex items-center justify-between gap-3"
                   >
                     <div>

@@ -392,7 +392,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
             {
               title: "अब पहला बिल बनाएं",
               description: "ग्राहक चुनें, प्रोडक्ट जोड़ें, और बिल बनाएं।",
-              href: "/invoices?quickAction=new-bill",
+              href: "/simple-bill",
               actionLabel: "बिल बनाएं",
             },
           ],
@@ -431,7 +431,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
               {
                 title: "Ab pehla bill banaiye",
                 description: "Customer chuniye, product jodiye, aur bill banaiye.",
-                href: "/invoices?quickAction=new-bill",
+                href: "/simple-bill",
                 actionLabel: "Bill banaiye",
               },
             ],
@@ -469,7 +469,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
               {
                 title: "Create your first bill",
                 description: "Pick the customer, add products, and generate the bill.",
-                href: "/invoices?quickAction=new-bill",
+                href: "/simple-bill",
                 actionLabel: "Create bill",
               },
             ],
@@ -1152,7 +1152,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         }}
         secondaryAction={{
           label: beginnerGuideCopy.secondary,
-          href: "/invoices?quickAction=new-bill",
+          href: "/simple-bill",
           variant: "outline",
         }}
       />
@@ -1215,22 +1215,32 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     </>
   );
 
+  const dashboardHeaderActions = (
+    <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+      <Button asChild size="lg" className="w-full sm:w-auto">
+        <Link href="/simple-bill">
+          {t("dashboard.createBillCta")}
+          <ArrowRight size={16} />
+        </Link>
+      </Button>
+      {isBeginnerWorkspace ? null : (
+        <DashboardFilters
+          filters={filters}
+          onChange={(next) => startTransition(() => setFilters(next))}
+          disabled={showLoadingState}
+          className="w-full sm:w-auto"
+        />
+      )}
+    </div>
+  );
+
   return (
     <DashboardLayout
       name={displayName}
       image={image}
       title={t("dashboard.title", { name: displayName })}
       subtitle={t("dashboard.subtitle")}
-      actions={
-        isBeginnerWorkspace ? undefined : (
-          <DashboardFilters
-            filters={filters}
-            onChange={(next) => startTransition(() => setFilters(next))}
-            disabled={showLoadingState}
-            className="w-full sm:w-auto"
-          />
-        )
-      }
+      actions={dashboardHeaderActions}
     >
       <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-7">
         {shouldShowSetupProgress ? (

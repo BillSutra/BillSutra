@@ -465,7 +465,7 @@ export default function ProductsClient({
             {
               title: "फिर बिल बनाएं",
               description: "जब प्रोडक्ट तैयार हो जाए तो सीधा बिल स्क्रीन खोलें।",
-              href: "/invoices?quickAction=new-bill",
+              href: "/simple-bill",
               actionLabel: "बिल स्क्रीन खोलें",
             },
           ],
@@ -500,7 +500,7 @@ export default function ProductsClient({
               {
                 title: "Phir bill banaiye",
                 description: "Product ready hote hi seedha bill screen kholiye.",
-                href: "/invoices?quickAction=new-bill",
+                href: "/simple-bill",
                 actionLabel: "Bill screen kholiye",
               },
             ],
@@ -534,7 +534,7 @@ export default function ProductsClient({
               {
                 title: "Then create a bill",
                 description: "As soon as the product is ready, open the bill screen.",
-                href: "/invoices?quickAction=new-bill",
+                href: "/simple-bill",
                 actionLabel: "Open bill screen",
               },
             ],
@@ -572,7 +572,7 @@ export default function ProductsClient({
             }}
             secondaryAction={{
               label: beginnerGuideCopy.secondary,
-              href: "/invoices?quickAction=new-bill",
+              href: "/simple-bill",
               variant: "outline",
             }}
           />

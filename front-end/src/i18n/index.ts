@@ -56,8 +56,11 @@ export const translations = {
       hinglish: "Hinglish",
     },
     navigation: {
-      invoices: "Bills",
-      invoiceRecords: "Bill History",
+      simpleBill: "Simple Bill",
+      simpleBillBadge: "Easy",
+      insights: "Reports",
+      invoices: "Invoices",
+      invoiceRecords: "Past Bills",
       clients: "Customers",
     },
     dashboardQuickDesk: {

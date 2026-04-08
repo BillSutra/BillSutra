@@ -124,13 +124,15 @@
   },
   "navigation": {
     "dashboard": "डैशबोर्ड",
-    "insights": "जानकारी",
+    "simpleBill": "सिंपल बिल",
+    "simpleBillBadge": "आसान",
+    "insights": "रिपोर्ट्स",
     "assistant": "सहायक",
     "products": "प्रोडक्ट्स",
     "inventory": "इन्वेंटरी",
     "warehouses": "वेयरहाउस",
     "invoices": "इनवॉइस",
-    "invoiceRecords": "इनवॉइस रिकॉर्ड्स",
+    "invoiceRecords": "पुराने बिल",
     "clients": "क्लाइंट्स",
     "workers": "वर्कर पैनल",
     "suppliers": "सप्लायर्स",
@@ -172,6 +174,7 @@
   "dashboard": {
     "title": "फिर से स्वागत है, {name}।",
     "subtitle": "बिक्री, नकदी प्रवाह, लाभ रुझान और इन्वेंटरी मांग की अधिक स्पष्ट झलक।",
+    "createBillCta": "+ सिंपल बिल",
     "sectionLinks": {
       "overview": "ओवरव्यू",
       "performance": "परफॉर्मेंस",

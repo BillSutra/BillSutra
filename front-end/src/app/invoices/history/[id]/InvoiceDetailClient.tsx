@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -78,7 +78,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   const [invoiceEmailSending, setInvoiceEmailSending] = useState(false);
   const designConfig = useMemo(() => normalizeDesignConfig(null), []);
 
-  const invoiceDate = (value?: string | null) => {
+  const invoiceDate = useCallback((value?: string | null) => {
     if (!value) return "-";
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) return value;
@@ -87,7 +87,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
       month: "short",
       year: "numeric",
     });
-  };
+  }, [formatDate]);
 
   const paymentSnapshot = useMemo(
     () => (data ? getInvoicePaymentSnapshot(data) : null),
@@ -129,13 +129,14 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     });
   }, [data]);
 
-  const formatLocalizedPaymentMethod = (
-    method?: Parameters<typeof formatPaymentMethodLabel>[0],
-  ) => {
-    const normalized = (method ?? "MANUAL").toUpperCase();
-    const key = `invoiceDetail.paymentMethods.${normalized}`;
-    return t(key) === key ? formatPaymentMethodLabel(method) : t(key);
-  };
+  const formatLocalizedPaymentMethod = useCallback(
+    (method?: Parameters<typeof formatPaymentMethodLabel>[0]) => {
+      const normalized = (method ?? "MANUAL").toUpperCase();
+      const key = `invoiceDetail.paymentMethods.${normalized}`;
+      return t(key) === key ? formatPaymentMethodLabel(method) : t(key);
+    },
+    [t],
+  );
 
   const previewData = useMemo<InvoicePreviewData | null>(() => {
     if (!data || !paymentSnapshot) return null;
@@ -193,6 +194,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
         paidAmount: paymentSnapshot.paid,
         remainingAmount: paymentSnapshot.remaining,
         history: paymentHistory.map((payment) => ({
+          id: payment.id,
           amount: Number(payment.amount ?? 0),
           paidAt: invoiceDate(payment.paid_at),
           method: formatLocalizedPaymentMethod(payment.method),
@@ -206,6 +208,8 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   }, [
     businessProfile,
     data,
+    formatLocalizedPaymentMethod,
+    invoiceDate,
     localizedPaymentHint,
     localizedPaymentLabel,
     paymentHistory,

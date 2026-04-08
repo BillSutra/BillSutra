@@ -37,9 +37,14 @@ const TopNavbar = ({
         keywords: ["dashboard", "home", "overview"],
       },
       {
+        href: "/simple-bill",
+        label: "simple bill",
+        keywords: ["simple bill", "create bill", "new bill", "create invoice"],
+      },
+      {
         href: "/invoices",
-        label: "bills",
-        keywords: ["bill", "bills", "invoice", "invoices", "create bill"],
+        label: "invoices",
+        keywords: ["bill", "bills", "invoice", "invoices"],
       },
       {
         href: "/products",
@@ -53,8 +58,13 @@ const TopNavbar = ({
       },
       {
         href: "/invoices/history",
-        label: "bill history",
-        keywords: ["history", "records", "bill history", "invoice history"],
+        label: "past bills",
+        keywords: ["history", "records", "bill history", "invoice history", "past bills"],
+      },
+      {
+        href: "/insights",
+        label: "reports",
+        keywords: ["reports", "insights", "analytics"],
       },
       {
         href: "/business-profile",
@@ -81,7 +91,7 @@ const TopNavbar = ({
     );
 
     if (!match) {
-      toast.error("Try bills, products, customers, or shop details.");
+      toast.error("Try simple bill, products, customers, reports, or shop details.");
       return;
     }
 

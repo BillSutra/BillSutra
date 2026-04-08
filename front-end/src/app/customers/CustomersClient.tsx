@@ -575,7 +575,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             {
               title: "फिर बिल बनाएं",
               description: "ग्राहक सेव होते ही सीधे बिल स्क्रीन पर जा सकते हैं।",
-              href: "/invoices?quickAction=new-bill",
+              href: "/simple-bill",
               actionLabel: "बिल बनाएं",
             },
             {
@@ -608,7 +608,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
               {
                 title: "Phir bill banaiye",
                 description: "Customer save hote hi seedha bill screen par ja sakte hain.",
-                href: "/invoices?quickAction=new-bill",
+                href: "/simple-bill",
                 actionLabel: "Bill banaiye",
               },
               {
@@ -640,7 +640,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
               {
                 title: "Create the bill next",
                 description: "As soon as the customer is saved, you can jump straight to billing.",
-                href: "/invoices?quickAction=new-bill",
+                href: "/simple-bill",
                 actionLabel: "Create bill",
               },
               {
@@ -744,7 +744,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             }}
             secondaryAction={{
               label: beginnerGuideCopy.secondary,
-              href: "/invoices?quickAction=new-bill",
+              href: "/simple-bill",
               variant: "outline",
             }}
           />

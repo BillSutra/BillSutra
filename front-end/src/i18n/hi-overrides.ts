@@ -2,10 +2,12 @@ import type { TranslationMap } from "@/i18n";
 
 export const hiOverrides: TranslationMap = {
   navigation: {
-    insights: "\u0907\u0928\u0938\u093e\u0907\u091f\u094d\u0938",
+    simpleBill: "सिंपल बिल",
+    simpleBillBadge: "आसान",
+    insights: "रिपोर्ट्स",
     assistant: "AI \u0905\u0938\u093f\u0938\u094d\u091f\u0947\u0902\u091f",
-    invoices: "\u092c\u093f\u0932",
-    invoiceRecords: "\u092c\u093f\u0932 \u0907\u0924\u093f\u0939\u093e\u0938",
+    invoices: "इनवॉइस",
+    invoiceRecords: "पुराने बिल",
     clients: "\u0917\u094d\u0930\u093e\u0939\u0915",
   },
   common: {

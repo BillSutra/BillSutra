@@ -444,7 +444,7 @@ const QuickActions = ({ className }: { className?: string }) => {
         description: t("dashboardQuickDesk.messages.newBillDescription"),
       });
       playSuccessFeedback();
-      router.push("/invoices?quickAction=new-bill");
+      router.push("/simple-bill");
       return;
     }
 
