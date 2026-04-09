@@ -17,9 +17,13 @@ const PaymentInfo = ({ data, theme }: InvoiceSectionProps) => {
     <section
       className="rounded-[22px] border border-slate-200 bg-white"
       style={style}
+      data-template-block="payment"
     >
       <div className="grid gap-4 px-5 py-4 sm:grid-cols-[0.92fr_1.08fr]">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+        <div
+          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+          data-part="payment-status-card"
+        >
           <p className="text-[0.72em] font-semibold uppercase tracking-[0.22em] text-slate-500">
             {t("invoicePreview.paymentTracking")}
           </p>
@@ -46,7 +50,10 @@ const PaymentInfo = ({ data, theme }: InvoiceSectionProps) => {
           </div>
 
           {paymentSummary?.history?.length ? (
-            <div className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-3">
+            <div
+              className="mt-4 rounded-xl border border-slate-200 bg-white px-3 py-3"
+              data-part="payment-history"
+            >
               <p className="text-[0.72em] font-semibold uppercase tracking-[0.16em] text-slate-500">
                 {t("invoicePreview.recentPayments")}
               </p>
@@ -73,7 +80,10 @@ const PaymentInfo = ({ data, theme }: InvoiceSectionProps) => {
           ) : null}
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+        <div
+          className="rounded-2xl border border-slate-200 bg-white px-4 py-4"
+          data-part="totals-card"
+        >
           <p className="text-[0.72em] font-semibold uppercase tracking-[0.22em] text-slate-500">
             {t("invoicePreview.totals")}
           </p>
@@ -95,6 +105,7 @@ const PaymentInfo = ({ data, theme }: InvoiceSectionProps) => {
             <div
               className="mt-3 flex items-center justify-between rounded-2xl px-4 py-3 font-semibold text-white"
               style={{ backgroundColor: theme.primaryColor }}
+              data-part="grand-total-card"
             >
               <span>{t("invoicePreview.grandTotal")}</span>
               <span>{formatCurrency(totals.total, data.business.currency)}</span>

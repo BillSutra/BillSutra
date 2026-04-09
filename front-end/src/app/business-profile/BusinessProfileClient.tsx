@@ -21,6 +21,8 @@ import {
   BUSINESS_TYPES,
   SECTION_LABELS,
   TEMPLATE_CATALOG,
+  buildCuratedTemplateList,
+  decorateInvoiceTemplate,
 } from "@/lib/invoiceTemplateData";
 import { PREVIEW_INVOICE } from "@/lib/invoicePreviewData";
 import {
@@ -132,24 +134,28 @@ const BusinessProfileClient = ({
     const allowedSections = new Set<SectionKey>(
       Object.keys(SECTION_LABELS) as SectionKey[],
     );
-    return templateRecords.map((template) => ({
-      id: String(template.id),
-      name: template.name,
-      description: template.description ?? "",
-      layout: template.layout_config.layout,
-      defaultSections: (template.sections ?? [])
-        .filter((section) => section.is_default)
-        .sort((a, b) => a.section_order - b.section_order)
-        .map((section) => section.section_key)
-        .filter((section): section is SectionKey =>
-          allowedSections.has(section as SectionKey),
-        ),
-      theme: {
-        primaryColor: template.layout_config.primaryColor,
-        fontFamily: "var(--font-geist-sans)",
-        tableStyle: template.layout_config.tableStyle,
-      },
-    }));
+    const normalizedTemplates = templateRecords.map((template) =>
+      decorateInvoiceTemplate({
+        id: String(template.id),
+        name: template.name,
+        description: template.description ?? "",
+        layout: template.layout_config.layout,
+        defaultSections: (template.sections ?? [])
+          .filter((section) => section.is_default)
+          .sort((a, b) => a.section_order - b.section_order)
+          .map((section) => section.section_key)
+          .filter((section): section is SectionKey =>
+            allowedSections.has(section as SectionKey),
+          ),
+        theme: {
+          primaryColor: template.layout_config.primaryColor,
+          fontFamily: "var(--font-geist-sans)",
+          tableStyle: template.layout_config.tableStyle,
+        },
+      }),
+    );
+
+    return buildCuratedTemplateList(normalizedTemplates);
   }, [templateRecords]);
 
   const selectedTemplate = useMemo(
@@ -345,6 +351,11 @@ const BusinessProfileClient = ({
                       <p className="text-base font-semibold text-[#10233f]">
                         {template.name}
                       </p>
+                      {template.bestFor ? (
+                        <p className="mt-2 inline-flex rounded-full bg-[#edf5fb] px-2.5 py-1 text-[11px] font-medium text-[#123d65]">
+                          {template.bestFor}
+                        </p>
+                      ) : null}
                       <p className="mt-2 text-sm leading-6 text-[#627890]">
                         {template.description}
                       </p>
@@ -718,6 +729,7 @@ const BusinessProfileClient = ({
                     <TemplatePreviewRenderer
                       key={`${selectedTemplate?.id ?? "template"}-${enabledSections.join(",")}`}
                       templateId={selectedTemplate?.id}
+                      templateName={selectedTemplate?.name}
                       data={previewData}
                       enabledSections={enabledSections}
                       theme={

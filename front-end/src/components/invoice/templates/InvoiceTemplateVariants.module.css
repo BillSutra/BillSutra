@@ -1,0 +1,399 @@
+.templateShell {
+  color: #0f172a;
+  --template-ink: #0f172a;
+  --template-muted: #64748b;
+  --template-line: rgba(148, 163, 184, 0.35);
+  --template-soft: rgba(248, 250, 252, 0.9);
+}
+
+.templateShell :global(.invoice-content-root) {
+  display: grid;
+  gap: 14px;
+}
+
+.templateShell :global(.invoice-section) {
+  min-width: 0;
+}
+
+.templateShell :global(.invoice-section > section) {
+  box-shadow: none;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.templateShell :global(.invoice-section table) {
+  width: 100%;
+}
+
+.templateShell :global(.invoice-section img) {
+  display: block;
+}
+
+.templateShell :global([data-part="section-title"]) {
+  letter-spacing: 0.18em;
+}
+
+.templateShell :global([data-part="grand-total-card"]) {
+  transition: none;
+}
+
+.classic {
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  padding: 12px;
+  border-radius: 28px;
+}
+
+.classic :global(.invoice-content-root) {
+  gap: 12px;
+}
+
+.classic :global(.invoice-section > section) {
+  border-color: #b8c4d4;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.classic :global([data-template-block="header"] [data-part="header-ribbon"]) {
+  border-bottom-color: #cbd5e1;
+  background: linear-gradient(90deg, var(--template-primary) 0%, #eef2f7 60%);
+}
+
+.classic :global([data-template-block="header"] [data-part="header-ribbon"] p),
+.classic :global([data-template-block="header"] [data-part="header-ribbon"] h1) {
+  color: #0f172a !important;
+}
+
+.classic :global([data-template-block="items"] [data-part="items-table"]),
+.classic :global([data-template-block="tax"] [data-part="tax-breakdown-table"]) {
+  border-top: 1px solid #cbd5e1;
+}
+
+.classic :global([data-template-block="items"] thead),
+.classic :global([data-template-block="tax"] thead) {
+  background: #f8fafc;
+}
+
+.classic :global([data-template-block="notes"]),
+.classic :global([data-template-block="footer"]) {
+  border-color: #94a3b8;
+}
+
+.modern {
+  background:
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.14), transparent 28%),
+    linear-gradient(180deg, #fcfefe 0%, #f4fbfa 100%);
+  padding: 14px;
+  border-radius: 32px;
+}
+
+.modern :global(.invoice-content-root) {
+  gap: 18px;
+}
+
+.modern :global(.invoice-section > section) {
+  border-color: rgba(226, 232, 240, 0.8);
+  border-radius: 28px;
+  box-shadow: 0 26px 60px -44px rgba(15, 23, 42, 0.22);
+}
+
+.modern :global([data-template-block="header"] [data-part="header-ribbon"]) {
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.14), rgba(255, 255, 255, 0.9));
+}
+
+.modern :global([data-template-block="header"] [data-part="logo-lockup"]) {
+  border-style: solid;
+  border-color: rgba(15, 118, 110, 0.18);
+  background: linear-gradient(180deg, #ffffff 0%, #effcf8 100%);
+}
+
+.modern :global([data-template-block="payment"] [data-part="totals-card"]),
+.modern :global([data-template-block="notes"]),
+.modern :global([data-template-block="client"] [data-part="invoice-meta-card"]) {
+  background: #fcfffe;
+}
+
+.modern :global([data-template-block="payment"] [data-part="grand-total-card"]) {
+  box-shadow: 0 20px 44px -28px rgba(15, 118, 110, 0.45);
+}
+
+.gst {
+  padding: 12px;
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, #fbfdff 0%, #f1f5f9 100%);
+}
+
+.gst :global(.invoice-content-root) {
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.gst :global(.invoice-section[data-section="header"]),
+.gst :global(.invoice-section[data-section="items"]),
+.gst :global(.invoice-section[data-section="service_items"]),
+.gst :global(.invoice-section[data-section="footer"]) {
+  grid-column: 1 / -1;
+}
+
+.gst :global(.invoice-section > section) {
+  border-color: #64748b;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.gst :global([data-template-block="header"] [data-part="header-ribbon"]) {
+  background: linear-gradient(90deg, rgba(12, 74, 110, 0.18), rgba(12, 74, 110, 0.04));
+}
+
+.gst :global([data-template-block="header"] [data-part="logo-lockup"]),
+.gst :global([data-template-block="company"] [data-part="business-meta-card"]),
+.gst :global([data-template-block="client"] [data-part="invoice-meta-card"]) {
+  border-radius: 8px;
+}
+
+.gst :global([data-template-block="tax"] [data-part="tax-breakdown-table"]),
+.gst :global([data-template-block="items"] [data-part="items-table"]) {
+  border: 1px solid #cbd5e1;
+}
+
+.gst :global([data-template-block="items"] thead),
+.gst :global([data-template-block="tax"] thead) {
+  background: #e2e8f0;
+}
+
+.gst :global([data-template-block="tax"] [data-part="tax-total-card"]),
+.gst :global([data-template-block="payment"] [data-part="totals-card"]) {
+  background: #f8fafc;
+}
+
+.headerLeft {
+  padding: 14px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+.headerLeft :global(.invoice-content-root) {
+  gap: 14px;
+}
+
+.headerLeft :global(.invoice-section > section) {
+  border-color: rgba(125, 161, 210, 0.72);
+  border-left: 6px solid var(--template-primary);
+  border-radius: 22px;
+}
+
+.headerLeft :global([data-template-block="header"] [data-part="header-ribbon"]) {
+  background: linear-gradient(90deg, rgba(29, 78, 216, 0.12), rgba(255, 255, 255, 0.9));
+}
+
+.headerLeft :global([data-template-block="company"] [data-part="from-card"]),
+.headerLeft :global([data-template-block="client"] [data-part="bill-to-card"]),
+.headerLeft :global([data-template-block="client"] [data-part="invoice-meta-card"]) {
+  padding: 18px;
+  border-radius: 18px;
+  background: #f8fbff;
+}
+
+.headerLeft :global([data-template-block="payment"] [data-part="payment-status-card"]) {
+  background: #eff6ff;
+}
+
+.banner {
+  padding: 14px;
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at top right, rgba(124, 45, 18, 0.24), transparent 20%),
+    linear-gradient(180deg, #fffaf7 0%, #ffffff 100%);
+}
+
+.banner :global(.invoice-content-root) {
+  gap: 16px;
+}
+
+.banner :global(.invoice-section > section) {
+  border-color: rgba(226, 214, 203, 0.95);
+  border-radius: 24px;
+}
+
+.banner :global([data-template-block="header"]) {
+  position: relative;
+}
+
+.banner :global([data-template-block="header"] > section) {
+  overflow: hidden;
+  border: none;
+  background: linear-gradient(140deg, var(--template-primary) 0%, #111827 120%);
+  box-shadow: 0 34px 70px -46px rgba(17, 24, 39, 0.52);
+}
+
+.banner :global([data-template-block="header"] [data-part="header-ribbon"]) {
+  background: transparent;
+  border-bottom-color: rgba(255, 255, 255, 0.14);
+}
+
+.banner :global([data-template-block="header"] p),
+.banner :global([data-template-block="header"] h1),
+.banner :global([data-template-block="header"] span) {
+  color: #ffffff !important;
+}
+
+.banner :global([data-template-block="header"] [data-part="logo-lockup"]),
+.banner :global([data-template-block="header"] [data-part="invoice-date-card"]),
+.banner :global([data-template-block="header"] [data-part="status-pill"]) {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.banner :global([data-template-block="company"] [data-part="business-meta-card"]) {
+  background: #fff8f3;
+}
+
+.banner :global([data-template-block="payment"] [data-part="grand-total-card"]) {
+  background: linear-gradient(135deg, var(--template-primary) 0%, #111827 120%) !important;
+}
+
+.split {
+  padding: 14px;
+  border-radius: 30px;
+  background:
+    linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.split :global(.invoice-content-root) {
+  gap: 14px;
+  grid-template-columns: minmax(0, 1.38fr) minmax(0, 0.92fr);
+}
+
+.split :global(.invoice-section[data-section="header"]),
+.split :global(.invoice-section[data-section="footer"]) {
+  grid-column: 1 / -1;
+}
+
+.split :global(.invoice-section[data-section="company_details"]),
+.split :global(.invoice-section[data-section="client_details"]),
+.split :global(.invoice-section[data-section="items"]),
+.split :global(.invoice-section[data-section="service_items"]) {
+  grid-column: 1 / 2;
+}
+
+.split :global(.invoice-section[data-section="tax"]),
+.split :global(.invoice-section[data-section="discount"]),
+.split :global(.invoice-section[data-section="payment_info"]),
+.split :global(.invoice-section[data-section="notes"]) {
+  grid-column: 2 / 3;
+}
+
+.split :global(.invoice-section > section) {
+  height: 100%;
+  border-radius: 22px;
+}
+
+.split :global([data-template-block="company"] [data-part="business-meta-card"]),
+.split :global([data-template-block="client"] [data-part="invoice-meta-card"]),
+.split :global([data-template-block="notes"]),
+.split :global([data-template-block="payment"] [data-part="totals-card"]) {
+  background: #f8fafc;
+}
+
+.split :global([data-template-block="payment"] [data-part="grand-total-card"]) {
+  padding-top: 18px;
+  padding-bottom: 18px;
+}
+
+.compact {
+  padding: 10px;
+  border-radius: 22px;
+  background: linear-gradient(180deg, #fffdf7 0%, #ffffff 100%);
+}
+
+.compact :global(.invoice-content-root) {
+  gap: 8px;
+}
+
+.compact :global(.invoice-section > section) {
+  border-radius: 10px;
+  border-color: rgba(180, 83, 9, 0.28);
+}
+
+.compact :global([data-template-block="header"] [data-part="header-ribbon"]),
+.compact :global([data-template-block="items"] [data-part="items-toolbar"]) {
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+.compact :global([data-template-block="header"] [data-part="logo-lockup"]) {
+  height: 58px;
+  width: 58px;
+  border-radius: 12px;
+}
+
+.compact :global([data-template-block="company"] > div),
+.compact :global([data-template-block="client"] > div),
+.compact :global([data-template-block="payment"] > div) {
+  gap: 10px;
+}
+
+.compact :global([data-template-block="items"] th),
+.compact :global([data-template-block="items"] td),
+.compact :global([data-template-block="tax"] th),
+.compact :global([data-template-block="tax"] td) {
+  padding-top: 7px !important;
+  padding-bottom: 7px !important;
+}
+
+.compact :global([data-template-block="items"] thead),
+.compact :global([data-template-block="tax"] thead) {
+  background: #fff7ed;
+}
+
+.compact :global([data-template-block="payment"] [data-part="grand-total-card"]) {
+  border-radius: 14px;
+}
+
+.bold {
+  padding: 14px;
+  border-radius: 30px;
+  background:
+    radial-gradient(circle at top left, rgba(124, 45, 18, 0.16), transparent 26%),
+    linear-gradient(180deg, #ffffff 0%, #fff7f3 100%);
+}
+
+.bold :global(.invoice-content-root) {
+  gap: 16px;
+}
+
+.bold :global(.invoice-section > section) {
+  border-color: rgba(15, 23, 42, 0.08);
+  border-radius: 24px;
+  box-shadow: 0 24px 48px -36px rgba(15, 23, 42, 0.26);
+}
+
+.bold :global([data-template-block="header"] [data-part="header-ribbon"]) {
+  background: linear-gradient(135deg, var(--template-primary) 0%, #111827 120%);
+}
+
+.bold :global([data-template-block="header"] [data-part="header-ribbon"] p),
+.bold :global([data-template-block="header"] [data-part="header-ribbon"] h1),
+.bold :global([data-template-block="header"] [data-part="header-ribbon"] span) {
+  color: #ffffff !important;
+}
+
+.bold :global([data-template-block="payment"] [data-part="payment-status-card"]) {
+  background: linear-gradient(180deg, #fff7ed 0%, #ffffff 100%);
+}
+
+.bold :global([data-template-block="payment"] [data-part="totals-card"]) {
+  border-width: 2px;
+  border-color: rgba(124, 45, 18, 0.12);
+}
+
+.bold :global([data-template-block="payment"] [data-part="grand-total-card"]) {
+  background: linear-gradient(135deg, var(--template-primary) 0%, #111827 120%) !important;
+  font-size: 1.04em;
+  box-shadow: 0 28px 52px -34px rgba(124, 45, 18, 0.48);
+}
+
+.bold :global([data-template-block="notes"] [data-part="amount-words"]) {
+  font-size: 0.98em;
+  font-weight: 600;
+}

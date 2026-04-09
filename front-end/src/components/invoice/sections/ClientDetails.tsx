@@ -9,9 +9,13 @@ const ClientDetails = ({ data, theme }: InvoiceSectionProps) => {
     <section
       className="rounded-[20px] border border-slate-200 bg-white"
       style={style}
+      data-template-block="client"
     >
       <div className="grid gap-4 px-5 py-4 sm:grid-cols-2">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+        <div
+          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+          data-part="bill-to-card"
+        >
           <p className="text-[0.72em] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Bill to
           </p>
@@ -23,7 +27,10 @@ const ClientDetails = ({ data, theme }: InvoiceSectionProps) => {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+        <div
+          className="rounded-2xl border border-slate-200 bg-white px-4 py-4"
+          data-part="invoice-meta-card"
+        >
           <p className="text-[0.72em] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Invoice details
           </p>

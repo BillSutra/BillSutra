@@ -18,14 +18,27 @@ export type InvoiceTheme = {
 
 export type TemplateLayout = "stacked" | "split";
 
+export type InvoiceTemplateVariant =
+  | "classic"
+  | "modern"
+  | "indianModern"
+  | "gst"
+  | "headerLeft"
+  | "banner"
+  | "split"
+  | "compact"
+  | "bold";
+
 export type InvoiceTemplateConfig = {
   id: string;
   name: string;
   description: string;
+  bestFor?: string;
   layout: TemplateLayout;
   defaultSections: SectionKey[];
   sectionOrder?: SectionKey[];
   theme: InvoiceTheme;
+  variant?: InvoiceTemplateVariant;
 };
 
 export type BusinessTypeConfig = {

@@ -23,9 +23,17 @@ import {
   BUSINESS_TYPES,
   SECTION_LABELS,
   TEMPLATE_CATALOG,
+  buildCuratedTemplateList,
+  decorateInvoiceTemplate,
+  resolveInvoiceTemplatePreset,
 } from "@/lib/invoiceTemplateData";
+import {
+  DEFAULT_ACTIVE_INVOICE_TEMPLATE,
+  resolveActiveInvoiceTemplate,
+  saveActiveInvoiceTemplate,
+} from "@/lib/invoiceActiveTemplate";
 import { PREVIEW_INVOICE } from "@/lib/invoicePreviewData";
-import type { SectionKey } from "@/types/invoice-template";
+import type { InvoiceTemplateConfig, SectionKey } from "@/types/invoice-template";
 import {
   createUserSavedTemplate,
   deleteUserSavedTemplate,
@@ -82,11 +90,39 @@ const normalizeHexColor = (value: string) => {
   return null;
 };
 
+const matchesTemplateIdentity = (
+  template: InvoiceTemplateConfig,
+  templateId?: string | null,
+  templateName?: string | null,
+) => {
+  if (template.id === templateId) {
+    return true;
+  }
+
+  if (
+    templateName &&
+    template.name.toLowerCase() === templateName.trim().toLowerCase()
+  ) {
+    return true;
+  }
+
+  const templatePreset = resolveInvoiceTemplatePreset(template.id, template.name);
+  const activePreset = resolveInvoiceTemplatePreset(templateId, templateName);
+
+  return Boolean(
+    templatePreset &&
+      activePreset &&
+      templatePreset.variant === activePreset.variant,
+  );
+};
+
 const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
   const { t, formatDate } = useI18n();
   const queryClient = useQueryClient();
   const [businessTypeId, setBusinessTypeId] = useState("retail");
-  const [selectedTemplateId, setSelectedTemplateId] = useState("minimal");
+  const [selectedTemplateId, setSelectedTemplateId] = useState(
+    DEFAULT_ACTIVE_INVOICE_TEMPLATE.templateId,
+  );
   const [enabledSections, setEnabledSections] = useState<SectionKey[]>(
     BUSINESS_TYPES[0].defaultSections,
   );
@@ -110,6 +146,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
   const [previewThemeColor, setPreviewThemeColor] = useState("#2563eb");
   const [previewShowLogo, setPreviewShowLogo] = useState(false);
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeTemplateHydratedRef = useRef(false);
   const [draggedSection, setDraggedSection] = useState<SectionKey | null>(null);
   const [draggedPreviewSection, setDraggedPreviewSection] =
     useState<SectionKey | null>(null);
@@ -254,7 +291,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
         .map((section) => normalizeSection(section.section_key))
         .filter((section): section is SectionKey => Boolean(section));
 
-      return {
+      return decorateInvoiceTemplate({
         id: String(template.id),
         name: template.name,
         description: template.description ?? "",
@@ -270,44 +307,85 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
         sectionOrder: orderedSections.length
           ? orderedSections
           : defaultSections,
-      };
+      });
     });
   }, [templateRecords, normalizeSection]);
 
   const templates = templatesFromApi ?? TEMPLATE_CATALOG;
-  const featuredTemplateNames = useMemo(
-    () => new Set(["Ledgerline", "Atlas", "Harbor", "Verity", "Monarch"]),
-    [],
-  );
   const featuredTemplates = useMemo(() => {
-    return templates.filter((template) =>
-      featuredTemplateNames.has(template.name),
-    );
-  }, [templates, featuredTemplateNames]);
-  const regularTemplates = useMemo(() => {
-    return templates.filter(
-      (template) => !featuredTemplateNames.has(template.name),
-    );
-  }, [templates, featuredTemplateNames]);
+    return buildCuratedTemplateList(templates);
+  }, [templates]);
+  const templateCatalog = featuredTemplates.length ? featuredTemplates : templates;
 
   const selectedTemplate = useMemo(() => {
     return (
-      templates.find((item) => item.id === selectedTemplateId) ?? templates[0]
+      templateCatalog.find((item) => item.id === selectedTemplateId) ??
+      featuredTemplates.find((item) => item.id === selectedTemplateId) ??
+      templates.find((item) => item.id === selectedTemplateId) ??
+      templateCatalog[0] ??
+      featuredTemplates[0] ??
+      templates[0]
     );
-  }, [selectedTemplateId, templates]);
+  }, [featuredTemplates, selectedTemplateId, templateCatalog, templates]);
 
   const previewTemplate = useMemo(() => {
     if (!previewTemplateId) return null;
-    return templates.find((item) => item.id === previewTemplateId) ?? null;
-  }, [previewTemplateId, templates]);
+    return (
+      templateCatalog.find((item) => item.id === previewTemplateId) ??
+      templates.find((item) => item.id === previewTemplateId) ??
+      null
+    );
+  }, [previewTemplateId, templateCatalog, templates]);
 
   useEffect(() => {
-    if (!templates.length) return;
-    if (!templates.some((item) => item.id === selectedTemplateId)) {
-      setSelectedTemplateId(templates[0].id);
-      setThemeColor(templates[0].theme.primaryColor);
+    if (!templateCatalog.length) return;
+    if (!templateCatalog.some((item) => item.id === selectedTemplateId)) {
+      setSelectedTemplateId(templateCatalog[0].id);
+      setThemeColor(templateCatalog[0].theme.primaryColor);
     }
-  }, [templates, selectedTemplateId]);
+  }, [selectedTemplateId, templateCatalog]);
+
+  useEffect(() => {
+    if (!templates.length || activeTemplateHydratedRef.current) return;
+
+    const activeTemplate = resolveActiveInvoiceTemplate(
+      DEFAULT_ACTIVE_INVOICE_TEMPLATE,
+    );
+    const matchedTemplate =
+      templateCatalog.find((template) =>
+        matchesTemplateIdentity(
+          template,
+          activeTemplate.templateId,
+          activeTemplate.templateName,
+        ),
+      ) ??
+      featuredTemplates.find((template) =>
+        matchesTemplateIdentity(
+          template,
+          activeTemplate.templateId,
+          activeTemplate.templateName,
+        ),
+      ) ??
+      templates.find((template) =>
+        matchesTemplateIdentity(
+          template,
+          activeTemplate.templateId,
+          activeTemplate.templateName,
+        ),
+      );
+
+    if (!matchedTemplate) {
+      activeTemplateHydratedRef.current = true;
+      return;
+    }
+
+    setSelectedTemplateId(matchedTemplate.id);
+    setThemeColor(activeTemplate.theme.primaryColor);
+    setEnabledSections(activeTemplate.enabledSections);
+    setSectionOrder(activeTemplate.sectionOrder);
+    setDesignConfig(activeTemplate.designConfig);
+    activeTemplateHydratedRef.current = true;
+  }, [featuredTemplates, templateCatalog, templates]);
 
   useEffect(() => {
     const templateIdNumber = Number(selectedTemplateId);
@@ -595,7 +673,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
         showTaxNumber:
           businessProfile?.show_tax_number ??
           PREVIEW_INVOICE.business.showTaxNumber,
-        showLogoOnInvoice: false,
+        showLogoOnInvoice: Boolean(businessProfile?.logo_url),
       },
       items: PREVIEW_INVOICE.items.slice(0, 1),
       notes: "",
@@ -714,44 +792,74 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
     [designConfig, resetAllDesign, resetDesignSection, updateDesignSection],
   );
 
-  const applyTemplate = (templateId: string, color?: string) => {
-    const template = templates.find((item) => item.id === templateId);
+  const applyTemplate = (
+    templateId: string,
+    overrides?: {
+      color?: string;
+      enabledSections?: SectionKey[];
+      sectionOrder?: SectionKey[];
+      designConfig?: DesignConfig;
+    },
+  ) => {
+    const template =
+      templateCatalog.find((item) => item.id === templateId) ??
+      templates.find((item) => item.id === templateId);
     if (!template) return;
     const templateIdNumber = Number(templateId);
     const savedTemplateSettings = userTemplateRecords.find(
       (item) => item.template_id === templateIdNumber,
     );
-
-    setSelectedTemplateId(templateId);
-    setThemeColor(color ?? template.theme.primaryColor);
-    setEnabledSections(
+    const nextEnabledSections =
+      overrides?.enabledSections ??
       savedTemplateSettings?.enabled_sections
         ?.map((section) => normalizeSection(section))
         .filter((section): section is SectionKey => Boolean(section)) ??
-        template.defaultSections,
-    );
-    setSectionOrder(
+      template.defaultSections;
+    const nextSectionOrder =
+      overrides?.sectionOrder ??
       savedTemplateSettings?.section_order
         ?.map((section) => normalizeSection(section))
         .filter((section): section is SectionKey => Boolean(section)) ??
-        template.sectionOrder ??
-        template.defaultSections,
-    );
-    setDesignConfig(
+      template.sectionOrder ??
+      template.defaultSections;
+    const nextThemeColor =
+      overrides?.color ??
+      savedTemplateSettings?.theme_color ??
+      template.theme.primaryColor;
+    const nextDesignConfig =
+      overrides?.designConfig ??
       normalizeDesignConfig(
         (savedTemplateSettings?.design_config as Partial<DesignConfig>) ?? null,
-      ),
-    );
+      );
+
+    setSelectedTemplateId(templateId);
+    setThemeColor(nextThemeColor);
+    setEnabledSections(nextEnabledSections);
+    setSectionOrder(nextSectionOrder);
+    setDesignConfig(nextDesignConfig);
+    saveActiveInvoiceTemplate({
+      templateId: template.id,
+      templateName: template.name,
+      enabledSections: nextEnabledSections,
+      sectionOrder: nextSectionOrder,
+      theme: {
+        ...template.theme,
+        primaryColor: nextThemeColor,
+      },
+      designConfig: nextDesignConfig,
+    });
   };
 
   const openPreview = (templateId: string) => {
-    const template = templates.find((item) => item.id === templateId);
+    const template =
+      templateCatalog.find((item) => item.id === templateId) ??
+      templates.find((item) => item.id === templateId);
     if (!template) return;
     setPreviewTemplateId(templateId);
     setPreviewThemeColor(template.theme.primaryColor);
     setPreviewEnabledSections(template.defaultSections);
     setPreviewSectionOrder(template.sectionOrder ?? template.defaultSections);
-    setPreviewShowLogo(false);
+    setPreviewShowLogo(Boolean(businessProfile?.logo_url));
   };
 
   const closePreview = useCallback(() => {
@@ -1671,7 +1779,12 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                             <p className="mt-3 text-base font-semibold">
                               {template.name}
                             </p>
-                            <p className="mt-2 text-xs text-[#5c4b3b]">
+                            {template.bestFor ? (
+                              <p className="mt-2 inline-flex rounded-full bg-[#f6efe8] px-2.5 py-1 text-[11px] font-medium text-[#8a6d56]">
+                                {template.bestFor}
+                              </p>
+                            ) : null}
+                            <p className="mt-3 text-xs text-[#5c4b3b]">
                               {template.description}
                             </p>
                           </div>
@@ -1724,83 +1837,6 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                   </div>
                 </div>
               ) : null}
-              <div className="mt-6">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#8a6d56]">
-                  {t("templatesPage.allTemplates")}
-                </p>
-                <div className="mt-3 grid justify-items-center gap-4 md:grid-cols-2 lg:grid-cols-3">
-                  {regularTemplates.map((template) => (
-                    <div
-                      key={`all-${template.id}`}
-                      className={`w-full max-w-[430px] rounded-2xl border px-4 py-4 text-left transition ${
-                        selectedTemplateId === template.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div
-                            className="h-2 w-12 rounded-full"
-                            style={{
-                              backgroundColor: template.theme.primaryColor,
-                            }}
-                          />
-                          <p className="mt-3 text-base font-semibold">
-                            {template.name}
-                          </p>
-                          <p className="mt-2 text-xs text-[#5c4b3b]">
-                            {template.description}
-                          </p>
-                        </div>
-                        {selectedTemplateId === template.id ? (
-                          <span className="rounded-full bg-primary/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-primary">
-                            {t("templatesPage.active")}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="mt-4 h-60 overflow-hidden rounded-xl border border-border bg-white p-2">
-                        <div
-                          className="pointer-events-none origin-top-left"
-                          style={{
-                            width: A4_WIDTH_PX,
-                            height: A4_HEIGHT_PX,
-                            transform: "scale(0.26)",
-                          }}
-                        >
-                          <div className="h-full w-full bg-white p-4">
-                            <MemoTemplatePreview
-                              key={`all-${template.id}`}
-                              templateId={template.id}
-                              templateName={template.name}
-                              data={cardPreviewData}
-                              enabledSections={template.defaultSections}
-                              sectionOrder={template.sectionOrder}
-                              theme={template.theme}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                      <div className="mt-4 flex flex-wrap gap-3">
-                        <button
-                          type="button"
-                          onClick={() => openPreview(template.id)}
-                          className="rounded-full border border-border px-4 py-2 text-xs font-semibold"
-                        >
-                          {t("templatesPage.actions.preview")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => applyTemplate(template.id)}
-                          className="rounded-full bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground"
-                        >
-                          {t("templatesPage.actions.useTemplate")}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </>
           ) : null}
         </section>
@@ -1823,6 +1859,11 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 <h3 className="mt-1 text-xl font-semibold">
                   {previewTemplate.name}
                 </h3>
+                {previewTemplate.bestFor ? (
+                  <p className="mt-2 text-sm text-[#8a6d56]">
+                    {previewTemplate.bestFor}
+                  </p>
+                ) : null}
               </div>
               <div className="flex items-center gap-3">
                 <button
@@ -1855,9 +1896,12 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                     const normalizedOrder = previewSectionOrder.length
                       ? previewSectionOrder
                       : previewEnabledSections;
-                    applyTemplate(previewTemplate.id, previewThemeColor);
-                    setEnabledSections(previewEnabledSections);
-                    setSectionOrder(normalizedOrder);
+                    applyTemplate(previewTemplate.id, {
+                      color: previewThemeColor,
+                      enabledSections: previewEnabledSections,
+                      sectionOrder: normalizedOrder,
+                      designConfig,
+                    });
 
                     const templateIdNumber = Number(previewTemplate.id);
                     if (templateIdNumber && !Number.isNaN(templateIdNumber)) {

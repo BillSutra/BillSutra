@@ -8,14 +8,22 @@ const DiscountSection = ({ data, theme }: InvoiceSectionProps) => {
   const discountLabel = data.discount?.label ?? "Discount applied";
 
   return (
-    <section className="border border-slate-400 bg-white" style={style}>
+    <section
+      className="border border-slate-400 bg-white"
+      style={style}
+      data-template-block="discount"
+    >
       <p
         className="border-b border-slate-300 px-2 py-1 text-[0.82em] font-semibold"
         style={{ backgroundColor: `${theme.primaryColor}22` }}
+        data-part="section-title"
       >
         Discounts
       </p>
-      <div className="flex items-center justify-between px-2 py-2 text-[0.92em]">
+      <div
+        className="flex items-center justify-between px-2 py-2 text-[0.92em]"
+        data-part="discount-row"
+      >
         <span>{discountLabel}</span>
         <span className="font-semibold">
           {formatCurrency(discountAmount, data.business.currency)}

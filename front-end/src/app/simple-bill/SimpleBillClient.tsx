@@ -29,6 +29,7 @@ import {
   useCustomersQuery,
   useProductsQuery,
 } from "@/hooks/useInventoryQueries";
+import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import {
   fetchBusinessProfile,
   type BusinessProfileRecord,
@@ -283,12 +284,22 @@ const buildSimpleBillInvoicePreviewData = ({
 const ExistingInvoicePreview = ({
   data,
   hasItems = true,
+  templateId,
+  templateName,
+  enabledSections,
+  sectionOrder,
+  theme,
+  designConfig,
 }: {
   data: InvoicePreviewData;
   hasItems?: boolean;
+  templateId?: string | null;
+  templateName?: string | null;
+  enabledSections: SectionKey[];
+  sectionOrder: SectionKey[];
+  theme: InvoiceTheme;
+  designConfig: ReturnType<typeof normalizeDesignConfig>;
 }) => {
-  const designConfig = useMemo(() => normalizeDesignConfig(null), []);
-
   if (!hasItems) {
     return (
       <div className="min-w-0 overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700">
@@ -310,13 +321,15 @@ const ExistingInvoicePreview = ({
     >
       <div className="min-w-0 overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none">
         <A4PreviewStack
-          stackKey={`simple-bill-preview-${data.invoiceNumber}-${data.items.length}-${data.totals?.total ?? 0}`}
+          stackKey={`simple-bill-preview-${templateId ?? "default"}-${data.invoiceNumber}-${data.items.length}-${data.totals?.total ?? 0}`}
         >
           <TemplatePreviewRenderer
+            templateId={templateId}
+            templateName={templateName}
             data={data}
-            enabledSections={DEFAULT_INVOICE_SECTIONS}
-            sectionOrder={DEFAULT_INVOICE_SECTIONS}
-            theme={DEFAULT_INVOICE_THEME}
+            enabledSections={enabledSections}
+            sectionOrder={sectionOrder}
+            theme={theme}
           />
         </A4PreviewStack>
       </div>
@@ -422,6 +435,24 @@ const SimpleBillClient = ({
     invoiceForm.discount_type,
     taxMode,
   );
+  const fallbackActiveTemplate = useMemo(
+    () => ({
+      templateId: "professional",
+      templateName: "Professional",
+      enabledSections: DEFAULT_INVOICE_SECTIONS,
+      sectionOrder: DEFAULT_INVOICE_SECTIONS,
+      theme: DEFAULT_INVOICE_THEME,
+      designConfig: normalizeDesignConfig(null),
+    }),
+    [],
+  );
+  const activeTemplate = useActiveInvoiceTemplate(fallbackActiveTemplate);
+  const activeEnabledSections = activeTemplate.enabledSections;
+  const activeSectionOrder = activeTemplate.sectionOrder.length
+    ? activeTemplate.sectionOrder
+    : activeTemplate.enabledSections;
+  const activeTheme = activeTemplate.theme;
+  const activeDesignConfig = activeTemplate.designConfig;
   const previewInvoiceDate = useMemo(
     () =>
       formatDate(invoiceDate ? `${invoiceDate}T00:00:00` : new Date(), {
@@ -1006,9 +1037,9 @@ const SimpleBillClient = ({
                   return (
                     <div
                       key={item.id}
-                      className="grid min-w-0 gap-3 rounded-lg bg-background/80 p-3 shadow-[0_14px_34px_-30px_rgba(15,23,42,0.55)] ring-1 ring-border/45 animate-in fade-in slide-in-from-bottom-1 duration-200 sm:grid-cols-2 sm:items-end"
+                      className="grid min-w-0 gap-3 rounded-lg bg-background/80 p-3 shadow-[0_14px_34px_-30px_rgba(15,23,42,0.55)] ring-1 ring-border/45 animate-in fade-in slide-in-from-bottom-1 duration-200"
                     >
-                      <div className="relative grid min-w-0 gap-2 sm:col-span-2">
+                      <div className="relative grid min-w-0 gap-2">
                         <Label
                           htmlFor={`simple-item-${item.id}`}
                           className="whitespace-nowrap"
@@ -1095,81 +1126,83 @@ const SimpleBillClient = ({
                           </div>
                         ) : null}
                       </div>
-                      <div className="grid min-w-0 gap-2">
-                        <Label
-                          htmlFor={`simple-qty-${item.id}`}
-                          className="whitespace-nowrap"
-                        >
-                          Quantity
-                        </Label>
-                        <Input
-                          id={`simple-qty-${item.id}`}
-                          ref={(node) => {
-                            itemQuantityRefs.current[item.id] = node;
-                          }}
-                          value={item.quantity}
-                          onChange={(event) =>
-                            updateItem(item.id, {
-                              quantity: event.target.value.replace(/[^\d.]/g, ""),
-                            })
-                          }
-                          onFocus={(event) => event.target.select()}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              itemPriceRefs.current[item.id]?.focus();
+                      <div className="grid min-w-0 gap-3 sm:grid-cols-[7rem_8rem_minmax(0,1fr)_auto] sm:items-end">
+                        <div className="grid min-w-0 gap-2">
+                          <Label
+                            htmlFor={`simple-qty-${item.id}`}
+                            className="whitespace-nowrap"
+                          >
+                            Quantity
+                          </Label>
+                          <Input
+                            id={`simple-qty-${item.id}`}
+                            ref={(node) => {
+                              itemQuantityRefs.current[item.id] = node;
+                            }}
+                            value={item.quantity}
+                            onChange={(event) =>
+                              updateItem(item.id, {
+                                quantity: event.target.value.replace(/[^\d.]/g, ""),
+                              })
                             }
-                          }}
-                          className="h-12 text-base"
-                          inputMode="decimal"
-                        />
-                      </div>
-                      <div className="grid min-w-0 gap-2">
-                        <Label
-                          htmlFor={`simple-price-${item.id}`}
-                          className="whitespace-nowrap"
-                        >
-                          Price
-                        </Label>
-                        <Input
-                          id={`simple-price-${item.id}`}
-                          ref={(node) => {
-                            itemPriceRefs.current[item.id] = node;
-                          }}
-                          value={item.price}
-                          onChange={(event) =>
-                            updateItem(item.id, {
-                              price: event.target.value.replace(/[^\d.]/g, ""),
-                            })
-                          }
-                          onFocus={(event) => event.target.select()}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              addItemAfter(item.id);
+                            onFocus={(event) => event.target.select()}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                itemPriceRefs.current[item.id]?.focus();
+                              }
+                            }}
+                            className="h-12 text-base"
+                            inputMode="decimal"
+                          />
+                        </div>
+                        <div className="grid min-w-0 gap-2">
+                          <Label
+                            htmlFor={`simple-price-${item.id}`}
+                            className="whitespace-nowrap"
+                          >
+                            Price
+                          </Label>
+                          <Input
+                            id={`simple-price-${item.id}`}
+                            ref={(node) => {
+                              itemPriceRefs.current[item.id] = node;
+                            }}
+                            value={item.price}
+                            onChange={(event) =>
+                              updateItem(item.id, {
+                                price: event.target.value.replace(/[^\d.]/g, ""),
+                              })
                             }
-                          }}
-                          className="h-12 text-base"
-                          inputMode="decimal"
-                          placeholder="0"
-                        />
+                            onFocus={(event) => event.target.select()}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                addItemAfter(item.id);
+                              }
+                            }}
+                            className="h-12 text-base"
+                            inputMode="decimal"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div className="min-w-0 rounded-lg bg-muted/45 px-3 py-3 transition-colors duration-200">
+                          <p className="text-xs font-medium text-muted-foreground">Total</p>
+                          <p className="mt-1 text-base font-semibold text-foreground transition-all duration-200">
+                            {formatMoney(lineTotal)}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="justify-self-end self-end"
+                          aria-label="Remove item"
+                          onClick={() => removeItem(item.id)}
+                        >
+                          <Trash2 size={16} />
+                        </Button>
                       </div>
-                      <div className="min-w-0 rounded-lg bg-muted/45 px-3 py-3 transition-colors duration-200">
-                        <p className="text-xs font-medium text-muted-foreground">Total</p>
-                        <p className="mt-1 text-base font-semibold text-foreground transition-all duration-200">
-                          {formatMoney(lineTotal)}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="justify-self-end self-end"
-                        aria-label="Remove item"
-                        onClick={() => removeItem(item.id)}
-                      >
-                        <Trash2 size={16} />
-                      </Button>
                     </div>
                   );
                 })}
@@ -1252,6 +1285,12 @@ const SimpleBillClient = ({
             <ExistingInvoicePreview
               data={invoicePreviewData}
               hasItems={validItems.length > 0}
+              templateId={activeTemplate.templateId}
+              templateName={activeTemplate.templateName}
+              enabledSections={activeEnabledSections}
+              sectionOrder={activeSectionOrder}
+              theme={activeTheme}
+              designConfig={activeDesignConfig}
             />
           </div>
 
@@ -1321,6 +1360,12 @@ const SimpleBillClient = ({
         <ExistingInvoicePreview
           data={invoicePreviewData}
           hasItems={validItems.length > 0}
+          templateId={activeTemplate.templateId}
+          templateName={activeTemplate.templateName}
+          enabledSections={activeEnabledSections}
+          sectionOrder={activeSectionOrder}
+          theme={activeTheme}
+          designConfig={activeDesignConfig}
         />
       </Modal>
     </DashboardLayout>

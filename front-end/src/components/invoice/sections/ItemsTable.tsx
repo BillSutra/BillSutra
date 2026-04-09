@@ -10,8 +10,12 @@ const ItemsTable = ({ data, theme }: InvoiceSectionProps) => {
     <section
       className="invoice-section overflow-hidden rounded-[22px] border border-slate-200 bg-white"
       style={style}
+      data-template-block="items"
     >
-      <div className="flex flex-wrap items-center justify-between gap-4 px-5 py-4">
+      <div
+        className="flex flex-wrap items-center justify-between gap-4 px-5 py-4"
+        data-part="items-toolbar"
+      >
         <div>
           <p className="text-[0.72em] font-semibold uppercase tracking-[0.22em] text-slate-500">
             Itemized billing
@@ -20,12 +24,12 @@ const ItemsTable = ({ data, theme }: InvoiceSectionProps) => {
             {data.items.length} item(s) on this invoice
           </p>
         </div>
-        <p className="text-[0.95em] font-semibold text-slate-950">
+        <p className="text-[0.95em] font-semibold text-slate-950" data-part="subtotal-text">
           Subtotal: {formatCurrency(totals.subtotal, data.business.currency)}
         </p>
       </div>
       <div className="overflow-hidden border-t border-slate-200">
-        <table className="min-w-full text-[0.92em]">
+        <table className="min-w-full text-[0.92em]" data-part="items-table">
           <thead className="bg-slate-50 text-[0.74em] uppercase tracking-[0.18em] text-slate-500">
             <tr>
               <th className="border-b border-slate-200 px-4 py-3 text-left font-semibold">
@@ -68,6 +72,7 @@ const ItemsTable = ({ data, theme }: InvoiceSectionProps) => {
                   <td
                     className="border-b border-slate-200 px-4 py-3 text-right font-semibold"
                     style={{ color: theme.primaryColor }}
+                    data-part="line-total-cell"
                   >
                     {formatCurrency(
                       lineTotal + taxAmount,

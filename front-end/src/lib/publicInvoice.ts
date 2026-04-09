@@ -6,6 +6,8 @@ const DEFAULT_INVOICE_SECTIONS = [
   "company_details",
   "client_details",
   "items",
+  "tax",
+  "discount",
   "payment_info",
   "notes",
   "footer",

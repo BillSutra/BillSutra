@@ -29,6 +29,7 @@ import {
   useInvoiceQuery,
   useUpdateInvoiceMutation,
 } from "@/hooks/useInventoryQueries";
+import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   InvoicePreviewData,
@@ -76,7 +77,24 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   const [invoiceEmailRecipient, setInvoiceEmailRecipient] = useState("");
   const [invoiceEmailError, setInvoiceEmailError] = useState<string | null>(null);
   const [invoiceEmailSending, setInvoiceEmailSending] = useState(false);
-  const designConfig = useMemo(() => normalizeDesignConfig(null), []);
+  const fallbackActiveTemplate = useMemo(
+    () => ({
+      templateId: "professional",
+      templateName: "Professional",
+      enabledSections: DEFAULT_INVOICE_SECTIONS,
+      sectionOrder: DEFAULT_INVOICE_SECTIONS,
+      theme: DEFAULT_INVOICE_THEME,
+      designConfig: normalizeDesignConfig(null),
+    }),
+    [],
+  );
+  const activeTemplate = useActiveInvoiceTemplate(fallbackActiveTemplate);
+  const activeEnabledSections = activeTemplate.enabledSections;
+  const activeSectionOrder = activeTemplate.sectionOrder.length
+    ? activeTemplate.sectionOrder
+    : activeTemplate.enabledSections;
+  const activeTheme = activeTemplate.theme;
+  const designConfig = activeTemplate.designConfig;
 
   const invoiceDate = useCallback((value?: string | null) => {
     if (!value) return "-";
@@ -223,10 +241,12 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     try {
       await downloadPdf({
         previewPayload: {
+          templateId: activeTemplate.templateId,
+          templateName: activeTemplate.templateName,
           data: previewData,
-          enabledSections: DEFAULT_INVOICE_SECTIONS,
-          sectionOrder: DEFAULT_INVOICE_SECTIONS,
-          theme: DEFAULT_INVOICE_THEME,
+          enabledSections: activeEnabledSections,
+          sectionOrder: activeSectionOrder,
+          theme: activeTheme,
           designConfig,
         },
         fileName: `${data.invoice_number}.pdf`,
@@ -621,13 +641,15 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                     className="rounded-[1.75rem] border border-slate-200 bg-white p-2 dark:border-slate-700"
                   >
                     <A4PreviewStack
-                      stackKey={`invoice-detail-${data.id}-${data.status}-${paymentHistory.length}`}
+                      stackKey={`invoice-detail-${data.id}-${activeTemplate.templateId}-${data.status}-${paymentHistory.length}`}
                     >
                       <TemplatePreviewRenderer
+                        templateId={activeTemplate.templateId}
+                        templateName={activeTemplate.templateName}
                         data={previewData}
-                        enabledSections={DEFAULT_INVOICE_SECTIONS}
-                        sectionOrder={DEFAULT_INVOICE_SECTIONS}
-                        theme={DEFAULT_INVOICE_THEME}
+                        enabledSections={activeEnabledSections}
+                        sectionOrder={activeSectionOrder}
+                        theme={activeTheme}
                       />
                     </A4PreviewStack>
                   </div>

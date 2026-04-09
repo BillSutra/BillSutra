@@ -22,17 +22,25 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
   const grandTotal = totals.total ?? subtotal + totalTax - discount;
 
   return (
-    <section className="border border-slate-400 bg-white" style={style}>
+    <section
+      className="border border-slate-400 bg-white"
+      style={style}
+      data-template-block="tax"
+    >
       <p
         className="border-b border-slate-300 px-2 py-1 text-[0.82em] font-semibold"
         style={{ backgroundColor: `${theme.primaryColor}22` }}
+        data-part="section-title"
       >
         {t("invoicePreview.taxSummary")}
       </p>
 
       <div className="grid gap-3 px-2 py-3 text-[0.9em]">
         <div className="grid gap-2 sm:grid-cols-2">
-          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+          <div
+            className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2"
+            data-part="tax-summary-card"
+          >
             <p className="text-[0.78em] font-semibold uppercase tracking-[0.12em] text-slate-600">
               {t("invoicePreview.subtotalBeforeTax")}
             </p>
@@ -46,6 +54,7 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
               borderColor: `${theme.primaryColor}55`,
               backgroundColor: `${theme.primaryColor}12`,
             }}
+            data-part="tax-summary-card"
           >
             <p className="text-[0.78em] font-semibold uppercase tracking-[0.12em] text-slate-600">
               {t("invoicePreview.totalTaxAmount")}
@@ -57,7 +66,10 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
         </div>
 
         <div className="overflow-hidden rounded-md border border-slate-200">
-          <table className="min-w-full text-left text-[0.9em]">
+          <table
+            className="min-w-full text-left text-[0.9em]"
+            data-part="tax-breakdown-table"
+          >
             <thead
               className="text-[0.76em] uppercase tracking-[0.12em] text-slate-600"
               style={{ backgroundColor: `${theme.primaryColor}14` }}
@@ -115,7 +127,10 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
           </table>
         </div>
 
-        <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
+        <div
+          className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-3"
+          data-part="tax-total-card"
+        >
           <div className="flex items-center justify-between">
             <span className="text-slate-600">{t("invoicePreview.subtotal")}</span>
             <span className="font-medium text-slate-900">

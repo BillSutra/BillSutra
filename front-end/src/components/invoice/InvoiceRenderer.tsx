@@ -1,10 +1,11 @@
 import React from "react";
 import type {
   InvoicePreviewData,
-  InvoiceTheme,
   InvoiceSectionProps,
+  InvoiceTheme,
   SectionKey,
 } from "@/types/invoice-template";
+import { resolveInvoiceTemplateVariant } from "@/lib/invoiceTemplateData";
 import Header from "./sections/Header";
 import CompanyDetails from "./sections/CompanyDetails";
 import ClientDetails from "./sections/ClientDetails";
@@ -15,6 +16,15 @@ import DiscountSection from "./sections/DiscountSection";
 import PaymentInfo from "./sections/PaymentInfo";
 import Notes from "./sections/Notes";
 import Footer from "./sections/Footer";
+import TemplateBanner from "./templates/TemplateBanner";
+import TemplateBold from "./templates/TemplateBold";
+import TemplateClassic from "./templates/TemplateClassic";
+import TemplateCompact from "./templates/TemplateCompact";
+import TemplateGST from "./templates/TemplateGST";
+import TemplateHeaderLeft from "./templates/TemplateHeaderLeft";
+import TemplateIndianModern from "./templates/TemplateIndianModern";
+import TemplateModern from "./templates/TemplateModern";
+import TemplateSplit from "./templates/TemplateSplit";
 
 const SECTION_MAP: Record<
   SectionKey,
@@ -32,26 +42,32 @@ const SECTION_MAP: Record<
   footer: Footer,
 };
 
-export type InvoiceRendererProps = {
+export type InvoiceSectionRendererProps = {
   data: InvoicePreviewData;
   enabledSections: SectionKey[];
   sectionOrder?: SectionKey[];
   theme: InvoiceTheme;
 };
 
-const InvoiceRenderer = ({
+export type InvoiceRendererProps = InvoiceSectionRendererProps & {
+  templateId?: string | null;
+  templateName?: string | null;
+};
+
+export const InvoiceSectionRenderer = ({
   data,
   enabledSections,
   sectionOrder,
   theme,
-}: InvoiceRendererProps) => {
+}: InvoiceSectionRendererProps) => {
   const order = (sectionOrder?.length ? sectionOrder : enabledSections).filter(
     (section) => enabledSections.includes(section),
   );
 
   return (
     <div
-      className="invoice-content-root space-y-1"
+      className="invoice-content-root"
+      data-table-style={theme.tableStyle}
       style={{
         fontFamily: theme.fontFamily,
       }}
@@ -59,13 +75,36 @@ const InvoiceRenderer = ({
       {order.map((section) => {
         const SectionComponent = SECTION_MAP[section];
         return (
-          <div key={section} className="invoice-section">
+          <div key={section} className="invoice-section" data-section={section}>
             <SectionComponent data={data} theme={theme} />
           </div>
         );
       })}
     </div>
   );
+};
+
+const TEMPLATE_MAP = {
+  classic: TemplateClassic,
+  modern: TemplateModern,
+  indianModern: TemplateIndianModern,
+  gst: TemplateGST,
+  headerLeft: TemplateHeaderLeft,
+  banner: TemplateBanner,
+  split: TemplateSplit,
+  compact: TemplateCompact,
+  bold: TemplateBold,
+} as const;
+
+const InvoiceRenderer = ({
+  templateId,
+  templateName,
+  ...rendererProps
+}: InvoiceRendererProps) => {
+  const SelectedTemplate =
+    TEMPLATE_MAP[resolveInvoiceTemplateVariant(templateId, templateName)];
+
+  return <SelectedTemplate {...rendererProps} />;
 };
 
 export default InvoiceRenderer;

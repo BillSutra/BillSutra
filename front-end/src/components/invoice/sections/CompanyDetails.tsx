@@ -11,9 +11,10 @@ const CompanyDetails = ({ data, theme }: InvoiceSectionProps) => {
     <section
       className="rounded-[20px] border border-slate-200 bg-white"
       style={style}
+      data-template-block="company"
     >
       <div className="grid gap-4 px-5 py-4 text-[0.88em] sm:grid-cols-[1.15fr_0.85fr] sm:items-start">
-        <div>
+        <div data-part="from-card">
           <p className="text-[0.72em] font-semibold uppercase tracking-[0.22em] text-slate-500">
             {t("invoiceLabels.from")}
           </p>
@@ -28,7 +29,10 @@ const CompanyDetails = ({ data, theme }: InvoiceSectionProps) => {
           </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left sm:text-right">
+        <div
+          className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-left sm:text-right"
+          data-part="business-meta-card"
+        >
           <p className="text-[0.72em] font-semibold uppercase tracking-[0.22em] text-slate-500">
             {t("invoiceLabels.businessDetails")}
           </p>

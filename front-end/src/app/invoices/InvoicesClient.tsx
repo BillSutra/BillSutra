@@ -41,6 +41,7 @@ import {
   formatRelativeTime,
   useInvoiceDrafts,
 } from "@/hooks/invoice/useInvoiceDrafts";
+import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
@@ -272,10 +273,24 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     form.discount_type,
     taxMode,
   );
-  const activeEnabledSections = DEFAULT_INVOICE_SECTIONS;
-  const activeSectionOrder = DEFAULT_INVOICE_SECTIONS;
-  const activeTheme = DEFAULT_INVOICE_THEME;
-  const activeDesignConfig = useMemo(() => normalizeDesignConfig(null), []);
+  const fallbackActiveTemplate = useMemo(
+    () => ({
+      templateId: "professional",
+      templateName: "Professional",
+      enabledSections: DEFAULT_INVOICE_SECTIONS,
+      sectionOrder: DEFAULT_INVOICE_SECTIONS,
+      theme: DEFAULT_INVOICE_THEME,
+      designConfig: normalizeDesignConfig(null),
+    }),
+    [],
+  );
+  const activeTemplate = useActiveInvoiceTemplate(fallbackActiveTemplate);
+  const activeEnabledSections = activeTemplate.enabledSections;
+  const activeSectionOrder = activeTemplate.sectionOrder.length
+    ? activeTemplate.sectionOrder
+    : activeTemplate.enabledSections;
+  const activeTheme = activeTemplate.theme;
+  const activeDesignConfig = activeTemplate.designConfig;
   const autoFocusProductSearch =
     searchParams.get("quickAction") === "new-bill";
   const isMacShortcutPlatform = useMemo(() => {
@@ -1045,6 +1060,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     try {
       await downloadPdf({
         previewPayload: {
+          templateId: activeTemplate.templateId,
+          templateName: activeTemplate.templateName,
           data: invoicePreviewData,
           enabledSections: activeEnabledSections,
           sectionOrder: activeSectionOrder,
@@ -1060,6 +1077,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     activeDesignConfig,
     activeEnabledSections,
     activeSectionOrder,
+    activeTemplate.templateId,
+    activeTemplate.templateName,
     activeTheme,
     downloadPdf,
     invoicePreviewData,
@@ -1654,10 +1673,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                   className="rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none"
                 >
                   <A4PreviewStack
-                    stackKey={`invoices-preview-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
+                    stackKey={`invoices-preview-${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
                   >
                     <TemplatePreviewRenderer
-                      key={`${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
+                      key={`${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
+                      templateId={activeTemplate.templateId}
+                      templateName={activeTemplate.templateName}
                       data={invoicePreviewData}
                       enabledSections={activeEnabledSections}
                       sectionOrder={activeSectionOrder}
