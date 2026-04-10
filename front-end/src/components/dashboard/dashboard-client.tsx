@@ -402,83 +402,44 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           focusDescription:
             "Create Bill, Add Product, और Add Customer. यही सबसे जरूरी शॉर्टकट हैं।",
         }
-      : language === "hinglish"
-        ? {
-            kicker: "Nayi shuruaat",
-            title: "Pehla bill 2 minute ke andar banane ka simple raasta",
-            description:
-              "Abhi sirf in zaroori steps par dhyaan dijiye. Baaki features baad mein dekh sakte hain.",
-            progressLabel: `Abhi step ${setupProgress.businessReady ? setupProgress.productsReady ? setupProgress.customersReady ? 4 : 3 : 2 : 1} par hain`,
-            stepLabels: [
-              {
-                title: "Dukaan ki details bhariye",
-                description: "Shop ka naam aur phone bharne se bill ready dikhega.",
-                href: "/business-profile",
-                actionLabel: "Shop set kijiye",
-              },
-              {
-                title: "Kam se kam ek product jodiye",
-                description: "Naam aur price bharna enough hai.",
-                href: "/products",
-                actionLabel: "Product jodiye",
-              },
-              {
-                title: "Ek customer jodiye",
-                description: "Naam aur phone se start ho jayega.",
-                href: "/customers",
-                actionLabel: "Customer jodiye",
-              },
-              {
-                title: "Ab pehla bill banaiye",
-                description: "Customer chuniye, product jodiye, aur bill banaiye.",
-                href: "/simple-bill",
-                actionLabel: "Bill banaiye",
-              },
-            ],
-            primary: "Demo data jodiye",
-            secondary: "Seedha bill screen kholiye",
-            focusTitle: "Abhi bas 3 main buttons dikhaye jayenge",
-            focusDescription:
-              "Create Bill, Add Product, aur Add Customer. Inse aap bina confusion ke start kar sakte hain.",
-          }
-        : {
-            kicker: "Start Simple",
-            title: "The easiest path to your first bill in under 2 minutes",
-            description:
-              "Focus only on the essentials for now. The rest of the business tools can wait until after your first bill.",
-            progressLabel: `You are on step ${setupProgress.businessReady ? setupProgress.productsReady ? setupProgress.customersReady ? 4 : 3 : 2 : 1} of 4`,
-            stepLabels: [
-              {
-                title: "Fill in your shop details",
-                description: "Your shop name and phone are enough to get started.",
-                href: "/business-profile",
-                actionLabel: "Set up shop",
-              },
-              {
-                title: "Add at least one product",
-                description: "Product name and selling price are enough.",
-                href: "/products",
-                actionLabel: "Add product",
-              },
-              {
-                title: "Add one customer",
-                description: "A name and phone number are enough for the first bill.",
-                href: "/customers",
-                actionLabel: "Add customer",
-              },
-              {
-                title: "Create your first bill",
-                description: "Pick the customer, add products, and generate the bill.",
-                href: "/simple-bill",
-                actionLabel: "Create bill",
-              },
-            ],
-            primary: "Load demo data",
-            secondary: "Open bill screen",
-            focusTitle: "You only need 3 main actions right now",
-            focusDescription:
-              "Create Bill, Add Product, and Add Customer are the only shortcuts you need to start selling.",
-          };
+      : {
+          kicker: "Start Simple",
+          title: "The easiest path to your first bill in under 2 minutes",
+          description:
+            "Focus only on the essentials for now. The rest of the business tools can wait until after your first bill.",
+          progressLabel: `You are on step ${setupProgress.businessReady ? setupProgress.productsReady ? setupProgress.customersReady ? 4 : 3 : 2 : 1} of 4`,
+          stepLabels: [
+            {
+              title: "Fill in your shop details",
+              description: "Your shop name and phone are enough to get started.",
+              href: "/business-profile",
+              actionLabel: "Set up shop",
+            },
+            {
+              title: "Add at least one product",
+              description: "Product name and selling price are enough.",
+              href: "/products",
+              actionLabel: "Add product",
+            },
+            {
+              title: "Add one customer",
+              description: "A name and phone number are enough for the first bill.",
+              href: "/customers",
+              actionLabel: "Add customer",
+            },
+            {
+              title: "Create your first bill",
+              description: "Pick the customer, add products, and generate the bill.",
+              href: "/simple-bill",
+              actionLabel: "Create bill",
+            },
+          ],
+          primary: "Load demo data",
+          secondary: "Open bill screen",
+          focusTitle: "You only need 3 main actions right now",
+          focusDescription:
+            "Create Bill, Add Product, and Add Customer are the only shortcuts you need to start selling.",
+        };
 
   const handleSeedDemo = async () => {
     if (isSeedingDemo) return;

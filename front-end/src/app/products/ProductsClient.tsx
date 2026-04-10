@@ -84,10 +84,11 @@ export default function ProductsClient({
   const [editingForm, setEditingForm] = useState(form);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [formTouched, setFormTouched] = useState(false);
-  const [selectedImportFile, setSelectedImportFile] = useState<File | null>(null);
-  const [importPreview, setImportPreview] = useState<ProductImportPreview | null>(
+  const [selectedImportFile, setSelectedImportFile] = useState<File | null>(
     null,
   );
+  const [importPreview, setImportPreview] =
+    useState<ProductImportPreview | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const [isPreviewingImport, setIsPreviewingImport] = useState(false);
@@ -131,7 +132,8 @@ export default function ProductsClient({
   const categoryOptions = categories ?? [];
   const totalProducts = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
-  const showingFrom = totalProducts === 0 ? 0 : (currentPage - 1) * PRODUCTS_PAGE_LIMIT + 1;
+  const showingFrom =
+    totalProducts === 0 ? 0 : (currentPage - 1) * PRODUCTS_PAGE_LIMIT + 1;
   const showingTo = Math.min(currentPage * PRODUCTS_PAGE_LIMIT, totalProducts);
 
   const isMutating =
@@ -391,7 +393,9 @@ export default function ProductsClient({
       ]),
     ]
       .map((cells) =>
-        cells.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(","),
+        cells
+          .map((cell) => `"${String(cell).replaceAll('"', '""')}"`)
+          .join(","),
       )
       .join("\n");
     downloadBlobFile(
@@ -410,26 +414,20 @@ export default function ProductsClient({
     language === "hi"
       ? {
           title: "अभी कोई प्रोडक्ट नहीं है",
-          description: "अपना पहला प्रोडक्ट जोड़ें ताकि आप तुरंत बिल बनाना शुरू कर सकें।",
+          description:
+            "अपना पहला प्रोडक्ट जोड़ें ताकि आप तुरंत बिल बनाना शुरू कर सकें।",
           hint: "शुरुआत के लिए सिर्फ प्रोडक्ट नाम और बिक्री कीमत काफी है।",
           primary: "प्रोडक्ट जोड़ें",
           secondary: "बिल बनाएं",
         }
-      : language === "hinglish"
-        ? {
-            title: "Abhi koi product nahi hai",
-            description: "Apna pehla product jodiye taki aap turant bill banana shuru kar saken.",
-            hint: "Shuruaat ke liye sirf product naam aur selling price kaafi hai.",
-            primary: "Product Jodiye",
-            secondary: "Bill Banaiye",
-          }
-        : {
-            title: "No products yet",
-            description: "Add your first product so you can start making bills right away.",
-            hint: "Start by adding one item you sell. Product name and selling price are enough to begin.",
-            primary: "Add Product",
-            secondary: "Create Bill",
-          };
+      : {
+          title: "No products yet",
+          description:
+            "Add your first product so you can start making bills right away.",
+          hint: "Start by adding one item you sell. Product name and selling price are enough to begin.",
+          primary: "Add Product",
+          secondary: "Create Bill",
+        };
   const showBeginnerGuide =
     !isLoading &&
     !isError &&
@@ -447,7 +445,8 @@ export default function ProductsClient({
           steps: [
             {
               title: "दुकान की जानकारी",
-              description: "अगर अभी नहीं भरी है तो पहले दुकान का नाम और फोन जोड़ें।",
+              description:
+                "अगर अभी नहीं भरी है तो पहले दुकान का नाम और फोन जोड़ें।",
               href: "/business-profile",
               actionLabel: "दुकान सेट करें",
             },
@@ -464,7 +463,8 @@ export default function ProductsClient({
             },
             {
               title: "फिर बिल बनाएं",
-              description: "जब प्रोडक्ट तैयार हो जाए तो सीधा बिल स्क्रीन खोलें।",
+              description:
+                "जब प्रोडक्ट तैयार हो जाए तो सीधा बिल स्क्रीन खोलें।",
               href: "/simple-bill",
               actionLabel: "बिल स्क्रीन खोलें",
             },
@@ -472,75 +472,43 @@ export default function ProductsClient({
           primary: "फॉर्म तक जाएं",
           secondary: "सीधा बिल पेज खोलें",
         }
-      : language === "hinglish"
-        ? {
-            kicker: "Step 2",
-            title: "Ab apna pehla product jodiye",
-            description:
-              "Shuruaat ke liye sirf product ka naam aur selling price bhariye. SKU, barcode, aur bulk import baad mein bhi kar sakte hain.",
-            progressLabel: "Abhi yahi sabse zaroori kaam hai",
-            steps: [
-              {
-                title: "Shop details",
-                description: "Agar abhi nahi bhari hai to pehle shop ka naam aur phone jodiye.",
-                href: "/business-profile",
-                actionLabel: "Shop set kijiye",
-              },
-              {
-                title: "Pehla product jodiye",
-                description: "Naam aur price bharte hi aap bill banana start kar sakte hain.",
-                active: true,
-              },
-              {
-                title: "Phir customer jodiye",
-                description: "Customer ka naam aur phone next step mein jod sakte hain.",
-                href: "/customers",
-                actionLabel: "Customers kholiye",
-              },
-              {
-                title: "Phir bill banaiye",
-                description: "Product ready hote hi seedha bill screen kholiye.",
-                href: "/simple-bill",
-                actionLabel: "Bill screen kholiye",
-              },
-            ],
-            primary: "Form tak jaiye",
-            secondary: "Bill page kholiye",
-          }
-        : {
-            kicker: "Step 2",
-            title: "Add your first product now",
-            description:
-              "Start with only the product name and selling price. SKU, barcode, and bulk import can wait until later.",
-            progressLabel: "This is the only product step you need right now",
-            steps: [
-              {
-                title: "Shop details",
-                description: "If needed, add your shop name and phone first.",
-                href: "/business-profile",
-                actionLabel: "Set up shop",
-              },
-              {
-                title: "Add your first product",
-                description: "Once the name and price are saved, you can start making bills.",
-                active: true,
-              },
-              {
-                title: "Add a customer next",
-                description: "Customer name and phone can be added in the next step.",
-                href: "/customers",
-                actionLabel: "Open customers",
-              },
-              {
-                title: "Then create a bill",
-                description: "As soon as the product is ready, open the bill screen.",
-                href: "/simple-bill",
-                actionLabel: "Open bill screen",
-              },
-            ],
-            primary: "Jump to form",
-            secondary: "Open bill page",
-          };
+      : {
+          kicker: "Step 2",
+          title: "Add your first product now",
+          description:
+            "Start with only the product name and selling price. SKU, barcode, and bulk import can wait until later.",
+          progressLabel: "This is the only product step you need right now",
+          steps: [
+            {
+              title: "Shop details",
+              description: "If needed, add your shop name and phone first.",
+              href: "/business-profile",
+              actionLabel: "Set up shop",
+            },
+            {
+              title: "Add your first product",
+              description:
+                "Once the name and price are saved, you can start making bills.",
+              active: true,
+            },
+            {
+              title: "Add a customer next",
+              description:
+                "Customer name and phone can be added in the next step.",
+              href: "/customers",
+              actionLabel: "Open customers",
+            },
+            {
+              title: "Then create a bill",
+              description:
+                "As soon as the product is ready, open the bill screen.",
+              href: "/simple-bill",
+              actionLabel: "Open bill screen",
+            },
+          ],
+          primary: "Jump to form",
+          secondary: "Open bill page",
+        };
 
   return (
     <DashboardLayout
@@ -581,19 +549,20 @@ export default function ProductsClient({
         {canManageProducts ? (
           <section className="app-panel rounded-3xl p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold text-foreground">
-                    {t("productsPage.import.title")}
-                  </h2>
-                  <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-                    {t("productsPage.import.description")}
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  {t("productsPage.import.title")}
+                </h2>
+                <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+                  {t("productsPage.import.description")}
+                </p>
+                {showBeginnerGuide ? (
+                  <p className="mt-3 inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
+                    Bulk import is optional. Most beginners can skip this and
+                    add one product manually.
                   </p>
-                  {showBeginnerGuide ? (
-                    <p className="mt-3 inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
-                      Bulk import is optional. Most beginners can skip this and add one product manually.
-                    </p>
-                  ) : null}
-                </div>
+                ) : null}
+              </div>
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
@@ -651,7 +620,9 @@ export default function ProductsClient({
                     <p className="font-medium">{selectedImportFile.name}</p>
                     <p className="mt-1">
                       {t("productsPage.import.requirements.fileSize", {
-                        size: (selectedImportFile.size / 1024 / 1024).toFixed(2),
+                        size: (selectedImportFile.size / 1024 / 1024).toFixed(
+                          2,
+                        ),
                       })}
                     </p>
                   </div>
@@ -769,18 +740,32 @@ export default function ProductsClient({
                     {t("productsPage.import.preview.validDescription")}
                   </p>
                 </div>
-                <span className="app-chip">{importPreview.validRows.length}</span>
+                <span className="app-chip">
+                  {importPreview.validRows.length}
+                </span>
               </div>
               <div className="mt-4 overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead className="bg-muted/50 text-left text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.row")}</th>
-                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.name")}</th>
-                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.sku")}</th>
-                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.category")}</th>
-                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.sellingPrice")}</th>
-                      <th className="px-3 py-2 font-medium">{t("productsPage.import.table.openingStock")}</th>
+                      <th className="px-3 py-2 font-medium">
+                        {t("productsPage.import.table.row")}
+                      </th>
+                      <th className="px-3 py-2 font-medium">
+                        {t("productsPage.import.table.name")}
+                      </th>
+                      <th className="px-3 py-2 font-medium">
+                        {t("productsPage.import.table.sku")}
+                      </th>
+                      <th className="px-3 py-2 font-medium">
+                        {t("productsPage.import.table.category")}
+                      </th>
+                      <th className="px-3 py-2 font-medium">
+                        {t("productsPage.import.table.sellingPrice")}
+                      </th>
+                      <th className="px-3 py-2 font-medium">
+                        {t("productsPage.import.table.openingStock")}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -799,7 +784,9 @@ export default function ProductsClient({
                             {row.category ||
                               t("productsPage.import.preview.uncategorized")}
                           </td>
-                          <td className="px-3 py-3">{formatCurrency(row.price)}</td>
+                          <td className="px-3 py-3">
+                            {formatCurrency(row.price)}
+                          </td>
                           <td className="px-3 py-3">{row.stock}</td>
                         </tr>
                       ))
@@ -828,7 +815,9 @@ export default function ProductsClient({
                     {t("productsPage.import.preview.invalidDescription")}
                   </p>
                 </div>
-                <span className="app-chip">{importPreview.invalidRows.length}</span>
+                <span className="app-chip">
+                  {importPreview.invalidRows.length}
+                </span>
               </div>
               <div className="mt-4 space-y-3">
                 {importPreview.invalidRows.length > 0 ? (
@@ -899,7 +888,9 @@ export default function ProductsClient({
                 id="name"
                 label={t("productsPage.fields.name")}
                 value={form.name}
-                onChange={(value) => setForm((prev) => ({ ...prev, name: value }))}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, name: value }))
+                }
                 validate={validateProductNameField}
                 required
                 placeholder={t("productsPage.placeholders.name")}
@@ -909,7 +900,9 @@ export default function ProductsClient({
                 id="sku"
                 label={t("productsPage.fields.sku")}
                 value={form.sku}
-                onChange={(value) => setForm((prev) => ({ ...prev, sku: value }))}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, sku: value }))
+                }
                 validate={validateRequiredField}
                 required
                 placeholder={t("productsPage.placeholders.sku")}
@@ -931,7 +924,9 @@ export default function ProductsClient({
                 label={t("productsPage.fields.sellingPrice")}
                 type="number"
                 value={form.price}
-                onChange={(value) => setForm((prev) => ({ ...prev, price: value }))}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, price: value }))
+                }
                 validate={validateNumberField}
                 required
                 placeholder={t("productsPage.placeholders.zero")}
@@ -942,7 +937,9 @@ export default function ProductsClient({
                 label={t("productsPage.fields.costPrice")}
                 type="number"
                 value={form.cost}
-                onChange={(value) => setForm((prev) => ({ ...prev, cost: value }))}
+                onChange={(value) =>
+                  setForm((prev) => ({ ...prev, cost: value }))
+                }
                 validate={validateOptionalNumberField}
                 placeholder={t("productsPage.placeholders.zero")}
                 success
@@ -994,7 +991,10 @@ export default function ProductsClient({
                   className="app-field h-10 px-3 text-sm text-foreground"
                   value={form.category_id}
                   onChange={(event) =>
-                    setForm((prev) => ({ ...prev, category_id: event.target.value }))
+                    setForm((prev) => ({
+                      ...prev,
+                      category_id: event.target.value,
+                    }))
                   }
                 >
                   <option value="">{t("productsPage.uncategorized")}</option>
@@ -1086,7 +1086,9 @@ export default function ProductsClient({
                 <select
                   className="app-field h-10 px-3 text-sm text-foreground"
                   value={selectedCategoryFilter}
-                  onChange={(event) => setSelectedCategoryFilter(event.target.value)}
+                  onChange={(event) =>
+                    setSelectedCategoryFilter(event.target.value)
+                  }
                 >
                   <option value="">
                     {t("productsPage.filters.allCategories")}
@@ -1113,7 +1115,9 @@ export default function ProductsClient({
                   ) : null}
                 </div>
               </div>
-              {isLoading ? <div className="app-loading-skeleton h-64 w-full" /> : null}
+              {isLoading ? (
+                <div className="app-loading-skeleton h-64 w-full" />
+              ) : null}
               {isError ? (
                 <p className="text-sm text-amber-700 dark:text-amber-300">
                   {t("productsPage.loadError")}
@@ -1177,7 +1181,9 @@ export default function ProductsClient({
                                 />
                               </div>
                               <div className="grid gap-2">
-                                <Label>{t("productsPage.fields.sellingPrice")}</Label>
+                                <Label>
+                                  {t("productsPage.fields.sellingPrice")}
+                                </Label>
                                 <Input
                                   type="number"
                                   value={editingForm.price}
@@ -1191,7 +1197,9 @@ export default function ProductsClient({
                                 />
                               </div>
                               <div className="grid gap-2">
-                                <Label>{t("productsPage.fields.openingStock")}</Label>
+                                <Label>
+                                  {t("productsPage.fields.openingStock")}
+                                </Label>
                                 <Input
                                   type="number"
                                   value={editingForm.stock_on_hand}
@@ -1204,7 +1212,9 @@ export default function ProductsClient({
                                 />
                               </div>
                               <div className="grid gap-2">
-                                <Label>{t("productsPage.fields.reorderLevel")}</Label>
+                                <Label>
+                                  {t("productsPage.fields.reorderLevel")}
+                                </Label>
                                 <Input
                                   type="number"
                                   value={editingForm.reorder_level}
@@ -1217,7 +1227,9 @@ export default function ProductsClient({
                                 />
                               </div>
                               <div className="grid gap-2">
-                                <Label>{t("productsPage.fields.category")}</Label>
+                                <Label>
+                                  {t("productsPage.fields.category")}
+                                </Label>
                                 <select
                                   className="app-field h-10 px-3 text-sm text-foreground"
                                   value={editingForm.category_id}
@@ -1232,7 +1244,10 @@ export default function ProductsClient({
                                     {t("productsPage.uncategorized")}
                                   </option>
                                   {categoryOptions.map((category) => (
-                                    <option key={category.id} value={category.id}>
+                                    <option
+                                      key={category.id}
+                                      value={category.id}
+                                    >
                                       {category.name}
                                     </option>
                                   ))}
@@ -1258,8 +1273,12 @@ export default function ProductsClient({
                               <input
                                 type="checkbox"
                                 className="mt-1"
-                                checked={selectedProductIds.includes(product.id)}
-                                onChange={() => toggleProductSelection(product.id)}
+                                checked={selectedProductIds.includes(
+                                  product.id,
+                                )}
+                                onChange={() =>
+                                  toggleProductSelection(product.id)
+                                }
                                 aria-label={`Select ${product.name}`}
                               />
                               <div className="min-w-0 flex-1">
@@ -1267,7 +1286,9 @@ export default function ProductsClient({
                                   <p className="text-base font-semibold text-foreground">
                                     {product.name}
                                   </p>
-                                  <span className="app-chip">{product.sku}</span>
+                                  <span className="app-chip">
+                                    {product.sku}
+                                  </span>
                                 </div>
                                 <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                                   <span className="app-chip">
@@ -1284,7 +1305,9 @@ export default function ProductsClient({
                                   </span>
                                   <span className="app-chip">
                                     {t("productsPage.priceLabel", {
-                                      amount: formatCurrency(Number(product.price)),
+                                      amount: formatCurrency(
+                                        Number(product.price),
+                                      ),
                                     })}
                                   </span>
                                 </div>
@@ -1320,7 +1343,9 @@ export default function ProductsClient({
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+                        onClick={() =>
+                          setCurrentPage((page) => Math.max(page - 1, 1))
+                        }
                         disabled={currentPage <= 1 || isFetching}
                       >
                         Previous

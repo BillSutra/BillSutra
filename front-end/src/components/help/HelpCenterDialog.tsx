@@ -29,7 +29,8 @@ const HelpCenterDialog = ({
     language === "hi"
       ? {
           title: "मदद और शुरुआत",
-          description: "नई शुरुआत के लिए छोटे गाइड, अक्सर पूछे जाने वाले सवाल, और पहला बिल बनाने के आसान स्टेप यहां हैं।",
+          description:
+            "नई शुरुआत के लिए छोटे गाइड, अक्सर पूछे जाने वाले सवाल, और पहला बिल बनाने के आसान स्टेप यहां हैं।",
           firstBill: "पहला बिल कैसे बनाएं",
           firstBillSteps: [
             "1. पहले अपना बिजनेस नाम और फोन भरें।",
@@ -43,66 +44,48 @@ const HelpCenterDialog = ({
           guideBills: "पहला बिल बनाएं",
           faq: "अक्सर पूछे जाने वाले सवाल",
           faqOneQ: "क्या मुझे पहले सब कुछ भरना होगा?",
-          faqOneA: "नहीं। बिजनेस नाम, एक प्रोडक्ट और एक ग्राहक से शुरुआत हो सकती है।",
+          faqOneA:
+            "नहीं। बिजनेस नाम, एक प्रोडक्ट और एक ग्राहक से शुरुआत हो सकती है।",
           faqTwoQ: "अगर मेरे पास अभी असली डेटा नहीं है तो?",
-          faqTwoA: "आप डेमो डेटा डाल सकते हैं और बाद में उसे बदल या हटा सकते हैं।",
+          faqTwoA:
+            "आप डेमो डेटा डाल सकते हैं और बाद में उसे बदल या हटा सकते हैं।",
           faqThreeQ: "क्या यह मोबाइल पर भी आसान रहेगा?",
-          faqThreeA: "हां। मुख्य बटन बड़े रखे गए हैं और पहला बिल मोबाइल पर भी आसान है।",
+          faqThreeA:
+            "हां। मुख्य बटन बड़े रखे गए हैं और पहला बिल मोबाइल पर भी आसान है।",
           replay: "ऑनबोर्डिंग फिर से देखें",
           demo: demoSeeded ? "डेमो डेटा फिर जोड़ें" : "डेमो डेटा जोड़ें",
-          support: "अगर कहीं अटकें, तो पहले डैशबोर्ड के Quick Actions और ऊपर Help बटन देखें।",
+          support:
+            "अगर कहीं अटकें, तो पहले डैशबोर्ड के Quick Actions और ऊपर Help बटन देखें।",
         }
-      : language === "hinglish"
-        ? {
-            title: "Help aur Shuruaat",
-            description: "Naye user ke liye chhote guides, common sawaal, aur pehla bill banane ke seedhe steps yahan milenge.",
-            firstBill: "Pehla bill kaise banayein",
-            firstBillSteps: [
-              "1. Sabse pehle apna business naam aur phone bharein.",
-              "2. Uske baad kam se kam ek product jodiye.",
-              "3. Bills page kholiye aur customer chuniye.",
-              "4. Product jodiye aur last mein bill generate kijiye.",
-            ],
-            tutorials: "Quick guides",
-            guideBusiness: "Business details jodiye",
-            guideProducts: "Pehla product jodiye",
-            guideBills: "Pehla bill banaiye",
-            faq: "Common sawaal",
-            faqOneQ: "Kya mujhe pehle sab kuch bharna hoga?",
-            faqOneA: "Nahi. Business naam, ek product, aur ek customer se shuruaat ho sakti hai.",
-            faqTwoQ: "Agar mere paas abhi real data nahi hai to?",
-            faqTwoA: "Aap demo data load kar sakte hain aur baad mein edit ya delete kar sakte hain.",
-            faqThreeQ: "Kya ye mobile par bhi easy rahega?",
-            faqThreeA: "Haan. Main buttons bade rakhe gaye hain aur pehla bill mobile par bhi simple hai.",
-            replay: "Onboarding dubara dekhein",
-            demo: demoSeeded ? "Demo data phir jodiye" : "Demo data jodiye",
-            support: "Agar kahin atak jaayein, to dashboard ke Quick Actions aur upar Help button se shuru kijiye.",
-          }
-        : {
-            title: "Help & Getting Started",
-            description: "Short tutorials, common questions, and a simple first-bill guide for new users.",
-            firstBill: "How to create your first bill",
-            firstBillSteps: [
-              "1. Add your business name and phone number.",
-              "2. Add at least one product you sell.",
-              "3. Open the Bills page and choose a customer.",
-              "4. Add products, review the total, and generate the bill.",
-            ],
-            tutorials: "Quick guides",
-            guideBusiness: "Add business details",
-            guideProducts: "Add your first product",
-            guideBills: "Create your first bill",
-            faq: "FAQs",
-            faqOneQ: "Do I need to set up everything first?",
-            faqOneA: "No. You can start with your business name, one product, and one customer.",
-            faqTwoQ: "What if I do not have real data yet?",
-            faqTwoA: "You can load demo data now and edit or delete it later.",
-            faqThreeQ: "Will this stay easy on mobile?",
-            faqThreeA: "Yes. The main actions stay large, clear, and easy to tap.",
-            replay: "Replay onboarding",
-            demo: demoSeeded ? "Add demo data again" : "Load demo data",
-            support: "If you feel stuck, start with the dashboard quick actions and the Help button in the top bar.",
-          };
+      : {
+          title: "Help & Getting Started",
+          description:
+            "Short tutorials, common questions, and a simple first-bill guide for new users.",
+          firstBill: "How to create your first bill",
+          firstBillSteps: [
+            "1. Add your business name and phone number.",
+            "2. Add at least one product you sell.",
+            "3. Open the Bills page and choose a customer.",
+            "4. Add products, review the total, and generate the bill.",
+          ],
+          tutorials: "Quick guides",
+          guideBusiness: "Add business details",
+          guideProducts: "Add your first product",
+          guideBills: "Create your first bill",
+          faq: "FAQs",
+          faqOneQ: "Do I need to set up everything first?",
+          faqOneA:
+            "No. You can start with your business name, one product, and one customer.",
+          faqTwoQ: "What if I do not have real data yet?",
+          faqTwoA: "You can load demo data now and edit or delete it later.",
+          faqThreeQ: "Will this stay easy on mobile?",
+          faqThreeA:
+            "Yes. The main actions stay large, clear, and easy to tap.",
+          replay: "Replay onboarding",
+          demo: demoSeeded ? "Add demo data again" : "Load demo data",
+          support:
+            "If you feel stuck, start with the dashboard quick actions and the Help button in the top bar.",
+        };
 
   return (
     <Modal

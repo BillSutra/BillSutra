@@ -13,12 +13,12 @@ import { dashboardRetryDelay } from "@/lib/dashboardRefresh";
 const COPILOT_STALE_MS = 5 * 60 * 1000;
 
 export const financialCopilotQueryKey = (
-  language: "en" | "hi" | "hinglish",
+  language: "en" | "hi",
   amount?: number,
 ) => ["financial-copilot", language, amount ?? null] as const;
 
 export const useFinancialCopilot = (params: {
-  language: "en" | "hi" | "hinglish";
+  language: "en" | "hi";
   amount?: number;
 }) =>
   useQuery<FinancialCopilotPayload>({
@@ -30,7 +30,7 @@ export const useFinancialCopilot = (params: {
     retryDelay: dashboardRetryDelay,
   });
 
-export const useFinancialGoalActions = (language: "en" | "hi" | "hinglish") => {
+export const useFinancialGoalActions = (language: "en" | "hi") => {
   const queryClient = useQueryClient();
 
   const invalidateCopilot = () =>

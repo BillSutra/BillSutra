@@ -97,7 +97,11 @@ const formatActivityDate = (
   if (!value) return "-";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return formatDate(parsed, { day: "numeric", month: "short", year: "numeric" });
+  return formatDate(parsed, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 };
 
 const buildStatementHtml = ({
@@ -161,7 +165,11 @@ const buildStatementHtml = ({
         <p class="meta">${escapeHtml(customer.phone ?? t("customersPage.ledger.phoneFallback"))} | ${escapeHtml(customer.address ?? t("customersPage.ledger.addressFallback"))}</p>
         <p class="meta">${escapeHtml(
           t("customersPage.statement.generatedOn", {
-            date: formatDate(new Date(), { day: "numeric", month: "short", year: "numeric" }),
+            date: formatDate(new Date(), {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            }),
           }),
         )}</p>
         <div class="summary">
@@ -193,10 +201,14 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
   const customers = useMemo(() => data ?? [], [data]);
   const [query, setQuery] = useState("");
   const [selectedCustomerIds, setSelectedCustomerIds] = useState<number[]>([]);
-  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(
+    null,
+  );
   const [formMode, setFormMode] = useState<"create" | "edit">("create");
   const [form, setForm] = useState<CustomerFormState>(emptyForm);
-  const [formErrors, setFormErrors] = useState<Partial<Record<keyof CustomerFormState, string>>>({});
+  const [formErrors, setFormErrors] = useState<
+    Partial<Record<keyof CustomerFormState, string>>
+  >({});
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentInvoiceId, setPaymentInvoiceId] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -211,8 +223,12 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
   const filteredCustomers = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     const ordered = [...customers].sort((left, right) => {
-      const leftTime = new Date(left.lastActivityDate ?? left.lastPaymentDate ?? "").getTime();
-      const rightTime = new Date(right.lastActivityDate ?? right.lastPaymentDate ?? "").getTime();
+      const leftTime = new Date(
+        left.lastActivityDate ?? left.lastPaymentDate ?? "",
+      ).getTime();
+      const rightTime = new Date(
+        right.lastActivityDate ?? right.lastPaymentDate ?? "",
+      ).getTime();
       return rightTime - leftTime;
     });
 
@@ -225,11 +241,17 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     );
   }, [customers, query]);
 
-  const recentCustomers = useMemo(() => filteredCustomers.slice(0, 5), [filteredCustomers]);
+  const recentCustomers = useMemo(
+    () => filteredCustomers.slice(0, 5),
+    [filteredCustomers],
+  );
 
   useEffect(() => {
     const paramId = Number(searchParams.get("customer"));
-    if (Number.isFinite(paramId) && customers.some((customer) => customer.id === paramId)) {
+    if (
+      Number.isFinite(paramId) &&
+      customers.some((customer) => customer.id === paramId)
+    ) {
       setSelectedCustomerId(paramId);
       return;
     }
@@ -251,7 +273,8 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
   };
 
   const selectedCustomer = useMemo(
-    () => customers.find((customer) => customer.id === selectedCustomerId) ?? null,
+    () =>
+      customers.find((customer) => customer.id === selectedCustomerId) ?? null,
     [customers, selectedCustomerId],
   );
 
@@ -377,7 +400,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
       await deleteCustomer.mutateAsync(customerId);
       toast.success(t("customersPage.messages.removed"));
       if (selectedCustomerId === customerId) {
-        const nextCustomer = customers.find((customer) => customer.id !== customerId);
+        const nextCustomer = customers.find(
+          (customer) => customer.id !== customerId,
+        );
         if (nextCustomer) {
           selectCustomer(nextCustomer.id);
         } else {
@@ -508,7 +533,12 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
       try {
         await generateInvoicePdf({
           element: exportRoot,
-          fileName: `${selectedCustomer.name.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "customer"}-statement.pdf`,
+          fileName: `${
+            selectedCustomer.name
+              .replace(/[^a-z0-9]+/gi, "-")
+              .replace(/^-+|-+$/g, "")
+              .toLowerCase() || "customer"
+          }-statement.pdf`,
           imageType: "png",
           quality: 1,
         });
@@ -530,26 +560,20 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     language === "hi"
       ? {
           title: "अभी कोई ग्राहक नहीं है",
-          description: "अपना पहला ग्राहक जोड़ें ताकि बिल बनाते समय ग्राहक चुनना आसान हो।",
+          description:
+            "अपना पहला ग्राहक जोड़ें ताकि बिल बनाते समय ग्राहक चुनना आसान हो।",
           hint: "शुरुआत के लिए ग्राहक का नाम और फोन नंबर काफी है। बाकी जानकारी बाद में भर सकते हैं।",
           primary: "ग्राहक जोड़ें",
           secondary: "बिल बनाएं",
         }
-      : language === "hinglish"
-        ? {
-            title: "Abhi koi customer nahi hai",
-            description: "Apna pehla customer jodiye taki bill banate waqt customer select karna easy ho.",
-            hint: "Shuruaat ke liye customer ka naam aur phone number kaafi hai. Baaki details baad mein bhar sakte hain.",
-            primary: "Customer Jodiye",
-            secondary: "Bill Banaiye",
-          }
-        : {
-            title: "No customers yet",
-            description: "Add your first customer so selecting someone while making a bill feels easy.",
-            hint: "Start with customer name and phone number. You can fill the rest later.",
-            primary: "Add Customer",
-            secondary: "Create Bill",
-          };
+      : {
+          title: "No customers yet",
+          description:
+            "Add your first customer so selecting someone while making a bill feels easy.",
+          hint: "Start with customer name and phone number. You can fill the rest later.",
+          primary: "Add Customer",
+          secondary: "Create Bill",
+        };
   const showBeginnerGuide =
     !isLoading && !isError && customers.length === 0 && !query.trim();
   const beginnerGuideCopy =
@@ -563,94 +587,68 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
           steps: [
             {
               title: "दुकान और प्रोडक्ट तैयार करें",
-              description: "अगर अभी तक नहीं किया है तो पहले दुकान और प्रोडक्ट सेट करें।",
+              description:
+                "अगर अभी तक नहीं किया है तो पहले दुकान और प्रोडक्ट सेट करें।",
               href: "/products",
               actionLabel: "प्रोडक्ट पेज खोलें",
             },
             {
               title: "पहला ग्राहक जोड़ें",
-              description: "नाम और फोन भरना काफी है। बाकी जानकारी बाद में जोड़ सकते हैं।",
+              description:
+                "नाम और फोन भरना काफी है। बाकी जानकारी बाद में जोड़ सकते हैं।",
               active: true,
             },
             {
               title: "फिर बिल बनाएं",
-              description: "ग्राहक सेव होते ही सीधे बिल स्क्रीन पर जा सकते हैं।",
+              description:
+                "ग्राहक सेव होते ही सीधे बिल स्क्रीन पर जा सकते हैं।",
               href: "/simple-bill",
               actionLabel: "बिल बनाएं",
             },
             {
               title: "जरूरत हो तो भुगतान ट्रैक करें",
-              description: "यह स्क्रीन बाद में ग्राहक का बकाया और हिसाब भी दिखाएगी।",
+              description:
+                "यह स्क्रीन बाद में ग्राहक का बकाया और हिसाब भी दिखाएगी।",
             },
           ],
           primary: "फॉर्म तक जाएं",
           secondary: "सीधे बिल पेज खोलें",
         }
-      : language === "hinglish"
-        ? {
-            kicker: "Step 3",
-            title: "Ab pehla customer jodiye",
-            description:
-              "Customer ka naam aur phone jodte hi bill banate waqt sahi aadmi select karna easy ho jayega.",
-            progressLabel: "Customer add karna bill banane se just pehle wala step hai",
-            steps: [
-              {
-                title: "Shop aur products ready rakhiye",
-                description: "Agar abhi tak nahi kiya hai to pehle shop aur product set kijiye.",
-                href: "/products",
-                actionLabel: "Products kholiye",
-              },
-              {
-                title: "Pehla customer jodiye",
-                description: "Naam aur phone enough hai. Baaki details baad mein bhar sakte hain.",
-                active: true,
-              },
-              {
-                title: "Phir bill banaiye",
-                description: "Customer save hote hi seedha bill screen par ja sakte hain.",
-                href: "/simple-bill",
-                actionLabel: "Bill banaiye",
-              },
-              {
-                title: "Need ho to payment track kijiye",
-                description: "Yahi screen baad mein customer ka due aur hisaab bhi dikhayegi.",
-              },
-            ],
-            primary: "Form tak jaiye",
-            secondary: "Bill page kholiye",
-          }
-        : {
-            kicker: "Step 3",
-            title: "Add your first customer now",
-            description:
-              "Once the customer name and phone are saved, choosing the right person while creating a bill becomes easy.",
-            progressLabel: "This is the step right before creating the first bill",
-            steps: [
-              {
-                title: "Keep your shop and products ready",
-                description: "If needed, finish the product step first.",
-                href: "/products",
-                actionLabel: "Open products",
-              },
-              {
-                title: "Add your first customer",
-                description: "Customer name and phone are enough for now.",
-                active: true,
-              },
-              {
-                title: "Create the bill next",
-                description: "As soon as the customer is saved, you can jump straight to billing.",
-                href: "/simple-bill",
-                actionLabel: "Create bill",
-              },
-              {
-                title: "Track payments later",
-                description: "This page will also show dues and payment history after you start billing.",
-              },
-            ],
-            primary: "Jump to form",
-            secondary: "Open bill page",
-          };
+      : {
+          kicker: "Step 3",
+          title: "Add your first customer now",
+          description:
+            "Once the customer name and phone are saved, choosing the right person while creating a bill becomes easy.",
+          progressLabel:
+            "This is the step right before creating the first bill",
+          steps: [
+            {
+              title: "Keep your shop and products ready",
+              description: "If needed, finish the product step first.",
+              href: "/products",
+              actionLabel: "Open products",
+            },
+            {
+              title: "Add your first customer",
+              description: "Customer name and phone are enough for now.",
+              active: true,
+            },
+            {
+              title: "Create the bill next",
+              description:
+                "As soon as the customer is saved, you can jump straight to billing.",
+              href: "/simple-bill",
+              actionLabel: "Create bill",
+            },
+            {
+              title: "Track payments later",
+              description:
+                "This page will also show dues and payment history after you start billing.",
+            },
+          ],
+          primary: "Jump to form",
+          secondary: "Open bill page",
+        };
 
   const handleOpenShareStatement = () => {
     if (!selectedCustomer || !ledger) return;
@@ -755,12 +753,17 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             const Icon = card.icon;
 
             return (
-              <div key={card.label} className={cn("rounded-[1.6rem] border px-5 py-5", card.tone)}>
+              <div
+                key={card.label}
+                className={cn("rounded-[1.6rem] border px-5 py-5", card.tone)}
+              >
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-sm font-medium">{card.label}</p>
                   <Icon className="size-4" />
                 </div>
-                <p className="mt-3 text-2xl font-semibold tracking-tight">{card.value}</p>
+                <p className="mt-3 text-2xl font-semibold tracking-tight">
+                  {card.value}
+                </p>
               </div>
             );
           })}
@@ -771,7 +774,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             <section className="app-panel rounded-[1.9rem] p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="app-kicker">{t("customersPage.managementKicker")}</p>
+                  <p className="app-kicker">
+                    {t("customersPage.managementKicker")}
+                  </p>
                   <h2 className="mt-2 text-xl font-semibold text-foreground">
                     {formMode === "edit"
                       ? t("customersPage.editTitle")
@@ -795,53 +800,88 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                 noValidate
               >
                 <div className="grid gap-2">
-                  <Label htmlFor="customer-name">{t("customers.fields.name")}</Label>
+                  <Label htmlFor="customer-name">
+                    {t("customers.fields.name")}
+                  </Label>
                   <Input
                     id="customer-name"
                     value={form.name}
-                    onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, name: event.target.value }))
+                    }
                     placeholder={t("customers.placeholders.name")}
                   />
-                  {formErrors.name ? <p className="text-xs text-amber-700">{formErrors.name}</p> : null}
+                  {formErrors.name ? (
+                    <p className="text-xs text-amber-700">{formErrors.name}</p>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="customer-phone">{t("customers.fields.phone")}</Label>
+                  <Label htmlFor="customer-phone">
+                    {t("customers.fields.phone")}
+                  </Label>
                   <Input
                     id="customer-phone"
                     value={form.phone}
-                    onChange={(event) => setForm((prev) => ({ ...prev, phone: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        phone: event.target.value,
+                      }))
+                    }
                     placeholder={t("customersPage.phonePlaceholder")}
                     inputMode="numeric"
                   />
-                  {formErrors.phone ? <p className="text-xs text-amber-700">{formErrors.phone}</p> : null}
+                  {formErrors.phone ? (
+                    <p className="text-xs text-amber-700">{formErrors.phone}</p>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="customer-email">{t("customersPage.emailOptional")}</Label>
+                  <Label htmlFor="customer-email">
+                    {t("customersPage.emailOptional")}
+                  </Label>
                   <Input
                     id="customer-email"
                     value={form.email}
-                    onChange={(event) => setForm((prev) => ({ ...prev, email: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        email: event.target.value,
+                      }))
+                    }
                     placeholder={t("customers.fields.email")}
                     type="email"
                   />
-                  {formErrors.email ? <p className="text-xs text-amber-700">{formErrors.email}</p> : null}
+                  {formErrors.email ? (
+                    <p className="text-xs text-amber-700">{formErrors.email}</p>
+                  ) : null}
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="customer-address">{t("customersPage.addressOptional")}</Label>
+                  <Label htmlFor="customer-address">
+                    {t("customersPage.addressOptional")}
+                  </Label>
                   <Input
                     id="customer-address"
                     value={form.address}
-                    onChange={(event) => setForm((prev) => ({ ...prev, address: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        address: event.target.value,
+                      }))
+                    }
                     placeholder={t("customersPage.addressPlaceholder")}
                   />
                 </div>
 
                 <Button
                   type="submit"
-                  disabled={createCustomer.isPending || updateCustomer.isPending || deleteCustomer.isPending}
+                  disabled={
+                    createCustomer.isPending ||
+                    updateCustomer.isPending ||
+                    deleteCustomer.isPending
+                  }
                 >
                   {formMode === "edit"
                     ? t("customersPage.actions.saveCustomer")
@@ -853,7 +893,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             <section className="app-panel rounded-[1.9rem] p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <p className="app-kicker">{t("customersPage.recentKicker")}</p>
+                  <p className="app-kicker">
+                    {t("customersPage.recentKicker")}
+                  </p>
                   <h2 className="mt-2 text-xl font-semibold text-foreground">
                     {t("customersPage.recentTitle")}
                   </h2>
@@ -894,7 +936,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             <section className="app-panel rounded-[1.9rem] p-6">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="app-kicker">{t("customersPage.searchKicker")}</p>
+                  <p className="app-kicker">
+                    {t("customersPage.searchKicker")}
+                  </p>
                   <h2 className="mt-2 text-xl font-semibold text-foreground">
                     {t("customersPage.searchTitle")}
                   </h2>
@@ -915,9 +959,13 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
               </div>
 
               <div className="mt-4 grid gap-3">
-                {isLoading ? <div className="app-loading-skeleton h-64 w-full" /> : null}
+                {isLoading ? (
+                  <div className="app-loading-skeleton h-64 w-full" />
+                ) : null}
                 {isError ? (
-                  <p className="text-sm text-amber-700">{t("customers.loadError")}</p>
+                  <p className="text-sm text-amber-700">
+                    {t("customers.loadError")}
+                  </p>
                 ) : null}
                 {!isLoading && !isError && filteredCustomers.length === 0 ? (
                   customers.length === 0 && !query.trim() ? (
@@ -960,11 +1008,18 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                             <input
                               type="checkbox"
                               className="mt-1"
-                              checked={selectedCustomerIds.includes(customer.id)}
-                              onChange={() => toggleCustomerSelection(customer.id)}
-                              aria-label={t("customersPage.ledger.selectCustomer", {
-                                name: customer.name,
-                              })}
+                              checked={selectedCustomerIds.includes(
+                                customer.id,
+                              )}
+                              onChange={() =>
+                                toggleCustomerSelection(customer.id)
+                              }
+                              aria-label={t(
+                                "customersPage.ledger.selectCustomer",
+                                {
+                                  name: customer.name,
+                                },
+                              )}
                             />
 
                             <button
@@ -973,11 +1028,15 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                               className="min-w-0 flex-1 text-left"
                             >
                               <div className="flex flex-wrap items-center justify-between gap-2">
-                                <p className="truncate text-base font-semibold text-foreground">{customer.name}</p>
+                                <p className="truncate text-base font-semibold text-foreground">
+                                  {customer.name}
+                                </p>
                                 <span
                                   className={cn(
                                     "rounded-full px-2.5 py-1 text-xs font-semibold",
-                                    due > 0 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700",
+                                    due > 0
+                                      ? "bg-rose-100 text-rose-700"
+                                      : "bg-emerald-100 text-emerald-700",
                                   )}
                                 >
                                   {due > 0
@@ -987,19 +1046,34 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                               </div>
                               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                 <span className="app-chip">
-                                  {customer.phone || t("customersPage.ledger.phoneFallback")}
+                                  {customer.phone ||
+                                    t("customersPage.ledger.phoneFallback")}
                                 </span>
-                                <span className="app-chip">{formatCurrency(due, "INR")}</span>
+                                <span className="app-chip">
+                                  {formatCurrency(due, "INR")}
+                                </span>
                               </div>
                             </button>
                           </div>
 
                           <div className="mt-4 flex flex-wrap gap-2">
-                            <Button type="button" variant="outline" size="sm" onClick={() => startEditing(customer)}>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => startEditing(customer)}
+                            >
                               <SquarePen className="size-4" />
                               {t("customers.actions.edit")}
                             </Button>
-                            <Button type="button" variant="destructive" size="sm" onClick={() => void handleDeleteCustomer(customer.id)}>
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              onClick={() =>
+                                void handleDeleteCustomer(customer.id)
+                              }
+                            >
                               <Trash2 className="size-4" />
                               {t("customers.actions.delete")}
                             </Button>
@@ -1021,20 +1095,27 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                       <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                         {t("customersPage.ledger.title")}
                       </p>
-                      <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{selectedCustomer.name}</h2>
+                      <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">
+                        {selectedCustomer.name}
+                      </h2>
                       <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
                         <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                           <Phone className="size-3.5" />
-                          {selectedCustomer.phone || t("customersPage.ledger.phoneFallback")}
+                          {selectedCustomer.phone ||
+                            t("customersPage.ledger.phoneFallback")}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                           <MapPin className="size-3.5" />
-                          {selectedCustomer.address || t("customersPage.ledger.addressFallback")}
+                          {selectedCustomer.address ||
+                            t("customersPage.ledger.addressFallback")}
                         </span>
                         <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-3 py-1">
                           <Clock3 className="size-3.5" />
                           {t("customersPage.ledger.lastPayment", {
-                            date: formatActivityDate(ledger.summary.lastPaymentDate, formatDate),
+                            date: formatActivityDate(
+                              ledger.summary.lastPaymentDate,
+                              formatDate,
+                            ),
                           })}
                         </span>
                       </div>
@@ -1075,7 +1156,11 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                         type="button"
                         onClick={openPaymentModal}
                         disabled={!hasOpenInvoices || createPayment.isPending}
-                        title={!hasOpenInvoices ? t("customersPage.messages.noPendingInvoices") : undefined}
+                        title={
+                          !hasOpenInvoices
+                            ? t("customersPage.messages.noPendingInvoices")
+                            : undefined
+                        }
                       >
                         <CreditCard className="size-4" />
                         {createPayment.isPending
@@ -1088,16 +1173,23 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                   <div className="mt-6 grid gap-4 md:grid-cols-4">
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-3 text-amber-700">
-                        <span className="text-sm">{t("customersPage.ledger.totalDue")}</span>
+                        <span className="text-sm">
+                          {t("customersPage.ledger.totalDue")}
+                        </span>
                         <Wallet className="size-4" />
                       </div>
                       <p className="mt-3 text-2xl font-semibold text-amber-950">
-                        {formatCurrency(ledger.summary.outstandingBalance, "INR")}
+                        {formatCurrency(
+                          ledger.summary.outstandingBalance,
+                          "INR",
+                        )}
                       </p>
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-3 text-slate-600">
-                        <span className="text-sm">{t("customersPage.ledger.totalBilled")}</span>
+                        <span className="text-sm">
+                          {t("customersPage.ledger.totalBilled")}
+                        </span>
                         <FileText className="size-4" />
                       </div>
                       <p className="mt-3 text-2xl font-semibold text-slate-950">
@@ -1106,7 +1198,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                     </div>
                     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-3 text-emerald-700">
-                        <span className="text-sm">{t("customersPage.ledger.totalPaid")}</span>
+                        <span className="text-sm">
+                          {t("customersPage.ledger.totalPaid")}
+                        </span>
                         <CircleDollarSign className="size-4" />
                       </div>
                       <p className="mt-3 text-2xl font-semibold text-emerald-950">
@@ -1115,7 +1209,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                     </div>
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                       <div className="flex items-center justify-between gap-3 text-slate-600">
-                        <span className="text-sm">{t("customersPage.ledger.openInvoices")}</span>
+                        <span className="text-sm">
+                          {t("customersPage.ledger.openInvoices")}
+                        </span>
                         <Users className="size-4" />
                       </div>
                       <p className="mt-3 text-2xl font-semibold text-slate-950">
@@ -1142,7 +1238,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                       <div
                         className={cn(
                           "rounded-full px-3 py-1 text-xs font-semibold",
-                          ledger.summary.outstandingBalance > 0 ? "bg-rose-100 text-rose-700" : "bg-emerald-100 text-emerald-700",
+                          ledger.summary.outstandingBalance > 0
+                            ? "bg-rose-100 text-rose-700"
+                            : "bg-emerald-100 text-emerald-700",
                         )}
                       >
                         {ledger.summary.outstandingBalance > 0
@@ -1160,31 +1258,54 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                         <table className="min-w-full text-sm">
                           <thead className="bg-slate-50 text-slate-600">
                             <tr>
-                              <th className="px-4 py-3 text-left font-medium">{t("customersPage.ledger.columns.date")}</th>
-                              <th className="px-4 py-3 text-left font-medium">{t("customersPage.ledger.columns.description")}</th>
-                              <th className="px-4 py-3 text-left font-medium">{t("customersPage.ledger.columns.debit")}</th>
-                              <th className="px-4 py-3 text-left font-medium">{t("customersPage.ledger.columns.credit")}</th>
-                              <th className="px-4 py-3 text-left font-medium">{t("customersPage.ledger.columns.balance")}</th>
+                              <th className="px-4 py-3 text-left font-medium">
+                                {t("customersPage.ledger.columns.date")}
+                              </th>
+                              <th className="px-4 py-3 text-left font-medium">
+                                {t("customersPage.ledger.columns.description")}
+                              </th>
+                              <th className="px-4 py-3 text-left font-medium">
+                                {t("customersPage.ledger.columns.debit")}
+                              </th>
+                              <th className="px-4 py-3 text-left font-medium">
+                                {t("customersPage.ledger.columns.credit")}
+                              </th>
+                              <th className="px-4 py-3 text-left font-medium">
+                                {t("customersPage.ledger.columns.balance")}
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
                             {ledger.entries.map((entry) => (
-                              <tr key={entry.id} className="border-t border-slate-200">
-                                <td className="px-4 py-3 align-top text-slate-600">{formatActivityDate(entry.date, formatDate)}</td>
+                              <tr
+                                key={entry.id}
+                                className="border-t border-slate-200"
+                              >
+                                <td className="px-4 py-3 align-top text-slate-600">
+                                  {formatActivityDate(entry.date, formatDate)}
+                                </td>
                                 <td className="px-4 py-3 align-top">
-                                  <p className="font-medium text-slate-950">{entry.description}</p>
+                                  <p className="font-medium text-slate-950">
+                                    {entry.description}
+                                  </p>
                                   <p className="mt-1 text-xs text-slate-500">
                                     {entry.note ||
                                       (entry.type === "invoice"
                                         ? t("customersPage.ledger.debitEntry")
-                                        : t("customersPage.ledger.creditEntry"))}
+                                        : t(
+                                            "customersPage.ledger.creditEntry",
+                                          ))}
                                   </p>
                                 </td>
                                 <td className="px-4 py-3 align-top font-medium text-rose-700">
-                                  {entry.debit > 0 ? formatCurrency(entry.debit, "INR") : "-"}
+                                  {entry.debit > 0
+                                    ? formatCurrency(entry.debit, "INR")
+                                    : "-"}
                                 </td>
                                 <td className="px-4 py-3 align-top font-medium text-emerald-700">
-                                  {entry.credit > 0 ? formatCurrency(entry.credit, "INR") : "-"}
+                                  {entry.credit > 0
+                                    ? formatCurrency(entry.credit, "INR")
+                                    : "-"}
                                 </td>
                                 <td className="px-4 py-3 align-top font-semibold text-slate-950">
                                   {formatCurrency(entry.balance, "INR")}
@@ -1213,29 +1334,43 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                       ) : (
                         <div className="mt-4 grid gap-3">
                           {ledger.summary.openInvoices.map((invoice) => (
-                            <div key={invoice.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                            <div
+                              key={invoice.id}
+                              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4"
+                            >
                               <div className="flex items-start justify-between gap-3">
                                 <div>
-                                  <p className="font-semibold text-slate-950">{invoice.invoiceNumber}</p>
+                                  <p className="font-semibold text-slate-950">
+                                    {invoice.invoiceNumber}
+                                  </p>
                                   <p className="mt-1 text-xs text-slate-500">
                                     {t("customersPage.ledger.issuedOn", {
-                                      date: formatActivityDate(invoice.issueDate, formatDate),
+                                      date: formatActivityDate(
+                                        invoice.issueDate,
+                                        formatDate,
+                                      ),
                                     })}
                                   </p>
                                 </div>
                                 <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700">
-                                  {t(`exportDialog.statuses.${invoice.status}`) ===
+                                  {t(
+                                    `exportDialog.statuses.${invoice.status}`,
+                                  ) ===
                                   `exportDialog.statuses.${invoice.status}`
                                     ? invoice.status.replaceAll("_", " ")
-                                    : t(`exportDialog.statuses.${invoice.status}`)}
+                                    : t(
+                                        `exportDialog.statuses.${invoice.status}`,
+                                      )}
                                 </span>
                               </div>
                               <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
                                 <span className="app-chip">
-                                  {t("invoiceDetail.totalLabel")}: {formatCurrency(invoice.total, "INR")}
+                                  {t("invoiceDetail.totalLabel")}:{" "}
+                                  {formatCurrency(invoice.total, "INR")}
                                 </span>
                                 <span className="app-chip">
-                                  {t("invoiceDetail.remainingLabel")}: {formatCurrency(invoice.remaining, "INR")}
+                                  {t("invoiceDetail.remainingLabel")}:{" "}
+                                  {formatCurrency(invoice.remaining, "INR")}
                                 </span>
                               </div>
                             </div>
@@ -1261,7 +1396,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             ) : (
               <section className="rounded-[1.9rem] border border-dashed border-slate-300 bg-white p-10 text-center shadow-sm">
                 {ledgerLoading ? (
-                  <p className="text-sm text-slate-500">{t("customersPage.ledger.loading")}</p>
+                  <p className="text-sm text-slate-500">
+                    {t("customersPage.ledger.loading")}
+                  </p>
                 ) : (
                   <>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
@@ -1294,7 +1431,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
       >
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label htmlFor="ledger-payment-invoice">{t("customersPage.ledger.selectInvoice")}</Label>
+            <Label htmlFor="ledger-payment-invoice">
+              {t("customersPage.ledger.selectInvoice")}
+            </Label>
             <select
               id="ledger-payment-invoice"
               value={paymentInvoiceId}
@@ -1309,17 +1448,22 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
               }}
               className="app-field h-10 w-full px-3 py-2"
             >
-              <option value="">{t("customersPage.ledger.selectInvoice")}</option>
+              <option value="">
+                {t("customersPage.ledger.selectInvoice")}
+              </option>
               {(ledger?.summary.openInvoices ?? []).map((invoice) => (
                 <option key={invoice.id} value={invoice.id}>
-                  {invoice.invoiceNumber} - {formatCurrency(invoice.remaining, "INR")}
+                  {invoice.invoiceNumber} -{" "}
+                  {formatCurrency(invoice.remaining, "INR")}
                 </option>
               ))}
             </select>
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="ledger-payment-amount">{t("customersPage.ledger.amountPaid")}</Label>
+            <Label htmlFor="ledger-payment-amount">
+              {t("customersPage.ledger.amountPaid")}
+            </Label>
             <Input
               id="ledger-payment-amount"
               value={paymentAmount}
@@ -1329,10 +1473,16 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             />
           </div>
 
-          {paymentError ? <p className="text-sm text-amber-700">{paymentError}</p> : null}
+          {paymentError ? (
+            <p className="text-sm text-amber-700">{paymentError}</p>
+          ) : null}
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => setPaymentModalOpen(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPaymentModalOpen(false)}
+            >
               {t("common.cancel")}
             </Button>
             <Button
@@ -1403,7 +1553,9 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
               onClick={() => void handleShareStatement("email")}
               disabled={statementShareAction !== null}
             >
-              {statementShareAction === "email" ? "Opening..." : "Share by email"}
+              {statementShareAction === "email"
+                ? "Opening..."
+                : "Share by email"}
             </Button>
             <Button
               type="button"

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type SetupProgressCardProps = {
-  language: "en" | "hi" | "hinglish";
+  language: "en" | "hi";
   progress: {
     businessReady: boolean;
     productsReady: boolean;
@@ -30,31 +30,24 @@ const SetupProgressCard = ({
       ? {
           kicker: "नई शुरुआत",
           title: "पहला बिल जल्दी बनाने के लिए यह करें",
-          description: "अगर आप पहली बार Bill Sutra चला रहे हैं, तो बस नीचे के स्टेप पूरे करें।",
+          description:
+            "अगर आप पहली बार Bill Sutra चला रहे हैं, तो बस नीचे के स्टेप पूरे करें।",
           demo: demoSeeded ? "डेमो डेटा फिर जोड़ें" : "डेमो डेटा जोड़ें",
         }
-      : language === "hinglish"
-        ? {
-            kicker: "Nayi shuruaat",
-            title: "Pehla bill jaldi banane ke liye ye steps follow kijiye",
-            description: "Agar aap pehli baar Bill Sutra use kar rahe hain, to bas neeche ke steps complete kijiye.",
-            demo: demoSeeded ? "Demo data phir jodiye" : "Demo data jodiye",
-          }
-        : {
-            kicker: "New here",
-            title: "Follow these steps to create your first bill fast",
-            description: "If this is your first time using Bill Sutra, just complete the steps below.",
-            demo: demoSeeded ? "Add demo data again" : "Load demo data",
-          };
+      : {
+          kicker: "New here",
+          title: "Follow these steps to create your first bill fast",
+          description:
+            "If this is your first time using Bill Sutra, just complete the steps below.",
+          demo: demoSeeded ? "Add demo data again" : "Load demo data",
+        };
 
   const steps = [
     {
       label:
         language === "hi"
           ? "अपनी दुकान की जानकारी जोड़ें"
-          : language === "hinglish"
-            ? "Apni dukaan ki details jodiye"
-            : "Add your business details",
+          : "Add your business details",
       done: progress.businessReady,
       href: "/business-profile",
     },
@@ -62,29 +55,18 @@ const SetupProgressCard = ({
       label:
         language === "hi"
           ? "कम से कम एक प्रोडक्ट जोड़ें"
-          : language === "hinglish"
-            ? "Kam se kam ek product jodiye"
-            : "Add at least one product",
+          : "Add at least one product",
       done: progress.productsReady,
       href: "/products",
     },
     {
-      label:
-        language === "hi"
-          ? "एक ग्राहक जोड़ें"
-          : language === "hinglish"
-            ? "Ek customer jodiye"
-            : "Add one customer",
+      label: language === "hi" ? "एक ग्राहक जोड़ें" : "Add one customer",
       done: progress.customersReady,
       href: "/customers",
     },
     {
       label:
-        language === "hi"
-          ? "अपना पहला बिल बनाएं"
-          : language === "hinglish"
-            ? "Apna pehla bill banaiye"
-            : "Create your first bill",
+        language === "hi" ? "अपना पहला बिल बनाएं" : "Create your first bill",
       done: progress.billsReady,
       href: "/invoices",
     },
@@ -144,17 +126,18 @@ const SetupProgressCard = ({
             {completedSteps < 4
               ? language === "hi"
                 ? "थोड़ा सा सेटअप बाकी है, फिर पहला बिल बहुत आसान होगा।"
-                : language === "hinglish"
-                  ? "Thoda sa setup baaki hai, phir pehla bill bahut easy ho jayega."
-                  : "A little setup now will make the first bill much easier."
+                : "A little setup now will make the first bill much easier."
               : language === "hi"
                 ? "सब तैयार है। अब आप सीधे बिल बना सकते हैं।"
-                : language === "hinglish"
-                  ? "Sab tayyar hai. Ab aap seedha bill bana sakte hain."
-                  : "Everything is ready. You can create bills right away."}
+                : "Everything is ready. You can create bills right away."}
           </span>
         </div>
-        <Button type="button" variant="outline" onClick={onSeedDemo} disabled={isSeedingDemo}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onSeedDemo}
+          disabled={isSeedingDemo}
+        >
           {isSeedingDemo ? "..." : copy.demo}
         </Button>
       </div>

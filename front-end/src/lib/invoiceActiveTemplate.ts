@@ -56,7 +56,8 @@ export const DEFAULT_ACTIVE_INVOICE_TEMPLATE: ActiveInvoiceTemplateInput = {
   templateId: DEFAULT_TEMPLATE.id,
   templateName: DEFAULT_TEMPLATE.name,
   enabledSections: DEFAULT_TEMPLATE.defaultSections,
-  sectionOrder: DEFAULT_TEMPLATE.sectionOrder ?? DEFAULT_TEMPLATE.defaultSections,
+  sectionOrder:
+    DEFAULT_TEMPLATE.sectionOrder ?? DEFAULT_TEMPLATE.defaultSections,
   theme: DEFAULT_TEMPLATE.theme,
   designConfig: null,
 };

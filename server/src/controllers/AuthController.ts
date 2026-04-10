@@ -73,9 +73,7 @@ type PasskeyAuthenticateVerifyPayload = z.infer<
 type PasskeyRegisterOptionsPayload = z.infer<
   typeof passkeyRegisterOptionsSchema
 >;
-type PasskeyRegisterVerifyPayload = z.infer<
-  typeof passkeyRegisterVerifySchema
->;
+type PasskeyRegisterVerifyPayload = z.infer<typeof passkeyRegisterVerifySchema>;
 
 const PASSKEY_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const PASSKEY_TIMEOUT_MS = 60 * 1000;
@@ -287,7 +285,10 @@ class AuthController {
         });
       }
 
-      const isValidPassword = await bcrypt.compare(body.password, worker.password);
+      const isValidPassword = await bcrypt.compare(
+        body.password,
+        worker.password,
+      );
 
       if (!isValidPassword) {
         await recordAuthEvent({
@@ -721,7 +722,9 @@ class AuthController {
         },
       });
     } catch {
-      return sendResponse(res, 500, { message: "Unable to start passkey login" });
+      return sendResponse(res, 500, {
+        message: "Unable to start passkey login",
+      });
     }
   }
 

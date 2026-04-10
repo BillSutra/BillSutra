@@ -214,7 +214,8 @@ export const CURATED_TEMPLATE_PRESETS: TemplatePreset[] = [
     name: "Indian Modern GST Invoice",
     description:
       "Single-page GST-ready invoice with compact blocks for Indian business billing.",
-    bestFor: "Best for Indian businesses that want a clean one-page tax invoice.",
+    bestFor:
+      "Best for Indian businesses that want a clean one-page tax invoice.",
     layout: "stacked",
     defaultSections: [
       "header",
@@ -252,7 +253,8 @@ export const CURATED_TEMPLATE_PRESETS: TemplatePreset[] = [
     name: "Compact Shop Bill",
     description:
       "Dense, quick-read billing with smaller spacing for fast counter sales.",
-    bestFor: "Best for small shops, retail counters, and quick walk-in billing.",
+    bestFor:
+      "Best for small shops, retail counters, and quick walk-in billing.",
     layout: "stacked",
     defaultSections: [
       "header",
@@ -354,7 +356,8 @@ export const CURATED_TEMPLATE_PRESETS: TemplatePreset[] = [
     name: "Simple Beginner Invoice",
     description:
       "Straightforward labels and calm structure that reduce confusion for first-time users.",
-    bestFor: "Best for new businesses that want an easy, beginner-friendly bill.",
+    bestFor:
+      "Best for new businesses that want an easy, beginner-friendly bill.",
     layout: "stacked",
     defaultSections: [
       "header",

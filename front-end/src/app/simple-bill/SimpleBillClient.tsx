@@ -3,13 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Eye,
-  Plus,
-  ReceiptText,
-  RotateCcw,
-  Trash2,
-} from "lucide-react";
+import { Eye, Plus, ReceiptText, RotateCcw, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
@@ -162,7 +156,9 @@ const mapSimpleBillItemsToInvoiceItems = (
   }));
 
 const isInvoiceItemReady = (item: InvoiceItemForm) =>
-  Boolean(item.name.trim() && Number(item.quantity) > 0 && Number(item.price) > 0);
+  Boolean(
+    item.name.trim() && Number(item.quantity) > 0 && Number(item.price) > 0,
+  );
 
 const mapSimpleBillToInvoice = ({
   customerId,
@@ -357,7 +353,9 @@ const SimpleBillClient = ({
   const [gstEnabled, setGstEnabled] = useState(false);
   const [notes, setNotes] = useState("");
   const [customerSearch, setCustomerSearch] = useState("");
-  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(
+    null,
+  );
   const [createdCustomer, setCreatedCustomer] = useState<Customer | null>(null);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
@@ -391,7 +389,8 @@ const SimpleBillClient = ({
     return customers
       .filter(
         (customer) =>
-          containsText(customer.name, search) || containsText(customer.phone, search),
+          containsText(customer.name, search) ||
+          containsText(customer.phone, search),
       )
       .slice(0, 5);
   }, [customerSearch, customers]);
@@ -406,7 +405,10 @@ const SimpleBillClient = ({
     );
   }, [customerSearch, customers]);
 
-  const discountType = useMemo(() => toDiscountType(discountMode), [discountMode]);
+  const discountType = useMemo(
+    () => toDiscountType(discountMode),
+    [discountMode],
+  );
   const invoiceItems = useMemo(
     () => mapSimpleBillItemsToInvoiceItems(items, gstEnabled),
     [gstEnabled, items],
@@ -534,7 +536,9 @@ const SimpleBillClient = ({
       }
     }
 
-    const lastCustomerId = Number(window.localStorage.getItem(LAST_CUSTOMER_KEY));
+    const lastCustomerId = Number(
+      window.localStorage.getItem(LAST_CUSTOMER_KEY),
+    );
     if (Number.isFinite(lastCustomerId) && lastCustomerId > 0) {
       setSelectedCustomerId(lastCustomerId);
     }
@@ -556,7 +560,9 @@ const SimpleBillClient = ({
 
   const selectCustomer = (customer: Customer) => {
     setSelectedCustomerId(customer.id);
-    setCreatedCustomer((current) => (current?.id === customer.id ? current : null));
+    setCreatedCustomer((current) =>
+      current?.id === customer.id ? current : null,
+    );
     setCustomerSearch(customerLabel(customer));
     setNewCustomerName("");
     setNewCustomerPhone("");
@@ -774,7 +780,9 @@ const SimpleBillClient = ({
       toast.success("Bill generated.");
       router.push(`/invoices/history/${createdInvoice.id}`);
     } catch {
-      toast.error("Could not generate the bill. Please check the details and try again.");
+      toast.error(
+        "Could not generate the bill. Please check the details and try again.",
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -846,7 +854,9 @@ const SimpleBillClient = ({
           <div className="grid min-w-0 gap-5">
             <section className="rounded-lg bg-card/90 p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.5)] ring-1 ring-border/45 sm:p-5">
               <div className="flex flex-col gap-1">
-                <h3 className="text-lg font-semibold text-foreground">Customer</h3>
+                <h3 className="text-lg font-semibold text-foreground">
+                  Customer
+                </h3>
                 <p className="text-sm text-muted-foreground">
                   Type or select. Both work.
                 </p>
@@ -859,7 +869,10 @@ const SimpleBillClient = ({
                   value={customerSearch}
                   onFocus={() => setCustomerSuggestionsOpen(true)}
                   onBlur={() =>
-                    window.setTimeout(() => setCustomerSuggestionsOpen(false), 120)
+                    window.setTimeout(
+                      () => setCustomerSuggestionsOpen(false),
+                      120,
+                    )
                   }
                   onChange={(event) => handleCustomerSearch(event.target.value)}
                   onKeyDown={(event) => {
@@ -886,7 +899,9 @@ const SimpleBillClient = ({
                             {customer.name}
                           </span>
                           {customer.phone ? (
-                            <span className="text-muted-foreground">{customer.phone}</span>
+                            <span className="text-muted-foreground">
+                              {customer.phone}
+                            </span>
                           ) : null}
                         </button>
                       ))
@@ -929,7 +944,9 @@ const SimpleBillClient = ({
                     <Input
                       id="simple-new-customer-name"
                       value={newCustomerName}
-                      onChange={(event) => setNewCustomerName(event.target.value)}
+                      onChange={(event) =>
+                        setNewCustomerName(event.target.value)
+                      }
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
                           event.preventDefault();
@@ -947,7 +964,9 @@ const SimpleBillClient = ({
                       ref={newCustomerPhoneRef}
                       value={newCustomerPhone}
                       onChange={(event) =>
-                        setNewCustomerPhone(event.target.value.replace(/[^\d]/g, ""))
+                        setNewCustomerPhone(
+                          event.target.value.replace(/[^\d]/g, ""),
+                        )
                       }
                       onKeyDown={(event) => {
                         if (event.key === "Enter") {
@@ -975,13 +994,19 @@ const SimpleBillClient = ({
             <section className="rounded-lg bg-card/90 p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.5)] ring-1 ring-border/45 sm:p-5">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <h3 className="text-lg font-semibold text-foreground">Items</h3>
+                  <h3 className="text-lg font-semibold text-foreground">
+                    Items
+                  </h3>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Search saved products or type the item name directly.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" variant="outline" onClick={loadLastBill}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={loadLastBill}
+                  >
                     <RotateCcw size={16} />
                     Repeat Last Bill
                   </Button>
@@ -1004,7 +1029,8 @@ const SimpleBillClient = ({
                       className="rounded-lg bg-primary/10 px-3 py-2 text-sm font-semibold text-primary ring-1 ring-primary/15 transition hover:bg-primary hover:text-primary-foreground hover:shadow-sm"
                       onClick={() => {
                         const target =
-                          items.find((item) => !item.name.trim()) ?? items[items.length - 1];
+                          items.find((item) => !item.name.trim()) ??
+                          items[items.length - 1];
                         if (!target) return;
                         selectProductForItem(target.id, product);
                         window.setTimeout(
@@ -1027,11 +1053,13 @@ const SimpleBillClient = ({
                 ) : null}
 
                 {items.map((item, index) => {
-                  const lineTotal = toQuantity(item.quantity) * toAmount(item.price);
+                  const lineTotal =
+                    toQuantity(item.quantity) * toAmount(item.price);
                   const suggestions = getProductSuggestions(item.name);
                   const hasExactProductMatch = products.some(
                     (product) =>
-                      product.name.toLowerCase() === item.name.trim().toLowerCase(),
+                      product.name.toLowerCase() ===
+                      item.name.trim().toLowerCase(),
                   );
 
                   return (
@@ -1084,11 +1112,16 @@ const SimpleBillClient = ({
                                   key={product.id}
                                   type="button"
                                   className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition hover:bg-accent/70"
-                                  onMouseDown={(event) => event.preventDefault()}
+                                  onMouseDown={(event) =>
+                                    event.preventDefault()
+                                  }
                                   onClick={() => {
                                     selectProductForItem(item.id, product);
                                     window.setTimeout(
-                                      () => itemQuantityRefs.current[item.id]?.focus(),
+                                      () =>
+                                        itemQuantityRefs.current[
+                                          item.id
+                                        ]?.focus(),
                                       0,
                                     );
                                   }}
@@ -1120,7 +1153,8 @@ const SimpleBillClient = ({
                                 }}
                               >
                                 <Plus size={16} />
-                                Add &quot;{item.name.trim()}&quot; as new product
+                                Add &quot;{item.name.trim()}&quot; as new
+                                product
                               </button>
                             ) : null}
                           </div>
@@ -1142,7 +1176,10 @@ const SimpleBillClient = ({
                             value={item.quantity}
                             onChange={(event) =>
                               updateItem(item.id, {
-                                quantity: event.target.value.replace(/[^\d.]/g, ""),
+                                quantity: event.target.value.replace(
+                                  /[^\d.]/g,
+                                  "",
+                                ),
                               })
                             }
                             onFocus={(event) => event.target.select()}
@@ -1171,7 +1208,10 @@ const SimpleBillClient = ({
                             value={item.price}
                             onChange={(event) =>
                               updateItem(item.id, {
-                                price: event.target.value.replace(/[^\d.]/g, ""),
+                                price: event.target.value.replace(
+                                  /[^\d.]/g,
+                                  "",
+                                ),
                               })
                             }
                             onFocus={(event) => event.target.select()}
@@ -1187,7 +1227,9 @@ const SimpleBillClient = ({
                           />
                         </div>
                         <div className="min-w-0 rounded-lg bg-muted/45 px-3 py-3 transition-colors duration-200">
-                          <p className="text-xs font-medium text-muted-foreground">Total</p>
+                          <p className="text-xs font-medium text-muted-foreground">
+                            Total
+                          </p>
                           <p className="mt-1 text-base font-semibold text-foreground transition-all duration-200">
                             {formatMoney(lineTotal)}
                           </p>
@@ -1216,7 +1258,9 @@ const SimpleBillClient = ({
                 <select
                   id="simple-payment"
                   value={payment}
-                  onChange={(event) => setPayment(event.target.value as PaymentChoice)}
+                  onChange={(event) =>
+                    setPayment(event.target.value as PaymentChoice)
+                  }
                   className="app-field h-12 w-full rounded-lg px-3 text-base text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 >
                   <option value="CASH">Cash</option>
@@ -1310,7 +1354,9 @@ const SimpleBillClient = ({
                     disabled={isSubmitting || validItems.length === 0}
                     onClick={() => void handleGenerateBill()}
                   >
-                    {isSubmitting ? "Generating..." : t("invoiceComposer.checkout")}
+                    {isSubmitting
+                      ? "Generating..."
+                      : t("invoiceComposer.checkout")}
                   </Button>
                   <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
                     <span>

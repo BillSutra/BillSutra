@@ -171,7 +171,10 @@ export const workerCreateSchema = z.object({
 export const workerUpdateSchema = z
   .object({
     name: z.string().min(2).optional(),
-    phone: z.string().regex(/^\d{10,15}$/).optional(),
+    phone: z
+      .string()
+      .regex(/^\d{10,15}$/)
+      .optional(),
     password: z.string().min(6).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {

@@ -104,11 +104,7 @@ router.post(
   validate({ body: adminLoginSchema }),
   AdminController.login,
 );
-router.get(
-  "/admin/summary",
-  AdminAuthMiddleware,
-  AdminController.summary,
-);
+router.get("/admin/summary", AdminAuthMiddleware, AdminController.summary);
 router.get(
   "/admin/businesses",
   AdminAuthMiddleware,
@@ -126,11 +122,7 @@ router.delete(
   validate({ params: adminBusinessIdParamSchema }),
   AdminController.deleteBusiness,
 );
-router.get(
-  "/admin/workers",
-  AdminAuthMiddleware,
-  AdminController.listWorkers,
-);
+router.get("/admin/workers", AdminAuthMiddleware, AdminController.listWorkers);
 router.get(
   "/admin/payments",
   AdminAuthMiddleware,
@@ -351,8 +343,18 @@ router.delete(
 
 // Logo management
 router.get("/logo", AuthMiddleware, LogoController.get);
-router.post("/logo", AuthMiddleware, logoUploadMiddleware, LogoController.upload);
-router.put("/logo", AuthMiddleware, logoUploadMiddleware, LogoController.update);
+router.post(
+  "/logo",
+  AuthMiddleware,
+  logoUploadMiddleware,
+  LogoController.upload,
+);
+router.put(
+  "/logo",
+  AuthMiddleware,
+  logoUploadMiddleware,
+  LogoController.update,
+);
 router.delete("/logo", AuthMiddleware, LogoController.remove);
 
 router.post(
@@ -666,7 +668,11 @@ router.get(
   DashboardController.suppliers,
 );
 router.get("/dashboard/cashflow", AuthMiddleware, DashboardController.cashflow);
-router.get("/dashboard/product-sales", AuthMiddleware, DashboardController.productSales);
+router.get(
+  "/dashboard/product-sales",
+  AuthMiddleware,
+  DashboardController.productSales,
+);
 router.get("/dashboard/forecast", AuthMiddleware, DashboardController.forecast);
 
 export default router;

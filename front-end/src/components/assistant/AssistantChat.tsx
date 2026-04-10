@@ -2,7 +2,15 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Bot, Mic, SendHorizontal, Square, User2, Volume2, VolumeX } from "lucide-react";
+import {
+  Bot,
+  Mic,
+  SendHorizontal,
+  Square,
+  User2,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { translate, type Language } from "@/i18n";
 import {
   askAssistant,
@@ -92,16 +100,6 @@ const buildMessageCopy = (
   language: AssistantChatLanguage,
   fallbackLanguage: Language,
 ): AssistantCopy => {
-  if (language === "hinglish") {
-    return {
-      thinking: "Soch raha hoon...",
-      error: "Thoda issue aa gaya. Ek baar phir try karo.",
-      examplesTitle: "Try these",
-      roleUser: "You",
-      roleAssistant: "Bill Sutra Buddy",
-    };
-  }
-
   const baseCopy = buildBaseAssistantCopy(language ?? fallbackLanguage);
   return {
     thinking: baseCopy.thinking,
@@ -112,9 +110,7 @@ const buildMessageCopy = (
   };
 };
 
-const buildVoiceCopy = (
-  language: AssistantChatLanguage,
-): VoiceCopy => {
+const buildVoiceCopy = (language: AssistantChatLanguage): VoiceCopy => {
   if (language === "hi") {
     return {
       start: "बोलें",
@@ -125,24 +121,9 @@ const buildVoiceCopy = (
       thinking: "सोच रहा हूँ...",
       speaking: "बोल रहा हूँ...",
       transcriptTitle: "Live transcript",
-      fallback: "इस browser में voice input available नहीं है. आप text से पूछ सकते हैं.",
-      helper: "Mic दबाकर Hindi, English या Hinglish में सवाल बोलिए.",
-      errorTitle: "Voice issue",
-    };
-  }
-
-  if (language === "hinglish") {
-    return {
-      start: "Bolna start karo",
-      stop: "Rok do",
-      replay: "Reply suno",
-      stopReplay: "Voice roko",
-      listening: "Sun raha hoon...",
-      thinking: "Soch raha hoon...",
-      speaking: "Bol raha hoon...",
-      transcriptTitle: "Live transcript",
-      fallback: "Is browser mein voice input available nahi hai. Aap text se pooch sakte ho.",
-      helper: "Mic dabao aur Hindi, English ya Hinglish mein apna sawaal bolo.",
+      fallback:
+        "इस browser में voice input available नहीं है. आप text से पूछ सकते हैं.",
+      helper: "माइक दबाकर हिंदी या अंग्रेज़ी में सवाल बोलिए।",
       errorTitle: "Voice issue",
     };
   }
@@ -156,8 +137,9 @@ const buildVoiceCopy = (
     thinking: "Thinking...",
     speaking: "Speaking...",
     transcriptTitle: "Live transcript",
-    fallback: "Voice input is not available in this browser. You can still type your question.",
-    helper: "Tap the mic and ask your question in Hindi, English, or Hinglish.",
+    fallback:
+      "Voice input is not available in this browser. You can still type your question.",
+    helper: "Tap the mic and ask your question in Hindi or English.",
     errorTitle: "Voice issue",
   };
 };
@@ -340,8 +322,12 @@ const AssistantChat = () => {
               <Bot size={18} />
             </div>
             <div>
-              <CardTitle className="text-xl text-foreground">{uiCopy.title}</CardTitle>
-              <p className="mt-2 text-sm text-muted-foreground">{uiCopy.description}</p>
+              <CardTitle className="text-xl text-foreground">
+                {uiCopy.title}
+              </CardTitle>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {uiCopy.description}
+              </p>
             </div>
           </div>
         </CardHeader>
@@ -369,7 +355,11 @@ const AssistantChat = () => {
                     }`}
                   >
                     <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] opacity-80">
-                      {message.role === "user" ? <User2 size={14} /> : <Bot size={14} />}
+                      {message.role === "user" ? (
+                        <User2 size={14} />
+                      ) : (
+                        <Bot size={14} />
+                      )}
                       <span>
                         {message.role === "user"
                           ? messageCopy.roleUser
@@ -443,10 +433,16 @@ const AssistantChat = () => {
 
                 voiceAssistant.startListening();
               }}
-              aria-label={voiceAssistant.isListening ? voiceCopy.stop : voiceCopy.start}
+              aria-label={
+                voiceAssistant.isListening ? voiceCopy.stop : voiceCopy.start
+              }
               className="h-12 w-12 rounded-2xl"
             >
-              {voiceAssistant.isListening ? <Square size={16} /> : <Mic size={16} />}
+              {voiceAssistant.isListening ? (
+                <Square size={16} />
+              ) : (
+                <Mic size={16} />
+              )}
             </Button>
             <Button
               type="button"
@@ -470,11 +466,17 @@ const AssistantChat = () => {
                 );
               }}
               aria-label={
-                voiceAssistant.isSpeaking ? voiceCopy.stopReplay : voiceCopy.replay
+                voiceAssistant.isSpeaking
+                  ? voiceCopy.stopReplay
+                  : voiceCopy.replay
               }
               className="h-12 w-12 rounded-2xl"
             >
-              {voiceAssistant.isSpeaking ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              {voiceAssistant.isSpeaking ? (
+                <VolumeX size={16} />
+              ) : (
+                <Volume2 size={16} />
+              )}
             </Button>
             <Button
               type="submit"
@@ -492,7 +494,9 @@ const AssistantChat = () => {
 
           <div className="rounded-3xl border border-border/70 bg-background/70 p-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-foreground">{voiceStatusLabel}</p>
+              <p className="text-sm font-semibold text-foreground">
+                {voiceStatusLabel}
+              </p>
               {voiceAssistant.liveTranscript ? (
                 <span className="rounded-full border border-border bg-card px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                   {voiceCopy.transcriptTitle}
@@ -518,7 +522,9 @@ const AssistantChat = () => {
       <div className="grid gap-4">
         <Card className="dashboard-chart-surface rounded-[1.75rem]">
           <CardHeader className="dashboard-chart-content">
-            <CardTitle className="text-lg text-foreground">{uiCopy.examplesTitle}</CardTitle>
+            <CardTitle className="text-lg text-foreground">
+              {uiCopy.examplesTitle}
+            </CardTitle>
           </CardHeader>
           <CardContent className="dashboard-chart-content grid gap-2">
             {uiCopy.quickPrompts.map((prompt) => (

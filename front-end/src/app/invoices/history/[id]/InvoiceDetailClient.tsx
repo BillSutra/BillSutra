@@ -4,7 +4,14 @@ import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Clock3, Download, Mail, Share2, Wallet } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock3,
+  Download,
+  Mail,
+  Share2,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
@@ -75,7 +82,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   const [partialError, setPartialError] = useState<string | null>(null);
   const [invoiceEmailOpen, setInvoiceEmailOpen] = useState(false);
   const [invoiceEmailRecipient, setInvoiceEmailRecipient] = useState("");
-  const [invoiceEmailError, setInvoiceEmailError] = useState<string | null>(null);
+  const [invoiceEmailError, setInvoiceEmailError] = useState<string | null>(
+    null,
+  );
   const [invoiceEmailSending, setInvoiceEmailSending] = useState(false);
   const fallbackActiveTemplate = useMemo(
     () => ({
@@ -96,16 +105,19 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   const activeTheme = activeTemplate.theme;
   const designConfig = activeTemplate.designConfig;
 
-  const invoiceDate = useCallback((value?: string | null) => {
-    if (!value) return "-";
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return value;
-    return formatDate(parsed, {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }, [formatDate]);
+  const invoiceDate = useCallback(
+    (value?: string | null) => {
+      if (!value) return "-";
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return value;
+      return formatDate(parsed, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    },
+    [formatDate],
+  );
 
   const paymentSnapshot = useMemo(
     () => (data ? getInvoicePaymentSnapshot(data) : null),
@@ -114,8 +126,10 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
 
   const localizedPaymentLabel = useMemo(() => {
     if (!paymentSnapshot) return "";
-    if (paymentSnapshot.paymentStatus === "PAID") return t("invoiceDetail.markPaid");
-    if (paymentSnapshot.paymentStatus === "PARTIAL") return t("invoiceDetail.markPartial");
+    if (paymentSnapshot.paymentStatus === "PAID")
+      return t("invoiceDetail.markPaid");
+    if (paymentSnapshot.paymentStatus === "PARTIAL")
+      return t("invoiceDetail.markPartial");
     return t("invoiceDetail.markPending");
   }, [paymentSnapshot, t]);
 
@@ -187,7 +201,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
       },
       items: data.items.map((item) => ({
         name: item.name,
-        description: item.tax_rate ? `GST ${item.tax_rate}%` : t("invoiceComposer.noGst"),
+        description: item.tax_rate
+          ? `GST ${item.tax_rate}%`
+          : t("invoiceComposer.noGst"),
         quantity: Number(item.quantity) || 0,
         unitPrice: Number(item.price) || 0,
         taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
@@ -444,10 +460,14 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     >
       <div className="mx-auto grid w-full max-w-7xl gap-6">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">{t("invoiceDetail.loading")}</p>
+          <p className="text-sm text-muted-foreground">
+            {t("invoiceDetail.loading")}
+          </p>
         ) : null}
         {isError ? (
-          <p className="text-sm text-[#b45309]">{t("invoiceDetail.loadError")}</p>
+          <p className="text-sm text-[#b45309]">
+            {t("invoiceDetail.loadError")}
+          </p>
         ) : null}
 
         {!isLoading && !isError && data && paymentSnapshot && previewData ? (
@@ -464,7 +484,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                     </h2>
                     <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                       {t("invoiceDetail.issuedOn", {
-                        customer: data.customer?.name || t("invoiceDetail.customerFallback"),
+                        customer:
+                          data.customer?.name ||
+                          t("invoiceDetail.customerFallback"),
                         date: invoiceDate(data.date),
                       })}
                     </p>
@@ -479,7 +501,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                 <div className="mt-6 grid gap-4 sm:grid-cols-3">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-slate-500">{t("invoiceDetail.grandTotal")}</span>
+                      <span className="text-sm text-slate-500">
+                        {t("invoiceDetail.grandTotal")}
+                      </span>
                       <Wallet className="h-4 w-4 text-slate-500" />
                     </div>
                     <p className="mt-3 text-2xl font-semibold text-slate-950 dark:text-slate-50">
@@ -489,7 +513,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
 
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-emerald-700">{t("invoiceDetail.paid")}</span>
+                      <span className="text-sm text-emerald-700">
+                        {t("invoiceDetail.paid")}
+                      </span>
                       <CheckCircle2 className="h-4 w-4 text-emerald-700" />
                     </div>
                     <p className="mt-3 text-2xl font-semibold text-emerald-950">
@@ -499,7 +525,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
 
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-amber-700">{t("invoiceDetail.balance")}</span>
+                      <span className="text-sm text-amber-700">
+                        {t("invoiceDetail.balance")}
+                      </span>
                       <Clock3 className="h-4 w-4 text-amber-700" />
                     </div>
                     <p className="mt-3 text-2xl font-semibold text-amber-950">
@@ -595,7 +623,10 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                         >
                           <div>
                             <p className="font-semibold text-slate-950 dark:text-slate-50">
-                              {formatCurrency(Number(payment.amount ?? 0), "INR")}
+                              {formatCurrency(
+                                Number(payment.amount ?? 0),
+                                "INR",
+                              )}
                             </p>
                             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                               {formatLocalizedPaymentMethod(payment.method)}
@@ -674,7 +705,8 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
               <p>
                 {t("invoiceDetail.emailDebugCustomer", {
-                  value: data?.customer?.name ?? t("invoiceDetail.customerFallback"),
+                  value:
+                    data?.customer?.name ?? t("invoiceDetail.customerFallback"),
                 })}
               </p>
               <p className="mt-1">
@@ -695,7 +727,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="invoice-email-recipient">{t("invoiceDetail.emailLabel")}</Label>
+              <Label htmlFor="invoice-email-recipient">
+                {t("invoiceDetail.emailLabel")}
+              </Label>
               <Input
                 id="invoice-email-recipient"
                 type="email"
@@ -727,7 +761,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                 onClick={() => void handleSendInvoiceEmail()}
                 disabled={invoiceEmailSending}
               >
-                {invoiceEmailSending ? t("invoiceDetail.sending") : t("invoiceDetail.sendEmail")}
+                {invoiceEmailSending
+                  ? t("invoiceDetail.sending")
+                  : t("invoiceDetail.sendEmail")}
               </Button>
             </div>
           </div>
@@ -748,18 +784,23 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
           <div className="grid gap-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
               <p>
-                {t("invoiceDetail.totalLabel")}: {formatCurrency(paymentSnapshot?.total ?? 0, "INR")}
+                {t("invoiceDetail.totalLabel")}:{" "}
+                {formatCurrency(paymentSnapshot?.total ?? 0, "INR")}
               </p>
               <p className="mt-1">
-                {t("invoiceDetail.paid")}: {formatCurrency(paymentSnapshot?.paid ?? 0, "INR")}
+                {t("invoiceDetail.paid")}:{" "}
+                {formatCurrency(paymentSnapshot?.paid ?? 0, "INR")}
               </p>
               <p className="mt-1">
-                {t("invoiceDetail.remainingLabel")}: {formatCurrency(paymentSnapshot?.remaining ?? 0, "INR")}
+                {t("invoiceDetail.remainingLabel")}:{" "}
+                {formatCurrency(paymentSnapshot?.remaining ?? 0, "INR")}
               </p>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="partial-payment-amount">{t("invoiceDetail.amountReceived")}</Label>
+              <Label htmlFor="partial-payment-amount">
+                {t("invoiceDetail.amountReceived")}
+              </Label>
               <Input
                 id="partial-payment-amount"
                 type="number"

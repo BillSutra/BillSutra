@@ -30,101 +30,78 @@ const BeginnerOnboardingModal = ({
     language === "hi"
       ? {
           title: "Bill Sutra में आपका स्वागत है",
-          description: "पहला बिल जल्दी बनाने के लिए बस इन चार आसान स्टेप्स को फॉलो करें।",
+          description:
+            "पहला बिल जल्दी बनाने के लिए बस इन चार आसान स्टेप्स को फॉलो करें।",
           steps: [
             {
               title: "शुरुआत आसान रखें",
-              description: "यह ऐप छोटे दुकानदारों और बिजनेस मालिकों के लिए बनाया गया है। सब कुछ आसान भाषा में रखा गया है।",
+              description:
+                "यह ऐप छोटे दुकानदारों और बिजनेस मालिकों के लिए बनाया गया है। सब कुछ आसान भाषा में रखा गया है।",
             },
             {
               title: "अपनी दुकान की जानकारी जोड़ें",
-              description: "सबसे पहले बिजनेस नाम, फोन नंबर और पता भरें ताकि आपके बिल तैयार रहें।",
+              description:
+                "सबसे पहले बिजनेस नाम, फोन नंबर और पता भरें ताकि आपके बिल तैयार रहें।",
               href: "/business-profile",
               cta: "बिजनेस डिटेल्स जोड़ें",
             },
             {
               title: "अपना पहला प्रोडक्ट जोड़ें",
-              description: "जो सामान आप बेचते हैं, उसका नाम और कीमत भर दें। इतना काफी है।",
+              description:
+                "जो सामान आप बेचते हैं, उसका नाम और कीमत भर दें। इतना काफी है।",
               href: "/products",
               cta: "प्रोडक्ट जोड़ें",
             },
             {
               title: "अब पहला बिल बनाएं",
-              description: "ग्राहक चुनें, प्रोडक्ट जोड़ें और बिल तैयार करें। आम तौर पर यह दो मिनट के अंदर हो सकता है।",
+              description:
+                "ग्राहक चुनें, प्रोडक्ट जोड़ें और बिल तैयार करें। आम तौर पर यह दो मिनट के अंदर हो सकता है।",
               href: "/invoices",
               cta: "पहला बिल बनाएं",
             },
           ],
-            sample: demoSeeded ? "डेमो डेटा फिर जोड़ें" : "डेमो डेटा जोड़ें",
-            finish: "शुरू करें",
-            demoDescription:
-              "अगर आप पहले ऐप देखना चाहते हैं, तो सैंपल प्रोडक्ट और सैंपल बिल जोड़ सकते हैं। आप उन्हें कभी भी बदल या हटा सकते हैं।",
-          }
-      : language === "hinglish"
-        ? {
-            title: "Bill Sutra mein aapka swagat hai",
-            description: "Pehla bill jaldi banane ke liye bas in chaar easy steps ko follow kijiye.",
-            steps: [
-              {
-                title: "Shuruaat simple rakhiye",
-                description: "Ye app dukandaron aur small business owners ke liye bana hai. Sab kuch seedhi bhaasha mein rakha gaya hai.",
-              },
-              {
-                title: "Apni dukaan ki details jodiye",
-                description: "Sabse pehle business naam, phone number, aur address bhariye taki aapke bills ready rahein.",
-                href: "/business-profile",
-                cta: "Business details jodiye",
-              },
-              {
-                title: "Pehla product jodiye",
-                description: "Jo saman aap bechte hain, uska naam aur price bhar dijiye. Itna hi kaafi hai.",
-                href: "/products",
-                cta: "Product jodiye",
-              },
-              {
-                title: "Ab pehla bill banaiye",
-                description: "Customer chuniye, product jodiye, aur bill generate kijiye. Aksar ye 2 minute ke andar ho sakta hai.",
-                href: "/invoices",
-                cta: "Pehla bill banaiye",
-              },
-            ],
-            sample: demoSeeded ? "Demo data phir jodiye" : "Demo data jodiye",
-            finish: "Shuru karein",
-            demoDescription:
-              "Agar aap pehle app try karna chahte hain, to sample products aur sample bill load kar sakte hain. Aap unhe kabhi bhi edit ya delete kar sakte hain.",
-          }
-        : {
-            title: "Welcome to Bill Sutra",
-            description: "Follow these four simple steps to create your first bill fast.",
-            steps: [
-              {
-                title: "Keep the first setup simple",
-                description: "This app is made for shopkeepers and small business owners, so everything is written in plain language.",
-              },
-              {
-                title: "Add your business details",
-                description: "Start with your business name, phone number, and address so your bills are ready to use.",
-                href: "/business-profile",
-                cta: "Add business details",
-              },
-              {
-                title: "Add your first product",
-                description: "Enter the name and price of something you sell. That is enough to begin.",
-                href: "/products",
-                cta: "Add product",
-              },
-              {
-                title: "Create your first bill",
-                description: "Choose a customer, add products, and generate the bill. Most people can do this in under two minutes.",
-                href: "/invoices",
-                cta: "Create first bill",
-              },
-            ],
-            sample: demoSeeded ? "Add demo data again" : "Load demo data",
-            finish: "Start now",
-            demoDescription:
-              "If you want to try the app first, load sample products and a sample bill. You can edit or delete them anytime.",
-          };
+          sample: demoSeeded ? "डेमो डेटा फिर जोड़ें" : "डेमो डेटा जोड़ें",
+          finish: "शुरू करें",
+          demoDescription:
+            "अगर आप पहले ऐप देखना चाहते हैं, तो सैंपल प्रोडक्ट और सैंपल बिल जोड़ सकते हैं। आप उन्हें कभी भी बदल या हटा सकते हैं।",
+        }
+      : {
+          title: "Welcome to Bill Sutra",
+          description:
+            "Follow these four simple steps to create your first bill fast.",
+          steps: [
+            {
+              title: "Keep the first setup simple",
+              description:
+                "This app is made for shopkeepers and small business owners, so everything is written in plain language.",
+            },
+            {
+              title: "Add your business details",
+              description:
+                "Start with your business name, phone number, and address so your bills are ready to use.",
+              href: "/business-profile",
+              cta: "Add business details",
+            },
+            {
+              title: "Add your first product",
+              description:
+                "Enter the name and price of something you sell. That is enough to begin.",
+              href: "/products",
+              cta: "Add product",
+            },
+            {
+              title: "Create your first bill",
+              description:
+                "Choose a customer, add products, and generate the bill. Most people can do this in under two minutes.",
+              href: "/invoices",
+              cta: "Create first bill",
+            },
+          ],
+          sample: demoSeeded ? "Add demo data again" : "Load demo data",
+          finish: "Start now",
+          demoDescription:
+            "If you want to try the app first, load sample products and a sample bill. You can edit or delete them anytime.",
+        };
 
   const icons = [Sparkles, Building2, PackagePlus, ReceiptText];
 
@@ -140,7 +117,7 @@ const BeginnerOnboardingModal = ({
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-3 dark:border-slate-700 dark:bg-slate-900/60">
           <div>
             <p className="text-sm font-medium text-slate-700 dark:text-slate-200">
-              English / Hindi / Hinglish
+              English / Hindi
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Choose the language that feels easiest right now.
@@ -191,7 +168,12 @@ const BeginnerOnboardingModal = ({
             {copy.demoDescription}
           </p>
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={onSeedDemo} disabled={isSeedingDemo}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onSeedDemo}
+              disabled={isSeedingDemo}
+            >
               {isSeedingDemo ? "..." : copy.sample}
             </Button>
             <Button type="button" onClick={onComplete}>

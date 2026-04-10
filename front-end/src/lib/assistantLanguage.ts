@@ -1,4 +1,4 @@
-export type AssistantChatLanguage = "en" | "hi" | "hinglish";
+export type AssistantChatLanguage = "en" | "hi";
 
 const DEVANAGARI_PATTERN = /[\u0900-\u097F]/g;
 
@@ -78,22 +78,21 @@ export const detectAssistantChatLanguage = (
     HINDI_ROMANIZED_HINTS.includes(token),
   ).length;
 
-  if (devanagariCount > 0 && englishHintCount === 0) {
+  if (devanagariCount > 0) {
     return "hi";
   }
 
-  if (devanagariCount > 0 || (englishHintCount > 0 && hindiHintCount > 0)) {
-    // Mixed input should feel natural in the loading state too.
-    return "hinglish";
-  }
-
-  if (hindiHintCount > 0) {
-    return "hinglish";
+  if (hindiHintCount > 0 && englishHintCount === 0) {
+    return "hi";
   }
 
   if (englishHintCount > 0) {
     return "en";
   }
 
-  return "hinglish";
+  if (hindiHintCount > 0) {
+    return "hi";
+  }
+
+  return "en";
 };

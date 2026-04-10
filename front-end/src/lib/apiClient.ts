@@ -332,13 +332,13 @@ export type Purchase = {
   paymentStatus: "PAID" | "PARTIALLY_PAID" | "UNPAID";
   paymentDate?: string | null;
   paymentMethod?:
-  | "CASH"
-  | "CARD"
-  | "BANK_TRANSFER"
-  | "UPI"
-  | "CHEQUE"
-  | "OTHER"
-  | null;
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "CHEQUE"
+    | "OTHER"
+    | null;
   notes?: string | null;
   supplier?: Supplier | null;
   warehouse?: { id: number; name: string } | null;
@@ -361,13 +361,13 @@ export type PurchaseInput = {
   amount_paid?: number | null;
   payment_date?: string | Date | null;
   payment_method?:
-  | "CASH"
-  | "CARD"
-  | "BANK_TRANSFER"
-  | "UPI"
-  | "CHEQUE"
-  | "OTHER"
-  | null;
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "CHEQUE"
+    | "OTHER"
+    | null;
   notes?: string | null;
   items: Array<{
     product_id: number;
@@ -390,13 +390,13 @@ export type Sale = {
   paymentStatus: "PAID" | "PARTIALLY_PAID" | "UNPAID";
   paymentDate?: string | null;
   paymentMethod?:
-  | "CASH"
-  | "CARD"
-  | "BANK_TRANSFER"
-  | "UPI"
-  | "CHEQUE"
-  | "OTHER"
-  | null;
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "CHEQUE"
+    | "OTHER"
+    | null;
   notes?: string | null;
   customer?: Customer | null;
   items: Array<{
@@ -419,13 +419,13 @@ export type SaleInput = {
   amount_paid?: number | null;
   payment_date?: string | Date | null;
   payment_method?:
-  | "CASH"
-  | "CARD"
-  | "BANK_TRANSFER"
-  | "UPI"
-  | "CHEQUE"
-  | "OTHER"
-  | null;
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "CHEQUE"
+    | "OTHER"
+    | null;
   notes?: string | null;
   items: Array<{
     product_id: number;
@@ -477,6 +477,12 @@ export type InvoiceInput = {
   due_date?: string | Date | null;
   discount?: number | null;
   discount_type?: "PERCENTAGE" | "FIXED" | null;
+  tax_mode?: "AUTO" | "CGST_SGST" | "IGST" | "NONE" | null;
+  customer_type?: "B2C" | "B2B" | null;
+  customer_gstin?: string | null;
+  business_gstin?: string | null;
+  place_of_supply_state_code?: string | null;
+  is_tax_inclusive?: boolean;
   status?: string | null;
   notes?: string | null;
   sync_sales?: boolean;
@@ -1048,7 +1054,7 @@ export type DashboardForecastResponse = {
 };
 
 export type AssistantReply = {
-  language: "en" | "hi" | "hinglish";
+  language: "en" | "hi";
   intent:
     | "profit"
     | "total_sales"
@@ -1079,7 +1085,7 @@ export type AssistantHistoryMessage = {
 
 export type FinancialCopilotPayload = {
   generatedAt: string;
-  language: "en" | "hi" | "hinglish";
+  language: "en" | "hi";
   overview: {
     headline: string;
     summary: string;
@@ -1316,7 +1322,9 @@ export const fetchProducts = async (
   }
 
   const query = searchParams.toString();
-  const response = await apiClient.get(query ? `/products?${query}` : "/products");
+  const response = await apiClient.get(
+    query ? `/products?${query}` : "/products",
+  );
   const payload = response.data?.data;
   const products = normalizeListResponse<Product>(
     payload?.products ?? payload?.items ?? payload,
@@ -1324,17 +1332,15 @@ export const fetchProducts = async (
 
   return {
     products,
-    total:
-      typeof payload?.total === "number" ? payload.total : products.length,
-    page: typeof payload?.page === "number" ? payload.page : params?.page ?? 1,
+    total: typeof payload?.total === "number" ? payload.total : products.length,
+    page:
+      typeof payload?.page === "number" ? payload.page : (params?.page ?? 1),
     limit:
       typeof payload?.limit === "number"
         ? payload.limit
-        : params?.limit ?? products.length,
+        : (params?.limit ?? products.length),
     totalPages:
-      typeof payload?.totalPages === "number"
-        ? payload.totalPages
-        : 1,
+      typeof payload?.totalPages === "number" ? payload.totalPages : 1,
   };
 };
 
@@ -1379,20 +1385,24 @@ export const previewProductImport = async (
   formData.append("file", file);
 
   try {
-    const response = await apiClient.post("/import/products/preview", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-      onUploadProgress: (event) => {
-        if (!options?.onUploadProgress || !event.total) {
-          return;
-        }
+    const response = await apiClient.post(
+      "/import/products/preview",
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: (event) => {
+          if (!options?.onUploadProgress || !event.total) {
+            return;
+          }
 
-        const progress = Math.min(
-          100,
-          Math.round((event.loaded / event.total) * 100),
-        );
-        options.onUploadProgress(progress);
+          const progress = Math.min(
+            100,
+            Math.round((event.loaded / event.total) * 100),
+          );
+          options.onUploadProgress(progress);
+        },
       },
-    });
+    );
 
     return response.data.data as ProductImportPreview;
   } catch (error) {
@@ -1520,9 +1530,7 @@ export const fetchWorkers = async (): Promise<Worker[]> => {
   return response.data.data as Worker[];
 };
 
-export const createWorker = async (
-  payload: WorkerInput,
-): Promise<Worker> => {
+export const createWorker = async (payload: WorkerInput): Promise<Worker> => {
   const response = await apiClient.post("/workers/create", payload);
   return response.data.data as Worker;
 };
@@ -1578,12 +1586,12 @@ export const updateSale = async (
     amount_paid?: number;
     payment_date?: string | Date | null;
     payment_method?:
-    | "CASH"
-    | "CARD"
-    | "BANK_TRANSFER"
-    | "UPI"
-    | "CHEQUE"
-    | "OTHER";
+      | "CASH"
+      | "CARD"
+      | "BANK_TRANSFER"
+      | "UPI"
+      | "CHEQUE"
+      | "OTHER";
   },
 ): Promise<void> => {
   await apiClient.put(`/sales/${id}`, payload);
@@ -1638,14 +1646,20 @@ export const fetchAccessPaymentStatus =
 export const createAccessRazorpayOrder = async (
   payload: CreateAccessRazorpayOrderInput,
 ): Promise<CreateAccessRazorpayOrderResponse> => {
-  const response = await apiClient.post("/payments/access/razorpay/order", payload);
+  const response = await apiClient.post(
+    "/payments/access/razorpay/order",
+    payload,
+  );
   return response.data.data as CreateAccessRazorpayOrderResponse;
 };
 
 export const verifyAccessRazorpayPayment = async (
   payload: VerifyAccessRazorpayPaymentInput,
 ): Promise<AccessPaymentRecord> => {
-  const response = await apiClient.post("/payments/access/razorpay/verify", payload);
+  const response = await apiClient.post(
+    "/payments/access/razorpay/verify",
+    payload,
+  );
   return response.data.data as AccessPaymentRecord;
 };
 
@@ -1788,7 +1802,8 @@ export const runDataExport = async (
 
       return {
         delivery: "email",
-        fileName: parsed.data?.fileName ?? `${payload.resource}.${payload.format}`,
+        fileName:
+          parsed.data?.fileName ?? `${payload.resource}.${payload.format}`,
         email: parsed.data?.email ?? payload.email ?? "",
         exportedCount: parsed.data?.exportedCount ?? 0,
         message: parsed.message ?? "Export sent successfully.",
@@ -1928,7 +1943,9 @@ export const fetchInventoryDemandPredictions = async (
 ): Promise<InventoryDemandPredictionsResponse> => {
   const query = buildInventoryPredictionParams(filters);
   const response = await apiClient.get(
-    query ? `/inventory-demand/predictions?${query}` : "/inventory-demand/predictions",
+    query
+      ? `/inventory-demand/predictions?${query}`
+      : "/inventory-demand/predictions",
   );
   return response.data.data as InventoryDemandPredictionsResponse;
 };
@@ -1974,7 +1991,7 @@ export const fetchDashboardInventory =
   };
 
 export const fetchDashboardProductSales = async (
-  period: "lifetime" | "month" | "week" | "year" = "lifetime"
+  period: "lifetime" | "month" | "week" | "year" = "lifetime",
 ): Promise<DashboardProductSales> => {
   const response = await apiClient.get("/dashboard/product-sales", {
     params: { period },
@@ -1991,13 +2008,14 @@ export const fetchDashboardPaymentMethods = async (
   return response.data.data as DashboardPaymentMethods;
 };
 
-export const fetchDashboardTransactions =
-  async (filters?: DashboardOverviewFilters): Promise<DashboardTransactions> => {
-    const response = await apiClient.get("/dashboard/transactions", {
-      params: buildDashboardFilterParams(filters),
-    });
-    return response.data.data as DashboardTransactions;
-  };
+export const fetchDashboardTransactions = async (
+  filters?: DashboardOverviewFilters,
+): Promise<DashboardTransactions> => {
+  const response = await apiClient.get("/dashboard/transactions", {
+    params: buildDashboardFilterParams(filters),
+  });
+  return response.data.data as DashboardTransactions;
+};
 
 export const fetchDashboardCustomers =
   async (): Promise<DashboardCustomers> => {
@@ -2025,7 +2043,7 @@ export const fetchDashboardForecast =
   };
 
 export const fetchFinancialCopilot = async (params?: {
-  language?: "en" | "hi" | "hinglish";
+  language?: "en" | "hi";
   amount?: number;
 }): Promise<FinancialCopilotPayload> => {
   const response = await apiClient.get("/copilot/summary", { params });
@@ -2060,7 +2078,10 @@ export const askAssistant = async (
   message: string,
   history: AssistantHistoryMessage[] = [],
 ): Promise<AssistantReply> => {
-  const response = await apiClient.post("/assistant/query", { message, history });
+  const response = await apiClient.post("/assistant/query", {
+    message,
+    history,
+  });
   return response.data.data as AssistantReply;
 };
 
@@ -2200,9 +2221,7 @@ export const fetchLogoUrl = async (): Promise<string | null> => {
 };
 
 /** Upload a logo for the first time (409 if one already exists → use replaceLogo). */
-export const uploadLogo = async (
-  file: File,
-): Promise<{ logo_url: string }> => {
+export const uploadLogo = async (file: File): Promise<{ logo_url: string }> => {
   const form = new FormData();
   form.append("logo", file);
   const response = await apiClient.post("/logo", form, {
@@ -2229,4 +2248,3 @@ export const removeLogo = async (): Promise<void> => {
 };
 
 export default apiClient;
-

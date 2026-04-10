@@ -73,10 +73,7 @@ type InvoiceClientProps = {
   image?: string;
 };
 
-const sanitizeItemFieldValue = (
-  key: keyof InvoiceItemForm,
-  value: string,
-) => {
+const sanitizeItemFieldValue = (key: keyof InvoiceItemForm, value: string) => {
   if (key === "quantity") {
     if (value === "") return value;
     const quantity = Number(value);
@@ -141,9 +138,7 @@ type QuickCustomerForm = {
 
 const RECENT_PRODUCT_USAGE_STORAGE_KEY = "invoice-smart-recent-products";
 
-const createEmptyInvoiceForm = (
-  customerId = "",
-): InvoiceFormState => ({
+const createEmptyInvoiceForm = (customerId = ""): InvoiceFormState => ({
   customer_id: customerId,
   date: "",
   due_date: "",
@@ -181,13 +176,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     queryFn: fetchBusinessProfile,
   });
   const sendInvoiceEmailMutation = useMutation({
-    mutationFn: ({
-      invoiceId,
-      email,
-    }: {
-      invoiceId: number;
-      email: string;
-    }) => sendInvoiceEmail(invoiceId, { email }),
+    mutationFn: ({ invoiceId, email }: { invoiceId: number; email: string }) =>
+      sendInvoiceEmail(invoiceId, { email }),
   });
   const createInvoice = useCreateInvoiceMutation();
   const createProduct = useCreateProductMutation();
@@ -225,9 +215,15 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   );
   const [taxMode, setTaxMode] = useState<TaxMode>("CGST_SGST");
   const [items, setItems] = useState<InvoiceItemForm[]>([]);
-  const [quickEntryProduct, setQuickEntryProduct] = useState<Product | null>(null);
-  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
-  const [recentCartProductId, setRecentCartProductId] = useState<string | null>(null);
+  const [quickEntryProduct, setQuickEntryProduct] = useState<Product | null>(
+    null,
+  );
+  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(
+    null,
+  );
+  const [recentCartProductId, setRecentCartProductId] = useState<string | null>(
+    null,
+  );
   const [shortcutHighlight, setShortcutHighlight] =
     useState<ShortcutHighlightSection>(null);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
@@ -238,11 +234,15 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     price: "",
     barcode: "",
   });
-  const [quickCustomerForm, setQuickCustomerForm] = useState<QuickCustomerForm>({
-    name: "",
-    phone: "",
-  });
-  const [recentProductUsage, setRecentProductUsage] = useState<RecentProductUsage[]>(() => {
+  const [quickCustomerForm, setQuickCustomerForm] = useState<QuickCustomerForm>(
+    {
+      name: "",
+      phone: "",
+    },
+  );
+  const [recentProductUsage, setRecentProductUsage] = useState<
+    RecentProductUsage[]
+  >(() => {
     if (typeof window === "undefined") return [];
 
     try {
@@ -291,8 +291,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     : activeTemplate.enabledSections;
   const activeTheme = activeTemplate.theme;
   const activeDesignConfig = activeTemplate.designConfig;
-  const autoFocusProductSearch =
-    searchParams.get("quickAction") === "new-bill";
+  const autoFocusProductSearch = searchParams.get("quickAction") === "new-bill";
   const isMacShortcutPlatform = useMemo(() => {
     if (typeof navigator === "undefined") return false;
     return /Mac|iPhone|iPad/i.test(navigator.platform);
@@ -310,7 +309,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           steps: [
             {
               title: "ग्राहक चुनें या जोड़ें",
-              description: "पहले ग्राहक चुनें ताकि बिल सही व्यक्ति के नाम से बने।",
+              description:
+                "पहले ग्राहक चुनें ताकि बिल सही व्यक्ति के नाम से बने।",
             },
             {
               title: "प्रोडक्ट जोड़ें",
@@ -318,49 +318,32 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             },
             {
               title: "जांचें और बिल बनाएं",
-              description: "कुल राशि देखकर बिल बनाएं और चाहें तो PDF या ईमेल भी करें।",
+              description:
+                "कुल राशि देखकर बिल बनाएं और चाहें तो PDF या ईमेल भी करें।",
             },
           ],
         }
-      : language === "hinglish"
-        ? {
-            bannerTitle: "Pehla bill easy tareeke se banaiye",
-            bannerDescription:
-              "Neeche diye gaye 3 steps follow kijiye. Pehle customer, phir products, aur last mein review karke bill banaiye.",
-            steps: [
-              {
-                title: "Customer chuniye ya jodiye",
-                description: "Sabse pehle customer chuniye taki bill sahi naam se bane.",
-              },
-              {
-                title: "Products jodiye",
-                description: "Ab wo products jodiye jo customer kharid raha hai.",
-              },
-              {
-                title: "Review kijiye aur bill banaiye",
-                description: "Total check kijiye, phir bill generate kijiye. Zarurat ho to PDF ya email bhi bhejiye.",
-              },
-            ],
-          }
-        : {
-            bannerTitle: "Create your first bill in 3 simple steps",
-            bannerDescription:
-              "Start with the customer, then add products, then review and generate the bill.",
-            steps: [
-              {
-                title: "Select or add a customer",
-                description: "Choose the customer first so the bill is created for the right person.",
-              },
-              {
-                title: "Add products",
-                description: "Add the products your customer is buying.",
-              },
-              {
-                title: "Review and generate the bill",
-                description: "Check the total, then create the bill and share it if needed.",
-              },
-            ],
-          };
+      : {
+          bannerTitle: "Create your first bill in 3 simple steps",
+          bannerDescription:
+            "Start with the customer, then add products, then review and generate the bill.",
+          steps: [
+            {
+              title: "Select or add a customer",
+              description:
+                "Choose the customer first so the bill is created for the right person.",
+            },
+            {
+              title: "Add products",
+              description: "Add the products your customer is buying.",
+            },
+            {
+              title: "Review and generate the bill",
+              description:
+                "Check the total, then create the bill and share it if needed.",
+            },
+          ],
+        };
   const helperCopy =
     language === "hi"
       ? {
@@ -383,82 +366,48 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           openProducts: "प्रोडक्ट खोलें",
           reviewMissing: "आगे बढ़ने के लिए कम से कम एक प्रोडक्ट जोड़ें।",
           reviewReady: "सब तैयार है। अब आख़िरी बिल बनाया जा सकता है।",
-          reviewMissingHelp: "कृपया बिल बनाने के लिए कम से कम एक प्रोडक्ट जोड़ें।",
+          reviewMissingHelp:
+            "कृपया बिल बनाने के लिए कम से कम एक प्रोडक्ट जोड़ें।",
         }
-      : language === "hinglish"
-        ? {
-            noCustomersTitle: "Abhi koi customer nahi hai",
-            noCustomersDescription:
-              "Pehla bill banane se pehle ek customer jodiye taki bill sahi naam par bane.",
-            noCustomersHint:
-              "Shuruaat ke liye sirf customer ka naam kaafi hai. Phone number baad mein bhi jod sakte hain.",
-            addCustomer: "Customer Jodiye",
-            openCustomers: "Customers Kholiye",
-            missingCustomerQuestion: "Customer nahi dikh raha?",
-            missingCustomerAnswer:
-              "Upar Add Customer use kijiye. Naya customer turant isi bill mein select ho jayega.",
-            noProductsTitle: "Abhi koi product nahi hai",
-            noProductsDescription:
-              "Bill banane se pehle kam se kam ek product jodna zaroori hai.",
-            noProductsHint:
-              "Shuruaat ek product se kijiye. Baad mein aur products jod sakte hain.",
-              addProduct: "Product Jodiye",
-              openProducts: "Products Kholiye",
-              reviewMissing: "Aage badhne ke liye kam se kam ek product jodiye.",
-              reviewReady: "Sab ready hai. Ab final bill ban sakta hai.",
-              reviewMissingHelp: "Please bill banane ke liye kam se kam ek product jodiye.",
-              reviewAction: "Bill review kijiye",
-              advancedHelpTitle: "Default settings ke saath shuru kar sakte hain",
-              advancedHelpBody:
-                "GST mode, PDF, aur email optional hain. Pehla bill banane ke liye sirf customer aur product kaafi hai.",
-            }
-          : {
-            noCustomersTitle: "No customers yet",
-            noCustomersDescription:
-              "Add your first customer before making a bill so the bill goes to the right person.",
-            noCustomersHint:
-              "You only need a customer name to get started. Phone number is optional.",
-            addCustomer: "Add Customer",
-            openCustomers: "Open Customers",
-            missingCustomerQuestion: "Do not see the customer yet?",
-            missingCustomerAnswer:
-              "Use Add Customer and the new customer will be selected in this bill right away.",
-            noProductsTitle: "No products yet",
-            noProductsDescription:
-              "Add at least one product before creating a bill.",
-            noProductsHint:
-              "Start with one item you sell most often. You can add more products later.",
-              addProduct: "Add Product",
-              openProducts: "Open Products",
-              reviewMissing: "Add at least one product to continue.",
-              reviewReady: "Everything looks ready for the final bill.",
-              reviewMissingHelp: "Please add at least one product to create a bill.",
-              reviewAction: "Review bill",
-              advancedHelpTitle: "You can start with the default settings",
-              advancedHelpBody:
-                "GST mode, PDF, and email are optional. For the first bill, you only need a customer and at least one product.",
-            };
+      : {
+          noCustomersTitle: "No customers yet",
+          noCustomersDescription:
+            "Add your first customer before making a bill so the bill goes to the right person.",
+          noCustomersHint:
+            "You only need a customer name to get started. Phone number is optional.",
+          addCustomer: "Add Customer",
+          openCustomers: "Open Customers",
+          missingCustomerQuestion: "Do not see the customer yet?",
+          missingCustomerAnswer:
+            "Use Add Customer and the new customer will be selected in this bill right away.",
+          noProductsTitle: "No products yet",
+          noProductsDescription:
+            "Add at least one product before creating a bill.",
+          noProductsHint:
+            "Start with one item you sell most often. You can add more products later.",
+          addProduct: "Add Product",
+          openProducts: "Open Products",
+          reviewMissing: "Add at least one product to continue.",
+          reviewReady: "Everything looks ready for the final bill.",
+          reviewMissingHelp:
+            "Please add at least one product to create a bill.",
+          reviewAction: "Review bill",
+          advancedHelpTitle: "You can start with the default settings",
+          advancedHelpBody:
+            "GST mode, PDF, and email are optional. For the first bill, you only need a customer and at least one product.",
+        };
   const reviewActionLabel =
-    language === "hi"
-      ? "बिल रिव्यू करें"
-      : language === "hinglish"
-        ? "Bill review kijiye"
-        : "Review bill";
+    language === "hi" ? "बिल रिव्यू करें" : "Review bill";
   const advancedHelpCopy =
     language === "hi"
       ? {
           title: "डिफॉल्ट सेटिंग के साथ शुरू कर सकते हैं",
           body: "GST mode, PDF, और email optional हैं. पहला बिल बनाने के लिए सिर्फ ग्राहक और प्रोडक्ट काफी है.",
         }
-      : language === "hinglish"
-        ? {
-            title: "Default settings ke saath shuru kar sakte hain",
-            body: "GST mode, PDF, aur email optional hain. Pehla bill banane ke liye sirf customer aur product kaafi hai.",
-          }
-        : {
-            title: "You can start with the default settings",
-            body: "GST mode, PDF, and email are optional. For the first bill, you only need a customer and at least one product.",
-          };
+      : {
+          title: "You can start with the default settings",
+          body: "GST mode, PDF, and email are optional. For the first bill, you only need a customer and at least one product.",
+        };
 
   const parseServerErrors = useCallback((error: unknown, fallback: string) => {
     if (axios.isAxiosError(error)) {
@@ -490,15 +439,18 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     });
   }, []);
 
-  const flashShortcutSection = useCallback((section: ShortcutHighlightSection) => {
-    setShortcutHighlight(section);
-    if (shortcutHighlightTimerRef.current) {
-      window.clearTimeout(shortcutHighlightTimerRef.current);
-    }
-    shortcutHighlightTimerRef.current = window.setTimeout(() => {
-      setShortcutHighlight(null);
-    }, 1200);
-  }, []);
+  const flashShortcutSection = useCallback(
+    (section: ShortcutHighlightSection) => {
+      setShortcutHighlight(section);
+      if (shortcutHighlightTimerRef.current) {
+        window.clearTimeout(shortcutHighlightTimerRef.current);
+      }
+      shortcutHighlightTimerRef.current = window.setTimeout(() => {
+        setShortcutHighlight(null);
+      }, 1200);
+    },
+    [],
+  );
 
   useEffect(() => {
     return () => {
@@ -565,9 +517,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
   const currentCartProductIds = useMemo(
     () =>
-      Array.from(
-        new Set(items.map((item) => item.product_id).filter(Boolean)),
-      ),
+      Array.from(new Set(items.map((item) => item.product_id).filter(Boolean))),
     [items],
   );
 
@@ -645,9 +595,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         label:
           form.discount_type === "PERCENTAGE"
             ? t("invoice.discountPercentageLabel", {
-                value: Math.min(100, Math.max(0, Number(form.discount) || 0)).toFixed(
-                  2,
-                ),
+                value: Math.min(
+                  100,
+                  Math.max(0, Number(form.discount) || 0),
+                ).toFixed(2),
               })
             : t("invoice.discountFixedLabel"),
       },
@@ -862,33 +813,42 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       flashShortcutSection("items");
 
       if (options?.announce !== false) {
-        toast.success(t("invoiceComposer.itemRemoved", { name: removedLabel }), {
-          action:
-            removedItem !== null
-              ? {
-                  label: t("invoiceComposer.undo"),
-                  onClick: () => {
-                    const itemToRestore = removedItem;
-                    if (!itemToRestore) return;
-                    setItems((currentItems) => {
-                      const nextItems = [...currentItems];
-                      nextItems.splice(index, 0, itemToRestore);
-                      return nextItems;
-                    });
-                    setSelectedItemIndex(index);
-                    setRecentCartProductId(itemToRestore.product_id || null);
-                    markDirty();
-                    flashShortcutSection("items");
-                    focusProductSearch(false);
-                  },
-                }
-              : undefined,
-        });
+        toast.success(
+          t("invoiceComposer.itemRemoved", { name: removedLabel }),
+          {
+            action:
+              removedItem !== null
+                ? {
+                    label: t("invoiceComposer.undo"),
+                    onClick: () => {
+                      const itemToRestore = removedItem;
+                      if (!itemToRestore) return;
+                      setItems((currentItems) => {
+                        const nextItems = [...currentItems];
+                        nextItems.splice(index, 0, itemToRestore);
+                        return nextItems;
+                      });
+                      setSelectedItemIndex(index);
+                      setRecentCartProductId(itemToRestore.product_id || null);
+                      markDirty();
+                      flashShortcutSection("items");
+                      focusProductSearch(false);
+                    },
+                  }
+                : undefined,
+          },
+        );
       }
 
       focusProductSearch(false);
     },
-    [flashShortcutSection, focusProductSearch, markDirty, resolvedSelectedItemIndex, t],
+    [
+      flashShortcutSection,
+      focusProductSearch,
+      markDirty,
+      resolvedSelectedItemIndex,
+      t,
+    ],
   );
 
   const handleFormChange = useCallback(
@@ -955,7 +915,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         return;
       }
 
-      if (!trimmedPrice || Number.isNaN(Number(trimmedPrice)) || Number(trimmedPrice) <= 0) {
+      if (
+        !trimmedPrice ||
+        Number.isNaN(Number(trimmedPrice)) ||
+        Number(trimmedPrice) <= 0
+      ) {
         toast.error(t("invoiceComposer.enterValidSellingPrice"));
         return;
       }
@@ -980,9 +944,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           toastMessage: `${createdProduct.name} ${t("invoiceComposer.addToCart").toLowerCase()}`,
         });
       } catch (error) {
-        toast.error(
-          parseServerErrors(error, t("inventory.saveError")),
-        );
+        toast.error(parseServerErrors(error, t("inventory.saveError")));
       }
     },
     [addProductToBill, createProduct, parseServerErrors, quickProductForm, t],
@@ -1012,13 +974,18 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           phone: trimmedPhone || undefined,
         });
 
-        queryClient.setQueryData<Customer[]>(["customers"], (currentCustomers) => {
-          const safeCustomers = currentCustomers ?? [];
-          return [
-            createdCustomer,
-            ...safeCustomers.filter((customer) => customer.id !== createdCustomer.id),
-          ];
-        });
+        queryClient.setQueryData<Customer[]>(
+          ["customers"],
+          (currentCustomers) => {
+            const safeCustomers = currentCustomers ?? [];
+            return [
+              createdCustomer,
+              ...safeCustomers.filter(
+                (customer) => customer.id !== createdCustomer.id,
+              ),
+            ];
+          },
+        );
 
         handleFormChange({
           ...form,
@@ -1031,13 +998,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         });
         flashShortcutSection("form");
         toast.success(
-          t("invoiceComposer.billCustomerAdded", { name: createdCustomer.name }),
+          t("invoiceComposer.billCustomerAdded", {
+            name: createdCustomer.name,
+          }),
         );
         focusProductSearch();
       } catch (error) {
-        toast.error(
-          parseServerErrors(error, t("customers.saveError")),
-        );
+        toast.error(parseServerErrors(error, t("customers.saveError")));
       }
     },
     [
@@ -1108,8 +1075,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
     try {
       const selectedCustomer =
-        customers?.find((customer) => customer.id === Number(form.customer_id)) ??
-        null;
+        customers?.find(
+          (customer) => customer.id === Number(form.customer_id),
+        ) ?? null;
 
       const createdInvoice = await createInvoice.mutateAsync({
         customer_id: Number(form.customer_id),
@@ -1148,7 +1116,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         warehouseId: form.warehouse_id ? Number(form.warehouse_id) : null,
       });
       toast.success(
-        t("invoice.createSuccess", { invoiceNumber: createdInvoice.invoice_number }),
+        t("invoice.createSuccess", {
+          invoiceNumber: createdInvoice.invoice_number,
+        }),
       );
       resetInvoiceComposer();
     } catch (error) {
@@ -1260,7 +1230,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       const hasModifier = event.ctrlKey || event.metaKey;
 
       const inputHasSelection =
-        target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
           ? (target.selectionStart ?? 0) !== (target.selectionEnd ?? 0)
           : false;
       const hasPageSelection =
@@ -1333,7 +1304,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           toast.success(t("invoiceComposer.productSearchFocused"));
           break;
         default:
-          if (key === "delete" || (isMacShortcutPlatform && key === "backspace")) {
+          if (
+            key === "delete" ||
+            (isMacShortcutPlatform && key === "backspace")
+          ) {
             event.preventDefault();
             if (resolvedSelectedItemIndex === null || items.length === 0) {
               toast.error(t("invoiceComposer.selectLineItemFirst"));
@@ -1403,19 +1377,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title={
-        language === "hi"
-          ? "बिल बनाएं"
-          : language === "hinglish"
-            ? "Bill Banaiye"
-            : "Create Bill"
-      }
+      title={language === "hi" ? "बिल बनाएं" : "Create Bill"}
       subtitle={
         language === "hi"
           ? "ग्राहक चुनें, प्रोडक्ट जोड़ें और कुछ ही स्टेप्स में बिल तैयार करें।"
-          : language === "hinglish"
-            ? "Customer chuniye, products jodiye, aur kuch hi steps mein bill tayyar kijiye."
-            : "Choose a customer, add products, and create a bill in a few simple steps."
+          : "Choose a customer, add products, and create a bill in a few simple steps."
       }
       actions={headerActions}
     >
@@ -1442,11 +1408,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             </div>
           </div>
 
-            <div className="mt-5 grid gap-3 lg:grid-cols-3">
-              {guidedFlowCopy.steps.map((step, index) => {
-                const stepNumber = index + 1;
-                const isDone = guidedStep > stepNumber;
-                const isActive = guidedStep === stepNumber;
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            {guidedFlowCopy.steps.map((step, index) => {
+              const stepNumber = index + 1;
+              const isDone = guidedStep > stepNumber;
+              const isActive = guidedStep === stepNumber;
 
               return (
                 <div
@@ -1462,7 +1428,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 >
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 text-primary">
-                      {isDone ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+                      {isDone ? (
+                        <CheckCircle2 size={18} />
+                      ) : (
+                        <Circle size={18} />
+                      )}
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
@@ -1477,36 +1447,42 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                     </div>
                   </div>
                 </div>
-                );
-              })}
-            </div>
+              );
+            })}
+          </div>
 
-            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-              {noCustomers ? (
-                <>
-                  <Button type="button" onClick={() => setQuickAddCustomerOpen(true)}>
-                    {helperCopy.addCustomer}
-                  </Button>
-                  <Button type="button" variant="outline" asChild>
-                    <Link href="/customers">{helperCopy.openCustomers}</Link>
-                  </Button>
-                </>
-              ) : noProducts ? (
-                <>
-                  <Button type="button" onClick={() => setQuickAddProductOpen(true)}>
-                    {helperCopy.addProduct}
-                  </Button>
-                  <Button type="button" variant="outline" asChild>
-                    <Link href="/products">{helperCopy.openProducts}</Link>
-                  </Button>
-                </>
-              ) : (
-                <Button type="button" onClick={scrollToCheckout}>
-                  {reviewActionLabel}
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            {noCustomers ? (
+              <>
+                <Button
+                  type="button"
+                  onClick={() => setQuickAddCustomerOpen(true)}
+                >
+                  {helperCopy.addCustomer}
                 </Button>
-              )}
-            </div>
-          </section>
+                <Button type="button" variant="outline" asChild>
+                  <Link href="/customers">{helperCopy.openCustomers}</Link>
+                </Button>
+              </>
+            ) : noProducts ? (
+              <>
+                <Button
+                  type="button"
+                  onClick={() => setQuickAddProductOpen(true)}
+                >
+                  {helperCopy.addProduct}
+                </Button>
+                <Button type="button" variant="outline" asChild>
+                  <Link href="/products">{helperCopy.openProducts}</Link>
+                </Button>
+              </>
+            ) : (
+              <Button type="button" onClick={scrollToCheckout}>
+                {reviewActionLabel}
+              </Button>
+            )}
+          </div>
+        </section>
 
         <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.64fr)]">
           <div className="grid gap-4">
@@ -1577,14 +1553,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 {helperCopy.missingCustomerAnswer}
               </p>
             </div>
-              <div className="no-print rounded-[1.7rem] bg-white/90 p-6 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.14)] ring-1 ring-slate-200/80 dark:bg-slate-900/80 dark:text-slate-300 dark:ring-slate-700/70">
-                <p className="font-semibold text-slate-950 dark:text-slate-100">
-                  {advancedHelpCopy.title}
-                </p>
-                <p className="mt-2 leading-6">{advancedHelpCopy.body}</p>
-              </div>
-            </aside>
-          </section>
+            <div className="no-print rounded-[1.7rem] bg-white/90 p-6 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.14)] ring-1 ring-slate-200/80 dark:bg-slate-900/80 dark:text-slate-300 dark:ring-slate-700/70">
+              <p className="font-semibold text-slate-950 dark:text-slate-100">
+                {advancedHelpCopy.title}
+              </p>
+              <p className="mt-2 leading-6">{advancedHelpCopy.body}</p>
+            </div>
+          </aside>
+        </section>
 
         <section className="mt-8 grid gap-6">
           <div className="rounded-[1.6rem] border border-slate-200 bg-white/90 px-5 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
@@ -1738,7 +1714,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                           : helperCopy.reviewReady}
                       </span>
                       <span className="font-semibold">
-                        {t("invoiceComposer.lineItemsCount", { count: items.length })}
+                        {t("invoiceComposer.lineItemsCount", {
+                          count: items.length,
+                        })}
                       </span>
                     </div>
                     <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -1783,7 +1761,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         >
           <div className="grid gap-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-              <p>{t("invoiceDetail.emailDebugInvoice", { value: lastCreatedInvoiceNumber ?? "-" })}</p>
+              <p>
+                {t("invoiceDetail.emailDebugInvoice", {
+                  value: lastCreatedInvoiceNumber ?? "-",
+                })}
+              </p>
               <p className="mt-1">
                 {t("invoiceDetail.emailDebugAmount", {
                   value: `INR ${(lastCreatedInvoiceTotal ?? 0).toFixed(2)}`,
@@ -1799,7 +1781,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="invoice-email-recipient">{t("invoiceComposer.emailLabel")}</Label>
+              <Label htmlFor="invoice-email-recipient">
+                {t("invoiceComposer.emailLabel")}
+              </Label>
               <Input
                 id="invoice-email-recipient"
                 type="email"
@@ -1847,13 +1831,34 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         >
           <div className="grid gap-3 text-sm text-muted-foreground">
             {[
-              [`${shortcutModifierLabel}+B`, t("invoiceComposer.shortcutNewBill")],
-              [`${shortcutModifierLabel}+P`, t("invoiceComposer.shortcutQuickProduct")],
-              [`${shortcutModifierLabel}+C`, t("invoiceComposer.shortcutQuickCustomer")],
-              [`${shortcutModifierLabel}+S`, t("invoiceComposer.shortcutSaveBill")],
-              [`${shortcutModifierLabel}+D`, t("invoiceComposer.shortcutDiscount")],
-              [`${shortcutModifierLabel}+Q`, t("invoiceComposer.shortcutFocusSearch")],
-              [`${shortcutModifierLabel}+Delete`, t("invoiceComposer.shortcutRemoveItem")],
+              [
+                `${shortcutModifierLabel}+B`,
+                t("invoiceComposer.shortcutNewBill"),
+              ],
+              [
+                `${shortcutModifierLabel}+P`,
+                t("invoiceComposer.shortcutQuickProduct"),
+              ],
+              [
+                `${shortcutModifierLabel}+C`,
+                t("invoiceComposer.shortcutQuickCustomer"),
+              ],
+              [
+                `${shortcutModifierLabel}+S`,
+                t("invoiceComposer.shortcutSaveBill"),
+              ],
+              [
+                `${shortcutModifierLabel}+D`,
+                t("invoiceComposer.shortcutDiscount"),
+              ],
+              [
+                `${shortcutModifierLabel}+Q`,
+                t("invoiceComposer.shortcutFocusSearch"),
+              ],
+              [
+                `${shortcutModifierLabel}+Delete`,
+                t("invoiceComposer.shortcutRemoveItem"),
+              ],
               ["Enter", t("invoiceComposer.shortcutEnter")],
               ["?", t("invoiceComposer.shortcutHelp")],
             ].map(([shortcut, description]) => (
@@ -1884,7 +1889,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         >
           <form className="grid gap-4" onSubmit={handleQuickCreateProduct}>
             <div className="grid gap-2">
-              <Label htmlFor="quick-product-name">{t("invoiceComposer.name")}</Label>
+              <Label htmlFor="quick-product-name">
+                {t("invoiceComposer.name")}
+              </Label>
               <Input
                 ref={quickProductNameRef}
                 id="quick-product-name"
@@ -1899,7 +1906,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="quick-product-price">{t("invoiceComposer.price")}</Label>
+              <Label htmlFor="quick-product-price">
+                {t("invoiceComposer.price")}
+              </Label>
               <Input
                 id="quick-product-price"
                 type="number"
@@ -1916,7 +1925,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="quick-product-barcode">{t("invoiceComposer.barcode")}</Label>
+              <Label htmlFor="quick-product-barcode">
+                {t("invoiceComposer.barcode")}
+              </Label>
               <Input
                 id="quick-product-barcode"
                 value={quickProductForm.barcode}
@@ -1938,7 +1949,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={createProduct.isPending}>
-                {createProduct.isPending ? t("common.processing") : t("invoiceComposer.saveProduct")}
+                {createProduct.isPending
+                  ? t("common.processing")
+                  : t("invoiceComposer.saveProduct")}
               </Button>
             </div>
           </form>
@@ -1952,7 +1965,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         >
           <form className="grid gap-4" onSubmit={handleQuickCreateCustomer}>
             <div className="grid gap-2">
-              <Label htmlFor="quick-customer-name">{t("invoiceComposer.name")}</Label>
+              <Label htmlFor="quick-customer-name">
+                {t("invoiceComposer.name")}
+              </Label>
               <Input
                 ref={quickCustomerNameRef}
                 id="quick-customer-name"
@@ -1967,7 +1982,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="quick-customer-phone">{t("invoiceComposer.phone")}</Label>
+              <Label htmlFor="quick-customer-phone">
+                {t("invoiceComposer.phone")}
+              </Label>
               <Input
                 id="quick-customer-phone"
                 value={quickCustomerForm.phone}
@@ -1989,7 +2006,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={createCustomer.isPending}>
-                {createCustomer.isPending ? t("common.processing") : t("invoiceComposer.saveCustomer")}
+                {createCustomer.isPending
+                  ? t("common.processing")
+                  : t("invoiceComposer.saveCustomer")}
               </Button>
             </div>
           </form>

@@ -339,7 +339,11 @@ export const send = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       message: `Invoice email sent to ${recipientEmail}`,
-      data: { invoiceId: invoice.id, status: invoice.status, email: recipientEmail },
+      data: {
+        invoiceId: invoice.id,
+        status: invoice.status,
+        email: recipientEmail,
+      },
     });
   } catch (error) {
     const err = error as Error & { status?: number };
@@ -368,7 +372,8 @@ export const reminder = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
-    const recipientEmail = requestedEmail || invoice.customer?.email?.trim() || "";
+    const recipientEmail =
+      requestedEmail || invoice.customer?.email?.trim() || "";
     if (!recipientEmail) {
       return res.status(422).json({
         message: "Customer email is required to send this reminder",
