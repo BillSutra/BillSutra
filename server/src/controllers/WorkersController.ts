@@ -13,6 +13,8 @@ const WORKER_MIGRATION_MESSAGE =
   "Worker management requires the latest database migration. Run Prisma migrations and restart the server.";
 
 const normalizeWorkerPhone = (value: string) => value.replace(/\D/g, "");
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
 
 const ensureWorkerTablesReady = async (res: Response) => {
   const [hasBusinessTable, hasWorkersTable] = await Promise.all([
@@ -153,10 +155,14 @@ class WorkersController {
     }
 
     const businessId = await resolveWorkerRouteBusinessId(req);
-    const workerId = req.params.id;
+    const workerId = readRouteParam(req.params.id);
 
     if (!businessId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    if (!workerId) {
+      return sendResponse(res, 422, { message: "Worker id is required" });
     }
 
     const { name, phone, password } = req.body as {
@@ -225,10 +231,14 @@ class WorkersController {
     }
 
     const businessId = await resolveWorkerRouteBusinessId(req);
-    const workerId = req.params.id;
+    const workerId = readRouteParam(req.params.id);
 
     if (!businessId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    if (!workerId) {
+      return sendResponse(res, 422, { message: "Worker id is required" });
     }
 
     if (req.user?.workerId && req.user.workerId === workerId) {

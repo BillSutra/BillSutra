@@ -790,11 +790,13 @@
     },
     "quickUpdate": "त्वरित अपडेट",
     "select": "चुनें",
+    "summaryCollected": "वसूल किया गया",
     "summarySettled": "{count} इनवॉइस पूरी तरह निपट चुके हैं",
     "summaryOutstanding": "बाकी वसूली",
     "summaryOutstandingBreakdown": "{pending} लंबित, {partial} आंशिक",
     "summaryValue": "इनवॉइस मूल्य",
     "summaryValueDescription": "जारी होने से निपटान तक हर बिल ट्रैक करें",
+    "afterPaymentProjection": "इस भुगतान के बाद: भुगतान {paid} | बाकी {balance}",
     "paidLabel": "भुगतान",
     "balanceLabel": "बाकी",
     "paidInline": "भुगतान {amount}"

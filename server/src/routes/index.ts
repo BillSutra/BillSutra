@@ -97,6 +97,8 @@ import copilotRoutes from "../modules/copilot/copilot.routes.js";
 import ExportController from "../modules/export/export.controller.js";
 
 const router = Router();
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
 
 // Super admin routes
 router.post(
@@ -235,7 +237,8 @@ router.get(
 router.get(
   "/invoices/:id",
   (req, _res, next) => {
-    if (/^\d+$/.test(req.params.id)) {
+    const invoiceParam = readRouteParam(req.params.id);
+    if (invoiceParam && /^\d+$/.test(invoiceParam)) {
       return next("route");
     }
 

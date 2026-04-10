@@ -9,6 +9,9 @@ const parseOwnerUserId = (ownerId: string) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
 const createAdminToken = (payload: AdminAuthUser) =>
   `Bearer ${jwt.sign(payload, process.env.JWT_SECRET as string, {
     expiresIn: "30d",
@@ -173,7 +176,10 @@ class AdminController {
   }
 
   static async showBusiness(req: Request, res: Response) {
-    const businessId = req.params.id;
+    const businessId = readRouteParam(req.params.id);
+    if (!businessId) {
+      return sendResponse(res, 422, { message: "Business id is required" });
+    }
 
     const business = await prisma.business.findUnique({
       where: { id: businessId },
@@ -258,7 +264,10 @@ class AdminController {
   }
 
   static async deleteBusiness(req: Request, res: Response) {
-    const businessId = req.params.id;
+    const businessId = readRouteParam(req.params.id);
+    if (!businessId) {
+      return sendResponse(res, 422, { message: "Business id is required" });
+    }
 
     const business = await prisma.business.findUnique({
       where: { id: businessId },

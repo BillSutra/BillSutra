@@ -206,6 +206,7 @@ const buildSimpleBillInvoicePreviewData = ({
   discount,
   payment,
   notes,
+  previewCopy,
 }: {
   businessProfile?: BusinessProfileRecord | null;
   customer?: Customer | null;
@@ -220,6 +221,14 @@ const buildSimpleBillInvoicePreviewData = ({
   discount: string;
   payment: InvoicePaymentMethod;
   notes: string;
+  previewCopy: {
+    customerFallback: string;
+    discountLabel: string;
+    paymentSelectedSuffix: string;
+    paymentMethodPrefix: string;
+    closingNote: string;
+    signatureLabel: string;
+  };
 }): InvoicePreviewData => {
   const selectedPaymentLabel = paymentLabel(payment);
 
@@ -241,7 +250,8 @@ const buildSimpleBillInvoicePreviewData = ({
       showPaymentQr: businessProfile?.show_payment_qr ?? false,
     },
     client: {
-      name: customer?.name ?? (fallbackCustomerName || "Customer"),
+      name:
+        customer?.name || fallbackCustomerName || previewCopy.customerFallback,
       email: customer?.email ?? "",
       phone: customer?.phone ?? fallbackCustomerPhone,
       address: customer?.address ?? "",
@@ -259,21 +269,21 @@ const buildSimpleBillInvoicePreviewData = ({
       value: Number(discount) || 0,
       label:
         discountType === "PERCENTAGE"
-          ? `Discount (${Math.min(100, Number(discount) || 0).toFixed(2)}%)`
-          : "Discount",
+          ? `${previewCopy.discountLabel} (${Math.min(100, Number(discount) || 0).toFixed(2)}%)`
+          : previewCopy.discountLabel,
     },
     paymentSummary: {
-      statusLabel: `${selectedPaymentLabel} selected`,
+      statusLabel: `${selectedPaymentLabel} ${previewCopy.paymentSelectedSuffix}`,
       statusTone: "pending",
-      statusNote: `Payment method: ${selectedPaymentLabel}`,
+      statusNote: `${previewCopy.paymentMethodPrefix}: ${selectedPaymentLabel}`,
       paidAmount: 0,
       remainingAmount: totals.total,
       history: [],
     },
     notes: notes.trim(),
-    paymentInfo: `Payment method: ${selectedPaymentLabel}`,
-    closingNote: "Thank you for your business.",
-    signatureLabel: "Authorized Signature",
+    paymentInfo: `${previewCopy.paymentMethodPrefix}: ${selectedPaymentLabel}`,
+    closingNote: previewCopy.closingNote,
+    signatureLabel: previewCopy.signatureLabel,
   };
 };
 
@@ -286,6 +296,7 @@ const ExistingInvoicePreview = ({
   sectionOrder,
   theme,
   designConfig,
+  emptyMessage,
 }: {
   data: InvoicePreviewData;
   hasItems?: boolean;
@@ -295,12 +306,13 @@ const ExistingInvoicePreview = ({
   sectionOrder: SectionKey[];
   theme: InvoiceTheme;
   designConfig: ReturnType<typeof normalizeDesignConfig>;
+  emptyMessage: string;
 }) => {
   if (!hasItems) {
     return (
       <div className="min-w-0 overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700">
         <div className="flex min-h-[34rem] items-center justify-center rounded-[1.35rem] border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-sm font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
-          Add items to see preview
+          {emptyMessage}
         </div>
       </div>
     );
@@ -338,9 +350,82 @@ const SimpleBillClient = ({
   image,
   initialInvoiceDate,
 }: SimpleBillClientProps) => {
-  const displayName = name.trim() || "Guest";
   const router = useRouter();
-  const { formatDate, t } = useI18n();
+  const { formatDate, language, t } = useI18n();
+  const isHindi = language === "hi";
+  const copy = useMemo(
+    () =>
+      isHindi
+        ? {
+            guestName: "मेहमान",
+            customerFallback: "ग्राहक",
+            discountLabel: "छूट",
+            paymentSelectedSuffix: "चुना गया",
+            paymentMethodPrefix: "भुगतान तरीका",
+            closingNote: "आपके व्यवसाय के लिए धन्यवाद।",
+            signatureLabel: "अधिकृत हस्ताक्षर",
+            toastEnterCustomerName: "ग्राहक का नाम दर्ज करें।",
+            toastCustomerQueued: "इनवॉइस बनाते समय ग्राहक जोड़ दिया जाएगा।",
+            toastNoSavedBill: "दोहराने के लिए कोई सेव किया हुआ बिल नहीं मिला।",
+            toastLastBillLoaded: "पिछला बिल लोड हो गया।",
+            toastLoadBillError: "पिछला बिल लोड नहीं हो पाया।",
+            toastChooseCustomer: "ग्राहक चुनें या टाइप करें।",
+            toastAddItem: "कम से कम एक आइटम कीमत के साथ जोड़ें।",
+            toastBillGenerated: "बिल बन गया।",
+            toastGenerateError:
+              "बिल नहीं बन पाया। जानकारी जांचकर दोबारा कोशिश करें।",
+            pageTitle: "सिंपल बिल",
+            pageSubtitle: "सेकंडों में बिल बनाएं - टाइप करें या चुनें।",
+            previewEmpty: "प्रीव्यू देखने के लिए आइटम जोड़ें",
+            generating: "बन रहा है...",
+            generateBill: "बिल बनाएं",
+            billPreviewTitle: "बिल प्रीव्यू",
+            billPreviewDescription: "सेव करने से पहले बिल जांच लें।",
+            useCustomer: "ग्राहक चुनें",
+            repeatLastBill: "पिछला बिल दोहराएं",
+            addItem: "आइटम जोड़ें",
+            previewBill: "बिल प्रीव्यू",
+            closeLabel: "बंद करें",
+            readyHintEmpty: "प्रीव्यू देखने के लिए आइटम जोड़ें",
+            readyHintDone: "फाइनल बिल के लिए सब तैयार है।",
+          }
+        : {
+            guestName: "Guest",
+            customerFallback: "Customer",
+            discountLabel: "Discount",
+            paymentSelectedSuffix: "selected",
+            paymentMethodPrefix: "Payment method",
+            closingNote: "Thank you for your business.",
+            signatureLabel: "Authorized Signature",
+            toastEnterCustomerName: "Enter the customer name.",
+            toastCustomerQueued:
+              "Customer will be added when the invoice is generated.",
+            toastNoSavedBill: "No saved bill to repeat yet.",
+            toastLastBillLoaded: "Last bill loaded.",
+            toastLoadBillError: "Could not load the last bill.",
+            toastChooseCustomer: "Type or select a customer.",
+            toastAddItem: "Add at least one item with a price.",
+            toastBillGenerated: "Bill generated.",
+            toastGenerateError:
+              "Could not generate the bill. Please check the details and try again.",
+            pageTitle: "Simple Bill",
+            pageSubtitle: "Create bill in seconds - type or select.",
+            previewEmpty: "Add items to see preview",
+            generating: "Generating...",
+            generateBill: "Generate Bill",
+            billPreviewTitle: "Bill Preview",
+            billPreviewDescription: "Review the bill before saving it.",
+            useCustomer: "Use Customer",
+            repeatLastBill: "Repeat Last Bill",
+            addItem: "Add Item",
+            previewBill: "Preview Bill",
+            closeLabel: "Close",
+            readyHintEmpty: "Add items to see preview",
+            readyHintDone: "Everything looks ready for the final bill.",
+          },
+    [isHindi],
+  );
+  const displayName = name.trim() || copy.guestName;
   const { data: customers = [] } = useCustomersQuery();
   const { data: products = [] } = useProductsQuery({ limit: 1000 });
   const { data: businessProfile } = useQuery({
@@ -471,7 +556,7 @@ const SimpleBillClient = ({
       customer: selectedCustomer,
       fallbackCustomerName:
         (addingCustomer ? newCustomerName.trim() : customerSearch.trim()) ||
-        "Customer",
+        copy.customerFallback,
       fallbackCustomerPhone: addingCustomer ? newCustomerPhone.trim() : "",
       invoiceNumber: t("invoice.invoicePreviewNumber"),
       invoiceDate: previewInvoiceDate,
@@ -482,9 +567,18 @@ const SimpleBillClient = ({
       discount: invoiceForm.discount,
       payment: selectedPaymentMethod,
       notes,
+      previewCopy: {
+        customerFallback: copy.customerFallback,
+        discountLabel: copy.discountLabel,
+        paymentSelectedSuffix: copy.paymentSelectedSuffix,
+        paymentMethodPrefix: copy.paymentMethodPrefix,
+        closingNote: copy.closingNote,
+        signatureLabel: copy.signatureLabel,
+      },
     });
   }, [
     addingCustomer,
+    copy,
     businessProfile,
     customerSearch,
     discountType,
@@ -650,7 +744,7 @@ const SimpleBillClient = ({
 
   const handleQuickAddCustomer = () => {
     if (!newCustomerName.trim()) {
-      toast.error("Enter the customer name.");
+      toast.error(copy.toastEnterCustomerName);
       return;
     }
 
@@ -660,13 +754,13 @@ const SimpleBillClient = ({
         : newCustomerName.trim(),
     );
     setCustomerSuggestionsOpen(false);
-    toast.success("Customer will be added when the invoice is generated.");
+    toast.success(copy.toastCustomerQueued);
   };
 
   const loadLastBill = () => {
     const stored = window.localStorage.getItem(LAST_BILL_KEY);
     if (!stored) {
-      toast.info("No saved bill to repeat yet.");
+      toast.info(copy.toastNoSavedBill);
       return;
     }
 
@@ -687,9 +781,9 @@ const SimpleBillClient = ({
       setNotes(bill.notes ?? "");
       setPayment(bill.payment);
       setInvoiceDate(todayInputValue());
-      toast.success("Last bill loaded.");
+      toast.success(copy.toastLastBillLoaded);
     } catch {
-      toast.error("Could not load the last bill.");
+      toast.error(copy.toastLoadBillError);
     }
   };
 
@@ -722,17 +816,17 @@ const SimpleBillClient = ({
     if (isSubmitting) return;
 
     if (addingCustomer && !newCustomerName.trim()) {
-      toast.error("Enter the customer name.");
+      toast.error(copy.toastEnterCustomerName);
       return;
     }
 
     if (!addingCustomer && !selectedCustomerId) {
-      toast.error("Type or select a customer.");
+      toast.error(copy.toastChooseCustomer);
       return;
     }
 
     if (validItems.length === 0) {
-      toast.error("Add at least one item with a price.");
+      toast.error(copy.toastAddItem);
       return;
     }
 
@@ -747,7 +841,7 @@ const SimpleBillClient = ({
         : selectedCustomer;
 
       if (!customer) {
-        toast.error("Type or select a customer.");
+        toast.error(copy.toastChooseCustomer);
         return;
       }
 
@@ -777,12 +871,10 @@ const SimpleBillClient = ({
       setAddingCustomer(false);
       setNewCustomerName("");
       setNewCustomerPhone("");
-      toast.success("Bill generated.");
+      toast.success(copy.toastBillGenerated);
       router.push(`/invoices/history/${createdInvoice.id}`);
     } catch {
-      toast.error(
-        "Could not generate the bill. Please check the details and try again.",
-      );
+      toast.error(copy.toastGenerateError);
     } finally {
       setIsSubmitting(false);
     }
@@ -796,8 +888,8 @@ const SimpleBillClient = ({
     <DashboardLayout
       name={displayName}
       image={image}
-      title="Simple Bill"
-      subtitle="Create bill in seconds - type or select."
+      title={copy.pageTitle}
+      subtitle={copy.pageSubtitle}
     >
       <div className="mx-auto grid w-full max-w-[100rem] gap-5">
         <section className="rounded-lg bg-card/80 px-4 py-3 shadow-[0_14px_36px_-34px_rgba(15,23,42,0.45)] ring-1 ring-border/35 sm:px-5">
@@ -985,7 +1077,7 @@ const SimpleBillClient = ({
                     disabled={createCustomer.isPending}
                     onClick={() => void handleQuickAddCustomer()}
                   >
-                    Use Customer
+                    {copy.useCustomer}
                   </Button>
                 </div>
               ) : null}
@@ -1008,11 +1100,11 @@ const SimpleBillClient = ({
                     onClick={loadLastBill}
                   >
                     <RotateCcw size={16} />
-                    Repeat Last Bill
+                    {copy.repeatLastBill}
                   </Button>
                   <Button type="button" onClick={() => addItemAfter()}>
                     <Plus size={16} />
-                    Add Item
+                    {copy.addItem}
                   </Button>
                 </div>
               </div>
@@ -1310,7 +1402,7 @@ const SimpleBillClient = ({
                 onClick={handlePreviewBill}
               >
                 <Eye size={18} />
-                Preview Bill
+                {copy.previewBill}
               </Button>
               <Button
                 type="button"
@@ -1320,7 +1412,7 @@ const SimpleBillClient = ({
                 onClick={() => void handleGenerateBill()}
               >
                 <ReceiptText size={18} />
-                {isSubmitting ? "Generating..." : "Generate Bill"}
+                {isSubmitting ? copy.generating : copy.generateBill}
               </Button>
             </section>
           </div>
@@ -1335,6 +1427,7 @@ const SimpleBillClient = ({
               sectionOrder={activeSectionOrder}
               theme={activeTheme}
               designConfig={activeDesignConfig}
+              emptyMessage={copy.previewEmpty}
             />
           </div>
 
@@ -1355,14 +1448,14 @@ const SimpleBillClient = ({
                     onClick={() => void handleGenerateBill()}
                   >
                     {isSubmitting
-                      ? "Generating..."
+                      ? copy.generating
                       : t("invoiceComposer.checkout")}
                   </Button>
                   <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
                     <span>
                       {validItems.length === 0
-                        ? "Add items to see preview"
-                        : "Everything looks ready for the final bill."}
+                        ? copy.readyHintEmpty
+                        : copy.readyHintDone}
                     </span>
                     <span className="font-semibold">
                       {t("invoiceComposer.lineItemsCount", {
@@ -1380,8 +1473,8 @@ const SimpleBillClient = ({
       <Modal
         open={previewOpen}
         onOpenChange={setPreviewOpen}
-        title="Bill Preview"
-        description="Review the bill before saving it."
+        title={copy.billPreviewTitle}
+        description={copy.billPreviewDescription}
         contentClassName="max-h-[92vh] overflow-y-auto sm:max-w-5xl"
         footer={
           <>
@@ -1390,7 +1483,7 @@ const SimpleBillClient = ({
               variant="outline"
               onClick={() => setPreviewOpen(false)}
             >
-              Close
+              {copy.closeLabel}
             </Button>
             <Button
               type="button"
@@ -1398,7 +1491,7 @@ const SimpleBillClient = ({
               onClick={() => void handleGenerateBill()}
             >
               <ReceiptText size={16} />
-              {isSubmitting ? "Generating..." : "Generate Bill"}
+              {isSubmitting ? copy.generating : copy.generateBill}
             </Button>
           </>
         }
@@ -1412,6 +1505,7 @@ const SimpleBillClient = ({
           sectionOrder={activeSectionOrder}
           theme={activeTheme}
           designConfig={activeDesignConfig}
+          emptyMessage={copy.previewEmpty}
         />
       </Modal>
     </DashboardLayout>

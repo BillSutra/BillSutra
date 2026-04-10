@@ -336,7 +336,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-200">
-                    Collected
+                    {t("invoiceHistory.summaryCollected")}
                   </p>
                   <p className="mt-3 text-3xl font-semibold tracking-tight text-emerald-950 dark:text-emerald-50">
                     {formatCurrencyValue(summary.paid)}
@@ -696,9 +696,10 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                       </span>
                       {selectedStatus === "PARTIALLY_PAID" ? (
                         <span className="text-xs text-gray-500 dark:text-gray-400">
-                          After this payment: paid{" "}
-                          {formatCurrencyValue(projectedPaid)} | balance{" "}
-                          {formatCurrencyValue(projectedBalance)}
+                          {t("invoiceHistory.afterPaymentProjection", {
+                            paid: formatCurrencyValue(projectedPaid),
+                            balance: formatCurrencyValue(projectedBalance),
+                          })}
                         </span>
                       ) : null}
                     </>

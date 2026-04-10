@@ -109,6 +109,9 @@ const buildOwnerAuthResponse = async (
 const getCredentialNotFoundMessage = () =>
   "No passkey is registered for this account yet.";
 
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
 class AuthController {
   static async oauthLogin(req: Request, res: Response) {
     try {
@@ -1115,7 +1118,12 @@ class AuthController {
         });
       }
 
-      const id = Number.parseInt(req.params.id, 10);
+      const idParam = readRouteParam(req.params.id);
+      if (!idParam) {
+        return sendResponse(res, 422, { message: "Passkey id is required" });
+      }
+
+      const id = Number.parseInt(idParam, 10);
       const credential = await prisma.passkeyCredential.findFirst({
         where: {
           id,
