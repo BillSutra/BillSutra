@@ -87,10 +87,10 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
           className={cn(
             "app-field block h-10 w-full px-3 py-2 text-base focus:outline-none focus:ring-2 transition-all md:text-sm",
             showError
-              ? "border-red-500 focus:ring-red-200"
+              ? "border-red-500/85 focus:ring-red-500/25"
               : showSuccess
-                ? "border-green-500 focus:ring-green-200"
-                : "focus:ring-indigo-200",
+                ? "border-emerald-500/80 focus:ring-emerald-500/25"
+                : "focus:ring-ring/30",
           )}
         >
           {children}
@@ -113,10 +113,10 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
           className={cn(
             "app-field block h-10 w-full px-3 py-2 text-base focus:outline-none focus:ring-2 transition-all md:text-sm",
             showError
-              ? "border-red-500 focus:ring-red-200"
+              ? "border-red-500/85 focus:ring-red-500/25"
               : showSuccess
-                ? "border-green-500 focus:ring-green-200"
-                : "focus:ring-indigo-200",
+                ? "border-emerald-500/80 focus:ring-emerald-500/25"
+                : "focus:ring-ring/30",
           )}
         />
       )}

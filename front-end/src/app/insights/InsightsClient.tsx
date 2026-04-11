@@ -257,7 +257,7 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
                           {card.value}
                         </p>
                       </div>
-                      <div className="rounded-2xl border border-current/15 bg-white/60 p-3 dark:bg-black/10">
+                      <div className="rounded-2xl border border-current/15 bg-card/60 p-3">
                         <Icon size={18} />
                       </div>
                     </div>

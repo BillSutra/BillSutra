@@ -1843,24 +1843,24 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
       </div>
       {previewTemplate ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 py-8"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/78 px-4 py-8"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) {
               closePreview();
             }
           }}
         >
-          <div className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-white text-[#1f1b16] shadow-2xl">
+          <div className="flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-3xl bg-card text-foreground shadow-2xl">
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border px-6 py-4">
               <div>
-                <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
+                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
                   {t("templatesPage.previewTitle")}
                 </p>
                 <h3 className="mt-1 text-xl font-semibold">
                   {previewTemplate.name}
                 </h3>
                 {previewTemplate.bestFor ? (
-                  <p className="mt-2 text-sm text-[#8a6d56]">
+                  <p className="mt-2 text-sm text-muted-foreground">
                     {previewTemplate.bestFor}
                   </p>
                 ) : null}

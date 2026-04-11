@@ -59,21 +59,21 @@ const FriendlyEmptyState = ({
   return (
     <section
       className={cn(
-        "rounded-[1.8rem] border border-dashed border-slate-300 bg-[linear-gradient(180deg,#fffdf9_0%,#f8fafc_100%)] px-6 py-8 text-center shadow-[0_20px_45px_-38px_rgba(15,23,42,0.18)] dark:border-slate-700 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.94)_0%,rgba(15,23,42,0.88)_100%)]",
+        "rounded-[1.8rem] border border-dashed border-border/85 bg-[linear-gradient(180deg,color-mix(in_oklab,var(--card)_94%,transparent)_0%,color-mix(in_oklab,var(--muted)_70%,transparent)_100%)] px-6 py-8 text-center shadow-[0_20px_45px_-38px_rgba(15,23,42,0.18)]",
         className,
       )}
     >
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white text-primary shadow-sm ring-1 ring-slate-200 dark:bg-slate-950 dark:ring-slate-700">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-card text-primary shadow-sm ring-1 ring-border/80">
         <Icon size={24} />
       </div>
-      <h3 className="mt-4 text-xl font-semibold text-slate-950 dark:text-slate-50">
+      <h3 className="mt-4 text-xl font-semibold text-foreground">
         {title}
       </h3>
-      <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600 dark:text-slate-300">
+      <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
         {description}
       </p>
       {hint ? (
-        <p className="mx-auto mt-3 max-w-lg rounded-full bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800 ring-1 ring-amber-200 dark:bg-amber-950/20 dark:text-amber-100 dark:ring-amber-900/40">
+        <p className="mx-auto mt-3 max-w-lg rounded-full bg-secondary px-4 py-2 text-xs font-medium text-secondary-foreground ring-1 ring-border/70">
           {hint}
         </p>
       ) : null}

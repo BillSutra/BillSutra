@@ -62,6 +62,29 @@ export const viewport: Viewport = {
   themeColor: "#123d65",
 };
 
+const themeInitScript = `(() => {
+  try {
+    const key = "billSutra:theme";
+    const root = document.documentElement;
+    const stored = window.localStorage.getItem(key);
+    const rawTheme =
+      stored === "light" || stored === "dark" || stored === "system"
+        ? stored
+        : "system";
+    const resolvedTheme =
+      rawTheme === "system"
+        ? window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light"
+        : rawTheme;
+    root.classList.remove("light", "dark");
+    root.classList.add(resolvedTheme);
+    root.style.colorScheme = resolvedTheme;
+  } catch {
+    // Keep server-rendered defaults if storage access fails.
+  }
+})();`;
+
 export default async function RootLayout({
   children,
 }: Readonly<{
@@ -75,11 +98,14 @@ export default async function RootLayout({
 
   return (
     <html lang={initialLanguage} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${sora.variable} ${fraunces.variable} ${hindiSans.variable} bg-background text-foreground antialiased transition-colors duration-300`}
       >
         <LanguageProvider initialLanguage={initialLanguage}>
-          <ThemeProvider>
+          <ThemeProvider disableTransitionOnChange>
             <SessionProvider>
               <QueryProvider>
                 <AuthTokenSync />

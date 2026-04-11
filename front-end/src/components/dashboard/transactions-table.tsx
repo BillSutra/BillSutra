@@ -158,7 +158,7 @@ const TransactionsTable = ({
                     {table.getRowModel().rows.map((row) => (
                       <tr
                         key={row.id}
-                        className="transition-colors odd:bg-transparent even:bg-black/[0.025] hover:bg-primary/[0.06] dark:even:bg-white/[0.025] dark:hover:bg-primary/[0.08]"
+                        className="transition-colors odd:bg-transparent even:bg-muted/25 hover:bg-primary/[0.06] dark:even:bg-muted/18 dark:hover:bg-primary/[0.08]"
                       >
                         {row.getVisibleCells().map((cell) => (
                           <td key={cell.id} className="px-4 py-3 text-foreground">

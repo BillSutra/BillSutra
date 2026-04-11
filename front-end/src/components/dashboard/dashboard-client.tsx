@@ -543,7 +543,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
 
   const heroSection = (
     <section className="grid gap-5 xl:grid-cols-12">
-      <header className="dashboard-chart-surface rounded-[2rem] xl:col-span-8">
+      <header className="dashboard-chart-surface rounded-4xl xl:col-span-8">
         <div className="dashboard-chart-content p-6 sm:p-7">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
@@ -675,7 +675,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         </div>
       </header>
 
-      <aside className="dashboard-chart-surface rounded-[2rem] xl:col-span-4">
+      <aside className="dashboard-chart-surface rounded-4xl xl:col-span-4">
         <div className="dashboard-chart-content flex h-full flex-col p-6 sm:p-7">
           <div className="flex items-start gap-3">
             <div className="rounded-2xl border border-border/70 bg-card/80 p-2 text-primary shadow-sm">
@@ -1265,7 +1265,11 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
 
   const dashboardHeaderActions = (
     <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-      <Button asChild size="lg" className="w-full sm:w-auto">
+      <Button
+        asChild
+        size="lg"
+        className="h-12 w-full text-base font-semibold shadow-[0_20px_44px_-28px_rgba(18,61,101,0.55)] sm:w-auto"
+      >
         <Link href="/simple-bill">
           {createBillCtaLabel}
           <ArrowRight size={16} />

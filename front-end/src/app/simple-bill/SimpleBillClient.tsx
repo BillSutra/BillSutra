@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Eye, Plus, ReceiptText, RotateCcw, Trash2 } from "lucide-react";
+import {
+  Download,
+  Plus,
+  Printer,
+  ReceiptText,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
@@ -11,12 +17,10 @@ import {
   DesignConfigProvider,
   normalizeDesignConfig,
 } from "@/components/invoice/DesignConfigContext";
-import InvoiceTotals from "@/components/invoice/InvoiceTotals";
 import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import Modal from "@/components/ui/modal";
 import {
   useCreateCustomerMutation,
   useCreateInvoiceMutation,
@@ -28,10 +32,12 @@ import {
   fetchBusinessProfile,
   type BusinessProfileRecord,
   type Customer,
+  type Invoice,
   type InvoiceInput,
   type Product,
 } from "@/lib/apiClient";
 import { useInvoiceTotals } from "@/hooks/invoice/useInvoiceTotals";
+import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   DiscountType,
@@ -74,9 +80,19 @@ type SavedSimpleBill = {
   items: SimpleBillItem[];
 };
 
+type SimpleBillDraft = SavedSimpleBill & {
+  invoiceDate: string;
+  customerSearch: string;
+  selectedCustomerId: number | null;
+  addingCustomer: boolean;
+  newCustomerName: string;
+  newCustomerPhone: string;
+};
+
 const LAST_CUSTOMER_KEY = "billsutra.simple-bill.last-customer";
 const LAST_BILL_KEY = "billsutra.simple-bill.last-bill";
 const PRODUCT_USAGE_KEY = "billsutra.simple-bill.product-usage";
+const SIMPLE_BILL_DRAFT_KEY = "billsutra.simple-bill.draft.v1";
 const INITIAL_ITEM_ID = "simple-bill-item-1";
 const GST_RATE = 18;
 const DEFAULT_INVOICE_SECTIONS: SectionKey[] = [
@@ -139,6 +155,9 @@ const paymentLabel = (payment: InvoicePaymentMethod) => {
 
 const containsText = (value: string | null | undefined, search: string) =>
   value?.toLowerCase().includes(search.toLowerCase()) ?? false;
+
+const normalizeText = (value: string | null | undefined) =>
+  value?.trim().toLowerCase() ?? "";
 
 const toDiscountType = (mode: DiscountMode): DiscountType =>
   mode === "PERCENT" ? "PERCENTAGE" : "FIXED";
@@ -311,7 +330,7 @@ const ExistingInvoicePreview = ({
   if (!hasItems) {
     return (
       <div className="min-w-0 overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700">
-        <div className="flex min-h-[34rem] items-center justify-center rounded-[1.35rem] border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-sm font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
+        <div className="flex min-h-136 items-center justify-center rounded-[1.35rem] border border-dashed border-slate-200 bg-slate-50 px-6 text-center text-sm font-medium text-slate-500 dark:border-slate-700 dark:bg-slate-900/50 dark:text-slate-300">
           {emptyMessage}
         </div>
       </div>
@@ -371,23 +390,63 @@ const SimpleBillClient = ({
             toastLoadBillError: "पिछला बिल लोड नहीं हो पाया।",
             toastChooseCustomer: "ग्राहक चुनें या टाइप करें।",
             toastAddItem: "कम से कम एक आइटम कीमत के साथ जोड़ें।",
-            toastBillGenerated: "बिल बन गया।",
+            toastProductNameMissing: "प्रोडक्ट का नाम खाली है।",
+            toastFixLineItems:
+              "हर भरे हुए आइटम में नाम, मात्रा और कीमत 0 से अधिक होना चाहिए।",
+            toastBillGenerated: "बिल सफलतापूर्वक सेव हुआ ✅",
             toastGenerateError:
               "बिल नहीं बन पाया। जानकारी जांचकर दोबारा कोशिश करें।",
+            toastPdfDownloaded: "डाउनलोड हो गया ✅",
+            toastPdfError: "PDF डाउनलोड नहीं हो पाया।",
+            toastPrintReady: "प्रिंट डायलॉग खुल गया है।",
+            toastSelectCustomerFirst: "पहले ग्राहक चुनें या वॉक-इन चुनें।",
+            toastGenerateBeforePrint: "पहले बिल जेनरेट और सेव करें।",
+            toastWalkInApplied: "वॉक-इन ग्राहक चुना गया।",
+            toastWalkInError: "वॉक-इन ग्राहक चुनने में दिक्कत हुई।",
+            toastNewBillReady: "नया बिल तैयार है।",
             pageTitle: "सिंपल बिल",
             pageSubtitle: "सेकंडों में बिल बनाएं - टाइप करें या चुनें।",
             previewEmpty: "प्रीव्यू देखने के लिए आइटम जोड़ें",
-            generating: "बन रहा है...",
-            generateBill: "बिल बनाएं",
+            generatingBill: "बिल बन रहा है...",
+            resetNewBill: "रीसेट / नया बिल",
+            generateAndSaveBill: "बिल बनाएं और सेव करें",
+            downloadPdf: "PDF डाउनलोड करें",
+            printBill: "प्रिंट करें",
+            nextStepsTitle: "बिल सेव हो गया। अब आगे क्या करें?",
+            nextStepsDescription: "इनवॉइस नंबर: {invoiceNumber}",
+            newBill: "नया बिल",
+            previewSuccessTitle: "बिल सफलतापूर्वक जेनरेट हो गया",
+            previewSuccessDescription:
+              "इनवॉइस नंबर: {invoiceNumber}. पूरी डिटेल हिस्ट्री में देखें।",
+            viewInHistory: "हिस्ट्री में देखें",
             billPreviewTitle: "बिल प्रीव्यू",
             billPreviewDescription: "सेव करने से पहले बिल जांच लें।",
             useCustomer: "ग्राहक चुनें",
+            useWalkInCustomer: "वॉक-इन ग्राहक उपयोग करें",
+            walkInCustomerName: "Walk-in Customer",
             repeatLastBill: "पिछला बिल दोहराएं",
-            addItem: "आइटम जोड़ें",
+            addItem: "प्रोडक्ट जोड़ें",
             previewBill: "बिल प्रीव्यू",
             closeLabel: "बंद करें",
             readyHintEmpty: "प्रीव्यू देखने के लिए आइटम जोड़ें",
             readyHintDone: "फाइनल बिल के लिए सब तैयार है।",
+            guidedTitle: "1-2 मिनट में बिल बनाएं",
+            guidedDescription:
+              "पहले ग्राहक चुनें, फिर प्रोडक्ट जोड़ें, बिल देखें और प्रिंट/डाउनलोड करें।",
+            stepCustomer: "स्टेप 1: ग्राहक चुनें",
+            stepProducts: "स्टेप 2: प्रोडक्ट जोड़ें",
+            stepReview: "स्टेप 3: बिल जांचें",
+            stepPrint: "स्टेप 4: प्रिंट / डाउनलोड",
+            customerRequiredHint:
+              "आगे बढ़ने के लिए पहले ग्राहक चुनें या वॉक-इन ग्राहक चुनें।",
+            loadingHint: "डेटा लोड हो रहा है...",
+            leaveWarning:
+              "आपका बिल ड्राफ्ट सेव है। क्या आप बिना सेव किए बाहर निकलना चाहते हैं?",
+            gstHint: "GST वैकल्पिक है (सुझाव: GST चालू रखें अगर रजिस्टर्ड हैं)",
+            customerAutoHint:
+              "ग्राहक का नाम लिखें। खाली छोड़ेंगे तो वॉक-इन ग्राहक अपने आप जुड़ जाएगा।",
+            totalAmountLabel: "कुल राशि",
+            previewHint: "स्क्रीन के लिए प्रीव्यू। प्रिंट हमेशा साफ़ ब्लैक-एंड-व्हाइट रहेगा।",
           }
         : {
             guestName: "Guest",
@@ -405,33 +464,82 @@ const SimpleBillClient = ({
             toastLoadBillError: "Could not load the last bill.",
             toastChooseCustomer: "Type or select a customer.",
             toastAddItem: "Add at least one item with a price.",
-            toastBillGenerated: "Bill generated.",
+            toastProductNameMissing: "Product name is missing.",
+            toastFixLineItems:
+              "Each entered item needs a name, quantity above 0, and price above 0.",
+            toastBillGenerated: "Bill saved successfully ✅",
             toastGenerateError:
               "Could not generate the bill. Please check the details and try again.",
+            toastPdfDownloaded: "Downloaded ✅",
+            toastPdfError: "Could not download PDF.",
+            toastPrintReady: "Print dialog is open.",
+            toastSelectCustomerFirst:
+              "Please select a customer first or choose Walk-in Customer.",
+            toastGenerateBeforePrint: "Generate and save the bill first.",
+            toastWalkInApplied: "Walk-in customer selected.",
+            toastWalkInError: "Could not use Walk-in Customer right now.",
+            toastNewBillReady: "New bill is ready.",
             pageTitle: "Simple Bill",
             pageSubtitle: "Create bill in seconds - type or select.",
             previewEmpty: "Add items to see preview",
-            generating: "Generating...",
-            generateBill: "Generate Bill",
+            generatingBill: "Generating Bill...",
+            resetNewBill: "Reset / New Bill",
+            generateAndSaveBill: "Generate & Save Bill",
+            downloadPdf: "Download PDF",
+            printBill: "Print Bill",
+            nextStepsTitle: "Bill saved. What next?",
+            nextStepsDescription: "Invoice number: {invoiceNumber}",
+            newBill: "New Bill",
+            previewSuccessTitle: "Bill generated successfully",
+            previewSuccessDescription:
+              "Invoice number: {invoiceNumber}. Open full details in history.",
+            viewInHistory: "View in History",
             billPreviewTitle: "Bill Preview",
             billPreviewDescription: "Review the bill before saving it.",
             useCustomer: "Use Customer",
+            useWalkInCustomer: "Use Walk-in Customer",
+            walkInCustomerName: "Walk-in Customer",
             repeatLastBill: "Repeat Last Bill",
-            addItem: "Add Item",
+            addItem: "Add Product",
             previewBill: "Preview Bill",
             closeLabel: "Close",
             readyHintEmpty: "Add items to see preview",
             readyHintDone: "Everything looks ready for the final bill.",
+            guidedTitle: "Create a bill in 1-2 minutes",
+            guidedDescription:
+              "Pick customer, add products, review bill, then print or download.",
+            stepCustomer: "Step 1: Add Customer",
+            stepProducts: "Step 2: Add Products",
+            stepReview: "Step 3: Review Bill",
+            stepPrint: "Step 4: Print / Download",
+            customerRequiredHint:
+              "Select a customer first to unlock product entry.",
+            loadingHint: "Loading data...",
+            leaveWarning:
+              "Your draft is saved. Do you want to leave without finishing this bill?",
+            gstHint: "GST is optional (suggested: keep it ON if GST registered)",
+            customerAutoHint:
+              "Type customer name. Leave empty to use Walk-in automatically.",
+            totalAmountLabel: "Total Amount",
+            previewHint:
+              "Preview is for screen. Print always stays clean black and white.",
           },
     [isHindi],
   );
   const displayName = name.trim() || copy.guestName;
-  const { data: customers = [] } = useCustomersQuery();
-  const { data: products = [] } = useProductsQuery({ limit: 1000 });
+  const {
+    data: customers = [],
+    isLoading: customersLoading,
+  } = useCustomersQuery();
+  const {
+    data: products = [],
+    isLoading: productsLoading,
+  } = useProductsQuery({ limit: 1000 });
   const { data: businessProfile } = useQuery({
     queryKey: ["business-profile"],
     queryFn: fetchBusinessProfile,
   });
+  const { downloadPdf } = useInvoicePdf();
   const createCustomer = useCreateCustomerMutation();
   const createInvoice = useCreateInvoiceMutation();
   const [invoiceDate, setInvoiceDate] = useState(initialInvoiceDate);
@@ -455,7 +563,10 @@ const SimpleBillClient = ({
   const [payment, setPayment] = useState<PaymentChoice>("CASH");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [generatedInvoice, setGeneratedInvoice] = useState<Invoice | null>(null);
+  const [isAssigningWalkIn, setIsAssigningWalkIn] = useState(false);
   const [productUsage, setProductUsage] = useState<Record<number, number>>({});
+  const submitLockRef = useRef(false);
   const newCustomerPhoneRef = useRef<HTMLInputElement | null>(null);
   const itemNameRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const itemQuantityRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -466,6 +577,19 @@ const SimpleBillClient = ({
       customers.find((customer) => customer.id === selectedCustomerId) ??
       (createdCustomer?.id === selectedCustomerId ? createdCustomer : null),
     [createdCustomer, customers, selectedCustomerId],
+  );
+
+  const walkInCustomer = useMemo(
+    () =>
+      customers.find((customer) => {
+        const normalizedName = normalizeText(customer.name);
+        return (
+          normalizedName === "walk-in customer" ||
+          normalizedName === "walk in customer" ||
+          normalizedName === normalizeText(copy.walkInCustomerName)
+        );
+      }) ?? null,
+    [copy.walkInCustomerName, customers],
   );
 
   const customerSuggestions = useMemo(() => {
@@ -502,6 +626,63 @@ const SimpleBillClient = ({
     () => invoiceItems.filter(isInvoiceItemReady),
     [invoiceItems],
   );
+  const hasSelectedCustomer = Boolean(selectedCustomer);
+  const hasCustomerContext =
+    hasSelectedCustomer ||
+    Boolean(customerSearch.trim()) ||
+    (addingCustomer && Boolean(newCustomerName.trim()));
+  const canGenerateBill = hasCustomerContext && validItems.length > 0;
+  const productsLocked = !hasCustomerContext;
+  const currentStep = !hasCustomerContext
+    ? 1
+    : validItems.length === 0
+      ? 2
+      : previewOpen
+        ? 4
+        : 3;
+  const stepItems = useMemo(
+    () => [
+      copy.stepCustomer,
+      copy.stepProducts,
+      copy.stepReview,
+      copy.stepPrint,
+    ],
+    [copy.stepCustomer, copy.stepProducts, copy.stepReview, copy.stepPrint],
+  );
+  const hasDraftContent = useMemo(
+    () =>
+      Boolean(
+        customerSearch.trim() ||
+          selectedCustomerId ||
+          notes.trim() ||
+          discount.trim() ||
+          payment !== "CASH" ||
+          gstEnabled ||
+          addingCustomer ||
+          newCustomerName.trim() ||
+          newCustomerPhone.trim() ||
+          items.some(
+            (item) =>
+              item.name.trim() ||
+              item.price.trim() ||
+              item.productId ||
+              (item.quantity.trim() && item.quantity.trim() !== "1"),
+          ),
+      ),
+    [
+      addingCustomer,
+      customerSearch,
+      discount,
+      gstEnabled,
+      items,
+      newCustomerName,
+      newCustomerPhone,
+      notes,
+      payment,
+      selectedCustomerId,
+    ],
+  );
+  const isInitialLoading = customersLoading || productsLoading;
   const taxMode: TaxMode = gstEnabled ? "CGST_SGST" : "NONE";
   const invoiceForm = useMemo<InvoiceFormState>(
     () => ({
@@ -558,7 +739,8 @@ const SimpleBillClient = ({
         (addingCustomer ? newCustomerName.trim() : customerSearch.trim()) ||
         copy.customerFallback,
       fallbackCustomerPhone: addingCustomer ? newCustomerPhone.trim() : "",
-      invoiceNumber: t("invoice.invoicePreviewNumber"),
+      invoiceNumber:
+        generatedInvoice?.invoice_number || t("invoice.invoicePreviewNumber"),
       invoiceDate: previewInvoiceDate,
       dueDate: previewInvoiceDate,
       items: invoiceItems,
@@ -584,6 +766,7 @@ const SimpleBillClient = ({
     discountType,
     invoiceForm.discount,
     invoiceItems,
+    generatedInvoice?.invoice_number,
     newCustomerName,
     newCustomerPhone,
     notes,
@@ -636,12 +819,137 @@ const SimpleBillClient = ({
     if (Number.isFinite(lastCustomerId) && lastCustomerId > 0) {
       setSelectedCustomerId(lastCustomerId);
     }
+
+    const storedDraft = window.localStorage.getItem(SIMPLE_BILL_DRAFT_KEY);
+    if (!storedDraft) {
+      return;
+    }
+
+    try {
+      const draft = JSON.parse(storedDraft) as Partial<SimpleBillDraft>;
+
+      if (typeof draft.invoiceDate === "string" && draft.invoiceDate) {
+        setInvoiceDate(draft.invoiceDate);
+      }
+      if (typeof draft.customerSearch === "string") {
+        setCustomerSearch(draft.customerSearch);
+      }
+      if (
+        typeof draft.selectedCustomerId === "number" &&
+        Number.isFinite(draft.selectedCustomerId) &&
+        draft.selectedCustomerId > 0
+      ) {
+        setSelectedCustomerId(draft.selectedCustomerId);
+      } else if (draft.selectedCustomerId === null) {
+        setSelectedCustomerId(null);
+      }
+      if (typeof draft.addingCustomer === "boolean") {
+        setAddingCustomer(false);
+      }
+      if (typeof draft.newCustomerName === "string") {
+        setNewCustomerName(draft.newCustomerName);
+      }
+      if (typeof draft.newCustomerPhone === "string") {
+        setNewCustomerPhone(draft.newCustomerPhone);
+      }
+      if (typeof draft.discount === "string") {
+        setDiscount(draft.discount);
+      }
+      if (draft.discountMode === "AMOUNT" || draft.discountMode === "PERCENT") {
+        setDiscountMode(draft.discountMode);
+      }
+      if (typeof draft.gstEnabled === "boolean") {
+        setGstEnabled(draft.gstEnabled);
+      }
+      if (typeof draft.notes === "string") {
+        setNotes(draft.notes);
+      }
+      if (
+        draft.payment === "CASH" ||
+        draft.payment === "UPI" ||
+        draft.payment === "ONLINE"
+      ) {
+        setPayment(draft.payment);
+      }
+      if (Array.isArray(draft.items) && draft.items.length > 0) {
+        setItems(
+          draft.items.map((item) => ({
+            id: item.id || createItem().id,
+            productId:
+              typeof item.productId === "number" && Number.isFinite(item.productId)
+                ? item.productId
+                : undefined,
+            name: item.name ?? "",
+            quantity: item.quantity ?? "1",
+            price: item.price ?? "",
+          })),
+        );
+      }
+    } catch {
+      window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
+    }
   }, []);
 
   useEffect(() => {
     if (!selectedCustomer) return;
     setCustomerSearch(customerLabel(selectedCustomer));
   }, [selectedCustomer]);
+
+  useEffect(() => {
+    if (!hasDraftContent) {
+      window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
+      return;
+    }
+
+    const draft: SimpleBillDraft = {
+      invoiceDate,
+      customerSearch,
+      selectedCustomerId,
+      addingCustomer,
+      newCustomerName,
+      newCustomerPhone,
+      customerId: selectedCustomerId ?? undefined,
+      customerName: selectedCustomer?.name ?? customerSearch,
+      payment,
+      discount,
+      discountMode,
+      gstEnabled,
+      notes,
+      items,
+    };
+
+    window.localStorage.setItem(SIMPLE_BILL_DRAFT_KEY, JSON.stringify(draft));
+  }, [
+    addingCustomer,
+    customerSearch,
+    discount,
+    discountMode,
+    gstEnabled,
+    hasDraftContent,
+    invoiceDate,
+    items,
+    newCustomerName,
+    newCustomerPhone,
+    notes,
+    payment,
+    selectedCustomer?.name,
+    selectedCustomerId,
+  ]);
+
+  useEffect(() => {
+    if (!hasDraftContent) {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = copy.leaveWarning;
+      return copy.leaveWarning;
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [copy.leaveWarning, hasDraftContent]);
 
   const updateItem = useCallback(
     (id: string, patch: Partial<SimpleBillItem>) => {
@@ -652,7 +960,7 @@ const SimpleBillClient = ({
     [],
   );
 
-  const selectCustomer = (customer: Customer) => {
+  const selectCustomer = useCallback((customer: Customer) => {
     setSelectedCustomerId(customer.id);
     setCreatedCustomer((current) =>
       current?.id === customer.id ? current : null,
@@ -662,7 +970,36 @@ const SimpleBillClient = ({
     setNewCustomerPhone("");
     setAddingCustomer(false);
     setCustomerSuggestionsOpen(false);
-  };
+  }, []);
+
+  const ensureWalkInCustomer = useCallback(async () => {
+    if (walkInCustomer) {
+      selectCustomer(walkInCustomer);
+      return walkInCustomer;
+    }
+
+    const created = await createCustomer.mutateAsync({
+      name: copy.walkInCustomerName,
+    });
+    selectCustomer(created);
+    return created;
+  }, [copy.walkInCustomerName, createCustomer, selectCustomer, walkInCustomer]);
+
+  const handleUseWalkInCustomer = useCallback(async () => {
+    if (isAssigningWalkIn) {
+      return;
+    }
+
+    try {
+      setIsAssigningWalkIn(true);
+      await ensureWalkInCustomer();
+      toast.success(copy.toastWalkInApplied);
+    } catch {
+      toast.error(copy.toastWalkInError);
+    } finally {
+      setIsAssigningWalkIn(false);
+    }
+  }, [copy.toastWalkInApplied, copy.toastWalkInError, ensureWalkInCustomer, isAssigningWalkIn]);
 
   const selectProductForItem = useCallback(
     (itemId: string, product: Product) => {
@@ -813,15 +1150,48 @@ const SimpleBillClient = ({
   };
 
   const handleGenerateBill = async () => {
-    if (isSubmitting) return;
-
-    if (addingCustomer && !newCustomerName.trim()) {
-      toast.error(copy.toastEnterCustomerName);
+    if (
+      isSubmitting ||
+      createInvoice.isPending ||
+      createCustomer.isPending ||
+      submitLockRef.current
+    ) {
       return;
     }
 
-    if (!addingCustomer && !selectedCustomerId) {
+    if (!hasCustomerContext) {
       toast.error(copy.toastChooseCustomer);
+      return;
+    }
+
+    const enteredInvoiceItems = invoiceItems.filter((item) =>
+      Boolean(
+        item.name.trim() ||
+          item.product_id ||
+          Number(item.quantity) > 1 ||
+          Number(item.price) > 0,
+      ),
+    );
+
+    const hasInvalidLineItems = enteredInvoiceItems.some(
+      (item) =>
+        !item.name.trim() ||
+        Number(item.quantity) <= 0 ||
+        Number(item.price) <= 0,
+    );
+
+    if (hasInvalidLineItems) {
+      toast.error(copy.toastFixLineItems);
+      return;
+    }
+
+    const hasMissingProductName = invoiceItems.some(
+      (item) =>
+        !item.name.trim() &&
+        (Number(item.quantity) > 0 || Number(item.price) > 0 || item.product_id),
+    );
+    if (hasMissingProductName) {
+      toast.error(copy.toastProductNameMissing);
       return;
     }
 
@@ -831,14 +1201,29 @@ const SimpleBillClient = ({
     }
 
     try {
+      submitLockRef.current = true;
       setIsSubmitting(true);
 
-      const customer = addingCustomer
-        ? await createCustomer.mutateAsync({
-            name: newCustomerName.trim(),
-            phone: newCustomerPhone.trim() || undefined,
-          })
-        : selectedCustomer;
+      let customer: Customer | null = selectedCustomer;
+
+      if (!customer && addingCustomer && newCustomerName.trim()) {
+        customer = await createCustomer.mutateAsync({
+          name: newCustomerName.trim(),
+          phone: newCustomerPhone.trim() || undefined,
+        });
+      }
+
+      if (!customer) {
+        const typedCustomerName = customerSearch.trim();
+        if (typedCustomerName) {
+          customer = await createCustomer.mutateAsync({
+            name: typedCustomerName,
+          });
+          selectCustomer(customer);
+        } else {
+          customer = await ensureWalkInCustomer();
+        }
+      }
 
       if (!customer) {
         toast.error(copy.toastChooseCustomer);
@@ -871,17 +1256,93 @@ const SimpleBillClient = ({
       setAddingCustomer(false);
       setNewCustomerName("");
       setNewCustomerPhone("");
+      setGeneratedInvoice(createdInvoice);
+      setPreviewOpen(true);
       toast.success(copy.toastBillGenerated);
-      router.push(`/invoices/history/${createdInvoice.id}`);
+      window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
+      router.refresh();
     } catch {
       toast.error(copy.toastGenerateError);
     } finally {
+      submitLockRef.current = false;
       setIsSubmitting(false);
     }
   };
 
-  const handlePreviewBill = () => {
-    setPreviewOpen(true);
+  const handleCreateNewBill = useCallback(() => {
+    setInvoiceDate(todayInputValue());
+    setCustomerSearch("");
+    setSelectedCustomerId(null);
+    setCreatedCustomer(null);
+    setAddingCustomer(false);
+    setNewCustomerName("");
+    setNewCustomerPhone("");
+    setItems([createItem(INITIAL_ITEM_ID)]);
+    setDiscount("");
+    setDiscountMode("AMOUNT");
+    setPayment("CASH");
+    setGstEnabled(false);
+    setNotes("");
+    setGeneratedInvoice(null);
+    setPreviewOpen(false);
+    setFocusedItemId(null);
+    window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
+    toast.success(copy.toastNewBillReady);
+  }, [copy.toastNewBillReady]);
+
+  const handlePrintBill = () => {
+    if (!generatedInvoice) {
+      toast.error(copy.toastGenerateBeforePrint);
+      return;
+    }
+
+    if (!hasCustomerContext) {
+      toast.error(copy.toastSelectCustomerFirst);
+      return;
+    }
+
+    if (validItems.length === 0) {
+      toast.error(copy.toastAddItem);
+      return;
+    }
+
+    window.print();
+    toast.success(copy.toastPrintReady);
+  };
+
+  const handleDownloadBill = async () => {
+    if (!generatedInvoice) {
+      toast.error(copy.toastGenerateBeforePrint);
+      return;
+    }
+
+    if (!hasCustomerContext) {
+      toast.error(copy.toastSelectCustomerFirst);
+      return;
+    }
+
+    if (validItems.length === 0) {
+      toast.error(copy.toastAddItem);
+      return;
+    }
+
+    try {
+      await downloadPdf({
+        previewPayload: {
+          templateId: activeTemplate.templateId,
+          templateName: activeTemplate.templateName,
+          data: invoicePreviewData,
+          enabledSections: activeEnabledSections,
+          sectionOrder: activeSectionOrder,
+          theme: activeTheme,
+          designConfig: activeDesignConfig,
+        },
+        fileName: `${generatedInvoice.invoice_number || invoicePreviewData.invoiceNumber || "bill"}.pdf`,
+      });
+      toast.success(copy.toastPdfDownloaded);
+    } catch {
+      toast.error(copy.toastPdfError);
+    }
   };
 
   return (
@@ -891,533 +1352,421 @@ const SimpleBillClient = ({
       title={copy.pageTitle}
       subtitle={copy.pageSubtitle}
     >
-      <div className="mx-auto grid w-full max-w-[100rem] gap-5">
-        <section className="rounded-lg bg-card/80 px-4 py-3 shadow-[0_14px_36px_-34px_rgba(15,23,42,0.45)] ring-1 ring-border/35 sm:px-5">
-          <div className="grid gap-3 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
+      <div className="mx-auto grid w-full max-w-5xl gap-5">
+        <section className="rounded-2xl bg-card/92 p-5 ring-1 ring-border/55">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
             <div>
-              <p className="text-sm font-semibold text-foreground">
-                Create bill in seconds - type or select
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Add customer, add items, preview if needed, then generate.
+              <p className="text-base font-semibold text-foreground">{copy.guidedTitle}</p>
+              <p className="mt-1 text-sm text-muted-foreground">{copy.guidedDescription}</p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {isHindi
+                  ? "बिल नंबर सेव करते समय अपने आप बनेगा"
+                  : "Bill number is generated automatically when you save."}
               </p>
             </div>
-
-            <div className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 px-3 py-2 text-sm font-medium text-foreground">
-              <span>Invoice number generated on save</span>
-              <span className="text-muted-foreground">|</span>
+            <div className="grid gap-2">
+              <Label htmlFor="simple-invoice-date">
+                {isHindi ? "बिल तारीख" : "Bill Date"}
+              </Label>
               <Input
                 id="simple-invoice-date"
                 type="date"
                 aria-label="Bill date"
                 value={invoiceDate}
                 onChange={(event) => setInvoiceDate(event.target.value)}
-                className="h-9 w-[9.5rem] bg-background/80 text-sm"
+                className="h-11"
               />
-            </div>
-
-            <div className="grid gap-3 sm:grid-cols-[auto_1fr] sm:items-end">
-              <button
+              <Button
                 type="button"
-                className={`h-12 rounded-lg px-4 text-sm font-semibold transition ${
-                  gstEnabled
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
-                }`}
-                onClick={() => setGstEnabled((current) => !current)}
+                variant="outline"
+                size="lg"
+                className="h-12 text-base font-semibold"
+                onClick={handleCreateNewBill}
               >
-                GST {gstEnabled ? "On" : "Off"}
-              </button>
-              <div className="grid gap-2">
-                <Label htmlFor="simple-notes">Notes</Label>
-                <Input
-                  id="simple-notes"
-                  value={notes}
-                  onChange={(event) => setNotes(event.target.value)}
-                  className="h-12 text-base"
-                  placeholder="Optional"
-                />
+                {copy.resetNewBill}
+              </Button>
+            </div>
+          </div>
+
+          {isInitialLoading ? (
+            <p className="mt-3 text-sm text-muted-foreground">{copy.loadingHint}</p>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl bg-card/92 p-5 ring-1 ring-border/55">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-lg font-semibold text-foreground">{copy.stepCustomer}</h3>
+            <p className="text-sm text-muted-foreground">
+              {isHindi
+                ? "नाम या फोन लिखें और ग्राहक चुनें।"
+                : "Type name/phone and choose customer."}
+            </p>
+          </div>
+
+          <div className="relative mt-4 grid gap-2">
+            <Label htmlFor="simple-customer">
+              {isHindi ? "ग्राहक नाम या फोन" : "Customer Name or Phone"}
+            </Label>
+            <Input
+              id="simple-customer"
+              value={customerSearch}
+              onFocus={() => setCustomerSuggestionsOpen(true)}
+              onBlur={() =>
+                window.setTimeout(() => setCustomerSuggestionsOpen(false), 120)
+              }
+              onChange={(event) => handleCustomerSearch(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && customerSuggestions[0]) {
+                  event.preventDefault();
+                  selectCustomer(customerSuggestions[0]);
+                }
+              }}
+              className="h-12 text-base"
+              placeholder={
+                isHindi
+                  ? "ग्राहक का नाम लिखना शुरू करें"
+                  : "Start typing customer name"
+              }
+            />
+            {customerSuggestionsOpen ? (
+              <div className="absolute left-0 right-0 top-19 z-20 overflow-hidden rounded-lg bg-popover shadow-[0_22px_50px_-30px_rgba(15,23,42,0.65)] ring-1 ring-border/70">
+                {customerSuggestions.length > 0 ? (
+                  customerSuggestions.map((customer) => (
+                    <button
+                      key={customer.id}
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition hover:bg-accent/70"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => selectCustomer(customer)}
+                    >
+                      <span className="font-semibold text-foreground">{customer.name}</span>
+                      {customer.phone ? (
+                        <span className="text-muted-foreground">{customer.phone}</span>
+                      ) : null}
+                    </button>
+                  ))
+                ) : (
+                  <p className="px-4 py-3 text-sm text-muted-foreground">
+                    {isHindi ? "कोई सेव ग्राहक नहीं मिला" : "No saved customer found"}
+                  </p>
+                )}
               </div>
+            ) : null}
+          </div>
+
+          <p className="mt-3 text-xs text-muted-foreground">{copy.customerAutoHint}</p>
+        </section>
+
+        <section className="rounded-2xl bg-card/92 p-5 ring-1 ring-border/55">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">{copy.stepProducts}</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {isHindi
+                  ? "प्रोडक्ट का नाम, मात्रा और कीमत डालें।"
+                  : "Add product name, quantity, and price."}
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="lg"
+              className="h-11 font-semibold"
+              disabled={productsLocked}
+              onClick={() => addItemAfter()}
+            >
+              <Plus size={16} />
+              {copy.addItem}
+            </Button>
+          </div>
+
+          {productsLocked ? (
+            <div className="mt-4 rounded-lg bg-muted/45 px-4 py-3 text-sm text-muted-foreground">
+              {copy.customerRequiredHint}
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid gap-3">
+            {items.length === 1 && !items[0]?.name.trim() ? (
+              <div className="rounded-lg bg-muted/35 px-4 py-3 text-sm text-muted-foreground">
+                {isHindi ? "पहला प्रोडक्ट जोड़ें" : "Start by adding a product"}
+              </div>
+            ) : null}
+
+            {!productsLocked &&
+              items.map((item, index) => {
+                const lineTotal = toQuantity(item.quantity) * toAmount(item.price);
+                const suggestions = getProductSuggestions(item.name);
+                const hasExactProductMatch = products.some(
+                  (product) =>
+                    product.name.toLowerCase() === item.name.trim().toLowerCase(),
+                );
+
+                return (
+                  <div
+                    key={item.id}
+                    className="grid min-w-0 gap-3 rounded-lg bg-background/80 p-3 ring-1 ring-border/45"
+                  >
+                    <div className="relative grid min-w-0 gap-2">
+                      <Label htmlFor={`simple-item-${item.id}`} className="whitespace-nowrap">
+                        {isHindi ? "प्रोडक्ट नाम" : "Product Name"}
+                      </Label>
+                      <Input
+                        id={`simple-item-${item.id}`}
+                        ref={(node) => {
+                          itemNameRefs.current[item.id] = node;
+                        }}
+                        value={item.name}
+                        onFocus={() => setFocusedItemId(item.id)}
+                        onBlur={() => {
+                          window.setTimeout(() => {
+                            setFocusedItemId((current) =>
+                              current === item.id ? null : current,
+                            );
+                          }, 120);
+                        }}
+                        onChange={(event) =>
+                          handleItemNameChange(item.id, event.target.value)
+                        }
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") {
+                            event.preventDefault();
+                            itemQuantityRefs.current[item.id]?.focus();
+                          }
+                        }}
+                        className="h-12 text-base"
+                        placeholder={
+                          index === 0
+                            ? isHindi
+                              ? "प्रोडक्ट नाम लिखें"
+                              : "Type product name"
+                            : isHindi
+                              ? "प्रोडक्ट नाम"
+                              : "Product name"
+                        }
+                      />
+                      {focusedItemId === item.id ? (
+                        <div className="absolute left-0 right-0 top-19 z-10 overflow-hidden rounded-lg bg-popover shadow-[0_22px_50px_-30px_rgba(15,23,42,0.65)] ring-1 ring-border/70">
+                          {suggestions.length > 0 ? (
+                            suggestions.map((product) => (
+                              <button
+                                key={product.id}
+                                type="button"
+                                className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition hover:bg-accent/70"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => {
+                                  selectProductForItem(item.id, product);
+                                  window.setTimeout(
+                                    () => itemQuantityRefs.current[item.id]?.focus(),
+                                    0,
+                                  );
+                                }}
+                              >
+                                <span className="font-semibold text-foreground">{product.name}</span>
+                                <span className="text-muted-foreground">
+                                  {formatMoney(Number(product.price) || 0)}
+                                </span>
+                              </button>
+                            ))
+                          ) : (
+                            <p className="px-4 py-3 text-sm text-muted-foreground">
+                              {isHindi ? "कोई सेव प्रोडक्ट नहीं मिला" : "No saved product found"}
+                            </p>
+                          )}
+                          {item.name.trim() && !hasExactProductMatch ? (
+                            <button
+                              type="button"
+                              className="flex w-full items-center gap-2 border-t border-border/60 px-4 py-3 text-left text-sm font-semibold text-primary transition hover:bg-primary/5"
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                updateItem(item.id, {
+                                  name: item.name.trim(),
+                                  productId: undefined,
+                                });
+                                itemQuantityRefs.current[item.id]?.focus();
+                              }}
+                            >
+                              <Plus size={16} />
+                              {isHindi
+                                ? `\"${item.name.trim()}\" जोड़ें`
+                                : `Add \"${item.name.trim()}\"`}
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-[7rem_8rem_minmax(0,1fr)_auto] sm:items-end">
+                      <div className="grid min-w-0 gap-2">
+                        <Label htmlFor={`simple-qty-${item.id}`} className="whitespace-nowrap">
+                          {isHindi ? "मात्रा" : "Quantity"}
+                        </Label>
+                        <Input
+                          id={`simple-qty-${item.id}`}
+                          ref={(node) => {
+                            itemQuantityRefs.current[item.id] = node;
+                          }}
+                          value={item.quantity}
+                          onChange={(event) =>
+                            updateItem(item.id, {
+                              quantity: event.target.value.replace(/[^\d.]/g, ""),
+                            })
+                          }
+                          onFocus={(event) => event.target.select()}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              itemPriceRefs.current[item.id]?.focus();
+                            }
+                          }}
+                          className="h-12 text-base"
+                          inputMode="decimal"
+                        />
+                      </div>
+                      <div className="grid min-w-0 gap-2">
+                        <Label htmlFor={`simple-price-${item.id}`} className="whitespace-nowrap">
+                          {isHindi ? "कीमत" : "Price"}
+                        </Label>
+                        <Input
+                          id={`simple-price-${item.id}`}
+                          ref={(node) => {
+                            itemPriceRefs.current[item.id] = node;
+                          }}
+                          value={item.price}
+                          onChange={(event) =>
+                            updateItem(item.id, {
+                              price: event.target.value.replace(/[^\d.]/g, ""),
+                            })
+                          }
+                          onFocus={(event) => event.target.select()}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.preventDefault();
+                              addItemAfter(item.id);
+                            }
+                          }}
+                          className="h-12 text-base"
+                          inputMode="decimal"
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="min-w-0 rounded-lg bg-muted/45 px-3 py-3">
+                        <p className="text-xs font-medium text-muted-foreground">
+                          {isHindi ? "लाइन टोटल" : "Line Total"}
+                        </p>
+                        <p className="mt-1 text-base font-semibold text-foreground">
+                          {formatMoney(lineTotal)}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="justify-self-end self-end"
+                        aria-label="Remove item"
+                        onClick={() => removeItem(item.id)}
+                      >
+                        <Trash2 size={16} />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </section>
+
+        <section className="rounded-2xl bg-card/95 p-5 ring-1 ring-border/55">
+          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)] md:items-center">
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">{copy.totalAmountLabel}</p>
+              <p className="mt-1 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+                {formatMoney(totals.total)}
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {t("invoiceComposer.lineItemsCount", { count: validItems.length })}
+              </p>
+            </div>
+            <div className="grid gap-2">
+              <Button
+                type="button"
+                size="lg"
+                className="h-12 w-full bg-slate-900 text-base font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+                disabled={
+                  isSubmitting ||
+                  createInvoice.isPending ||
+                  createCustomer.isPending ||
+                  !canGenerateBill
+                }
+                onClick={() => void handleGenerateBill()}
+              >
+                <ReceiptText size={18} />
+                {isSubmitting ? copy.generatingBill : copy.generateAndSaveBill}
+              </Button>
+
+              {generatedInvoice ? (
+                <div className="rounded-xl border border-border/70 bg-background/70 p-3">
+                  <p className="text-sm font-semibold text-foreground">{copy.nextStepsTitle}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {copy.nextStepsDescription.replace(
+                      "{invoiceNumber}",
+                      generatedInvoice.invoice_number,
+                    )}
+                  </p>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handleDownloadBill()}
+                    >
+                      <Download size={16} />
+                      {copy.downloadPdf}
+                    </Button>
+                    <Button type="button" variant="outline" onClick={handlePrintBill}>
+                      <Printer size={16} />
+                      {copy.printBill}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleCreateNewBill}
+                    >
+                      <Plus size={16} />
+                      {copy.newBill}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
 
-        <section className="grid gap-5 xl:grid-cols-[minmax(340px,0.85fr)_minmax(0,1.15fr)_minmax(280px,0.5fr)] xl:items-start">
-          <div className="grid min-w-0 gap-5">
-            <section className="rounded-lg bg-card/90 p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.5)] ring-1 ring-border/45 sm:p-5">
-              <div className="flex flex-col gap-1">
-                <h3 className="text-lg font-semibold text-foreground">
-                  Customer
-                </h3>
-                <p className="text-sm text-muted-foreground">
-                  Type or select. Both work.
+        <section className="rounded-2xl bg-card/92 p-5 ring-1 ring-border/55">
+          <h3 className="text-lg font-semibold text-foreground">{copy.billPreviewTitle}</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{copy.previewHint}</p>
+
+          {generatedInvoice ? (
+            <div className="mt-3 flex flex-col gap-3 rounded-xl border border-emerald-300/60 bg-emerald-50/70 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-800/70 dark:bg-emerald-950/20">
+              <div>
+                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">
+                  {copy.previewSuccessTitle}
+                </p>
+                <p className="mt-0.5 text-xs text-emerald-700/90 dark:text-emerald-300/90">
+                  {copy.previewSuccessDescription.replace(
+                    "{invoiceNumber}",
+                    generatedInvoice.invoice_number,
+                  )}
                 </p>
               </div>
-
-              <div className="relative mt-4 grid gap-2">
-                <Label htmlFor="simple-customer">Customer Name or Phone</Label>
-                <Input
-                  id="simple-customer"
-                  value={customerSearch}
-                  onFocus={() => setCustomerSuggestionsOpen(true)}
-                  onBlur={() =>
-                    window.setTimeout(
-                      () => setCustomerSuggestionsOpen(false),
-                      120,
-                    )
-                  }
-                  onChange={(event) => handleCustomerSearch(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && customerSuggestions[0]) {
-                      event.preventDefault();
-                      selectCustomer(customerSuggestions[0]);
-                    }
-                  }}
-                  className="h-12 text-base"
-                  placeholder="Start typing customer name"
-                />
-                {customerSuggestionsOpen ? (
-                  <div className="absolute left-0 right-0 top-[4.75rem] z-20 overflow-hidden rounded-lg bg-popover shadow-[0_22px_50px_-30px_rgba(15,23,42,0.65)] ring-1 ring-border/70">
-                    {customerSuggestions.length > 0 ? (
-                      customerSuggestions.map((customer) => (
-                        <button
-                          key={customer.id}
-                          type="button"
-                          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition hover:bg-accent/70"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => selectCustomer(customer)}
-                        >
-                          <span className="font-semibold text-foreground">
-                            {customer.name}
-                          </span>
-                          {customer.phone ? (
-                            <span className="text-muted-foreground">
-                              {customer.phone}
-                            </span>
-                          ) : null}
-                        </button>
-                      ))
-                    ) : (
-                      <p className="px-4 py-3 text-sm text-muted-foreground">
-                        No saved customer found
-                      </p>
-                    )}
-                    {customerSearch.trim() && !hasExactCustomerMatch ? (
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2 border-t border-border/60 px-4 py-3 text-left text-sm font-semibold text-primary transition hover:bg-primary/5"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => startAddCustomer(customerSearch)}
-                      >
-                        <Plus size={16} />
-                        Add &quot;{customerSearch.trim()}&quot; as new customer
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="mt-3">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => startAddCustomer(customerSearch)}
-                >
-                  <Plus size={16} />
-                  Add New
-                </Button>
-              </div>
-
-              {addingCustomer ? (
-                <div className="mt-4 grid gap-3 rounded-lg bg-muted/35 p-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                  <div className="grid gap-2">
-                    <Label htmlFor="simple-new-customer-name">Name</Label>
-                    <Input
-                      id="simple-new-customer-name"
-                      value={newCustomerName}
-                      onChange={(event) =>
-                        setNewCustomerName(event.target.value)
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          newCustomerPhoneRef.current?.focus();
-                        }
-                      }}
-                      className="h-12 text-base"
-                      placeholder="Customer name"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="simple-new-customer-phone">Phone</Label>
-                    <Input
-                      id="simple-new-customer-phone"
-                      ref={newCustomerPhoneRef}
-                      value={newCustomerPhone}
-                      onChange={(event) =>
-                        setNewCustomerPhone(
-                          event.target.value.replace(/[^\d]/g, ""),
-                        )
-                      }
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void handleQuickAddCustomer();
-                        }
-                      }}
-                      className="h-12 text-base"
-                      placeholder="Phone number"
-                      inputMode="tel"
-                    />
-                  </div>
-                  <Button
-                    type="button"
-                    className="h-12"
-                    disabled={createCustomer.isPending}
-                    onClick={() => void handleQuickAddCustomer()}
-                  >
-                    {copy.useCustomer}
-                  </Button>
-                </div>
-              ) : null}
-            </section>
-
-            <section className="rounded-lg bg-card/90 p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.5)] ring-1 ring-border/45 sm:p-5">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground">
-                    Items
-                  </h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Search saved products or type the item name directly.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={loadLastBill}
-                  >
-                    <RotateCcw size={16} />
-                    {copy.repeatLastBill}
-                  </Button>
-                  <Button type="button" onClick={() => addItemAfter()}>
-                    <Plus size={16} />
-                    {copy.addItem}
-                  </Button>
-                </div>
-              </div>
-
-              {frequentProducts.length > 0 ? (
-                <div className="mt-4 flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                    Frequent
-                  </span>
-                  {frequentProducts.map((product) => (
-                    <button
-                      key={product.id}
-                      type="button"
-                      className="rounded-lg bg-primary/10 px-3 py-2 text-sm font-semibold text-primary ring-1 ring-primary/15 transition hover:bg-primary hover:text-primary-foreground hover:shadow-sm"
-                      onClick={() => {
-                        const target =
-                          items.find((item) => !item.name.trim()) ??
-                          items[items.length - 1];
-                        if (!target) return;
-                        selectProductForItem(target.id, product);
-                        window.setTimeout(
-                          () => itemQuantityRefs.current[target.id]?.focus(),
-                          0,
-                        );
-                      }}
-                    >
-                      {product.name}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-
-              <div className="mt-4 grid gap-3">
-                {items.length === 1 && !items[0]?.name.trim() ? (
-                  <div className="rounded-lg bg-muted/35 px-4 py-3 text-sm text-muted-foreground">
-                    Start by adding an item
-                  </div>
-                ) : null}
-
-                {items.map((item, index) => {
-                  const lineTotal =
-                    toQuantity(item.quantity) * toAmount(item.price);
-                  const suggestions = getProductSuggestions(item.name);
-                  const hasExactProductMatch = products.some(
-                    (product) =>
-                      product.name.toLowerCase() ===
-                      item.name.trim().toLowerCase(),
-                  );
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="grid min-w-0 gap-3 rounded-lg bg-background/80 p-3 shadow-[0_14px_34px_-30px_rgba(15,23,42,0.55)] ring-1 ring-border/45 animate-in fade-in slide-in-from-bottom-1 duration-200"
-                    >
-                      <div className="relative grid min-w-0 gap-2">
-                        <Label
-                          htmlFor={`simple-item-${item.id}`}
-                          className="whitespace-nowrap"
-                        >
-                          Product Name
-                        </Label>
-                        <Input
-                          id={`simple-item-${item.id}`}
-                          ref={(node) => {
-                            itemNameRefs.current[item.id] = node;
-                          }}
-                          value={item.name}
-                          onFocus={() => setFocusedItemId(item.id)}
-                          onBlur={() => {
-                            window.setTimeout(() => {
-                              setFocusedItemId((current) =>
-                                current === item.id ? null : current,
-                              );
-                            }, 120);
-                          }}
-                          onChange={(event) =>
-                            handleItemNameChange(item.id, event.target.value)
-                          }
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              itemQuantityRefs.current[item.id]?.focus();
-                            }
-                          }}
-                          className="h-12 text-base"
-                          placeholder={
-                            index === 0
-                              ? "Type product name (or select)"
-                              : "Type product name"
-                          }
-                        />
-                        {focusedItemId === item.id ? (
-                          <div className="absolute left-0 right-0 top-[4.75rem] z-10 overflow-hidden rounded-lg bg-popover shadow-[0_22px_50px_-30px_rgba(15,23,42,0.65)] ring-1 ring-border/70">
-                            {suggestions.length > 0 ? (
-                              suggestions.map((product) => (
-                                <button
-                                  key={product.id}
-                                  type="button"
-                                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-sm transition hover:bg-accent/70"
-                                  onMouseDown={(event) =>
-                                    event.preventDefault()
-                                  }
-                                  onClick={() => {
-                                    selectProductForItem(item.id, product);
-                                    window.setTimeout(
-                                      () =>
-                                        itemQuantityRefs.current[
-                                          item.id
-                                        ]?.focus(),
-                                      0,
-                                    );
-                                  }}
-                                >
-                                  <span className="font-semibold text-foreground">
-                                    {product.name}
-                                  </span>
-                                  <span className="text-muted-foreground">
-                                    {formatMoney(Number(product.price) || 0)}
-                                  </span>
-                                </button>
-                              ))
-                            ) : (
-                              <p className="px-4 py-3 text-sm text-muted-foreground">
-                                No saved product found
-                              </p>
-                            )}
-                            {item.name.trim() && !hasExactProductMatch ? (
-                              <button
-                                type="button"
-                                className="flex w-full items-center gap-2 border-t border-border/60 px-4 py-3 text-left text-sm font-semibold text-primary transition hover:bg-primary/5"
-                                onMouseDown={(event) => event.preventDefault()}
-                                onClick={() => {
-                                  updateItem(item.id, {
-                                    name: item.name.trim(),
-                                    productId: undefined,
-                                  });
-                                  itemQuantityRefs.current[item.id]?.focus();
-                                }}
-                              >
-                                <Plus size={16} />
-                                Add &quot;{item.name.trim()}&quot; as new
-                                product
-                              </button>
-                            ) : null}
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className="grid min-w-0 gap-3 sm:grid-cols-[7rem_8rem_minmax(0,1fr)_auto] sm:items-end">
-                        <div className="grid min-w-0 gap-2">
-                          <Label
-                            htmlFor={`simple-qty-${item.id}`}
-                            className="whitespace-nowrap"
-                          >
-                            Quantity
-                          </Label>
-                          <Input
-                            id={`simple-qty-${item.id}`}
-                            ref={(node) => {
-                              itemQuantityRefs.current[item.id] = node;
-                            }}
-                            value={item.quantity}
-                            onChange={(event) =>
-                              updateItem(item.id, {
-                                quantity: event.target.value.replace(
-                                  /[^\d.]/g,
-                                  "",
-                                ),
-                              })
-                            }
-                            onFocus={(event) => event.target.select()}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault();
-                                itemPriceRefs.current[item.id]?.focus();
-                              }
-                            }}
-                            className="h-12 text-base"
-                            inputMode="decimal"
-                          />
-                        </div>
-                        <div className="grid min-w-0 gap-2">
-                          <Label
-                            htmlFor={`simple-price-${item.id}`}
-                            className="whitespace-nowrap"
-                          >
-                            Price
-                          </Label>
-                          <Input
-                            id={`simple-price-${item.id}`}
-                            ref={(node) => {
-                              itemPriceRefs.current[item.id] = node;
-                            }}
-                            value={item.price}
-                            onChange={(event) =>
-                              updateItem(item.id, {
-                                price: event.target.value.replace(
-                                  /[^\d.]/g,
-                                  "",
-                                ),
-                              })
-                            }
-                            onFocus={(event) => event.target.select()}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault();
-                                addItemAfter(item.id);
-                              }
-                            }}
-                            className="h-12 text-base"
-                            inputMode="decimal"
-                            placeholder="0"
-                          />
-                        </div>
-                        <div className="min-w-0 rounded-lg bg-muted/45 px-3 py-3 transition-colors duration-200">
-                          <p className="text-xs font-medium text-muted-foreground">
-                            Total
-                          </p>
-                          <p className="mt-1 text-base font-semibold text-foreground transition-all duration-200">
-                            {formatMoney(lineTotal)}
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="justify-self-end self-end"
-                          aria-label="Remove item"
-                          onClick={() => removeItem(item.id)}
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="rounded-lg bg-card/90 p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.5)] ring-1 ring-border/45 sm:p-5">
-              <h3 className="text-lg font-semibold text-foreground">Payment</h3>
-              <div className="mt-4 grid gap-2">
-                <Label htmlFor="simple-payment">Payment Method</Label>
-                <select
-                  id="simple-payment"
-                  value={payment}
-                  onChange={(event) =>
-                    setPayment(event.target.value as PaymentChoice)
-                  }
-                  className="app-field h-12 w-full rounded-lg px-3 text-base text-foreground outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
-                >
-                  <option value="CASH">Cash</option>
-                  <option value="UPI">UPI</option>
-                  <option value="ONLINE">Online</option>
-                </select>
-              </div>
-              <div className="mt-4 grid gap-2">
-                <Label htmlFor="simple-discount">Discount</Label>
-                <div className="grid grid-cols-[1fr_auto] gap-2">
-                  <Input
-                    id="simple-discount"
-                    value={discount}
-                    onChange={(event) =>
-                      setDiscount(event.target.value.replace(/[^\d.]/g, ""))
-                    }
-                    className="h-12 text-base"
-                    placeholder="Discount (₹ or %)"
-                    inputMode="decimal"
-                  />
-                  <div className="flex rounded-lg bg-muted p-1">
-                    {(["AMOUNT", "PERCENT"] as DiscountMode[]).map((mode) => (
-                      <button
-                        key={mode}
-                        type="button"
-                        className={`h-10 min-w-10 rounded-md px-3 text-sm font-semibold transition ${
-                          discountMode === mode
-                            ? "bg-background text-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground"
-                        }`}
-                        onClick={() => setDiscountMode(mode)}
-                      >
-                        {mode === "AMOUNT" ? "₹" : "%"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="grid gap-3 rounded-lg bg-card/90 p-4 shadow-[0_18px_45px_-34px_rgba(15,23,42,0.5)] ring-1 ring-border/45 xl:hidden">
               <Button
                 type="button"
-                size="lg"
                 variant="outline"
-                className="h-12 justify-start text-base font-semibold"
-                onClick={handlePreviewBill}
+                className="w-full sm:w-auto"
+                onClick={() => router.push(`/invoices/history/${generatedInvoice.id}`)}
               >
-                <Eye size={18} />
-                {copy.previewBill}
+                {copy.viewInHistory}
               </Button>
-              <Button
-                type="button"
-                size="lg"
-                className="h-14 text-base font-semibold"
-                disabled={isSubmitting}
-                onClick={() => void handleGenerateBill()}
-              >
-                <ReceiptText size={18} />
-                {isSubmitting ? copy.generating : copy.generateBill}
-              </Button>
-            </section>
-          </div>
+            </div>
+          ) : null}
 
-          <div className="hidden min-w-0 xl:grid xl:self-start">
+          <div className="mt-4">
             <ExistingInvoicePreview
               data={invoicePreviewData}
               hasItems={validItems.length > 0}
@@ -1430,84 +1779,8 @@ const SimpleBillClient = ({
               emptyMessage={copy.previewEmpty}
             />
           </div>
-
-          <aside className="hidden min-w-0 xl:sticky xl:top-24 xl:grid xl:self-start">
-            <InvoiceTotals
-              totals={totals}
-              taxMode={taxMode}
-              discountValue={invoiceForm.discount}
-              discountType={invoiceForm.discount_type}
-              className="xl:max-w-[390px]"
-              action={
-                <div className="mt-6 grid gap-3">
-                  <Button
-                    type="button"
-                    size="lg"
-                    className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
-                    disabled={isSubmitting || validItems.length === 0}
-                    onClick={() => void handleGenerateBill()}
-                  >
-                    {isSubmitting
-                      ? copy.generating
-                      : t("invoiceComposer.checkout")}
-                  </Button>
-                  <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
-                    <span>
-                      {validItems.length === 0
-                        ? copy.readyHintEmpty
-                        : copy.readyHintDone}
-                    </span>
-                    <span className="font-semibold">
-                      {t("invoiceComposer.lineItemsCount", {
-                        count: validItems.length,
-                      })}
-                    </span>
-                  </div>
-                </div>
-              }
-            />
-          </aside>
         </section>
       </div>
-
-      <Modal
-        open={previewOpen}
-        onOpenChange={setPreviewOpen}
-        title={copy.billPreviewTitle}
-        description={copy.billPreviewDescription}
-        contentClassName="max-h-[92vh] overflow-y-auto sm:max-w-5xl"
-        footer={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPreviewOpen(false)}
-            >
-              {copy.closeLabel}
-            </Button>
-            <Button
-              type="button"
-              disabled={isSubmitting}
-              onClick={() => void handleGenerateBill()}
-            >
-              <ReceiptText size={16} />
-              {isSubmitting ? copy.generating : copy.generateBill}
-            </Button>
-          </>
-        }
-      >
-        <ExistingInvoicePreview
-          data={invoicePreviewData}
-          hasItems={validItems.length > 0}
-          templateId={activeTemplate.templateId}
-          templateName={activeTemplate.templateName}
-          enabledSections={activeEnabledSections}
-          sectionOrder={activeSectionOrder}
-          theme={activeTheme}
-          designConfig={activeDesignConfig}
-          emptyMessage={copy.previewEmpty}
-        />
-      </Modal>
     </DashboardLayout>
   );
 };

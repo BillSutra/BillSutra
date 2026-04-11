@@ -4,8 +4,10 @@ import {
   fetchCashInflowSnapshot,
   getDailyExpenses,
 } from "../../services/dashboardAnalyticsService.js";
+import { emitDashboardUpdate } from "../../services/dashboardRealtime.js";
 import { buildFinancialCopilot } from "../copilot/copilot.service.js";
 import { formatCopilotCurrency } from "../copilot/copilot.language.js";
+import { createInvoice as createInvoiceRecord } from "../invoice/invoice.service.js";
 import {
   detectAssistantLanguage,
   type AssistantLanguage,
@@ -16,6 +18,9 @@ type AssistantIntent =
   | "total_sales"
   | "pending_payments"
   | "cashflow"
+  | "create_bill"
+  | "add_product"
+  | "smart_insights"
   | "top_spend"
   | "vendor_spend"
   | "budget_plan"
@@ -105,12 +110,71 @@ type AssistantParsedQuery = {
   usedHistory: boolean;
 };
 
+type AssistantActionType = "create_invoice" | "create_product";
+type AssistantActionStatus = "success" | "failed" | "noop";
+
+type AssistantAction = {
+  type: AssistantActionType;
+  status: AssistantActionStatus;
+  message: string;
+  resourceId?: number;
+  resourceLabel?: string;
+  route?: string;
+};
+
+type AssistantCopilotProductSuggestion = {
+  id: number;
+  name: string;
+  price: number;
+  gstRate: number;
+};
+
+type AssistantCopilotInvoiceItem = {
+  name: string;
+  quantity: number;
+  price: number;
+  gstRate: number | null;
+  source: "explicit" | "catalog" | "top_seller";
+};
+
+type AssistantCopilotInvoiceAutocomplete = {
+  customerName: string;
+  autoCompleted: boolean;
+  items: AssistantCopilotInvoiceItem[];
+};
+
+type AssistantCopilotGstRecommendation = {
+  rate: number;
+  reason: string;
+  confidence: "high" | "medium" | "low";
+};
+
+type AssistantCopilotInsight = {
+  title: string;
+  detail: string;
+  value?: string;
+};
+
+type AssistantCopilotPayload = {
+  productSuggestions?: AssistantCopilotProductSuggestion[];
+  invoiceAutocomplete?: AssistantCopilotInvoiceAutocomplete;
+  gstRecommendation?: AssistantCopilotGstRecommendation;
+  smartInsights?: AssistantCopilotInsight[];
+};
+
+type AssistantActionExecution = {
+  action: AssistantAction;
+  copilot?: AssistantCopilotPayload;
+};
+
 export type AssistantReply = {
   language: AssistantLanguage;
   intent: AssistantIntent;
   answer: string;
   highlights: Array<{ label: string; value: string }>;
   examples: string[];
+  action?: AssistantAction;
+  copilot?: AssistantCopilotPayload;
 };
 
 const SYNCED_INVOICE_NOTE_PATTERN = /Synced from invoice\s+/i;
@@ -162,6 +226,45 @@ const CASHFLOW_KEYWORDS = [
   "nakdi",
   "नकदी",
   "कैशफ्लो",
+];
+
+const CREATE_BILL_KEYWORDS = [
+  "create bill",
+  "make bill",
+  "new bill",
+  "generate bill",
+  "create invoice",
+  "make invoice",
+  "new invoice",
+  "bill bana",
+  "invoice bana",
+  "बिल बनाओ",
+  "इनवॉइस बनाओ",
+];
+
+const ADD_PRODUCT_KEYWORDS = [
+  "add product",
+  "create product",
+  "new product",
+  "product add",
+  "add item",
+  "product banao",
+  "product bana",
+  "प्रोडक्ट जोड़ो",
+  "प्रोडक्ट बनाओ",
+];
+
+const SMART_INSIGHT_KEYWORDS = [
+  "smart insight",
+  "smart insights",
+  "top selling",
+  "best selling",
+  "top seller",
+  "best seller",
+  "top product",
+  "सबसे ज्यादा बिकने",
+  "बेस्ट सेलिंग",
+  "टॉप सेलिंग",
 ];
 
 const SPEND_KEYWORDS = [
@@ -285,23 +388,51 @@ const FOLLOW_UP_KEYWORDS = [
 
 const HELP_EXAMPLES: Record<AssistantLanguage, string[]> = {
   en: [
+    "Create a bill for Ravi Kumar with 2 x Rice at ₹45",
+    "Add product Bread at ₹40 with GST 5",
+    "Show smart insights and top selling product",
+    "Show today's sales",
     "How much did I spend on Swiggy last month?",
     "What is my profit this month?",
     "Which category is taking most of my money?",
     "Can I afford ₹10,000 this month?",
   ],
   hi: [
+    "Ravi Kumar के लिए 2 x Rice @ ₹45 का bill बनाओ",
+    "Bread product ₹40 पर GST 5 के साथ जोड़ो",
+    "स्मार्ट insights दिखाओ और top selling product बताओ",
+    "आज की sales दिखाओ",
     "मैंने पिछले महीने Swiggy पर कितना खर्च किया?",
     "इस महीने मेरा profit कितना है?",
     "मेरा सबसे ज़्यादा पैसा किस category पर जा रहा है?",
     "क्या मैं इस महीने ₹10,000 afford कर सकता हूँ?",
   ],
   hinglish: [
+    "Ravi Kumar ke liye 2 x Rice @ ₹45 ka bill banao",
+    "Bread product ₹40 par GST 5 ke saath add karo",
+    "Smart insights dikhao aur top selling product batao",
+    "Aaj ki sales dikhao",
     "Maine last month Swiggy pe kitna spend kiya?",
     "Is month mera profit kitna hai?",
     "Mera sabse zyada paisa kis category pe ja raha hai?",
     "Main ₹10,000 afford kar sakta hoon kya?",
   ],
+};
+
+const ASSISTANT_ACTION_DEDUPE_WINDOW_MS = 8_000;
+const assistantRecentActions = new Map<
+  string,
+  {
+    at: number;
+    action: AssistantAction;
+  }
+>();
+
+const assistantDebugEnabled = process.env.NODE_ENV !== "production";
+
+const logAssistantDebug = (event: string, payload: Record<string, unknown>) => {
+  if (!assistantDebugEnabled) return;
+  console.info(`[assistant] ${event}`, payload);
 };
 
 const toNumber = (value: unknown) => Number(value ?? 0);
@@ -314,6 +445,156 @@ const roundMetric = (value: number, digits = 2) => {
 
 const normalizeText = (value: string) =>
   value.toLowerCase().replace(/\s+/g, " ").trim();
+
+const normalizeForActionKey = (value: string) =>
+  normalizeText(value).replace(/[^a-z0-9\u0900-\u097f ]/g, " ").replace(/\s+/g, " ").trim();
+
+const buildAssistantActionKey = (
+  userId: number,
+  intent: AssistantIntent,
+  message: string,
+) => `${userId}:${intent}:${normalizeForActionKey(message)}`;
+
+const pruneRecentAssistantActions = () => {
+  const threshold = Date.now() - ASSISTANT_ACTION_DEDUPE_WINDOW_MS;
+  for (const [key, entry] of assistantRecentActions.entries()) {
+    if (entry.at < threshold) {
+      assistantRecentActions.delete(key);
+    }
+  }
+};
+
+const getRecentAssistantAction = (key: string): AssistantAction | null => {
+  pruneRecentAssistantActions();
+  const entry = assistantRecentActions.get(key);
+  if (!entry) {
+    return null;
+  }
+
+  if (Date.now() - entry.at > ASSISTANT_ACTION_DEDUPE_WINDOW_MS) {
+    assistantRecentActions.delete(key);
+    return null;
+  }
+
+  return entry.action;
+};
+
+const rememberAssistantAction = (key: string, action: AssistantAction) => {
+  assistantRecentActions.set(key, { at: Date.now(), action });
+};
+
+const cleanActionEntity = (value: string) =>
+  value
+    .replace(/[?.,!]/g, " ")
+    .replace(
+      /\b(with|at|price|gst|for|to|today|tomorrow|this|last|month|week|bill|invoice|please|plz|and)\b.*$/i,
+      " ",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+const extractCustomerNameForBill = (message: string) => {
+  const quoted = message.match(/(?:for|to|customer)\s+["']([^"']{2,80})["']/i);
+  if (quoted?.[1]) {
+    const cleanedQuoted = cleanActionEntity(quoted[1]);
+    if (cleanedQuoted.length >= 2) return cleanedQuoted;
+  }
+
+  const direct = message.match(
+    /(?:for|to|customer)\s+([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s.&\-]{1,80})/i,
+  );
+  if (!direct?.[1]) {
+    return null;
+  }
+
+  const cleaned = cleanActionEntity(direct[1]);
+  return cleaned.length >= 2 ? cleaned : null;
+};
+
+type AssistantInvoiceItemCandidate = {
+  name: string;
+  quantity: number;
+  price: number;
+};
+
+const extractInvoiceItemsFromMessage = (
+  message: string,
+): AssistantInvoiceItemCandidate[] => {
+  const itemPattern =
+    /(\d+(?:\.\d+)?)?\s*(?:x|qty)?\s*([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s().&\-]{1,50}?)\s*(?:at|@)\s*(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?)/gi;
+  const items: AssistantInvoiceItemCandidate[] = [];
+
+  for (const match of message.matchAll(itemPattern)) {
+    const quantity = Math.max(1, Math.round(Number(match[1] ?? "1")));
+    const name = cleanActionEntity(match[2] ?? "");
+    const price = Number(match[3] ?? "0");
+
+    if (!name || !Number.isFinite(price) || price <= 0) {
+      continue;
+    }
+
+    items.push({
+      name,
+      quantity,
+      price,
+    });
+  }
+
+  return items;
+};
+
+const extractProductNameForCreate = (message: string) => {
+  const quoted = message.match(/["']([^"']{2,80})["']/);
+  if (quoted?.[1]) {
+    const cleanedQuoted = cleanActionEntity(quoted[1]);
+    if (cleanedQuoted.length >= 2) return cleanedQuoted;
+  }
+
+  const named = message.match(
+    /(?:add|create|new)\s+(?:a\s+)?product(?:\s+(?:named|called))?\s+([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s().&\-]{1,80})/i,
+  );
+  if (!named?.[1]) {
+    return null;
+  }
+
+  const cleaned = cleanActionEntity(named[1]);
+  return cleaned.length >= 2 ? cleaned : null;
+};
+
+const extractRequestedGstRate = (message: string) => {
+  if (hasKeyword(message, ["without gst", "no gst"])) {
+    return 0;
+  }
+
+  const numericMatch = message.match(
+    /(?:gst(?:\s*rate)?\s*|)(\d+(?:\.\d+)?)\s*%?\s*gst|gst(?:\s*rate)?\s*(\d+(?:\.\d+)?)/i,
+  );
+  const raw = numericMatch?.[1] ?? numericMatch?.[2] ?? null;
+  if (raw) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  if (hasKeyword(message, ["with gst", "gst"])) {
+    return 18;
+  }
+
+  return null;
+};
+
+const buildAssistantSku = (productName: string) => {
+  const base = productName
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 6);
+  const prefix = base || "ITEM";
+  const suffix = `${Date.now().toString().slice(-4)}${Math.floor(
+    Math.random() * 90 + 10,
+  )}`;
+  return `${prefix}-${suffix}`;
+};
 
 const startOfDayUtc = (date: Date) =>
   new Date(
@@ -550,6 +831,444 @@ const resolveAssistantPeriod = (message: string) => {
   } satisfies AssistantPeriod;
 };
 
+type AssistantTopSellingProduct = {
+  productId: number | null;
+  name: string;
+  quantity: number;
+  revenue: number;
+  gstRate: number | null;
+  stockOnHand: number | null;
+  unitPrice: number | null;
+};
+
+const GST_KEYWORD_HINTS: Array<{ rate: number; keywords: string[] }> = [
+  {
+    rate: 5,
+    keywords: [
+      "rice",
+      "atta",
+      "flour",
+      "milk",
+      "bread",
+      "dal",
+      "wheat",
+      "grocery",
+      "chai",
+      "tea",
+    ],
+  },
+  {
+    rate: 12,
+    keywords: ["medicine", "medicines", "pharma", "drug", "drugs"],
+  },
+  {
+    rate: 18,
+    keywords: [
+      "mobile",
+      "charger",
+      "cable",
+      "electronics",
+      "laptop",
+      "service",
+      "consulting",
+    ],
+  },
+  {
+    rate: 28,
+    keywords: ["cigarette", "tobacco", "perfume", "luxury", "car"],
+  },
+];
+
+const inferGstRateFromKeywords = (productName: string) => {
+  const normalized = normalizeText(productName);
+  if (!normalized) {
+    return null;
+  }
+
+  for (const band of GST_KEYWORD_HINTS) {
+    if (band.keywords.some((keyword) => normalized.includes(keyword))) {
+      return band.rate;
+    }
+  }
+
+  return null;
+};
+
+const buildGstRecommendation = async (params: {
+  userId: number;
+  productName: string;
+  language: AssistantLanguage;
+}): Promise<AssistantCopilotGstRecommendation> => {
+  const exact = await prisma.product.findFirst({
+    where: {
+      user_id: params.userId,
+      name: {
+        equals: params.productName,
+        mode: "insensitive",
+      },
+    },
+    select: {
+      name: true,
+      gst_rate: true,
+    },
+  });
+
+  if (exact) {
+    const rate = roundMetric(toNumber(exact.gst_rate), 2);
+    return {
+      rate,
+      confidence: "high",
+      reason:
+        params.language === "hi"
+          ? `${exact.name} के existing catalog data से GST लिया गया है।`
+          : params.language === "hinglish"
+            ? `${exact.name} ke existing catalog data se GST liya gaya hai.`
+            : `GST is based on existing catalog data for ${exact.name}.`,
+    };
+  }
+
+  const tokens = normalizeText(params.productName)
+    .split(" ")
+    .filter((token) => token.length >= 3)
+    .slice(0, 3);
+
+  if (tokens.length > 0) {
+    const similarProducts = await prisma.product.findMany({
+      where: {
+        user_id: params.userId,
+        OR: tokens.map((token) => ({
+          name: {
+            contains: token,
+            mode: "insensitive",
+          },
+        })),
+      },
+      select: {
+        gst_rate: true,
+      },
+      take: 40,
+    });
+
+    const bands = new Map<string, { rate: number; count: number }>();
+    for (const product of similarProducts) {
+      const rate = roundMetric(toNumber(product.gst_rate), 2);
+      if (!Number.isFinite(rate) || rate < 0 || rate > 28) {
+        continue;
+      }
+
+      const key = rate.toFixed(2);
+      const current = bands.get(key) ?? { rate, count: 0 };
+      current.count += 1;
+      bands.set(key, current);
+    }
+
+    const topBand = [...bands.values()].sort((left, right) => {
+      if (right.count === left.count) {
+        return left.rate - right.rate;
+      }
+
+      return right.count - left.count;
+    })[0];
+
+    if (topBand) {
+      return {
+        rate: topBand.rate,
+        confidence: "medium",
+        reason:
+          params.language === "hi"
+            ? "मिलते-जुलते products के आधार पर GST suggest किया गया है।"
+            : params.language === "hinglish"
+              ? "Milte-julte products ke basis par GST suggest kiya gaya hai."
+              : "GST is suggested from similar products in your catalog.",
+      };
+    }
+  }
+
+  const keywordRate = inferGstRateFromKeywords(params.productName);
+  if (keywordRate != null) {
+    return {
+      rate: keywordRate,
+      confidence: "medium",
+      reason:
+        params.language === "hi"
+          ? "Product type keywords के आधार पर GST suggest किया गया है।"
+          : params.language === "hinglish"
+            ? "Product type keywords ke basis par GST suggest kiya gaya hai."
+            : "GST is suggested from product-type keywords.",
+    };
+  }
+
+  return {
+    rate: 18,
+    confidence: "low",
+    reason:
+      params.language === "hi"
+        ? "Specific match नहीं मिला, इसलिए default GST 18% suggest किया गया।"
+        : params.language === "hinglish"
+          ? "Specific match nahi mila, isliye default GST 18% suggest kiya gaya."
+          : "No clear match found, so default GST 18% is suggested.",
+  };
+};
+
+const searchProductSuggestions = async (params: {
+  userId: number;
+  message: string;
+  limit?: number;
+}): Promise<AssistantCopilotProductSuggestion[]> => {
+  const tokens = normalizeText(params.message)
+    .split(/[^a-z0-9\u0900-\u097f]+/i)
+    .filter((token) => token.length >= 2)
+    .slice(0, 4);
+
+  if (tokens.length === 0) {
+    return [];
+  }
+
+  const candidates = await prisma.product.findMany({
+    where: {
+      user_id: params.userId,
+      OR: tokens.map((token) => ({
+        name: {
+          contains: token,
+          mode: "insensitive",
+        },
+      })),
+    },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      gst_rate: true,
+    },
+    take: 30,
+  });
+
+  const scored = candidates
+    .map((candidate) => {
+      const normalizedName = normalizeText(candidate.name);
+      const score = tokens.reduce((sum, token) => {
+        if (normalizedName.startsWith(token)) {
+          return sum + 3;
+        }
+
+        if (normalizedName.includes(token)) {
+          return sum + 1;
+        }
+
+        return sum;
+      }, 0);
+
+      return {
+        ...candidate,
+        score,
+      };
+    })
+    .filter((candidate) => candidate.score > 0)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, params.limit ?? 5);
+
+  return scored.map((candidate) => ({
+    id: candidate.id,
+    name: candidate.name,
+    price: roundMetric(toNumber(candidate.price), 2),
+    gstRate: roundMetric(toNumber(candidate.gst_rate), 2),
+  }));
+};
+
+const fetchTopSellingProducts = async (params: {
+  userId: number;
+  period: AssistantPeriod;
+  limit?: number;
+}): Promise<AssistantTopSellingProduct[]> => {
+  const groups = await prisma.saleItem.groupBy({
+    by: ["product_id", "name"],
+    where: {
+      sale: {
+        user_id: params.userId,
+        status: SaleStatus.COMPLETED,
+        sale_date: {
+          gte: params.period.start,
+          lt: params.period.endExclusive,
+        },
+      },
+    },
+    _sum: {
+      quantity: true,
+      line_total: true,
+    },
+    orderBy: [{ _sum: { quantity: "desc" } }, { _sum: { line_total: "desc" } }],
+    take: Math.max((params.limit ?? 3) * 2, 6),
+  });
+
+  const productIds = groups
+    .map((group) => group.product_id)
+    .filter((id): id is number => typeof id === "number");
+
+  const products =
+    productIds.length > 0
+      ? await prisma.product.findMany({
+          where: {
+            user_id: params.userId,
+            id: { in: productIds },
+          },
+          select: {
+            id: true,
+            name: true,
+            gst_rate: true,
+            stock_on_hand: true,
+            price: true,
+          },
+        })
+      : [];
+
+  const productMap = new Map(products.map((product) => [product.id, product]));
+
+  return groups
+    .map((group) => {
+      const quantity = Math.max(0, Number(group._sum.quantity ?? 0));
+      const revenue = roundMetric(toNumber(group._sum.line_total), 2);
+      const product =
+        group.product_id != null ? productMap.get(group.product_id) ?? null : null;
+
+      return {
+        productId: group.product_id,
+        name: product?.name ?? group.name,
+        quantity,
+        revenue,
+        gstRate: product ? roundMetric(toNumber(product.gst_rate), 2) : null,
+        stockOnHand: product?.stock_on_hand ?? null,
+        unitPrice: product ? roundMetric(toNumber(product.price), 2) : null,
+      } satisfies AssistantTopSellingProduct;
+    })
+    .filter((item) => item.quantity > 0 && item.name.trim().length > 0)
+    .sort((left, right) => {
+      if (right.quantity === left.quantity) {
+        return right.revenue - left.revenue;
+      }
+
+      return right.quantity - left.quantity;
+    })
+    .slice(0, params.limit ?? 3);
+};
+
+const buildAutocompleteItemsFromTopProducts = async (params: {
+  userId: number;
+  period: AssistantPeriod;
+}): Promise<AssistantCopilotInvoiceItem[]> => {
+  const topSelling = await fetchTopSellingProducts({
+    userId: params.userId,
+    period: params.period,
+    limit: 3,
+  });
+
+  if (topSelling.length > 0) {
+    return topSelling.map((item) => {
+      const inferredPrice =
+        item.unitPrice ??
+        (item.quantity > 0 ? roundMetric(item.revenue / item.quantity, 2) : 0);
+
+      return {
+        name: item.name,
+        quantity: 1,
+        price: Math.max(1, inferredPrice),
+        gstRate: item.gstRate,
+        source: "top_seller",
+      } satisfies AssistantCopilotInvoiceItem;
+    });
+  }
+
+  const fallbackProducts = await prisma.product.findMany({
+    where: {
+      user_id: params.userId,
+    },
+    orderBy: {
+      updated_at: "desc",
+    },
+    select: {
+      name: true,
+      price: true,
+      gst_rate: true,
+    },
+    take: 2,
+  });
+
+  return fallbackProducts.map((product) => ({
+    name: product.name,
+    quantity: 1,
+    price: Math.max(1, roundMetric(toNumber(product.price), 2)),
+    gstRate: roundMetric(toNumber(product.gst_rate), 2),
+    source: "catalog",
+  }));
+};
+
+const buildSmartInsightsPayload = async (params: {
+  userId: number;
+  language: AssistantLanguage;
+  period: AssistantPeriod;
+}): Promise<AssistantCopilotInsight[]> => {
+  const topSelling = await fetchTopSellingProducts({
+    userId: params.userId,
+    period: params.period,
+    limit: 3,
+  });
+
+  if (topSelling.length === 0) {
+    return [];
+  }
+
+  const primary = topSelling[0];
+  const periodLabel = formatPeriodLabel(params.period, params.language);
+  const insights: AssistantCopilotInsight[] = [
+    {
+      title:
+        params.language === "hi"
+          ? "टॉप सेलिंग प्रोडक्ट"
+          : params.language === "hinglish"
+            ? "Top selling product"
+            : "Top selling product",
+      detail:
+        params.language === "hi"
+          ? `${periodLabel} में ${primary.name} सबसे ज्यादा बिका (${primary.quantity} यूनिट)।`
+          : params.language === "hinglish"
+            ? `${periodLabel} mein ${primary.name} sabse zyada bika (${primary.quantity} units).`
+            : `${primary.name} sold the most in ${periodLabel} (${primary.quantity} units).`,
+      value: primary.name,
+    },
+  ];
+
+  if (primary.stockOnHand != null && primary.stockOnHand <= Math.max(3, primary.quantity)) {
+    insights.push({
+      title:
+        params.language === "hi"
+          ? "रीस्टॉक अलर्ट"
+          : params.language === "hinglish"
+            ? "Restock alert"
+            : "Restock alert",
+      detail:
+        params.language === "hi"
+          ? `${primary.name} का stock ${primary.stockOnHand} है। रीस्टॉक प्लान अभी बनाना बेहतर रहेगा।`
+          : params.language === "hinglish"
+            ? `${primary.name} ka stock ${primary.stockOnHand} hai. Restock plan abhi banana better rahega.`
+            : `${primary.name} stock is ${primary.stockOnHand}. Plan a restock now to avoid stockout.`,
+    });
+  }
+
+  if (primary.gstRate != null) {
+    insights.push({
+      title: params.language === "hi" ? "GST संकेत" : "GST hint",
+      detail:
+        params.language === "hi"
+          ? `${primary.name} के लिए आमतौर पर ${primary.gstRate}% GST उपयोग हो रहा है।`
+          : params.language === "hinglish"
+            ? `${primary.name} ke liye usually ${primary.gstRate}% GST use ho raha hai.`
+            : `${primary.name} is usually billed with ${primary.gstRate}% GST.`,
+      value: `${primary.gstRate}%`,
+    });
+  }
+
+  return insights;
+};
+
 const extractAmount = (message: string) => {
   const match = message.replace(/,/g, "").match(/(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?)/i);
   if (!match?.[1]) return null;
@@ -585,6 +1304,18 @@ const extractEntity = (message: string) => {
 };
 
 const detectIntent = (message: string, amount: number | null, entity: string | null) => {
+  if (hasKeyword(message, CREATE_BILL_KEYWORDS)) {
+    return "create_bill" satisfies AssistantIntent;
+  }
+
+  if (hasKeyword(message, ADD_PRODUCT_KEYWORDS)) {
+    return "add_product" satisfies AssistantIntent;
+  }
+
+  if (hasKeyword(message, SMART_INSIGHT_KEYWORDS)) {
+    return "smart_insights" satisfies AssistantIntent;
+  }
+
   if (amount !== null && hasKeyword(message, AFFORDABILITY_KEYWORDS)) {
     return "affordability" satisfies AssistantIntent;
   }
@@ -774,6 +1505,573 @@ const buildAssistantSnapshot = async (
   };
 };
 
+const buildActionExamples = (
+  language: AssistantLanguage,
+  intent: AssistantIntent,
+) => {
+  if (intent === "create_bill") {
+    if (language === "hi") {
+      return [
+        "Ravi Kumar के लिए 2 x Rice @ ₹45 का bill बनाओ",
+        "Ravi Kumar के लिए 1 x Notebook @ ₹50 और 1 x Pen @ ₹10 का bill बनाओ",
+      ];
+    }
+
+    if (language === "hinglish") {
+      return [
+        "Ravi Kumar ke liye 2 x Rice @ ₹45 ka bill banao",
+        "Ravi Kumar ke liye 1 x Notebook @ ₹50 aur 1 x Pen @ ₹10 ka bill banao",
+      ];
+    }
+
+    return [
+      "Create a bill for Ravi Kumar with 2 x Rice at ₹45",
+      "Create a bill for Ravi Kumar with 1 x Notebook at ₹50 and 1 x Pen at ₹10",
+    ];
+  }
+
+  if (intent === "add_product") {
+    if (language === "hi") {
+      return [
+        "Bread product ₹40 पर GST 5 के साथ जोड़ो",
+        "Milk product ₹60 add करो",
+      ];
+    }
+
+    if (language === "hinglish") {
+      return [
+        "Bread product ₹40 par GST 5 ke saath add karo",
+        "Milk product ₹60 add karo",
+      ];
+    }
+
+    return [
+      "Add product Bread at ₹40 with GST 5",
+      "Add product Milk at ₹60",
+    ];
+  }
+
+  return HELP_EXAMPLES[language];
+};
+
+const executeAddProductAction = async (params: {
+  userId: number;
+  language: AssistantLanguage;
+  message: string;
+}): Promise<AssistantActionExecution> => {
+  logAssistantDebug("action.add_product.started", {
+    userId: params.userId,
+  });
+
+  const dedupeKey = buildAssistantActionKey(
+    params.userId,
+    "add_product",
+    params.message,
+  );
+  const recent = getRecentAssistantAction(dedupeKey);
+  if (recent?.status === "success") {
+    return {
+      action: {
+        ...recent,
+        status: "noop",
+        message:
+          params.language === "hi"
+            ? "मैंने अभी-अभी यह product जोड़ दिया था। लिस्ट refresh करके देखें।"
+            : params.language === "hinglish"
+              ? "Maine abhi yeh product add kiya tha. Product list refresh karke dekho."
+              : "I just added this product. Please refresh the product list once.",
+      },
+    };
+  }
+
+  const productName = extractProductNameForCreate(params.message);
+  const price = extractAmount(params.message);
+  const gstRate = extractRequestedGstRate(params.message);
+
+  const productSuggestions = await searchProductSuggestions({
+    userId: params.userId,
+    message: params.message,
+  });
+
+  if (!productName || price == null || price <= 0) {
+    return {
+      action: {
+        type: "create_product",
+        status: "failed",
+        message:
+          params.language === "hi"
+            ? "Product add करने के लिए नाम और price दोनों चाहिए। जैसे: Bread product ₹40 पर GST 5 जोड़ो।"
+            : params.language === "hinglish"
+              ? "Product add karne ke liye naam aur price dono chahiye. Example: Bread product ₹40 par GST 5 add karo."
+              : "To add a product, I need both name and price. Example: Add product Bread at ₹40 with GST 5.",
+      },
+      copilot:
+        productSuggestions.length > 0
+          ? {
+              productSuggestions,
+            }
+          : undefined,
+    };
+  }
+
+  if (gstRate != null && (gstRate < 0 || gstRate > 28)) {
+    return {
+      action: {
+        type: "create_product",
+        status: "failed",
+        message:
+          params.language === "hi"
+            ? "GST rate 0 से 28 के बीच रखें।"
+            : params.language === "hinglish"
+              ? "GST rate 0 se 28 ke beech rakho."
+              : "Please keep GST rate between 0 and 28.",
+      },
+      copilot:
+        productSuggestions.length > 0
+          ? {
+              productSuggestions,
+            }
+          : undefined,
+    };
+  }
+
+  const gstRecommendation: AssistantCopilotGstRecommendation =
+    gstRate != null
+      ? {
+          rate: gstRate,
+          confidence: "high",
+          reason:
+            params.language === "hi"
+              ? `आपने GST ${gstRate}% दिया, वही लागू किया गया।`
+              : params.language === "hinglish"
+                ? `Aapne GST ${gstRate}% diya, wahi apply kiya gaya.`
+                : `Using the GST ${gstRate}% you provided.`,
+        }
+      : await buildGstRecommendation({
+          userId: params.userId,
+          productName,
+          language: params.language,
+        });
+
+  const resolvedGstRate = gstRate ?? gstRecommendation.rate;
+
+  const existingProduct = await prisma.product.findFirst({
+    where: {
+      user_id: params.userId,
+      name: {
+        equals: productName,
+        mode: "insensitive",
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      gst_rate: true,
+    },
+  });
+
+  if (existingProduct) {
+    return {
+      action: {
+        type: "create_product",
+        status: "noop",
+        message:
+          params.language === "hi"
+            ? `${existingProduct.name} पहले से मौजूद है। क्या मैं इसका price update करूँ?`
+            : params.language === "hinglish"
+              ? `${existingProduct.name} pehle se hai. Kya main iska price update karun?`
+              : `${existingProduct.name} already exists. Do you want me to update its price?`,
+        resourceId: existingProduct.id,
+        resourceLabel: existingProduct.name,
+        route: "/products",
+      },
+      copilot: {
+        gstRecommendation,
+        productSuggestions: [
+          {
+            id: existingProduct.id,
+            name: existingProduct.name,
+            price: roundMetric(toNumber(existingProduct.price), 2),
+            gstRate: roundMetric(toNumber(existingProduct.gst_rate), 2),
+          },
+          ...productSuggestions,
+        ].slice(0, 5),
+      },
+    };
+  }
+
+  const createdProduct = await prisma.product.create({
+    data: {
+      user_id: params.userId,
+      name: productName,
+      sku: buildAssistantSku(productName),
+      price,
+      gst_rate: resolvedGstRate,
+      stock_on_hand: 0,
+      reorder_level: 0,
+    },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      gst_rate: true,
+    },
+  });
+
+  emitDashboardUpdate({ userId: params.userId, source: "assistant.product.create" });
+
+  logAssistantDebug("action.add_product.completed", {
+    userId: params.userId,
+    productId: createdProduct.id,
+  });
+
+  const action: AssistantAction = {
+    type: "create_product",
+    status: "success",
+    message:
+      params.language === "hi"
+        ? `${createdProduct.name} ${resolvedGstRate}% GST के साथ जोड़ दिया गया। क्या अब मैं इसके साथ bill बनाने में मदद करूँ?`
+        : params.language === "hinglish"
+          ? `${createdProduct.name} ${resolvedGstRate}% GST ke saath add ho gaya. Kya ab main iske saath bill banane mein help karun?`
+          : `${createdProduct.name} has been added with ${resolvedGstRate}% GST. Do you want me to help create a bill with it?`,
+    resourceId: createdProduct.id,
+    resourceLabel: createdProduct.name,
+    route: "/products",
+  };
+
+  rememberAssistantAction(dedupeKey, action);
+  return {
+    action,
+    copilot: {
+      gstRecommendation,
+      productSuggestions: [
+        {
+          id: createdProduct.id,
+          name: createdProduct.name,
+          price: roundMetric(toNumber(createdProduct.price), 2),
+          gstRate: roundMetric(toNumber(createdProduct.gst_rate), 2),
+        },
+        ...productSuggestions,
+      ].slice(0, 5),
+    },
+  };
+};
+
+const executeCreateBillAction = async (params: {
+  userId: number;
+  language: AssistantLanguage;
+  message: string;
+}): Promise<AssistantActionExecution> => {
+  logAssistantDebug("action.create_bill.started", {
+    userId: params.userId,
+  });
+
+  const dedupeKey = buildAssistantActionKey(
+    params.userId,
+    "create_bill",
+    params.message,
+  );
+  const recent = getRecentAssistantAction(dedupeKey);
+  if (recent?.status === "success") {
+    return {
+      action: {
+        ...recent,
+        status: "noop",
+        message:
+          params.language === "hi"
+            ? "यह command मैंने अभी run की थी। duplicate bill रोक दिया गया है।"
+            : params.language === "hinglish"
+              ? "Yeh command maine abhi run ki thi. Duplicate bill rok diya gaya hai."
+              : "I just ran this command. I prevented a duplicate bill.",
+      },
+    };
+  }
+
+  const customerName = extractCustomerNameForBill(params.message);
+  if (!customerName) {
+    return {
+      action: {
+        type: "create_invoice",
+        status: "failed",
+        message:
+          params.language === "hi"
+            ? "कृपया ग्राहक का नाम भी दें। जैसे: Ravi Kumar के लिए 2 x Rice @ ₹45 का bill बनाओ।"
+            : params.language === "hinglish"
+              ? "Please customer name bhi do. Example: Ravi Kumar ke liye 2 x Rice @ ₹45 ka bill banao."
+              : "Please include customer name too. Example: Create a bill for Ravi Kumar with 2 x Rice at ₹45.",
+      },
+    };
+  }
+
+  const customer =
+    (await prisma.customer.findFirst({
+      where: {
+        user_id: params.userId,
+        name: {
+          equals: customerName,
+          mode: "insensitive",
+        },
+      },
+      select: { id: true, name: true },
+    })) ??
+    (await prisma.customer.findFirst({
+      where: {
+        user_id: params.userId,
+        name: {
+          contains: customerName,
+          mode: "insensitive",
+        },
+      },
+      orderBy: { created_at: "desc" },
+      select: { id: true, name: true },
+    }));
+
+  if (!customer) {
+    return {
+      action: {
+        type: "create_invoice",
+        status: "failed",
+        message:
+          params.language === "hi"
+            ? `मुझे "${customerName}" नाम का ग्राहक नहीं मिला। आप existing customer चुन सकते हैं या पहले ग्राहक जोड़ें।`
+            : params.language === "hinglish"
+              ? `Mujhe "${customerName}" naam ka customer nahi mila. Aap existing customer select kar sakte ho ya pehle customer add karo.`
+              : `I could not find customer "${customerName}". You can select an existing customer or add one first.`,
+      },
+    };
+  }
+
+  const catalogProducts = await prisma.product.findMany({
+    where: { user_id: params.userId },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      gst_rate: true,
+    },
+    take: 400,
+  });
+
+  const catalogByExactName = new Map(
+    catalogProducts.map((product) => [normalizeText(product.name), product]),
+  );
+
+  const explicitItems = extractInvoiceItemsFromMessage(params.message);
+  const messageNormalized = normalizeText(params.message);
+
+  const inferredItems = catalogProducts
+    .filter((product) => {
+      const normalizedName = normalizeText(product.name);
+      return normalizedName.length >= 3 && messageNormalized.includes(normalizedName);
+    })
+    .slice(0, 8)
+    .map((product) => ({
+      name: product.name,
+      quantity: 1,
+      price: Math.max(0, toNumber(product.price)),
+      productId: product.id,
+      taxRate: toNumber(product.gst_rate),
+      source: "catalog" as const,
+    }));
+
+  type DraftBillItem = {
+    name: string;
+    quantity: number;
+    price: number;
+    productId?: number;
+    taxRate?: number;
+    source: "explicit" | "catalog" | "top_seller";
+  };
+
+  let draftItems: DraftBillItem[] = [
+    ...explicitItems.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      productId: undefined as number | undefined,
+      taxRate: undefined as number | undefined,
+      source: "explicit" as const,
+    })),
+    ...inferredItems,
+  ];
+
+  let autoCompleted = false;
+
+  const validDraftItems = draftItems.filter(
+    (item) =>
+      item.name.trim().length > 0 &&
+      Number.isFinite(item.quantity) &&
+      item.quantity > 0 &&
+      Number.isFinite(item.price) &&
+      item.price > 0,
+  );
+
+  if (validDraftItems.length === 0) {
+    const autocompleteItems = await buildAutocompleteItemsFromTopProducts({
+      userId: params.userId,
+      period: resolveAssistantPeriod(params.message),
+    });
+
+    draftItems = autocompleteItems.map((item) => {
+      const exactMatch = catalogByExactName.get(normalizeText(item.name));
+      return {
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        productId: exactMatch?.id,
+        taxRate: item.gstRate ?? undefined,
+        source: item.source,
+      };
+    });
+    autoCompleted = draftItems.length > 0;
+  }
+
+  const validItems = draftItems.filter(
+    (item) =>
+      item.name.trim().length > 0 &&
+      Number.isFinite(item.quantity) &&
+      item.quantity > 0 &&
+      Number.isFinite(item.price) &&
+      item.price > 0,
+  );
+
+  if (validItems.length === 0) {
+    return {
+      action: {
+        type: "create_invoice",
+        status: "failed",
+        message:
+          params.language === "hi"
+            ? "Bill बनाने के लिए कम से कम 1 item और valid price चाहिए। जैसे: Ravi Kumar के लिए 2 x Rice @ ₹45 का bill बनाओ।"
+            : params.language === "hinglish"
+              ? "Bill banane ke liye kam se kam 1 item aur valid price chahiye. Example: Ravi Kumar ke liye 2 x Rice @ ₹45 ka bill banao."
+              : "To create a bill, I need at least 1 item with a valid price. Example: Create a bill for Ravi Kumar with 2 x Rice at ₹45.",
+      },
+    };
+  }
+
+  const gstMemo = new Map<string, AssistantCopilotGstRecommendation>();
+  let primaryGstRecommendation: AssistantCopilotGstRecommendation | undefined;
+
+  const finalizedItems = await Promise.all(
+    validItems.map(async (item) => {
+      const normalizedName = normalizeText(item.name);
+      const exactMatch =
+        item.productId != null
+          ? catalogProducts.find((product) => product.id === item.productId) ?? null
+          : catalogByExactName.get(normalizedName) ?? null;
+
+      let taxRate =
+        item.taxRate != null && Number.isFinite(item.taxRate)
+          ? roundMetric(item.taxRate, 2)
+          : undefined;
+
+      if (taxRate == null) {
+        if (exactMatch) {
+          taxRate = roundMetric(toNumber(exactMatch.gst_rate), 2);
+          if (!primaryGstRecommendation) {
+            primaryGstRecommendation = {
+              rate: taxRate,
+              confidence: "high",
+              reason:
+                params.language === "hi"
+                  ? `${exactMatch.name} के existing catalog GST का उपयोग किया गया।`
+                  : params.language === "hinglish"
+                    ? `${exactMatch.name} ke existing catalog GST ka use kiya gaya.`
+                    : `Used existing catalog GST for ${exactMatch.name}.`,
+            };
+          }
+        } else {
+          const cached = gstMemo.get(normalizedName);
+          const recommendation =
+            cached ??
+            (await buildGstRecommendation({
+              userId: params.userId,
+              productName: item.name,
+              language: params.language,
+            }));
+          gstMemo.set(normalizedName, recommendation);
+          taxRate = recommendation.rate;
+          if (!primaryGstRecommendation) {
+            primaryGstRecommendation = recommendation;
+          }
+        }
+      }
+
+      return {
+        ...item,
+        productId: item.productId ?? exactMatch?.id,
+        taxRate,
+      };
+    }),
+  );
+
+  const invoiceAutocomplete: AssistantCopilotInvoiceAutocomplete = {
+    customerName: customer.name,
+    autoCompleted,
+    items: finalizedItems.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      gstRate: item.taxRate ?? null,
+      source: item.source,
+    })),
+  };
+
+  const createdInvoice = await createInvoiceRecord(params.userId, {
+    customer_id: customer.id,
+    date: new Date(),
+    due_date: new Date(),
+    discount: 0,
+    discount_type: "FIXED",
+    status: InvoiceStatus.SENT,
+    sync_sales: false,
+    notes: "Created via Assistant",
+    items: finalizedItems.map((item) => ({
+      product_id: item.productId,
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      tax_rate: item.taxRate,
+    })),
+  });
+
+  emitDashboardUpdate({ userId: params.userId, source: "assistant.invoice.create" });
+
+  logAssistantDebug("action.create_bill.completed", {
+    userId: params.userId,
+    invoiceId: createdInvoice.id,
+  });
+
+  const action: AssistantAction = {
+    type: "create_invoice",
+    status: "success",
+    message:
+      params.language === "hi"
+        ? `Bill बन गया: ${createdInvoice.invoice_number}.${autoCompleted ? " मैंने items auto-complete भी किए हैं।" : ""} क्या अब PDF download करें या print करें?`
+        : params.language === "hinglish"
+          ? `Bill ban gaya: ${createdInvoice.invoice_number}.${autoCompleted ? " Maine items auto-complete bhi kiye hain." : ""} Kya ab PDF download karein ya print karein?`
+          : `Bill created: ${createdInvoice.invoice_number}.${autoCompleted ? " I also auto-completed the items for you." : ""} Do you want to download PDF or print now?`,
+    resourceId: createdInvoice.id,
+    resourceLabel: createdInvoice.invoice_number,
+    route: `/invoices/history/${createdInvoice.id}`,
+  };
+
+  rememberAssistantAction(dedupeKey, action);
+  return {
+    action,
+    copilot: {
+      invoiceAutocomplete,
+      gstRecommendation: primaryGstRecommendation,
+      productSuggestions: await searchProductSuggestions({
+        userId: params.userId,
+        message: params.message,
+      }),
+    },
+  };
+};
+
 const buildHighlights = (
   language: AssistantLanguage,
   snapshot: AssistantFinanceSnapshot,
@@ -783,8 +2081,16 @@ const buildHighlights = (
     topSpend?: AssistantTopSpend | null;
     requestedAmount?: number | null;
     copilotSummary?: Awaited<ReturnType<typeof buildFinancialCopilot>> | null;
+    smartInsights?: AssistantCopilotInsight[];
   },
 ) => {
+  if (intent === "smart_insights" && extra?.smartInsights?.length) {
+    return extra.smartInsights.slice(0, 3).map((insight) => ({
+      label: insight.title,
+      value: insight.value ?? insight.detail,
+    }));
+  }
+
   if (intent === "budget_plan" && extra?.copilotSummary) {
     return [
       {
@@ -1448,6 +2754,32 @@ const buildTopSpendAnswer = (
   )}, which is about ${roundMetric(topSpend.shareOfOutflow, 1)}% of your tracked outflow.`;
 };
 
+const buildSmartInsightsAnswer = (
+  language: AssistantLanguage,
+  period: AssistantPeriod,
+  insights: AssistantCopilotInsight[],
+) => {
+  const periodLabel = formatPeriodLabel(period, language);
+  if (insights.length === 0) {
+    if (language === "hi") {
+      return `${periodLabel} के लिए अभी पर्याप्त sales pattern data नहीं है। थोड़ा और billing data आने पर मैं smart insights दिखा दूँगा।`;
+    }
+
+    if (language === "hinglish") {
+      return `${periodLabel} ke liye abhi enough sales pattern data nahi hai. Thoda aur billing data aate hi main smart insights dikha dunga.`;
+    }
+
+    return `I do not have enough sales pattern data for ${periodLabel} yet. Once more billing data is available, I can show smart insights.`;
+  }
+
+  const [first, second] = insights;
+  if (!second) {
+    return first.detail;
+  }
+
+  return `${first.detail} ${second.detail}`;
+};
+
 const buildAffordabilityAnswer = (
   language: AssistantLanguage,
   snapshot: AssistantFinanceSnapshot,
@@ -1723,14 +3055,14 @@ const buildHelpAnswer = (language: AssistantLanguage, usedHistory: boolean) => {
     : "";
 
   if (language === "hi") {
-    return `${historyHint}मैं profit, sales, pending payments, cashflow, category spend, supplier spend, budget planning, savings suggestions, bill reminders, health score, behavior insights, goal tracking और affordability जैसे सवाल समझ सकता हूँ। आप इनमें से कुछ पूछ सकते हैं।`;
+    return `${historyHint}मैं उसे ठीक से समझ नहीं पाया। ऐसे पूछें: "आज की sales दिखाओ", "Ravi Kumar के लिए bill बनाओ", या "Bread product ₹40 पर GST 5 जोड़ो".`;
   }
 
   if (language === "hinglish") {
-    return `${historyHint}Main profit, sales, pending payments, cashflow, category spend, supplier spend, budget planning, savings suggestions, bill reminders, health score, behavior insights, goal tracking, aur affordability jaise sawal samajh sakta hoon. Aap inme se kuch pooch sakte ho.`;
+    return `${historyHint}Main is query ko clearly samajh nahi paaya. Aise try karo: "Show today's sales", "Create a bill for Ravi Kumar", ya "Add product Bread at ₹40 with GST 5".`;
   }
 
-  return `${historyHint}I can help with profit, sales, pending payments, cashflow, spend by supplier or category, budget planning, savings ideas, bill reminders, health score, behavior insights, goal tracking, and affordability questions. Try one of the example prompts.`;
+  return `${historyHint}I could not understand that clearly. Try: "Show today's sales", "Create a bill for Ravi Kumar", or "Add product Bread at ₹40 with GST 5".`;
 };
 
 const parseAssistantQuery = (
@@ -1765,85 +3097,235 @@ export const answerAssistantQuery = async (params: {
   message: string;
   history?: AssistantHistoryMessage[];
 }): Promise<AssistantReply> => {
+  const startedAt = Date.now();
   const parsed = parseAssistantQuery(params.message, params.history ?? []);
-  const needsCopilotSummary =
-    parsed.intent === "budget_plan" ||
-    parsed.intent === "savings_suggestion" ||
-    parsed.intent === "bill_reminder" ||
-    parsed.intent === "health_score" ||
-    parsed.intent === "behavior_insights" ||
-    parsed.intent === "goal_tracking" ||
-    parsed.intent === "affordability";
-  const { snapshot, purchases } = await buildAssistantSnapshot(
-    params.userId,
-    parsed.period,
-  );
-  const copilotSummary = needsCopilotSummary
-    ? await buildFinancialCopilot({
+
+  logAssistantDebug("query.received", {
+    userId: params.userId,
+    intent: parsed.intent,
+    period: parsed.period.key,
+    language: parsed.language,
+    usedHistory: parsed.usedHistory,
+  });
+
+  try {
+    if (parsed.intent === "add_product") {
+      const result = await executeAddProductAction({
         userId: params.userId,
         language: parsed.language,
-        fallbackMessage: parsed.conversationMessage,
-        decisionAmount: parsed.amount,
-      })
-    : null;
+        message: parsed.conversationMessage,
+      });
 
-  const spendMatch =
-    parsed.intent === "vendor_spend" && parsed.entity
-      ? findSpendMatch(purchases, parsed.entity, snapshot.totalOutflow)
-      : null;
-  const topSpend =
-    parsed.intent === "top_spend"
-      ? findTopSpend(purchases, snapshot.totalOutflow)
-      : null;
+      const reply: AssistantReply = {
+        language: parsed.language,
+        intent: parsed.intent,
+        answer: result.action.message,
+        highlights:
+          result.action.resourceLabel
+            ? [
+                {
+                  label: parsed.language === "hi" ? "Product" : "Product",
+                  value: result.action.resourceLabel,
+                },
+              ]
+            : [],
+        examples: buildActionExamples(parsed.language, parsed.intent),
+        action: result.action,
+        copilot: result.copilot,
+      };
 
-  let answer = "";
-  if (parsed.intent === "profit") {
-    answer = buildProfitAnswer(parsed.language, snapshot);
-  } else if (parsed.intent === "total_sales") {
-    answer = buildSalesAnswer(parsed.language, snapshot);
-  } else if (parsed.intent === "pending_payments") {
-    answer = buildPendingAnswer(parsed.language, snapshot);
-  } else if (parsed.intent === "cashflow") {
-    answer = buildCashflowAnswer(parsed.language, snapshot);
-  } else if (parsed.intent === "vendor_spend" && parsed.entity) {
-    answer = buildVendorSpendAnswer(
-      parsed.language,
-      snapshot,
-      parsed.entity,
-      spendMatch,
-    );
-  } else if (parsed.intent === "top_spend") {
-    answer = buildTopSpendAnswer(parsed.language, snapshot, topSpend);
-  } else if (parsed.intent === "budget_plan" && copilotSummary) {
-    answer = buildBudgetPlanAnswer(parsed.language, copilotSummary);
-  } else if (parsed.intent === "savings_suggestion" && copilotSummary) {
-    answer = buildSavingsSuggestionAnswer(parsed.language, copilotSummary);
-  } else if (parsed.intent === "bill_reminder" && copilotSummary) {
-    answer = buildBillReminderAnswer(parsed.language, copilotSummary);
-  } else if (parsed.intent === "health_score" && copilotSummary) {
-    answer = buildHealthScoreAnswer(parsed.language, copilotSummary);
-  } else if (parsed.intent === "behavior_insights" && copilotSummary) {
-    answer = buildBehaviorInsightsAnswer(parsed.language, copilotSummary);
-  } else if (parsed.intent === "goal_tracking" && copilotSummary) {
-    answer = buildGoalTrackingAnswer(parsed.language, copilotSummary);
-  } else if (parsed.intent === "affordability") {
-    answer = copilotSummary
-      ? buildDecisionGuidanceAnswer(parsed.language, copilotSummary, parsed.amount)
-      : buildAffordabilityAnswer(parsed.language, snapshot, parsed.amount);
-  } else {
-    answer = buildHelpAnswer(parsed.language, parsed.usedHistory);
+      logAssistantDebug("query.completed", {
+        userId: params.userId,
+        intent: parsed.intent,
+        actionStatus: result.action.status,
+        durationMs: Date.now() - startedAt,
+      });
+
+      return reply;
+    }
+
+    if (parsed.intent === "create_bill") {
+      const result = await executeCreateBillAction({
+        userId: params.userId,
+        language: parsed.language,
+        message: parsed.conversationMessage,
+      });
+
+      const reply: AssistantReply = {
+        language: parsed.language,
+        intent: parsed.intent,
+        answer: result.action.message,
+        highlights:
+          result.action.resourceLabel
+            ? [
+                {
+                  label: parsed.language === "hi" ? "Invoice" : "Invoice",
+                  value: result.action.resourceLabel,
+                },
+              ]
+            : [],
+        examples: buildActionExamples(parsed.language, parsed.intent),
+        action: result.action,
+        copilot: result.copilot,
+      };
+
+      logAssistantDebug("query.completed", {
+        userId: params.userId,
+        intent: parsed.intent,
+        actionStatus: result.action.status,
+        durationMs: Date.now() - startedAt,
+      });
+
+      return reply;
+    }
+
+    if (parsed.intent === "smart_insights") {
+      const smartInsights = await buildSmartInsightsPayload({
+        userId: params.userId,
+        language: parsed.language,
+        period: parsed.period,
+      });
+
+      const reply: AssistantReply = {
+        language: parsed.language,
+        intent: parsed.intent,
+        answer: buildSmartInsightsAnswer(parsed.language, parsed.period, smartInsights),
+        highlights: smartInsights.slice(0, 3).map((insight) => ({
+          label: insight.title,
+          value: insight.value ?? insight.detail,
+        })),
+        examples: buildExamples(parsed.language),
+        copilot: {
+          smartInsights,
+        },
+      };
+
+      logAssistantDebug("query.completed", {
+        userId: params.userId,
+        intent: parsed.intent,
+        durationMs: Date.now() - startedAt,
+      });
+
+      return reply;
+    }
+
+    if (parsed.intent === "help") {
+      const reply: AssistantReply = {
+        language: parsed.language,
+        intent: parsed.intent,
+        answer: buildHelpAnswer(parsed.language, parsed.usedHistory),
+        highlights: [],
+        examples: buildExamples(parsed.language),
+      };
+
+      logAssistantDebug("query.completed", {
+        userId: params.userId,
+        intent: parsed.intent,
+        durationMs: Date.now() - startedAt,
+      });
+
+      return reply;
+    }
+
+    const needsCopilotSummary =
+      parsed.intent === "budget_plan" ||
+      parsed.intent === "savings_suggestion" ||
+      parsed.intent === "bill_reminder" ||
+      parsed.intent === "health_score" ||
+      parsed.intent === "behavior_insights" ||
+      parsed.intent === "goal_tracking" ||
+      parsed.intent === "affordability";
+
+    const [snapshotResult, copilotSummary] = await Promise.all([
+      buildAssistantSnapshot(params.userId, parsed.period),
+      needsCopilotSummary
+        ? buildFinancialCopilot({
+            userId: params.userId,
+            language: parsed.language,
+            fallbackMessage: parsed.conversationMessage,
+            decisionAmount: parsed.amount,
+          })
+        : Promise.resolve<Awaited<ReturnType<typeof buildFinancialCopilot>> | null>(
+            null,
+          ),
+    ]);
+
+    const { snapshot, purchases } = snapshotResult;
+
+    const spendMatch =
+      parsed.intent === "vendor_spend" && parsed.entity
+        ? findSpendMatch(purchases, parsed.entity, snapshot.totalOutflow)
+        : null;
+    const topSpend =
+      parsed.intent === "top_spend"
+        ? findTopSpend(purchases, snapshot.totalOutflow)
+        : null;
+
+    let answer = "";
+    if (parsed.intent === "profit") {
+      answer = buildProfitAnswer(parsed.language, snapshot);
+    } else if (parsed.intent === "total_sales") {
+      answer = buildSalesAnswer(parsed.language, snapshot);
+    } else if (parsed.intent === "pending_payments") {
+      answer = buildPendingAnswer(parsed.language, snapshot);
+    } else if (parsed.intent === "cashflow") {
+      answer = buildCashflowAnswer(parsed.language, snapshot);
+    } else if (parsed.intent === "vendor_spend" && parsed.entity) {
+      answer = buildVendorSpendAnswer(
+        parsed.language,
+        snapshot,
+        parsed.entity,
+        spendMatch,
+      );
+    } else if (parsed.intent === "top_spend") {
+      answer = buildTopSpendAnswer(parsed.language, snapshot, topSpend);
+    } else if (parsed.intent === "budget_plan" && copilotSummary) {
+      answer = buildBudgetPlanAnswer(parsed.language, copilotSummary);
+    } else if (parsed.intent === "savings_suggestion" && copilotSummary) {
+      answer = buildSavingsSuggestionAnswer(parsed.language, copilotSummary);
+    } else if (parsed.intent === "bill_reminder" && copilotSummary) {
+      answer = buildBillReminderAnswer(parsed.language, copilotSummary);
+    } else if (parsed.intent === "health_score" && copilotSummary) {
+      answer = buildHealthScoreAnswer(parsed.language, copilotSummary);
+    } else if (parsed.intent === "behavior_insights" && copilotSummary) {
+      answer = buildBehaviorInsightsAnswer(parsed.language, copilotSummary);
+    } else if (parsed.intent === "goal_tracking" && copilotSummary) {
+      answer = buildGoalTrackingAnswer(parsed.language, copilotSummary);
+    } else if (parsed.intent === "affordability") {
+      answer = copilotSummary
+        ? buildDecisionGuidanceAnswer(parsed.language, copilotSummary, parsed.amount)
+        : buildAffordabilityAnswer(parsed.language, snapshot, parsed.amount);
+    } else {
+      answer = buildHelpAnswer(parsed.language, parsed.usedHistory);
+    }
+
+    const reply: AssistantReply = {
+      language: parsed.language,
+      intent: parsed.intent,
+      answer,
+      highlights: buildHighlights(parsed.language, snapshot, parsed.intent, {
+        spendMatch,
+        topSpend,
+        requestedAmount: parsed.amount,
+        copilotSummary,
+      }),
+      examples: copilotSummary?.examples ?? buildExamples(parsed.language),
+    };
+
+    logAssistantDebug("query.completed", {
+      userId: params.userId,
+      intent: parsed.intent,
+      durationMs: Date.now() - startedAt,
+    });
+
+    return reply;
+  } catch (error) {
+    logAssistantDebug("query.failed", {
+      userId: params.userId,
+      intent: parsed.intent,
+      durationMs: Date.now() - startedAt,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    throw error;
   }
-
-  return {
-    language: parsed.language,
-    intent: parsed.intent,
-    answer,
-    highlights: buildHighlights(parsed.language, snapshot, parsed.intent, {
-      spendMatch,
-      topSpend,
-      requestedAmount: parsed.amount,
-      copilotSummary,
-    }),
-    examples: copilotSummary?.examples ?? buildExamples(parsed.language),
-  };
 };

@@ -1,4 +1,6 @@
-export type AssistantChatLanguage = "en" | "hi";
+import type { Language } from "@/i18n";
+
+export type AssistantChatLanguage = "en" | "hi" | "hinglish";
 
 const DEVANAGARI_PATTERN = /[\u0900-\u097F]/g;
 
@@ -78,12 +80,16 @@ export const detectAssistantChatLanguage = (
     HINDI_ROMANIZED_HINTS.includes(token),
   ).length;
 
-  if (devanagariCount > 0) {
+  if (devanagariCount > 0 && englishHintCount === 0) {
     return "hi";
   }
 
+  if (devanagariCount > 0 || (hindiHintCount > 0 && englishHintCount > 0)) {
+    return "hinglish";
+  }
+
   if (hindiHintCount > 0 && englishHintCount === 0) {
-    return "hi";
+    return "hinglish";
   }
 
   if (englishHintCount > 0) {
@@ -91,8 +97,12 @@ export const detectAssistantChatLanguage = (
   }
 
   if (hindiHintCount > 0) {
-    return "hi";
+    return "hinglish";
   }
 
-  return "en";
+  return "hinglish";
 };
+
+export const assistantLanguageToUiLanguage = (
+  language: AssistantChatLanguage,
+): Language => (language === "hi" ? "hi" : "en");

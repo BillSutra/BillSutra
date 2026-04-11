@@ -638,6 +638,11 @@
         "kicker": "AI insights",
         "title": "Actionable business suggestions",
         "description": "Plain-language suggestions generated from your receipts, expenses, and expected future movement."
+      },
+      "demandSupply": {
+        "kicker": "Demand intelligence",
+        "title": "Forecast-led inventory pressure",
+        "description": "Combine sales momentum with stockout risk here so buyers can act before the operational dashboard gets noisy."
       }
     },
     "cards": {

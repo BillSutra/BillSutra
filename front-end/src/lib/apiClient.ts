@@ -1054,12 +1054,15 @@ export type DashboardForecastResponse = {
 };
 
 export type AssistantReply = {
-  language: "en" | "hi";
+  language: "en" | "hi" | "hinglish";
   intent:
     | "profit"
     | "total_sales"
     | "pending_payments"
     | "cashflow"
+    | "create_bill"
+    | "add_product"
+    | "smart_insights"
     | "top_spend"
     | "vendor_spend"
     | "budget_plan"
@@ -1076,6 +1079,43 @@ export type AssistantReply = {
     value: string;
   }>;
   examples: string[];
+  action?: {
+    type: "create_invoice" | "create_product";
+    status: "success" | "failed" | "noop";
+    message: string;
+    resourceId?: number;
+    resourceLabel?: string;
+    route?: string;
+  };
+  copilot?: {
+    productSuggestions?: Array<{
+      id: number;
+      name: string;
+      price: number;
+      gstRate: number;
+    }>;
+    invoiceAutocomplete?: {
+      customerName: string;
+      autoCompleted: boolean;
+      items: Array<{
+        name: string;
+        quantity: number;
+        price: number;
+        gstRate: number | null;
+        source: "explicit" | "catalog" | "top_seller";
+      }>;
+    };
+    gstRecommendation?: {
+      rate: number;
+      reason: string;
+      confidence: "high" | "medium" | "low";
+    };
+    smartInsights?: Array<{
+      title: string;
+      detail: string;
+      value?: string;
+    }>;
+  };
 };
 
 export type AssistantHistoryMessage = {
@@ -1085,7 +1125,7 @@ export type AssistantHistoryMessage = {
 
 export type FinancialCopilotPayload = {
   generatedAt: string;
-  language: "en" | "hi";
+  language: "en" | "hi" | "hinglish";
   overview: {
     headline: string;
     summary: string;
@@ -2078,11 +2118,34 @@ export const askAssistant = async (
   message: string,
   history: AssistantHistoryMessage[] = [],
 ): Promise<AssistantReply> => {
-  const response = await apiClient.post("/assistant/query", {
-    message,
-    history,
-  });
-  return response.data.data as AssistantReply;
+  try {
+    const response = await apiClient.post("/assistant/query", {
+      message,
+      history,
+    });
+    return response.data.data as AssistantReply;
+  } catch (error) {
+    const responseMessage =
+      axios.isAxiosError(error) &&
+      error.response?.data &&
+      typeof error.response.data === "object" &&
+      "message" in error.response.data &&
+      typeof error.response.data.message === "string"
+        ? error.response.data.message.trim()
+        : "";
+
+    if (responseMessage) {
+      throw new Error(responseMessage);
+    }
+
+    if (axios.isAxiosError(error) && error.code === "ERR_NETWORK") {
+      throw new Error(
+        "Network issue while contacting assistant. Please check internet and try again.",
+      );
+    }
+
+    throw new Error("Assistant request failed. Please try again.");
+  }
 };
 
 export const fetchUserProfile = async (): Promise<UserProfile> => {

@@ -37,7 +37,7 @@ export default function ForgetPass() {
           placeholder={t("auth.forgotForm.emailPlaceholder")}
           name="email"
         />
-        <span className="text-sm text-[#b97908]">{state.errors?.email}</span>
+        <span className="text-sm text-destructive">{state.errors?.email}</span>
       </div>
 
       <div className="mt-4">

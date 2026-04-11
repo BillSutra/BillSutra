@@ -159,7 +159,7 @@ const Pricing = ({ isAuthenticated = false }: PricingProps) => {
               >
                 <div className="flex min-h-full flex-col">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge className="border-transparent bg-black/5 text-foreground hover:bg-black/5">
+                    <Badge className="border-transparent bg-muted text-foreground hover:bg-muted">
                       {plan.kicker}
                     </Badge>
                     {plan.badge ? (
