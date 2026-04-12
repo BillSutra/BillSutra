@@ -65,7 +65,9 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
       dashboardNavSections
         .map((section) => ({
           ...section,
-          items: translatedNavItems.filter((item) => item.section === section.id),
+          items: translatedNavItems.filter(
+            (item) => item.section === section.id,
+          ),
         }))
         .filter((section) => section.items.length > 0),
     [translatedNavItems],
@@ -124,12 +126,16 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
       <nav className="space-y-4">
         {groupedNavItems.map((section) => {
           const hasActiveItem = section.items.some(
-            (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
+            (item) =>
+              pathname === item.href || pathname.startsWith(`${item.href}/`),
           );
           const canCollapseSection = section.id !== "main" && !collapsed;
           const sectionCollapsed =
-            canCollapseSection && collapsedSections[section.id] && !hasActiveItem;
-          const isExpanded = collapsed || section.id === "main" || !sectionCollapsed;
+            canCollapseSection &&
+            collapsedSections[section.id] &&
+            !hasActiveItem;
+          const isExpanded =
+            collapsed || section.id === "main" || !sectionCollapsed;
 
           return (
             <div key={section.id} className="space-y-1.5">
@@ -164,7 +170,8 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
                 <div className="grid gap-1">
                   {section.items.map((item) => {
                     const active =
-                      pathname === item.href || pathname.startsWith(`${item.href}/`);
+                      pathname === item.href ||
+                      pathname.startsWith(`${item.href}/`);
 
                     return (
                       <SidebarNavItem
@@ -213,7 +220,9 @@ const AppSidebar = ({
               variant="outline"
               className="rounded-2xl"
               onClick={onToggleCollapsed}
-              aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+              aria-label={
+                collapsed ? t("sidebar.expand") : t("sidebar.collapse")
+              }
             >
               {collapsed ? (
                 <PanelLeftOpen className="h-4 w-4" />

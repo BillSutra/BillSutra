@@ -43,6 +43,10 @@ import {
 } from "@/hooks/invoice/useInvoiceDrafts";
 import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
+import {
+  formatBusinessAddressFromRecord,
+  formatCustomerAddressFromRecord,
+} from "@/lib/indianAddress";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   InvoiceDraft,
@@ -167,10 +171,25 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const { formatDate, language, locale, t } = useI18n();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { data: customers } = useCustomersQuery();
-  const { data: products = [] } = useProductsQuery({ limit: 1000 });
-  const { data: invoices = [] } = useInvoicesQuery();
-  const { data: warehouses } = useWarehousesQuery();
+  const {
+    data: customers = [],
+    isLoading: customersLoading,
+    isError: customersError,
+    refetch: refetchCustomers,
+  } = useCustomersQuery();
+  const {
+    data: products = [],
+    isLoading: productsLoading,
+    isError: productsError,
+    refetch: refetchProducts,
+  } = useProductsQuery({ limit: 1000 });
+  const { data: invoices = [], refetch: refetchInvoices } = useInvoicesQuery();
+  const {
+    data: warehouses = [],
+    isLoading: warehousesLoading,
+    isError: warehousesError,
+    refetch: refetchWarehouses,
+  } = useWarehousesQuery();
   const { data: businessProfile } = useQuery({
     queryKey: ["business-profile"],
     queryFn: fetchBusinessProfile,
@@ -297,8 +316,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     return /Mac|iPhone|iPad/i.test(navigator.platform);
   }, []);
   const shortcutModifierLabel = isMacShortcutPlatform ? "Cmd" : "Ctrl";
-  const noCustomers = (customers?.length ?? 0) === 0;
-  const noProducts = products.length === 0;
+  const isBootstrapLoading =
+    customersLoading || productsLoading || warehousesLoading;
+  const hasBootstrapError = customersError || productsError || warehousesError;
+  const noCustomers = !customersLoading && customers.length === 0;
+  const noProducts = !productsLoading && products.length === 0;
   const guidedStep = !form.customer_id ? 1 : items.length === 0 ? 2 : 3;
   const guidedFlowCopy =
     language === "hi"
@@ -439,6 +461,15 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     });
   }, []);
 
+  const handleRetryBootstrapData = useCallback(() => {
+    void Promise.all([
+      refetchCustomers(),
+      refetchProducts(),
+      refetchWarehouses(),
+      refetchInvoices(),
+    ]);
+  }, [refetchCustomers, refetchInvoices, refetchProducts, refetchWarehouses]);
+
   const flashShortcutSection = useCallback(
     (section: ShortcutHighlightSection) => {
       setShortcutHighlight(section);
@@ -502,14 +533,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         : Math.min(selectedItemIndex, items.length - 1);
 
   const customer = useMemo(
-    () =>
-      (customers ?? []).find((item) => String(item.id) === form.customer_id),
+    () => customers.find((item) => String(item.id) === form.customer_id),
     [customers, form.customer_id],
   );
 
   const customerNameById = useMemo(() => {
     const map = new Map<string, string>();
-    (customers ?? []).forEach((item) => {
+    customers.forEach((item) => {
       map.set(String(item.id), item.name);
     });
     return map;
@@ -564,7 +594,27 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       dueDate,
       business: {
         businessName,
-        address: businessProfile?.address ?? "",
+        businessAddress: businessProfile
+          ? {
+              addressLine1:
+                businessProfile.businessAddress?.addressLine1 ??
+                businessProfile.address_line1 ??
+                "",
+              city:
+                businessProfile.businessAddress?.city ??
+                businessProfile.city ??
+                "",
+              state:
+                businessProfile.businessAddress?.state ??
+                businessProfile.state ??
+                "",
+              pincode:
+                businessProfile.businessAddress?.pincode ??
+                businessProfile.pincode ??
+                "",
+            }
+          : undefined,
+        address: formatBusinessAddressFromRecord(businessProfile),
         phone: businessProfile?.phone ?? "",
         email: businessProfile?.email ?? "",
         website: businessProfile?.website ?? "",
@@ -576,10 +626,18 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         showPaymentQr: businessProfile?.show_payment_qr ?? false,
       },
       client: {
-        name: customer?.name ?? t("invoice.fallbackCustomer"),
+        name:
+          customer?.type === "business"
+            ? customer.businessName ||
+              customer.name ||
+              t("invoice.fallbackCustomer")
+            : (customer?.name ?? t("invoice.fallbackCustomer")),
+        type: customer?.type,
+        businessName: customer?.businessName ?? customer?.business_name ?? "",
+        gstin: customer?.gstin ?? "",
         email: customer?.email ?? "",
         phone: customer?.phone ?? "",
-        address: customer?.address ?? "",
+        address: formatCustomerAddressFromRecord(customer) || "",
       },
       items: items.map((item) => ({
         name: item.name || t("invoice.fallbackItem"),
@@ -955,7 +1013,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       event.preventDefault();
 
       const trimmedName = quickCustomerForm.name.trim();
-      const trimmedPhone = quickCustomerForm.phone.trim();
+      const normalizedPhone = quickCustomerForm.phone.replace(/\D/g, "");
 
       if (trimmedName.length < 2) {
         toast.error(t("invoiceComposer.customerNameMin"));
@@ -963,7 +1021,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         return;
       }
 
-      if (trimmedPhone && trimmedPhone.length < 6) {
+      if (!/^\d{10}$/.test(normalizedPhone)) {
         toast.error(t("invoiceComposer.customerPhoneMin"));
         return;
       }
@@ -971,7 +1029,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       try {
         const createdCustomer = await createCustomer.mutateAsync({
           name: trimmedName,
-          phone: trimmedPhone || undefined,
+          phone: normalizedPhone,
         });
 
         queryClient.setQueryData<Customer[]>(
@@ -1197,7 +1255,6 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         }),
       );
     } catch (error) {
-      console.error("Invoice email failed:", error);
       setServerError(parseServerErrors(error, t("invoice.sendEmailError")));
       toast.error(t("invoice.sendEmailFailureToast"));
     }
@@ -1386,6 +1443,36 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       actions={headerActions}
     >
       <div className="mx-auto w-full max-w-[1500px] font-[var(--font-sora),var(--font-geist-sans)]">
+        {hasBootstrapError ? (
+          <section className="mb-6 rounded-2xl border border-amber-300/70 bg-amber-50/80 p-4 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
+            <p className="text-sm font-semibold">
+              {language === "hi"
+                ? "कुछ डेटा लोड नहीं हो पाया"
+                : "Some setup data could not be loaded"}
+            </p>
+            <p className="mt-1 text-xs opacity-90">
+              {language === "hi"
+                ? "ग्राहक, प्रोडक्ट या वेयरहाउस डेटा में दिक्कत है। कृपया फिर से लोड करें।"
+                : "Customers, products, or warehouse data failed to load. Please retry."}
+            </p>
+            <div className="mt-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleRetryBootstrapData}
+              >
+                {language === "hi" ? "फिर से लोड करें" : "Retry loading"}
+              </Button>
+            </div>
+          </section>
+        ) : isBootstrapLoading ? (
+          <section className="mb-6 rounded-2xl border border-slate-200 bg-slate-50/90 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+            {language === "hi"
+              ? "ग्राहक, प्रोडक्ट और वेयरहाउस डेटा लोड हो रहा है..."
+              : "Loading customers, products, and warehouse data..."}
+          </section>
+        ) : null}
+
         <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-6 shadow-[0_24px_54px_-38px_rgba(15,23,42,0.16)] ring-1 ring-slate-200/70 dark:border-slate-700 dark:bg-slate-900/75 dark:ring-slate-700/60">
           <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-3xl">
@@ -1529,8 +1616,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               >
                 <InvoiceForm
                   form={form}
-                  customers={customers ?? []}
-                  warehouses={warehouses ?? []}
+                  customers={customers}
+                  warehouses={warehouses}
                   taxMode={taxMode}
                   onFormChange={handleFormChange}
                   onTaxModeChange={handleTaxModeChange}
@@ -1991,10 +2078,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 onChange={(event) =>
                   setQuickCustomerForm((currentForm) => ({
                     ...currentForm,
-                    phone: event.target.value,
+                    phone: event.target.value.replace(/\D/g, "").slice(0, 10),
                   }))
                 }
                 placeholder={t("invoiceComposer.customerPhonePlaceholder")}
+                inputMode="numeric"
               />
             </div>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

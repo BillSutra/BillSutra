@@ -3,13 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Download,
-  Plus,
-  Printer,
-  ReceiptText,
-  Trash2,
-} from "lucide-react";
+import axios from "axios";
+import { Download, Plus, Printer, ReceiptText, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
@@ -36,6 +31,10 @@ import {
   type InvoiceInput,
   type Product,
 } from "@/lib/apiClient";
+import {
+  formatBusinessAddressFromRecord,
+  formatCustomerAddressFromRecord,
+} from "@/lib/indianAddress";
 import { useInvoiceTotals } from "@/hooks/invoice/useInvoiceTotals";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import { useI18n } from "@/providers/LanguageProvider";
@@ -55,6 +54,8 @@ type SimpleBillClientProps = {
   name: string;
   image?: string;
   initialInvoiceDate: string;
+  initialCustomerName?: string;
+  resetOnLoad?: boolean;
 };
 
 type SimpleBillItem = {
@@ -94,6 +95,7 @@ const LAST_BILL_KEY = "billsutra.simple-bill.last-bill";
 const PRODUCT_USAGE_KEY = "billsutra.simple-bill.product-usage";
 const SIMPLE_BILL_DRAFT_KEY = "billsutra.simple-bill.draft.v1";
 const INITIAL_ITEM_ID = "simple-bill-item-1";
+const WALK_IN_CUSTOMER_PHONE = "9000000000";
 const GST_RATE = 18;
 const DEFAULT_INVOICE_SECTIONS: SectionKey[] = [
   "header",
@@ -139,7 +141,11 @@ const formatMoney = (value: number) =>
   }).format(value);
 
 const customerLabel = (customer: Customer) =>
-  customer.phone ? `${customer.name} (${customer.phone})` : customer.name;
+  customer.phone
+    ? `${customer.type === "business" ? customer.businessName || customer.name : customer.name} (${customer.phone})`
+    : customer.type === "business"
+      ? customer.businessName || customer.name
+      : customer.name;
 
 const paymentMethod = (payment: PaymentChoice): InvoicePaymentMethod => {
   if (payment === "UPI") return "UPI";
@@ -158,6 +164,35 @@ const containsText = (value: string | null | undefined, search: string) =>
 
 const normalizeText = (value: string | null | undefined) =>
   value?.trim().toLowerCase() ?? "";
+
+const parseApiErrorMessage = (error: unknown, fallback: string) => {
+  if (!axios.isAxiosError(error)) {
+    return fallback;
+  }
+
+  const data = error.response?.data as
+    | { message?: string; errors?: Record<string, string[] | string> }
+    | undefined;
+
+  const messages = new Set<string>();
+
+  if (data?.message?.trim()) {
+    messages.add(data.message.trim());
+  }
+
+  if (data?.errors) {
+    Object.values(data.errors).forEach((value) => {
+      const values = Array.isArray(value) ? value : [value];
+      values.forEach((entry) => {
+        if (typeof entry === "string" && entry.trim()) {
+          messages.add(entry.trim());
+        }
+      });
+    });
+  }
+
+  return messages.size > 0 ? Array.from(messages).join(" ") : fallback;
+};
 
 const toDiscountType = (mode: DiscountMode): DiscountType =>
   mode === "PERCENT" ? "PERCENTAGE" : "FIXED";
@@ -257,7 +292,27 @@ const buildSimpleBillInvoicePreviewData = ({
     dueDate,
     business: {
       businessName: businessProfile?.business_name || "BillSutra",
-      address: businessProfile?.address ?? "",
+      businessAddress: businessProfile
+        ? {
+            addressLine1:
+              businessProfile.businessAddress?.addressLine1 ??
+              businessProfile.address_line1 ??
+              "",
+            city:
+              businessProfile.businessAddress?.city ??
+              businessProfile.city ??
+              "",
+            state:
+              businessProfile.businessAddress?.state ??
+              businessProfile.state ??
+              "",
+            pincode:
+              businessProfile.businessAddress?.pincode ??
+              businessProfile.pincode ??
+              "",
+          }
+        : undefined,
+      address: formatBusinessAddressFromRecord(businessProfile),
       phone: businessProfile?.phone ?? "",
       email: businessProfile?.email ?? "",
       website: businessProfile?.website ?? "",
@@ -270,10 +325,17 @@ const buildSimpleBillInvoicePreviewData = ({
     },
     client: {
       name:
-        customer?.name || fallbackCustomerName || previewCopy.customerFallback,
+        (customer?.type === "business"
+          ? customer.businessName || customer.name
+          : customer?.name) ||
+        fallbackCustomerName ||
+        previewCopy.customerFallback,
+      type: customer?.type,
+      businessName: customer?.businessName ?? customer?.business_name ?? "",
+      gstin: customer?.gstin ?? "",
       email: customer?.email ?? "",
       phone: customer?.phone ?? fallbackCustomerPhone,
-      address: customer?.address ?? "",
+      address: formatCustomerAddressFromRecord(customer) || "",
     },
     items: items.filter(isInvoiceItemReady).map((item) => ({
       name: item.name.trim(),
@@ -368,6 +430,8 @@ const SimpleBillClient = ({
   name,
   image,
   initialInvoiceDate,
+  initialCustomerName = "",
+  resetOnLoad = false,
 }: SimpleBillClientProps) => {
   const router = useRouter();
   const { formatDate, language, t } = useI18n();
@@ -384,6 +448,7 @@ const SimpleBillClient = ({
             closingNote: "आपके व्यवसाय के लिए धन्यवाद।",
             signatureLabel: "अधिकृत हस्ताक्षर",
             toastEnterCustomerName: "ग्राहक का नाम दर्ज करें।",
+            toastCustomerPhoneMin: "फोन नंबर में ठीक 10 अंक होने चाहिए।",
             toastCustomerQueued: "इनवॉइस बनाते समय ग्राहक जोड़ दिया जाएगा।",
             toastNoSavedBill: "दोहराने के लिए कोई सेव किया हुआ बिल नहीं मिला।",
             toastLastBillLoaded: "पिछला बिल लोड हो गया।",
@@ -446,7 +511,8 @@ const SimpleBillClient = ({
             customerAutoHint:
               "ग्राहक का नाम लिखें। खाली छोड़ेंगे तो वॉक-इन ग्राहक अपने आप जुड़ जाएगा।",
             totalAmountLabel: "कुल राशि",
-            previewHint: "स्क्रीन के लिए प्रीव्यू। प्रिंट हमेशा साफ़ ब्लैक-एंड-व्हाइट रहेगा।",
+            previewHint:
+              "स्क्रीन के लिए प्रीव्यू। प्रिंट हमेशा साफ़ ब्लैक-एंड-व्हाइट रहेगा।",
           }
         : {
             guestName: "Guest",
@@ -457,6 +523,8 @@ const SimpleBillClient = ({
             closingNote: "Thank you for your business.",
             signatureLabel: "Authorized Signature",
             toastEnterCustomerName: "Enter the customer name.",
+            toastCustomerPhoneMin:
+              "Phone number should contain exactly 10 digits.",
             toastCustomerQueued:
               "Customer will be added when the invoice is generated.",
             toastNoSavedBill: "No saved bill to repeat yet.",
@@ -517,7 +585,8 @@ const SimpleBillClient = ({
             loadingHint: "Loading data...",
             leaveWarning:
               "Your draft is saved. Do you want to leave without finishing this bill?",
-            gstHint: "GST is optional (suggested: keep it ON if GST registered)",
+            gstHint:
+              "GST is optional (suggested: keep it ON if GST registered)",
             customerAutoHint:
               "Type customer name. Leave empty to use Walk-in automatically.",
             totalAmountLabel: "Total Amount",
@@ -530,10 +599,14 @@ const SimpleBillClient = ({
   const {
     data: customers = [],
     isLoading: customersLoading,
+    isError: customersError,
+    refetch: refetchCustomers,
   } = useCustomersQuery();
   const {
     data: products = [],
     isLoading: productsLoading,
+    isError: productsError,
+    refetch: refetchProducts,
   } = useProductsQuery({ limit: 1000 });
   const { data: businessProfile } = useQuery({
     queryKey: ["business-profile"],
@@ -545,7 +618,9 @@ const SimpleBillClient = ({
   const [invoiceDate, setInvoiceDate] = useState(initialInvoiceDate);
   const [gstEnabled, setGstEnabled] = useState(false);
   const [notes, setNotes] = useState("");
-  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerSearch, setCustomerSearch] = useState(
+    initialCustomerName.trim(),
+  );
   const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(
     null,
   );
@@ -563,7 +638,9 @@ const SimpleBillClient = ({
   const [payment, setPayment] = useState<PaymentChoice>("CASH");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [generatedInvoice, setGeneratedInvoice] = useState<Invoice | null>(null);
+  const [generatedInvoice, setGeneratedInvoice] = useState<Invoice | null>(
+    null,
+  );
   const [isAssigningWalkIn, setIsAssigningWalkIn] = useState(false);
   const [productUsage, setProductUsage] = useState<Record<number, number>>({});
   const submitLockRef = useRef(false);
@@ -571,6 +648,7 @@ const SimpleBillClient = ({
   const itemNameRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const itemQuantityRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const itemPriceRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const pendingCustomerPrefillRef = useRef(initialCustomerName.trim());
 
   const selectedCustomer = useMemo(
     () =>
@@ -653,21 +731,21 @@ const SimpleBillClient = ({
     () =>
       Boolean(
         customerSearch.trim() ||
-          selectedCustomerId ||
-          notes.trim() ||
-          discount.trim() ||
-          payment !== "CASH" ||
-          gstEnabled ||
-          addingCustomer ||
-          newCustomerName.trim() ||
-          newCustomerPhone.trim() ||
-          items.some(
-            (item) =>
-              item.name.trim() ||
-              item.price.trim() ||
-              item.productId ||
-              (item.quantity.trim() && item.quantity.trim() !== "1"),
-          ),
+        selectedCustomerId ||
+        notes.trim() ||
+        discount.trim() ||
+        payment !== "CASH" ||
+        gstEnabled ||
+        addingCustomer ||
+        newCustomerName.trim() ||
+        newCustomerPhone.trim() ||
+        items.some(
+          (item) =>
+            item.name.trim() ||
+            item.price.trim() ||
+            item.productId ||
+            (item.quantity.trim() && item.quantity.trim() !== "1"),
+        ),
       ),
     [
       addingCustomer,
@@ -683,6 +761,7 @@ const SimpleBillClient = ({
     ],
   );
   const isInitialLoading = customersLoading || productsLoading;
+  const hasDataLoadError = customersError || productsError;
   const taxMode: TaxMode = gstEnabled ? "CGST_SGST" : "NONE";
   const invoiceForm = useMemo<InvoiceFormState>(
     () => ({
@@ -738,7 +817,9 @@ const SimpleBillClient = ({
       fallbackCustomerName:
         (addingCustomer ? newCustomerName.trim() : customerSearch.trim()) ||
         copy.customerFallback,
-      fallbackCustomerPhone: addingCustomer ? newCustomerPhone.trim() : "",
+      fallbackCustomerPhone: addingCustomer
+        ? newCustomerPhone.replace(/\D/g, "")
+        : "",
       invoiceNumber:
         generatedInvoice?.invoice_number || t("invoice.invoicePreviewNumber"),
       invoiceDate: previewInvoiceDate,
@@ -813,6 +894,11 @@ const SimpleBillClient = ({
       }
     }
 
+    if (resetOnLoad) {
+      window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
+      return;
+    }
+
     const lastCustomerId = Number(
       window.localStorage.getItem(LAST_CUSTOMER_KEY),
     );
@@ -844,7 +930,7 @@ const SimpleBillClient = ({
         setSelectedCustomerId(null);
       }
       if (typeof draft.addingCustomer === "boolean") {
-        setAddingCustomer(false);
+        setAddingCustomer(draft.addingCustomer);
       }
       if (typeof draft.newCustomerName === "string") {
         setNewCustomerName(draft.newCustomerName);
@@ -876,7 +962,8 @@ const SimpleBillClient = ({
           draft.items.map((item) => ({
             id: item.id || createItem().id,
             productId:
-              typeof item.productId === "number" && Number.isFinite(item.productId)
+              typeof item.productId === "number" &&
+              Number.isFinite(item.productId)
                 ? item.productId
                 : undefined,
             name: item.name ?? "",
@@ -888,7 +975,7 @@ const SimpleBillClient = ({
     } catch {
       window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
     }
-  }, []);
+  }, [resetOnLoad]);
 
   useEffect(() => {
     if (!selectedCustomer) return;
@@ -972,6 +1059,26 @@ const SimpleBillClient = ({
     setCustomerSuggestionsOpen(false);
   }, []);
 
+  useEffect(() => {
+    const pendingPrefill = pendingCustomerPrefillRef.current.trim();
+    if (!pendingPrefill || customers.length === 0 || selectedCustomerId) {
+      return;
+    }
+
+    const normalizedPrefill = pendingPrefill.toLowerCase();
+    const exactMatch = customers.find(
+      (customer) => customer.name.toLowerCase() === normalizedPrefill,
+    );
+
+    if (exactMatch) {
+      selectCustomer(exactMatch);
+    } else {
+      setCustomerSearch(pendingPrefill);
+    }
+
+    pendingCustomerPrefillRef.current = "";
+  }, [customers, selectCustomer, selectedCustomerId]);
+
   const ensureWalkInCustomer = useCallback(async () => {
     if (walkInCustomer) {
       selectCustomer(walkInCustomer);
@@ -980,6 +1087,7 @@ const SimpleBillClient = ({
 
     const created = await createCustomer.mutateAsync({
       name: copy.walkInCustomerName,
+      phone: WALK_IN_CUSTOMER_PHONE,
     });
     selectCustomer(created);
     return created;
@@ -999,7 +1107,12 @@ const SimpleBillClient = ({
     } finally {
       setIsAssigningWalkIn(false);
     }
-  }, [copy.toastWalkInApplied, copy.toastWalkInError, ensureWalkInCustomer, isAssigningWalkIn]);
+  }, [
+    copy.toastWalkInApplied,
+    copy.toastWalkInError,
+    ensureWalkInCustomer,
+    isAssigningWalkIn,
+  ]);
 
   const selectProductForItem = useCallback(
     (itemId: string, product: Product) => {
@@ -1085,9 +1198,15 @@ const SimpleBillClient = ({
       return;
     }
 
+    const normalizedPhone = newCustomerPhone.replace(/\D/g, "");
+    if (!/^\d{10}$/.test(normalizedPhone)) {
+      toast.error(copy.toastCustomerPhoneMin);
+      return;
+    }
+
     setCustomerSearch(
-      newCustomerPhone.trim()
-        ? `${newCustomerName.trim()} (${newCustomerPhone.trim()})`
+      normalizedPhone
+        ? `${newCustomerName.trim()} (${normalizedPhone})`
         : newCustomerName.trim(),
     );
     setCustomerSuggestionsOpen(false);
@@ -1167,9 +1286,9 @@ const SimpleBillClient = ({
     const enteredInvoiceItems = invoiceItems.filter((item) =>
       Boolean(
         item.name.trim() ||
-          item.product_id ||
-          Number(item.quantity) > 1 ||
-          Number(item.price) > 0,
+        item.product_id ||
+        Number(item.quantity) > 1 ||
+        Number(item.price) > 0,
       ),
     );
 
@@ -1188,7 +1307,9 @@ const SimpleBillClient = ({
     const hasMissingProductName = invoiceItems.some(
       (item) =>
         !item.name.trim() &&
-        (Number(item.quantity) > 0 || Number(item.price) > 0 || item.product_id),
+        (Number(item.quantity) > 0 ||
+          Number(item.price) > 0 ||
+          item.product_id),
     );
     if (hasMissingProductName) {
       toast.error(copy.toastProductNameMissing);
@@ -1207,9 +1328,15 @@ const SimpleBillClient = ({
       let customer: Customer | null = selectedCustomer;
 
       if (!customer && addingCustomer && newCustomerName.trim()) {
+        const normalizedPhone = newCustomerPhone.replace(/\D/g, "");
+        if (!/^\d{10}$/.test(normalizedPhone)) {
+          toast.error(copy.toastCustomerPhoneMin);
+          return;
+        }
+
         customer = await createCustomer.mutateAsync({
           name: newCustomerName.trim(),
-          phone: newCustomerPhone.trim() || undefined,
+          phone: normalizedPhone,
         });
       }
 
@@ -1218,6 +1345,7 @@ const SimpleBillClient = ({
         if (typedCustomerName) {
           customer = await createCustomer.mutateAsync({
             name: typedCustomerName,
+            phone: WALK_IN_CUSTOMER_PHONE,
           });
           selectCustomer(customer);
         } else {
@@ -1261,8 +1389,8 @@ const SimpleBillClient = ({
       toast.success(copy.toastBillGenerated);
       window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
       router.refresh();
-    } catch {
-      toast.error(copy.toastGenerateError);
+    } catch (error) {
+      toast.error(parseApiErrorMessage(error, copy.toastGenerateError));
     } finally {
       submitLockRef.current = false;
       setIsSubmitting(false);
@@ -1345,6 +1473,10 @@ const SimpleBillClient = ({
     }
   };
 
+  const handleRetryDataLoad = useCallback(() => {
+    void Promise.all([refetchCustomers(), refetchProducts()]);
+  }, [refetchCustomers, refetchProducts]);
+
   return (
     <DashboardLayout
       name={displayName}
@@ -1356,8 +1488,12 @@ const SimpleBillClient = ({
         <section className="rounded-2xl bg-card/92 p-5 ring-1 ring-border/55">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
             <div>
-              <p className="text-base font-semibold text-foreground">{copy.guidedTitle}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{copy.guidedDescription}</p>
+              <p className="text-base font-semibold text-foreground">
+                {copy.guidedTitle}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {copy.guidedDescription}
+              </p>
               <p className="mt-2 text-xs text-muted-foreground">
                 {isHindi
                   ? "बिल नंबर सेव करते समय अपने आप बनेगा"
@@ -1388,14 +1524,39 @@ const SimpleBillClient = ({
             </div>
           </div>
 
-          {isInitialLoading ? (
-            <p className="mt-3 text-sm text-muted-foreground">{copy.loadingHint}</p>
+          {hasDataLoadError ? (
+            <div className="mt-3 rounded-lg border border-amber-300/70 bg-amber-50/80 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
+              <p className="font-semibold">
+                {isHindi
+                  ? "ग्राहक या प्रोडक्ट डेटा लोड नहीं हुआ"
+                  : "Customer or product data failed to load"}
+              </p>
+              <p className="mt-1 text-xs opacity-90">
+                {isHindi
+                  ? "कृपया दोबारा कोशिश करें।"
+                  : "Please retry to continue with full data."}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3"
+                onClick={handleRetryDataLoad}
+              >
+                {isHindi ? "फिर से लोड करें" : "Retry loading"}
+              </Button>
+            </div>
+          ) : isInitialLoading ? (
+            <p className="mt-3 text-sm text-muted-foreground">
+              {copy.loadingHint}
+            </p>
           ) : null}
         </section>
 
         <section className="rounded-2xl bg-card/92 p-5 ring-1 ring-border/55">
           <div className="flex flex-col gap-1">
-            <h3 className="text-lg font-semibold text-foreground">{copy.stepCustomer}</h3>
+            <h3 className="text-lg font-semibold text-foreground">
+              {copy.stepCustomer}
+            </h3>
             <p className="text-sm text-muted-foreground">
               {isHindi
                 ? "नाम या फोन लिखें और ग्राहक चुनें।"
@@ -1439,28 +1600,38 @@ const SimpleBillClient = ({
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => selectCustomer(customer)}
                     >
-                      <span className="font-semibold text-foreground">{customer.name}</span>
+                      <span className="font-semibold text-foreground">
+                        {customer.name}
+                      </span>
                       {customer.phone ? (
-                        <span className="text-muted-foreground">{customer.phone}</span>
+                        <span className="text-muted-foreground">
+                          {customer.phone}
+                        </span>
                       ) : null}
                     </button>
                   ))
                 ) : (
                   <p className="px-4 py-3 text-sm text-muted-foreground">
-                    {isHindi ? "कोई सेव ग्राहक नहीं मिला" : "No saved customer found"}
+                    {isHindi
+                      ? "कोई सेव ग्राहक नहीं मिला"
+                      : "No saved customer found"}
                   </p>
                 )}
               </div>
             ) : null}
           </div>
 
-          <p className="mt-3 text-xs text-muted-foreground">{copy.customerAutoHint}</p>
+          <p className="mt-3 text-xs text-muted-foreground">
+            {copy.customerAutoHint}
+          </p>
         </section>
 
         <section className="rounded-2xl bg-card/92 p-5 ring-1 ring-border/55">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-foreground">{copy.stepProducts}</h3>
+              <h3 className="text-lg font-semibold text-foreground">
+                {copy.stepProducts}
+              </h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 {isHindi
                   ? "प्रोडक्ट का नाम, मात्रा और कीमत डालें।"
@@ -1494,11 +1665,13 @@ const SimpleBillClient = ({
 
             {!productsLocked &&
               items.map((item, index) => {
-                const lineTotal = toQuantity(item.quantity) * toAmount(item.price);
+                const lineTotal =
+                  toQuantity(item.quantity) * toAmount(item.price);
                 const suggestions = getProductSuggestions(item.name);
                 const hasExactProductMatch = products.some(
                   (product) =>
-                    product.name.toLowerCase() === item.name.trim().toLowerCase(),
+                    product.name.toLowerCase() ===
+                    item.name.trim().toLowerCase(),
                 );
 
                 return (
@@ -1507,7 +1680,10 @@ const SimpleBillClient = ({
                     className="grid min-w-0 gap-3 rounded-lg bg-background/80 p-3 ring-1 ring-border/45"
                   >
                     <div className="relative grid min-w-0 gap-2">
-                      <Label htmlFor={`simple-item-${item.id}`} className="whitespace-nowrap">
+                      <Label
+                        htmlFor={`simple-item-${item.id}`}
+                        className="whitespace-nowrap"
+                      >
                         {isHindi ? "प्रोडक्ट नाम" : "Product Name"}
                       </Label>
                       <Input
@@ -1556,12 +1732,17 @@ const SimpleBillClient = ({
                                 onClick={() => {
                                   selectProductForItem(item.id, product);
                                   window.setTimeout(
-                                    () => itemQuantityRefs.current[item.id]?.focus(),
+                                    () =>
+                                      itemQuantityRefs.current[
+                                        item.id
+                                      ]?.focus(),
                                     0,
                                   );
                                 }}
                               >
-                                <span className="font-semibold text-foreground">{product.name}</span>
+                                <span className="font-semibold text-foreground">
+                                  {product.name}
+                                </span>
                                 <span className="text-muted-foreground">
                                   {formatMoney(Number(product.price) || 0)}
                                 </span>
@@ -1569,7 +1750,9 @@ const SimpleBillClient = ({
                             ))
                           ) : (
                             <p className="px-4 py-3 text-sm text-muted-foreground">
-                              {isHindi ? "कोई सेव प्रोडक्ट नहीं मिला" : "No saved product found"}
+                              {isHindi
+                                ? "कोई सेव प्रोडक्ट नहीं मिला"
+                                : "No saved product found"}
                             </p>
                           )}
                           {item.name.trim() && !hasExactProductMatch ? (
@@ -1596,7 +1779,10 @@ const SimpleBillClient = ({
                     </div>
                     <div className="grid min-w-0 gap-3 sm:grid-cols-[7rem_8rem_minmax(0,1fr)_auto] sm:items-end">
                       <div className="grid min-w-0 gap-2">
-                        <Label htmlFor={`simple-qty-${item.id}`} className="whitespace-nowrap">
+                        <Label
+                          htmlFor={`simple-qty-${item.id}`}
+                          className="whitespace-nowrap"
+                        >
                           {isHindi ? "मात्रा" : "Quantity"}
                         </Label>
                         <Input
@@ -1607,7 +1793,10 @@ const SimpleBillClient = ({
                           value={item.quantity}
                           onChange={(event) =>
                             updateItem(item.id, {
-                              quantity: event.target.value.replace(/[^\d.]/g, ""),
+                              quantity: event.target.value.replace(
+                                /[^\d.]/g,
+                                "",
+                              ),
                             })
                           }
                           onFocus={(event) => event.target.select()}
@@ -1622,7 +1811,10 @@ const SimpleBillClient = ({
                         />
                       </div>
                       <div className="grid min-w-0 gap-2">
-                        <Label htmlFor={`simple-price-${item.id}`} className="whitespace-nowrap">
+                        <Label
+                          htmlFor={`simple-price-${item.id}`}
+                          className="whitespace-nowrap"
+                        >
                           {isHindi ? "कीमत" : "Price"}
                         </Label>
                         <Input
@@ -1676,12 +1868,16 @@ const SimpleBillClient = ({
         <section className="rounded-2xl bg-card/95 p-5 ring-1 ring-border/55">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)] md:items-center">
             <div>
-              <p className="text-sm font-medium text-muted-foreground">{copy.totalAmountLabel}</p>
+              <p className="text-sm font-medium text-muted-foreground">
+                {copy.totalAmountLabel}
+              </p>
               <p className="mt-1 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
                 {formatMoney(totals.total)}
               </p>
               <p className="mt-2 text-sm text-muted-foreground">
-                {t("invoiceComposer.lineItemsCount", { count: validItems.length })}
+                {t("invoiceComposer.lineItemsCount", {
+                  count: validItems.length,
+                })}
               </p>
             </div>
             <div className="grid gap-2">
@@ -1703,7 +1899,9 @@ const SimpleBillClient = ({
 
               {generatedInvoice ? (
                 <div className="rounded-xl border border-border/70 bg-background/70 p-3">
-                  <p className="text-sm font-semibold text-foreground">{copy.nextStepsTitle}</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {copy.nextStepsTitle}
+                  </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {copy.nextStepsDescription.replace(
                       "{invoiceNumber}",
@@ -1719,7 +1917,11 @@ const SimpleBillClient = ({
                       <Download size={16} />
                       {copy.downloadPdf}
                     </Button>
-                    <Button type="button" variant="outline" onClick={handlePrintBill}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handlePrintBill}
+                    >
                       <Printer size={16} />
                       {copy.printBill}
                     </Button>
@@ -1739,8 +1941,12 @@ const SimpleBillClient = ({
         </section>
 
         <section className="rounded-2xl bg-card/92 p-5 ring-1 ring-border/55">
-          <h3 className="text-lg font-semibold text-foreground">{copy.billPreviewTitle}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">{copy.previewHint}</p>
+          <h3 className="text-lg font-semibold text-foreground">
+            {copy.billPreviewTitle}
+          </h3>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {copy.previewHint}
+          </p>
 
           {generatedInvoice ? (
             <div className="mt-3 flex flex-col gap-3 rounded-xl border border-emerald-300/60 bg-emerald-50/70 p-3 sm:flex-row sm:items-center sm:justify-between dark:border-emerald-800/70 dark:bg-emerald-950/20">
@@ -1759,7 +1965,9 @@ const SimpleBillClient = ({
                 type="button"
                 variant="outline"
                 className="w-full sm:w-auto"
-                onClick={() => router.push(`/invoices/history/${generatedInvoice.id}`)}
+                onClick={() =>
+                  router.push(`/invoices/history/${generatedInvoice.id}`)
+                }
               >
                 {copy.viewInHistory}
               </Button>

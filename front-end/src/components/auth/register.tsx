@@ -80,10 +80,14 @@ const Register = () => {
             placeholder={t("auth.registerForm.emailPlaceholder")}
             type="email"
           />
-          <span className="text-xs text-destructive">{state.errors?.email}</span>
+          <span className="text-xs text-destructive">
+            {state.errors?.email}
+          </span>
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="password">{t("auth.registerForm.passwordLabel")}</Label>
+          <Label htmlFor="password">
+            {t("auth.registerForm.passwordLabel")}
+          </Label>
           <Input
             id="password"
             name="password"

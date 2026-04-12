@@ -47,9 +47,17 @@ export type BusinessTypeConfig = {
   defaultSections: SectionKey[];
 };
 
+export type BusinessAddressInput = {
+  addressLine1: string;
+  city: string;
+  state: string;
+  pincode: string;
+};
+
 export type BusinessProfileInput = {
   businessName: string;
   address: string;
+  businessAddress?: BusinessAddressInput;
   phone: string;
   email: string;
   website: string;
@@ -76,6 +84,9 @@ export type InvoicePreviewData = {
   business: BusinessProfileInput;
   client: {
     name: string;
+    type?: "individual" | "business";
+    businessName?: string;
+    gstin?: string;
     email: string;
     phone: string;
     address: string;

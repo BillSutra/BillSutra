@@ -1,6 +1,7 @@
 import type { InvoiceSectionProps } from "@/types/invoice-template";
 import { useSectionStyles } from "@/components/invoice/DesignConfigContext";
 import { useBusinessLogo } from "@/hooks/useBusinessLogo";
+import { buildBusinessAddressLines } from "@/lib/indianAddress";
 
 const Header = ({ data, theme }: InvoiceSectionProps) => {
   const { style } = useSectionStyles("header");
@@ -9,6 +10,10 @@ const Header = ({ data, theme }: InvoiceSectionProps) => {
   // so SSR and initial client render both see null → no hydration mismatch.
   const { logo: storedLogo } = useBusinessLogo();
   const effectiveLogo = data.business.logoUrl || storedLogo;
+  const businessAddressLines = buildBusinessAddressLines(
+    data.business.businessAddress,
+    data.business.address,
+  );
   const paymentToneClassName =
     data.paymentSummary?.statusTone === "paid"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -68,12 +73,20 @@ const Header = ({ data, theme }: InvoiceSectionProps) => {
           >
             {data.business.businessName}
           </p>
-          <p className="mt-1 text-[0.82em] text-slate-600">
-            {data.business.address || "Business address not added"}
-          </p>
+          <div className="mt-1 grid gap-0.5 text-[0.82em] text-slate-600">
+            {businessAddressLines.length > 0 ? (
+              businessAddressLines.map((line) => <p key={line}>{line}</p>)
+            ) : (
+              <p>Business address not added</p>
+            )}
+          </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.78em] text-slate-500">
-            {data.business.phone ? <span>Phone: {data.business.phone}</span> : null}
-            {data.business.email ? <span>Email: {data.business.email}</span> : null}
+            {data.business.phone ? (
+              <span>Phone: {data.business.phone}</span>
+            ) : null}
+            {data.business.email ? (
+              <span>Email: {data.business.email}</span>
+            ) : null}
           </div>
         </div>
 

@@ -8,6 +8,9 @@
     "start": "node dist/index.js",
     "watch": "tsc -w",
     "dev": "tsx watch src/index.ts",
+    "test:assistant-parser": "tsx --test src/modules/assistant/assistant.parser.test.ts",
+    "test:assistant-integration": "tsx --test src/modules/assistant/assistant.integration.test.ts",
+    "test:assistant-chatflow": "tsx --test src/modules/assistant/assistant.chatflow.e2e.test.ts",
     "seed": "prisma db seed"
   },
   "prisma": {

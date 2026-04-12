@@ -11,6 +11,7 @@ import {
   duplicateInvoice,
   deleteInvoice,
   generateInvoicePdf,
+  getInvoiceBootstrap,
   getInvoice,
   listInvoices,
   markInvoiceAsSent,
@@ -125,6 +126,16 @@ export const index = async (req: Request, res: Response) => {
     to: to ?? undefined,
   });
   return res.status(200).json({ data: invoices });
+};
+
+export const bootstrap = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const data = await getInvoiceBootstrap(userId);
+  return res.status(200).json({ data });
 };
 
 export const store = async (req: Request, res: Response) => {

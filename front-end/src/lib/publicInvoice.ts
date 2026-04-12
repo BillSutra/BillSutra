@@ -86,17 +86,15 @@ export type PublicInvoice = {
   tax: number;
   discount: number;
   currency: string;
-  status:
-    | "DRAFT"
-    | "SENT"
-    | "PAID"
-    | "OVERDUE"
-    | "PARTIALLY_PAID"
-    | "VOID";
+  status: "DRAFT" | "SENT" | "PAID" | "OVERDUE" | "PARTIALLY_PAID" | "VOID";
   date: string;
   due_date: string | null;
   notes: string | null;
+  customer_type: "individual" | "business";
+  customer_display_name: string;
   customer_name: string;
+  customer_business_name: string | null;
+  customer_gstin: string | null;
   email: string | null;
   customer_phone: string | null;
   customer_address: string | null;
@@ -140,9 +138,10 @@ export const fetchPublicInvoice = async (
     throw new PublicInvoiceNotFoundError();
   }
 
-  const payload = (await response.json().catch(() => null)) as
-    | { message?: string; data?: PublicInvoice }
-    | null;
+  const payload = (await response.json().catch(() => null)) as {
+    message?: string;
+    data?: PublicInvoice;
+  } | null;
 
   if (!response.ok || !payload?.data) {
     throw new Error(payload?.message || "Unable to load invoice");
@@ -174,7 +173,10 @@ export const buildPublicInvoicePreviewData = (
       showPaymentQr: false,
     },
     client: {
-      name: invoice.customer_name,
+      name: invoice.customer_display_name || invoice.customer_name,
+      type: invoice.customer_type,
+      businessName: invoice.customer_business_name ?? "",
+      gstin: invoice.customer_gstin ?? "",
       email: invoice.email ?? "",
       phone: invoice.customer_phone ?? "",
       address: invoice.customer_address ?? "",

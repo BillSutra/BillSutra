@@ -30,6 +30,10 @@ import {
   formatPaymentMethodLabel,
   getInvoicePaymentSnapshot,
 } from "@/lib/invoicePayments";
+import {
+  formatBusinessAddressFromRecord,
+  formatCustomerAddressFromRecord,
+} from "@/lib/indianAddress";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import {
   useCreatePaymentMutation,
@@ -182,7 +186,27 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
       dueDate: invoiceDate(data.due_date),
       business: {
         businessName,
-        address: businessProfile?.address ?? "",
+        businessAddress: businessProfile
+          ? {
+              addressLine1:
+                businessProfile.businessAddress?.addressLine1 ??
+                businessProfile.address_line1 ??
+                "",
+              city:
+                businessProfile.businessAddress?.city ??
+                businessProfile.city ??
+                "",
+              state:
+                businessProfile.businessAddress?.state ??
+                businessProfile.state ??
+                "",
+              pincode:
+                businessProfile.businessAddress?.pincode ??
+                businessProfile.pincode ??
+                "",
+            }
+          : undefined,
+        address: formatBusinessAddressFromRecord(businessProfile),
         phone: businessProfile?.phone ?? "",
         email: businessProfile?.email ?? "",
         website: businessProfile?.website ?? "",
@@ -194,10 +218,20 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
         showPaymentQr: businessProfile?.show_payment_qr ?? false,
       },
       client: {
-        name: data.customer?.name ?? t("invoiceDetail.customerFallback"),
+        name:
+          data.customer?.type === "business"
+            ? data.customer.businessName ||
+              data.customer.business_name ||
+              data.customer.name ||
+              t("invoiceDetail.customerFallback")
+            : (data.customer?.name ?? t("invoiceDetail.customerFallback")),
+        type: data.customer?.type,
+        businessName:
+          data.customer?.businessName ?? data.customer?.business_name ?? "",
+        gstin: data.customer?.gstin ?? "",
         email: data.customer?.email ?? "",
         phone: data.customer?.phone ?? "",
-        address: data.customer?.address ?? "",
+        address: formatCustomerAddressFromRecord(data.customer) || "",
       },
       items: data.items.map((item) => ({
         name: item.name,

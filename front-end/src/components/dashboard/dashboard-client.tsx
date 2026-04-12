@@ -1134,7 +1134,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                       </span>
                       <span className="rounded-full border border-border bg-background px-2.5 py-1 font-medium text-muted-foreground">
                         {translateEnum(
-                          "dashboard.enums.paymentStatus",
+                          "invoiceHistory.status",
                           invoice.status,
                         )}
                       </span>

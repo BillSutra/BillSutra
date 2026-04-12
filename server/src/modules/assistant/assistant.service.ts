@@ -1,4 +1,4 @@
-import { InvoiceStatus, SaleStatus } from "@prisma/client";
+import { InvoiceStatus, Prisma, SaleStatus } from "@prisma/client";
 import prisma from "../../config/db.config.js";
 import {
   fetchCashInflowSnapshot,
@@ -12,30 +12,23 @@ import {
   detectAssistantLanguage,
   type AssistantLanguage,
 } from "./assistant.language.js";
+import type {
+  AssistantAction as ContractAssistantAction,
+  AssistantCommand as ContractAssistantCommand,
+  AssistantCommandIntent as ContractAssistantCommandIntent,
+  AssistantCopilotGstRecommendation as ContractAssistantCopilotGstRecommendation,
+  AssistantCopilotInsight as ContractAssistantCopilotInsight,
+  AssistantCopilotInvoiceItem as ContractAssistantCopilotInvoiceItem,
+  AssistantCopilotPayload as ContractAssistantCopilotPayload,
+  AssistantCopilotProductSuggestion as ContractAssistantCopilotProductSuggestion,
+  AssistantHistoryMessage as ContractAssistantHistoryMessage,
+  AssistantIntent as ContractAssistantIntent,
+  AssistantReply as ContractAssistantReply,
+  AssistantStructuredPayload as ContractAssistantStructuredPayload,
+} from "./assistant.contract.js";
 
-type AssistantIntent =
-  | "profit"
-  | "total_sales"
-  | "pending_payments"
-  | "cashflow"
-  | "create_bill"
-  | "add_product"
-  | "smart_insights"
-  | "top_spend"
-  | "vendor_spend"
-  | "budget_plan"
-  | "savings_suggestion"
-  | "bill_reminder"
-  | "health_score"
-  | "behavior_insights"
-  | "goal_tracking"
-  | "affordability"
-  | "help";
-
-type AssistantHistoryMessage = {
-  role: "assistant" | "user";
-  content: string;
-};
+type AssistantIntent = ContractAssistantIntent;
+type AssistantHistoryMessage = ContractAssistantHistoryMessage;
 
 type AssistantPeriodKey =
   | "today"
@@ -106,79 +99,41 @@ type AssistantParsedQuery = {
   period: AssistantPeriod;
   amount: number | null;
   entity: string | null;
+  navigationTarget: string | null;
   conversationMessage: string;
   usedHistory: boolean;
 };
 
-type AssistantActionType = "create_invoice" | "create_product";
-type AssistantActionStatus = "success" | "failed" | "noop";
-
-type AssistantAction = {
-  type: AssistantActionType;
-  status: AssistantActionStatus;
-  message: string;
-  resourceId?: number;
-  resourceLabel?: string;
-  route?: string;
-};
-
-type AssistantCopilotProductSuggestion = {
-  id: number;
-  name: string;
-  price: number;
-  gstRate: number;
-};
-
-type AssistantCopilotInvoiceItem = {
-  name: string;
-  quantity: number;
-  price: number;
-  gstRate: number | null;
-  source: "explicit" | "catalog" | "top_seller";
-};
-
-type AssistantCopilotInvoiceAutocomplete = {
-  customerName: string;
-  autoCompleted: boolean;
-  items: AssistantCopilotInvoiceItem[];
-};
-
-type AssistantCopilotGstRecommendation = {
-  rate: number;
-  reason: string;
-  confidence: "high" | "medium" | "low";
-};
-
-type AssistantCopilotInsight = {
-  title: string;
-  detail: string;
-  value?: string;
-};
-
-type AssistantCopilotPayload = {
-  productSuggestions?: AssistantCopilotProductSuggestion[];
-  invoiceAutocomplete?: AssistantCopilotInvoiceAutocomplete;
-  gstRecommendation?: AssistantCopilotGstRecommendation;
-  smartInsights?: AssistantCopilotInsight[];
-};
+type AssistantAction = ContractAssistantAction;
+type AssistantCopilotProductSuggestion =
+  ContractAssistantCopilotProductSuggestion;
+type AssistantCopilotInvoiceItem = ContractAssistantCopilotInvoiceItem;
+type AssistantCopilotGstRecommendation =
+  ContractAssistantCopilotGstRecommendation;
+type AssistantCopilotInsight = ContractAssistantCopilotInsight;
+type AssistantCopilotPayload = ContractAssistantCopilotPayload;
+type AssistantCommandIntent = ContractAssistantCommandIntent;
+type AssistantCommand = ContractAssistantCommand;
+type AssistantStructuredPayload = ContractAssistantStructuredPayload;
 
 type AssistantActionExecution = {
   action: AssistantAction;
   copilot?: AssistantCopilotPayload;
+  command?: AssistantCommand;
 };
 
-export type AssistantReply = {
-  language: AssistantLanguage;
-  intent: AssistantIntent;
-  answer: string;
-  highlights: Array<{ label: string; value: string }>;
-  examples: string[];
-  action?: AssistantAction;
-  copilot?: AssistantCopilotPayload;
-};
+export type AssistantReply = ContractAssistantReply;
 
 const SYNCED_INVOICE_NOTE_PATTERN = /Synced from invoice\s+/i;
 const DEVANAGARI_PATTERN = /[\u0900-\u097F]/;
+const BILLING_ONLY_FALLBACK_MESSAGE =
+  "Main sirf billing aur products mein help kar sakta hoon.";
+const DASHBOARD_ROUTE_TARGETS = {
+  simpleBill: "/dashboard/simple-bill",
+  products: "/dashboard/products",
+  customers: "/dashboard/customers",
+  invoices: "/dashboard/invoices",
+} as const;
 
 const PROFIT_KEYWORDS = [
   "profit",
@@ -230,17 +185,119 @@ const CASHFLOW_KEYWORDS = [
 
 const CREATE_BILL_KEYWORDS = [
   "create bill",
+  "create a bill",
+  "create bill for",
+  "create a bill for",
   "make bill",
+  "make a bill",
   "new bill",
   "generate bill",
+  "generate a bill",
+  "bill generate karo",
+  "bill bana do",
+  "bill banao",
   "create invoice",
+  "create an invoice",
   "make invoice",
+  "make an invoice",
+  "invoice for",
   "new invoice",
   "bill bana",
+  "bill ban",
+  "ke liye bill",
+  "ka bill",
   "invoice bana",
   "बिल बनाओ",
   "इनवॉइस बनाओ",
 ];
+
+const SHOW_INVOICES_KEYWORDS = [
+  "show invoices",
+  "show invoice",
+  "invoice list",
+  "invoices list",
+  "bill list",
+  "bills list",
+  "show bills",
+  "invoice history",
+  "bill history",
+  "invoices dikhao",
+  "invoice dikhao",
+  "bill dikhao",
+  "bills dikhao",
+  "invoices dikhana",
+  "बिल दिखाओ",
+  "इनवॉइस दिखाओ",
+  "इनवॉइस लिस्ट",
+];
+
+const SHOW_CUSTOMERS_KEYWORDS = [
+  "show customers",
+  "customer list",
+  "customers list",
+  "show customer",
+  "customers dikhao",
+  "customer dikhao",
+  "grahak list",
+  "grahak dikhao",
+  "ग्राहक दिखाओ",
+  "कस्टमर दिखाओ",
+  "ग्राहक सूची",
+];
+
+const SHOW_PRODUCTS_KEYWORDS = [
+  "show products",
+  "show product",
+  "products dikhao",
+  "product dikhao",
+  "product list",
+  "products list",
+  "प्रोडक्ट दिखाओ",
+  "प्रोडक्ट लिस्ट",
+];
+
+const NAVIGATE_KEYWORDS = [
+  "open",
+  "go to",
+  "navigate",
+  "kholo",
+  "khol do",
+  "page kholo",
+  "le chalo",
+  "open page",
+];
+
+const resolveNavigationTarget = (message: string) => {
+  const normalized = normalizeText(message);
+
+  if (!hasKeyword(normalized, NAVIGATE_KEYWORDS)) {
+    return null;
+  }
+
+  if (
+    /\b(simple\s*bill|new\s*bill|bill\s*page|invoice\s*page)\b/i.test(
+      normalized,
+    )
+  ) {
+    return DASHBOARD_ROUTE_TARGETS.simpleBill;
+  }
+
+  if (/\b(products?|product\s*page|inventory)\b/i.test(normalized)) {
+    return DASHBOARD_ROUTE_TARGETS.products;
+  }
+
+  if (/\b(customers?|customer\s*page|grahak)\b/i.test(normalized)) {
+    return DASHBOARD_ROUTE_TARGETS.customers;
+  }
+
+  if (
+    /\b(invoices?|bills?|invoice\s*history|bill\s*history)\b/i.test(normalized)
+  ) {
+    return DASHBOARD_ROUTE_TARGETS.invoices;
+  }
+
+  return null;
+};
 
 const ADD_PRODUCT_KEYWORDS = [
   "add product",
@@ -248,10 +305,35 @@ const ADD_PRODUCT_KEYWORDS = [
   "new product",
   "product add",
   "add item",
+  "add karo",
+  "item add karo",
+  "daal do",
+  "dal do",
+  "jod do",
   "product banao",
   "product bana",
+  "product dalo",
+  "product daalo",
   "प्रोडक्ट जोड़ो",
   "प्रोडक्ट बनाओ",
+  "प्रोडक्ट डालो",
+];
+
+const REMOVE_PRODUCT_KEYWORDS = [
+  "remove product",
+  "remove item",
+  "delete product",
+  "delete item",
+  "remove",
+  "delete",
+  "hatao",
+  "hata do",
+  "hatado",
+  "remove karo",
+  "delete karo",
+  "प्रोडक्ट हटाओ",
+  "हटाओ",
+  "हटा दो",
 ];
 
 const SMART_INSIGHT_KEYWORDS = [
@@ -388,34 +470,28 @@ const FOLLOW_UP_KEYWORDS = [
 
 const HELP_EXAMPLES: Record<AssistantLanguage, string[]> = {
   en: [
-    "Create a bill for Ravi Kumar with 2 x Rice at ₹45",
+    "Create a bill for Ravi Kumar",
     "Add product Bread at ₹40 with GST 5",
-    "Show smart insights and top selling product",
-    "Show today's sales",
-    "How much did I spend on Swiggy last month?",
-    "What is my profit this month?",
-    "Which category is taking most of my money?",
-    "Can I afford ₹10,000 this month?",
+    "Remove product Bread",
+    "Show invoices",
+    "Show customers",
+    "Show products",
   ],
   hi: [
-    "Ravi Kumar के लिए 2 x Rice @ ₹45 का bill बनाओ",
+    "Ravi Kumar के लिए bill बनाओ",
     "Bread product ₹40 पर GST 5 के साथ जोड़ो",
-    "स्मार्ट insights दिखाओ और top selling product बताओ",
-    "आज की sales दिखाओ",
-    "मैंने पिछले महीने Swiggy पर कितना खर्च किया?",
-    "इस महीने मेरा profit कितना है?",
-    "मेरा सबसे ज़्यादा पैसा किस category पर जा रहा है?",
-    "क्या मैं इस महीने ₹10,000 afford कर सकता हूँ?",
+    "Bread product हटा दो",
+    "इनवॉइस दिखाओ",
+    "ग्राहक दिखाओ",
+    "प्रोडक्ट्स दिखाओ",
   ],
   hinglish: [
-    "Ravi Kumar ke liye 2 x Rice @ ₹45 ka bill banao",
+    "Ravi Kumar ke liye bill banao",
     "Bread product ₹40 par GST 5 ke saath add karo",
-    "Smart insights dikhao aur top selling product batao",
-    "Aaj ki sales dikhao",
-    "Maine last month Swiggy pe kitna spend kiya?",
-    "Is month mera profit kitna hai?",
-    "Mera sabse zyada paisa kis category pe ja raha hai?",
-    "Main ₹10,000 afford kar sakta hoon kya?",
+    "Bread product hata do",
+    "Invoices dikhao",
+    "Customers dikhao",
+    "Products dikhao",
   ],
 };
 
@@ -435,6 +511,28 @@ const logAssistantDebug = (event: string, payload: Record<string, unknown>) => {
   console.info(`[assistant] ${event}`, payload);
 };
 
+const buildStructuredPayload = (params: {
+  intent: AssistantCommandIntent;
+  data?: Record<string, unknown>;
+  action:
+    | "CREATE_BILL"
+    | "ADD_PRODUCT"
+    | "REMOVE_PRODUCT"
+    | "NAVIGATE"
+    | "SHOW_PRODUCTS"
+    | "SHOW_CUSTOMERS"
+    | "SHOW_INVOICES"
+    | "NONE";
+  target?: string;
+  message: string;
+}): AssistantStructuredPayload => ({
+  intent: params.intent,
+  data: params.data ?? {},
+  action: params.action,
+  target: params.target,
+  message: params.message,
+});
+
 const toNumber = (value: unknown) => Number(value ?? 0);
 
 const roundMetric = (value: number, digits = 2) => {
@@ -446,8 +544,32 @@ const roundMetric = (value: number, digits = 2) => {
 const normalizeText = (value: string) =>
   value.toLowerCase().replace(/\s+/g, " ").trim();
 
+const TRANSCRIPT_FILLER_PATTERNS = [
+  /\b(?:uh+|um+|hmm+|erm+|ah+)\b/gi,
+  /\b(?:actually|basically|matlab|acha|accha|arey|arre)\b/gi,
+  /\b(?:you\s+know)\b/gi,
+];
+
+const sanitizeTranscriptMessage = (message: string) => {
+  const trimmed = message.trim();
+  if (!trimmed) {
+    return message;
+  }
+
+  let sanitized = trimmed;
+  for (const pattern of TRANSCRIPT_FILLER_PATTERNS) {
+    sanitized = sanitized.replace(pattern, " ");
+  }
+
+  sanitized = sanitized.replace(/\s+/g, " ").trim();
+  return sanitized || trimmed;
+};
+
 const normalizeForActionKey = (value: string) =>
-  normalizeText(value).replace(/[^a-z0-9\u0900-\u097f ]/g, " ").replace(/\s+/g, " ").trim();
+  normalizeText(value)
+    .replace(/[^a-z0-9\u0900-\u097f ]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
 const buildAssistantActionKey = (
   userId: number,
@@ -493,28 +615,151 @@ const cleanActionEntity = (value: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-const extractCustomerNameForBill = (message: string) => {
-  const quoted = message.match(/(?:for|to|customer)\s+["']([^"']{2,80})["']/i);
-  if (quoted?.[1]) {
-    const cleanedQuoted = cleanActionEntity(quoted[1]);
-    if (cleanedQuoted.length >= 2) return cleanedQuoted;
-  }
+const stripLeadingProductFillers = (value: string) =>
+  value
+    .replace(
+      /^(?:(?:ek|a|an|the|ye|this|product|item|add|create|new|karo|kar|do|de|please|plz|bhaiya|bhai|sir|madam|didi|ji)\s+)+/i,
+      "",
+    )
+    .replace(
+      /^(?:ek|a|an|the|ye|this|product|item|please|plz|bhaiya|bhai|sir|madam|didi|ji)$/i,
+      "",
+    )
+    .trim();
 
-  const direct = message.match(
-    /(?:for|to|customer)\s+([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s.&\-]{1,80})/i,
-  );
-  if (!direct?.[1]) {
+const PRODUCT_NAME_NOISE_WORDS = new Set([
+  "ek",
+  "naam",
+  "name",
+  "ka",
+  "ki",
+  "ke",
+  "product",
+  "item",
+  "add",
+  "create",
+  "new",
+  "karo",
+  "kar",
+  "do",
+  "de",
+  "daal",
+  "dal",
+  "banana",
+  "bana",
+  "jismein",
+  "jisme",
+  "uska",
+  "uske",
+  "uski",
+  "price",
+  "worth",
+  "rs",
+  "inr",
+  "gst",
+  "percent",
+  "pct",
+  "hai",
+  "aur",
+  "with",
+  "please",
+  "plz",
+  "bhaiya",
+  "bhai",
+  "sir",
+  "madam",
+  "didi",
+  "ji",
+  "jiska",
+  "jis",
+  "jiske",
+  "jiski",
+  "usmein",
+  "usme",
+]);
+
+const titleCaseLatinToken = (token: string) =>
+  /^[a-z][a-z0-9().&\-]*$/i.test(token)
+    ? `${token.charAt(0).toUpperCase()}${token.slice(1).toLowerCase()}`
+    : token;
+
+const normalizeProductNameForAdd = (rawValue: string) => {
+  const tokens = rawValue
+    .replace(/["']/g, " ")
+    .split(/[^a-z0-9\u0900-\u097f().&\-]+/i)
+    .map((token) => token.trim())
+    .filter(Boolean)
+    .filter((token) => !/^\d+(?:\.\d+)?$/.test(token))
+    .filter((token) => !PRODUCT_NAME_NOISE_WORDS.has(token.toLowerCase()));
+
+  if (tokens.length === 0) {
     return null;
   }
 
-  const cleaned = cleanActionEntity(direct[1]);
-  return cleaned.length >= 2 ? cleaned : null;
+  return tokens.map((token) => titleCaseLatinToken(token)).join(" ");
+};
+
+const extractCustomerNameForBill = (message: string) => {
+  const compactMessage = message.replace(/\s+/g, " ").trim();
+  const customerPatterns = [
+    /(?:for|to|customer)\s+["']([^"']{2,80})["']/i,
+    /(?:bill|invoice|बिल|इनवॉइस)\s+(?:for|to)\s+["']([^"']{2,80})["']/i,
+    /([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s.&\-]{1,80}?)\s+(?:ke\s+liye|के\s*लिए)\s+(?:bill|invoice|बिल|इनवॉइस)/i,
+    /([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s.&\-]{1,80}?)\s+(?:ka|ki|ke|का|की|के)\s+(?:bill|invoice|बिल|इनवॉइस)/i,
+    /(?:for|to|customer)\s+([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s.&\-]{1,80})/i,
+    /(?:bill|invoice|बिल|इनवॉइस)\s+(?:for|to)\s+([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s.&\-]{1,80})/i,
+  ];
+
+  for (const pattern of customerPatterns) {
+    const candidate = compactMessage.match(pattern)?.[1];
+    if (!candidate) {
+      continue;
+    }
+
+    const cleaned = cleanActionEntity(
+      candidate
+        .replace(/^(?:please|plz)\s+/i, "")
+        .replace(/\s+(?:ji|sir|madam)$/i, ""),
+    );
+
+    if (cleaned.length >= 2) {
+      return cleaned;
+    }
+  }
+
+  return null;
 };
 
 type AssistantInvoiceItemCandidate = {
   name: string;
   quantity: number;
   price: number;
+};
+
+export type AssistantCreateBillParseResult = {
+  intent: "CREATE_BILL";
+  customerName: string | null;
+};
+
+export type AssistantAddProductParseResult = {
+  intent: "ADD_PRODUCT";
+  productName: string | null;
+  price: number | null;
+  gst: number | null;
+  hasPriceHint: boolean;
+  hasGstMention: boolean;
+};
+
+export type AssistantRemoveProductParseResult = {
+  intent: "REMOVE_PRODUCT";
+  productName: string | null;
+  hasRemoveKeyword: boolean;
+};
+
+type AssistantNumericToken = {
+  value: number;
+  start: number;
+  end: number;
 };
 
 const extractInvoiceItemsFromMessage = (
@@ -543,45 +788,486 @@ const extractInvoiceItemsFromMessage = (
   return items;
 };
 
-const extractProductNameForCreate = (message: string) => {
-  const quoted = message.match(/["']([^"']{2,80})["']/);
-  if (quoted?.[1]) {
-    const cleanedQuoted = cleanActionEntity(quoted[1]);
-    if (cleanedQuoted.length >= 2) return cleanedQuoted;
+export const parseCreateBillMessage = (
+  message: string,
+): AssistantCreateBillParseResult => ({
+  intent: "CREATE_BILL",
+  customerName: extractCustomerNameForBill(message),
+});
+
+const extractNumericTokens = (message: string): AssistantNumericToken[] => {
+  const tokens: AssistantNumericToken[] = [];
+
+  for (const match of message.matchAll(/\d+(?:,\d{3})*(?:\.\d+)?/g)) {
+    const raw = match[0] ?? "";
+    const index = match.index ?? -1;
+    if (!raw || index < 0) {
+      continue;
+    }
+
+    const start = index;
+    const end = start + raw.length;
+    const before = message[start - 1] ?? " ";
+    const after = message[end] ?? " ";
+
+    // Ignore numbers that are directly attached to letters (e.g. 18w).
+    if (/[a-z]/i.test(before) || /[a-z]/i.test(after)) {
+      continue;
+    }
+
+    const value = Number(raw.replace(/,/g, ""));
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+
+    tokens.push({ value, start, end });
   }
 
-  const named = message.match(
-    /(?:add|create|new)\s+(?:a\s+)?product(?:\s+(?:named|called))?\s+([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s().&\-]{1,80})/i,
-  );
-  if (!named?.[1]) {
-    return null;
-  }
-
-  const cleaned = cleanActionEntity(named[1]);
-  return cleaned.length >= 2 ? cleaned : null;
+  return tokens;
 };
 
-const extractRequestedGstRate = (message: string) => {
-  if (hasKeyword(message, ["without gst", "no gst"])) {
-    return 0;
+const extractRequestedGstRateDetails = (message: string) => {
+  const hasGstMention = /\bgst\b/i.test(message);
+
+  if (
+    hasKeyword(message, [
+      "without gst",
+      "no gst",
+      "gst free",
+      "gst nahi",
+      "gst nahin",
+    ])
+  ) {
+    return {
+      gst: 0,
+      hasGstMention: true,
+    };
   }
 
-  const numericMatch = message.match(
-    /(?:gst(?:\s*rate)?\s*|)(\d+(?:\.\d+)?)\s*%?\s*gst|gst(?:\s*rate)?\s*(\d+(?:\.\d+)?)/i,
-  );
-  const raw = numericMatch?.[1] ?? numericMatch?.[2] ?? null;
-  if (raw) {
-    const parsed = Number(raw);
+  const patterns = [
+    /(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:%|percent|pct)\s*gst/i,
+    /gst(?:\s*(?:of|rate|is|=|:|ke\s*saath|ke\s*liye|ka|ki|ko))?\s*(\d+(?:,\d{3})*(?:\.\d+)?)(?:\s*(?:%|percent|pct))?/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    const raw = match?.[1];
+    if (!raw) {
+      continue;
+    }
+
+    const parsed = Number(raw.replace(/,/g, ""));
     if (Number.isFinite(parsed)) {
-      return parsed;
+      return {
+        gst: parsed,
+        hasGstMention: true,
+      };
     }
   }
 
-  if (hasKeyword(message, ["with gst", "gst"])) {
-    return 18;
+  const standaloneNumber = extractStandaloneNumberReply(message);
+  if (
+    standaloneNumber != null &&
+    standaloneNumber >= 0 &&
+    standaloneNumber <= 28
+  ) {
+    return {
+      gst: standaloneNumber,
+      hasGstMention: true,
+    };
   }
 
-  return null;
+  return {
+    gst: null,
+    hasGstMention,
+  };
+};
+
+const extractPriceForAddProduct = (message: string, gstRate: number | null) => {
+  const hasPriceHint =
+    /(₹|rs\.?|inr)/i.test(message) ||
+    /\b(price|worth|cost|mrp|at|ka)\b/i.test(message);
+  const numericTokens = extractNumericTokens(message);
+
+  if (numericTokens.length === 0) {
+    return {
+      price: null,
+      hasPriceHint,
+    };
+  }
+
+  const priceCandidates = numericTokens.filter(
+    (token) =>
+      token.value > 0 &&
+      (gstRate == null || Math.abs(token.value - gstRate) >= 0.0001),
+  );
+
+  if (priceCandidates.length === 0) {
+    return {
+      price: null,
+      hasPriceHint,
+    };
+  }
+
+  const scored = priceCandidates
+    .map((token) => {
+      const localWindow = message.slice(
+        Math.max(0, token.start - 8),
+        Math.min(message.length, token.end + 8),
+      );
+      const leftWindow = normalizeText(
+        message.slice(Math.max(0, token.start - 20), token.start),
+      );
+      const rightWindow = normalizeText(
+        message.slice(token.end, token.end + 20),
+      );
+
+      let score = 0;
+
+      if (/(₹|rs\.?|inr)/i.test(localWindow)) {
+        score += 5;
+      }
+
+      if (/(price|worth|cost|mrp|at|for|ka)\s*$/.test(leftWindow)) {
+        score += 4;
+      }
+
+      if (/^\s*(₹|rs\.?|inr)/i.test(message.slice(token.end, token.end + 8))) {
+        score += 2;
+      }
+
+      if (/\bgst\b/.test(normalizeText(localWindow))) {
+        score -= 6;
+      }
+
+      if (gstRate != null && Math.abs(token.value - gstRate) < 0.0001) {
+        score -= 8;
+      }
+
+      if (token.value > 28) {
+        score += 2;
+      }
+
+      if (token.value <= 0) {
+        score -= 20;
+      }
+
+      if (rightWindow.startsWith("ka")) {
+        score += 3;
+      }
+
+      return {
+        value: token.value,
+        score,
+      };
+    })
+    .sort((left, right) => {
+      if (right.score === left.score) {
+        return right.value - left.value;
+      }
+
+      return right.score - left.score;
+    });
+
+  const best = scored[0];
+  if (best) {
+    return {
+      price: roundMetric(best.value, 2),
+      hasPriceHint,
+    };
+  }
+
+  return {
+    price: null,
+    hasPriceHint,
+  };
+};
+
+const REMOVE_PRODUCT_VERB_PATTERN =
+  /(?:\b(?:remove|delete)(?:\s*karo)?\b|\b(?:hatao|hata\s*do|hatado)\b|हटाओ|हटा\s*दो)/i;
+
+const stripLeadingRemoveFillers = (value: string) =>
+  value
+    .replace(
+      /^(?:(?:remove|delete|hatao|hata|hatado|product|item|please|plz|ye|this|the|karo|kar|do|de)\s+)+/i,
+      "",
+    )
+    .trim();
+
+const normalizeRemoveProductName = (value: string) =>
+  stripLeadingRemoveFillers(cleanActionEntity(value))
+    .replace(/\bas\s+(?:a\s+)?product\b.*$/i, " ")
+    .replace(/\bfrom\s+products?\b.*$/i, " ")
+    .replace(/\b(?:naam|name)\s*(?:ka|ki|ke)?\b/gi, " ")
+    .replace(/\b(?:products?|items?)\b$/i, " ")
+    .replace(/\b(?:as|from)\b$/i, " ")
+    .replace(/^(?:karo|kar\s*do|kar|do|de)\s+/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const extractProductNameForRemove = (message: string) => {
+  const quoted = message.match(/["']([^"']{2,80})["']/);
+  if (quoted?.[1]) {
+    const cleanedQuoted = normalizeRemoveProductName(quoted[1]);
+    if (cleanedQuoted.length >= 2) return cleanedQuoted;
+  }
+
+  const beforeAction = message.match(
+    /([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s().&\-]{1,80})\s+(?:(?:remove|delete)(?:\s*karo)?|hatao|hata\s*do|hatado)/i,
+  );
+  if (beforeAction?.[1]) {
+    const cleanedBeforeAction = normalizeRemoveProductName(beforeAction[1]);
+    if (cleanedBeforeAction.length >= 2) {
+      return cleanedBeforeAction;
+    }
+  }
+
+  const afterAction = message.match(
+    /(?:(?:remove|delete)(?:\s*karo)?|hatao|hata\s*do|hatado)\s+(?:product|item|ye|this|the|please|plz)?\s*(?!product\b|item\b|ye\b|this\b|the\b|please\b|plz\b|karo\b)([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s().&\-]{1,80})/i,
+  );
+  if (afterAction?.[1]) {
+    const cleanedAfterAction = normalizeRemoveProductName(afterAction[1]);
+    if (cleanedAfterAction.length >= 2) {
+      return cleanedAfterAction;
+    }
+  }
+
+  const candidate = message
+    .replace(/["']/g, " ")
+    .replace(
+      /(?:remove|delete|hatao|hata\s*do|hatado|remove\s*karo|delete\s*karo|हटा\s*दो|हटाओ)/gi,
+      " ",
+    )
+    .replace(
+      /\b(product|item|ye|this|the|please|plz|karo|kar|do|de|ko)\b/gi,
+      " ",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!candidate) {
+    return null;
+  }
+
+  const cleaned = normalizeRemoveProductName(candidate);
+  return cleaned.length >= 2 ? cleaned : null;
+};
+
+const extractProductNameForCreate = (message: string) => {
+  const quoted = message.match(/["']([^"']{2,80})["']/);
+  if (quoted?.[1]) {
+    const cleanedQuoted = normalizeProductNameForAdd(
+      stripLeadingProductFillers(cleanActionEntity(quoted[1])),
+    );
+    if (cleanedQuoted && cleanedQuoted.length >= 2) return cleanedQuoted;
+  }
+
+  const namedBeforeLabel = message.match(
+    /([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s().&\-]{1,80})\s+(?:name|naam)\s*(?:is|:|ka|ki|ke)\b/i,
+  );
+  if (namedBeforeLabel?.[1]) {
+    const cleanedNamedBeforeLabel = normalizeProductNameForAdd(
+      stripLeadingProductFillers(cleanActionEntity(namedBeforeLabel[1])),
+    );
+    if (cleanedNamedBeforeLabel && cleanedNamedBeforeLabel.length >= 2) {
+      return cleanedNamedBeforeLabel;
+    }
+  }
+
+  const namedByLabel = message.match(
+    /(?:name|naam)\s*(?:is|:|called|named|ka|ki|ke)\s*(?!\d)([a-z\u0900-\u097f][a-z0-9\u0900-\u097f\s().&\-]{1,80})/i,
+  );
+  if (namedByLabel?.[1]) {
+    const cleanedNamedByLabel = normalizeProductNameForAdd(
+      stripLeadingProductFillers(cleanActionEntity(namedByLabel[1])),
+    );
+    if (
+      cleanedNamedByLabel &&
+      cleanedNamedByLabel.length >= 2 &&
+      !/^(?:ka|ki|ke|karo|kar|do|de|item|product|price|gst|\d)/i.test(
+        cleanedNamedByLabel,
+      )
+    ) {
+      return cleanedNamedByLabel;
+    }
+  }
+
+  let candidate = message
+    .replace(/["']/g, " ")
+    .replace(/(\d+(?:,\d{3})*(?:\.\d+)?)\s*(?:%|percent|pct)\s*gst/gi, " ")
+    .replace(
+      /gst(?:\s*(?:of|rate|is|=|:|ke\s*saath|ke\s*liye|ka|ki|ko))?\s*\d+(?:,\d{3})*(?:\.\d+)?(?:\s*(?:%|percent|pct))?/gi,
+      " ",
+    )
+    .replace(/\b(?:without|no)\s+gst\b/gi, " ")
+    .replace(
+      /\b(?:price|worth|cost|mrp|at|for)\s*(?:is\s*)?(?:₹|rs\.?|inr)?\s*\d+(?:,\d{3})*(?:\.\d+)?/gi,
+      " ",
+    )
+    .replace(/(?:₹|rs\.?|inr)\s*\d+(?:,\d{3})*(?:\.\d+)?/gi, " ")
+    .replace(/\d+(?:,\d{3})*(?:\.\d+)?\s*(?:₹|rs\.?|inr)\b/gi, " ")
+    .replace(/\b\d+(?:,\d{3})*(?:\.\d+)?\s*ka\b/gi, " ")
+    .replace(/\b\d+(?:,\d{3})*(?:\.\d+)?\b/g, " ")
+    .replace(
+      /\b(add|create|new|product|item|naam|name|called|karo|kar|daal|dal|do|de|with|without|please|plz|ek|a|an|the|ko|ke|ki|ka|saath|mein|me|of|and|aur|gst|price|worth|cost|mrp|rs|inr)\b/gi,
+      " ",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!candidate) {
+    return null;
+  }
+
+  candidate = cleanActionEntity(candidate)
+    .replace(
+      /^(?:(?:ek|a|an|the|ye|this|product|item|add|create|new|karo|kar|do|de|please|plz)\s+)+/i,
+      "",
+    )
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const normalizedCandidate = normalizeProductNameForAdd(candidate);
+  return normalizedCandidate && normalizedCandidate.length >= 2
+    ? normalizedCandidate
+    : null;
+};
+
+export const parseAddProductMessage = (
+  message: string,
+): AssistantAddProductParseResult => {
+  const gst = extractRequestedGstRateDetails(message);
+  const price = extractPriceForAddProduct(message, gst.gst);
+
+  return {
+    intent: "ADD_PRODUCT",
+    productName: extractProductNameForCreate(message),
+    price: price.price,
+    gst: gst.gst,
+    hasPriceHint: price.hasPriceHint,
+    hasGstMention: gst.hasGstMention,
+  };
+};
+
+export const parseRemoveProductMessage = (
+  message: string,
+): AssistantRemoveProductParseResult => {
+  const normalized = normalizeText(message);
+
+  return {
+    intent: "REMOVE_PRODUCT",
+    productName: extractProductNameForRemove(message),
+    hasRemoveKeyword:
+      hasKeyword(message, REMOVE_PRODUCT_KEYWORDS) ||
+      REMOVE_PRODUCT_VERB_PATTERN.test(normalized),
+  };
+};
+
+const looksLikeRemoveProductIntent = (message: string) => {
+  const parsed = parseRemoveProductMessage(message);
+  if (!parsed.hasRemoveKeyword) {
+    return false;
+  }
+
+  const normalized = normalizeText(message);
+  const referencesOtherEntity =
+    /\b(invoice|bill|customer|supplier|purchase|sale|payment)\b/i.test(
+      normalized,
+    ) && !/\b(product|item)\b/i.test(normalized);
+
+  if (referencesOtherEntity) {
+    return false;
+  }
+
+  return true;
+};
+
+const looksLikeAddProductIntent = (message: string) => {
+  const normalized = normalizeText(message);
+
+  if (
+    hasKeyword(message, REMOVE_PRODUCT_KEYWORDS) ||
+    REMOVE_PRODUCT_VERB_PATTERN.test(normalized)
+  ) {
+    return false;
+  }
+
+  if (hasKeyword(message, ADD_PRODUCT_KEYWORDS)) {
+    return true;
+  }
+
+  if (
+    hasKeyword(message, [
+      ...CREATE_BILL_KEYWORDS,
+      ...SMART_INSIGHT_KEYWORDS,
+      ...AFFORDABILITY_KEYWORDS,
+      ...TOP_SPEND_KEYWORDS,
+      ...BUDGET_KEYWORDS,
+      ...SAVINGS_KEYWORDS,
+      ...REMINDER_KEYWORDS,
+      ...PENDING_KEYWORDS,
+      ...CASHFLOW_KEYWORDS,
+      ...PROFIT_KEYWORDS,
+      ...SALES_KEYWORDS,
+    ])
+  ) {
+    return false;
+  }
+
+  const parsed = parseAddProductMessage(message);
+  const hasActionVerb =
+    /\b(add|create|new|karo|kar do|daal do|dal do|jodo|banao|banado)\b/i.test(
+      normalized,
+    );
+  const hasProductCue = /\b(product|item|naam|name|sku)\b/i.test(normalized);
+  const hasCurrencyCue =
+    /(₹|rs\.?|inr)/i.test(message) ||
+    /\b(price|worth|cost|mrp|ka)\b/i.test(normalized);
+
+  if (hasActionVerb && (parsed.productName || parsed.price != null)) {
+    return true;
+  }
+
+  if (parsed.productName && parsed.hasGstMention) {
+    return true;
+  }
+
+  if (
+    parsed.productName &&
+    parsed.price != null &&
+    (hasCurrencyCue || hasProductCue)
+  ) {
+    return true;
+  }
+
+  if (parsed.productName && parsed.price != null && parsed.gst != null) {
+    return true;
+  }
+
+  return false;
+};
+
+const CREATE_BILL_VERB_PATTERN =
+  /\b(create|make|generate|banao|bana|banado|ban do|bana do)\b/i;
+const BILL_NOUN_PATTERN = /\b(bill|invoice|बिल|इनवॉइस)\b/i;
+const BILL_CONTEXT_PATTERN =
+  /(?:ke\s+liye|के\s*लिए|ka\s+bill|ki\s+bill|ke\s+bill)/i;
+
+const looksLikeCreateBillIntent = (message: string) => {
+  if (hasKeyword(message, CREATE_BILL_KEYWORDS)) {
+    return true;
+  }
+
+  const normalized = normalizeText(message);
+  const hasBillNoun = BILL_NOUN_PATTERN.test(message);
+  if (!hasBillNoun) {
+    return false;
+  }
+
+  return (
+    CREATE_BILL_VERB_PATTERN.test(normalized) ||
+    BILL_CONTEXT_PATTERN.test(normalized)
+  );
 };
 
 const buildAssistantSku = (productName: string) => {
@@ -657,10 +1343,13 @@ const formatPeriodLabel = (
 
 const hasKeyword = (message: string, keywords: string[]) => {
   const normalized = normalizeText(message);
-  return keywords.some((keyword) => normalized.includes(normalizeText(keyword)));
+  return keywords.some((keyword) =>
+    normalized.includes(normalizeText(keyword)),
+  );
 };
 
-const containsDevanagari = (message: string) => DEVANAGARI_PATTERN.test(message);
+const containsDevanagari = (message: string) =>
+  DEVANAGARI_PATTERN.test(message);
 
 const isSyncedInvoiceSale = (notes: string | null | undefined) =>
   SYNCED_INVOICE_NOTE_PATTERN.test(notes ?? "");
@@ -689,11 +1378,17 @@ const resolveInvoicePendingAmount = (invoice: {
   status: InvoiceStatus | string;
   payments: Array<{ amount: unknown }>;
 }) => {
-  if (invoice.status === InvoiceStatus.DRAFT || invoice.status === InvoiceStatus.VOID) {
+  if (
+    invoice.status === InvoiceStatus.DRAFT ||
+    invoice.status === InvoiceStatus.VOID
+  ) {
     return 0;
   }
 
-  return Math.max(0, toNumber(invoice.total) - resolveInvoicePaidAmount(invoice));
+  return Math.max(
+    0,
+    toNumber(invoice.total) - resolveInvoicePaidAmount(invoice),
+  );
 };
 
 const resolvePurchaseRealizedAmount = (purchase: {
@@ -717,7 +1412,8 @@ const resolvePurchaseRealizedAmount = (purchase: {
 
 const resolveAllocationRatio = (purchase: AssistantPurchaseRecord) => {
   const realizedAmount = resolvePurchaseRealizedAmount(purchase);
-  const totalAmount = toNumber(purchase.totalAmount) || toNumber(purchase.total);
+  const totalAmount =
+    toNumber(purchase.totalAmount) || toNumber(purchase.total);
 
   if (realizedAmount <= 0 || totalAmount <= 0) {
     return 0;
@@ -730,26 +1426,154 @@ const resolveConversationMessage = (
   message: string,
   history: AssistantHistoryMessage[],
 ) => {
-  const normalized = normalizeText(message);
-  const recentUserMessage = [...history]
-    .reverse()
-    .find((entry) => entry.role === "user" && entry.content.trim().length > 0);
+  return {
+    conversationMessage: message,
+    usedHistory: false,
+  };
+};
 
-  const shouldUseHistory =
-    !!recentUserMessage &&
-    (message.trim().length <= 28 ||
-      FOLLOW_UP_KEYWORDS.some((keyword) => normalized.includes(keyword)));
+const STANDALONE_NUMBER_REPLY_PATTERN =
+  /^(?:₹|rs\.?|inr)?\s*\d+(?:,\d{3})*(?:\.\d+)?\s*%?$/i;
 
-  if (!shouldUseHistory || !recentUserMessage) {
-    return {
-      conversationMessage: message,
-      usedHistory: false,
-    };
+const extractStandaloneNumberReply = (message: string) => {
+  const match = message
+    .trim()
+    .replace(/,/g, "")
+    .match(/^(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?)\s*%?$/i);
+  const raw = match?.[1] ?? null;
+  if (!raw) {
+    return null;
   }
 
-  // Preserve the latest wording while borrowing missing context from the previous user turn.
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const buildRecentAddProductContext = (history: AssistantHistoryMessage[]) => {
+  const recentUserMessages = [...history]
+    .reverse()
+    .filter((entry) => entry.role === "user" && entry.content.trim().length > 0)
+    .map((entry) => sanitizeTranscriptMessage(entry.content));
+
+  let productName: string | null = null;
+  let price: number | null = null;
+  let gst: number | null = null;
+
+  for (const userMessage of recentUserMessages) {
+    const parsed = parseAddProductMessage(userMessage);
+    const hasStrongAddCue =
+      looksLikeAddProductIntent(userMessage) ||
+      hasKeyword(userMessage, ADD_PRODUCT_KEYWORDS);
+
+    if (!productName && parsed.productName && hasStrongAddCue) {
+      productName = parsed.productName;
+    }
+
+    if (price == null && parsed.price != null && parsed.price > 0) {
+      price = parsed.price;
+    }
+
+    if (
+      gst == null &&
+      parsed.gst != null &&
+      parsed.gst >= 0 &&
+      parsed.gst <= 28
+    ) {
+      gst = parsed.gst;
+    }
+
+    if (productName && price != null && gst != null) {
+      break;
+    }
+  }
+
   return {
-    conversationMessage: `${recentUserMessage.content} ${message}`.trim(),
+    productName,
+    price,
+    gst,
+  };
+};
+
+const resolveAddProductFollowUpMessage = (
+  message: string,
+  history: AssistantHistoryMessage[],
+) => {
+  const normalizedMessage = normalizeText(message);
+  const recentAssistantMessage = [...history]
+    .reverse()
+    .find(
+      (entry) => entry.role === "assistant" && entry.content.trim().length > 0,
+    )?.content;
+
+  if (!recentAssistantMessage) {
+    return null;
+  }
+
+  const normalizedAssistantMessage = normalizeText(recentAssistantMessage);
+  const assistantAskedForGst =
+    /\bgst\b/.test(normalizedAssistantMessage) &&
+    /\b(kitna|percent|number|rate|apply|0\s*se\s*28)\b/.test(
+      normalizedAssistantMessage,
+    );
+  const assistantAskedForPrice =
+    /\bprice\b/.test(normalizedAssistantMessage) &&
+    /\b(bata|share|tell|bolo|required|need)\b/.test(normalizedAssistantMessage);
+
+  const compactFollowUpMessage =
+    message.trim().length <= 20 ||
+    STANDALONE_NUMBER_REPLY_PATTERN.test(message) ||
+    /^(?:gst|price|₹|rs\.?|inr)/i.test(normalizedMessage);
+
+  if (
+    !compactFollowUpMessage &&
+    !assistantAskedForGst &&
+    !assistantAskedForPrice
+  ) {
+    return null;
+  }
+
+  const currentParsed = parseAddProductMessage(message);
+  const context = buildRecentAddProductContext(history);
+  const standaloneNumber = extractStandaloneNumberReply(message);
+
+  const productName = currentParsed.productName ?? context.productName;
+  let price = currentParsed.price;
+  let gst = currentParsed.gst;
+
+  if (
+    assistantAskedForPrice &&
+    price == null &&
+    standaloneNumber != null &&
+    standaloneNumber > 0
+  ) {
+    price = standaloneNumber;
+  }
+
+  if (
+    assistantAskedForGst &&
+    (gst == null || gst < 0 || gst > 28) &&
+    standaloneNumber != null &&
+    standaloneNumber >= 0 &&
+    standaloneNumber <= 28
+  ) {
+    gst = standaloneNumber;
+  }
+
+  if (price == null && context.price != null && assistantAskedForGst) {
+    price = context.price;
+  }
+
+  if (!productName || price == null) {
+    return null;
+  }
+
+  const rebuiltMessage =
+    gst != null && assistantAskedForGst
+      ? `Add product ${productName} at ₹${roundMetric(price, 2)} with GST ${roundMetric(gst, 2)}`
+      : `Add product ${productName} at ₹${roundMetric(price, 2)}`;
+
+  return {
+    conversationMessage: rebuiltMessage,
     usedHistory: true,
   };
 };
@@ -1010,6 +1834,127 @@ const buildGstRecommendation = async (params: {
   };
 };
 
+const dedupeProductSuggestionsById = (
+  suggestions: AssistantCopilotProductSuggestion[],
+) => {
+  const seen = new Set<number>();
+
+  return suggestions.filter((suggestion) => {
+    if (seen.has(suggestion.id)) {
+      return false;
+    }
+
+    seen.add(suggestion.id);
+    return true;
+  });
+};
+
+const normalizeForFuzzyProductMatch = (value: string) =>
+  normalizeText(value).replace(/[^a-z0-9\u0900-\u097f]/g, "");
+
+const levenshteinDistance = (left: string, right: string) => {
+  if (left === right) {
+    return 0;
+  }
+
+  if (left.length === 0) {
+    return right.length;
+  }
+
+  if (right.length === 0) {
+    return left.length;
+  }
+
+  const previousRow = new Array<number>(right.length + 1);
+  const currentRow = new Array<number>(right.length + 1);
+
+  for (let column = 0; column <= right.length; column += 1) {
+    previousRow[column] = column;
+  }
+
+  for (let row = 1; row <= left.length; row += 1) {
+    currentRow[0] = row;
+
+    for (let column = 1; column <= right.length; column += 1) {
+      const cost = left[row - 1] === right[column - 1] ? 0 : 1;
+      currentRow[column] = Math.min(
+        currentRow[column - 1] + 1,
+        previousRow[column] + 1,
+        previousRow[column - 1] + cost,
+      );
+    }
+
+    for (let column = 0; column <= right.length; column += 1) {
+      previousRow[column] = currentRow[column];
+    }
+  }
+
+  return previousRow[right.length];
+};
+
+const rankFuzzyProductMatches = <T extends { name: string }>(
+  query: string,
+  products: T[],
+  limit = 5,
+) => {
+  const normalizedQuery = normalizeForFuzzyProductMatch(query);
+  if (normalizedQuery.length < 2) {
+    return [] as T[];
+  }
+
+  const ranked = products
+    .map((product) => {
+      const normalizedName = normalizeForFuzzyProductMatch(product.name);
+      if (!normalizedName) {
+        return null;
+      }
+
+      if (
+        normalizedName.includes(normalizedQuery) ||
+        normalizedQuery.includes(normalizedName)
+      ) {
+        return {
+          product,
+          score: 0,
+          lengthDiff: Math.abs(normalizedName.length - normalizedQuery.length),
+        };
+      }
+
+      const distance = levenshteinDistance(normalizedQuery, normalizedName);
+      const threshold = Math.max(
+        2,
+        Math.floor(
+          Math.max(normalizedQuery.length, normalizedName.length) * 0.35,
+        ),
+      );
+
+      if (distance > threshold) {
+        return null;
+      }
+
+      return {
+        product,
+        score: distance,
+        lengthDiff: Math.abs(normalizedName.length - normalizedQuery.length),
+      };
+    })
+    .filter(
+      (entry): entry is { product: T; score: number; lengthDiff: number } =>
+        entry !== null,
+    )
+    .sort((left, right) => {
+      if (left.score === right.score) {
+        return left.lengthDiff - right.lengthDiff;
+      }
+
+      return left.score - right.score;
+    })
+    .slice(0, limit)
+    .map((entry) => entry.product);
+
+  return ranked;
+};
+
 const searchProductSuggestions = async (params: {
   userId: number;
   message: string;
@@ -1067,12 +2012,14 @@ const searchProductSuggestions = async (params: {
     .sort((left, right) => right.score - left.score)
     .slice(0, params.limit ?? 5);
 
-  return scored.map((candidate) => ({
-    id: candidate.id,
-    name: candidate.name,
-    price: roundMetric(toNumber(candidate.price), 2),
-    gstRate: roundMetric(toNumber(candidate.gst_rate), 2),
-  }));
+  return dedupeProductSuggestionsById(
+    scored.map((candidate) => ({
+      id: candidate.id,
+      name: candidate.name,
+      price: roundMetric(toNumber(candidate.price), 2),
+      gstRate: roundMetric(toNumber(candidate.gst_rate), 2),
+    })),
+  ).slice(0, params.limit ?? 5);
 };
 
 const fetchTopSellingProducts = async (params: {
@@ -1128,7 +2075,9 @@ const fetchTopSellingProducts = async (params: {
       const quantity = Math.max(0, Number(group._sum.quantity ?? 0));
       const revenue = roundMetric(toNumber(group._sum.line_total), 2);
       const product =
-        group.product_id != null ? productMap.get(group.product_id) ?? null : null;
+        group.product_id != null
+          ? (productMap.get(group.product_id) ?? null)
+          : null;
 
       return {
         productId: group.product_id,
@@ -1236,7 +2185,10 @@ const buildSmartInsightsPayload = async (params: {
     },
   ];
 
-  if (primary.stockOnHand != null && primary.stockOnHand <= Math.max(3, primary.quantity)) {
+  if (
+    primary.stockOnHand != null &&
+    primary.stockOnHand <= Math.max(3, primary.quantity)
+  ) {
     insights.push({
       title:
         params.language === "hi"
@@ -1270,7 +2222,9 @@ const buildSmartInsightsPayload = async (params: {
 };
 
 const extractAmount = (message: string) => {
-  const match = message.replace(/,/g, "").match(/(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?)/i);
+  const match = message
+    .replace(/,/g, "")
+    .match(/(?:₹|rs\.?|inr)?\s*(\d+(?:\.\d+)?)/i);
   if (!match?.[1]) return null;
   const parsed = Number(match[1]);
   return Number.isFinite(parsed) ? parsed : null;
@@ -1303,69 +2257,38 @@ const extractEntity = (message: string) => {
   return null;
 };
 
-const detectIntent = (message: string, amount: number | null, entity: string | null) => {
-  if (hasKeyword(message, CREATE_BILL_KEYWORDS)) {
-    return "create_bill" satisfies AssistantIntent;
+const detectIntent = (
+  message: string,
+  amount: number | null,
+  entity: string | null,
+) => {
+  if (looksLikeRemoveProductIntent(message)) {
+    return "remove_product" satisfies AssistantIntent;
   }
 
-  if (hasKeyword(message, ADD_PRODUCT_KEYWORDS)) {
+  if (looksLikeAddProductIntent(message)) {
     return "add_product" satisfies AssistantIntent;
   }
 
-  if (hasKeyword(message, SMART_INSIGHT_KEYWORDS)) {
-    return "smart_insights" satisfies AssistantIntent;
+  const navigationTarget = resolveNavigationTarget(message);
+  if (navigationTarget) {
+    return "navigate" satisfies AssistantIntent;
   }
 
-  if (amount !== null && hasKeyword(message, AFFORDABILITY_KEYWORDS)) {
-    return "affordability" satisfies AssistantIntent;
+  if (hasKeyword(message, SHOW_PRODUCTS_KEYWORDS)) {
+    return "show_products" satisfies AssistantIntent;
   }
 
-  if (hasKeyword(message, HEALTH_KEYWORDS)) {
-    return "health_score" satisfies AssistantIntent;
+  if (hasKeyword(message, SHOW_INVOICES_KEYWORDS)) {
+    return "show_invoices" satisfies AssistantIntent;
   }
 
-  if (hasKeyword(message, BEHAVIOR_KEYWORDS)) {
-    return "behavior_insights" satisfies AssistantIntent;
+  if (hasKeyword(message, SHOW_CUSTOMERS_KEYWORDS)) {
+    return "show_customers" satisfies AssistantIntent;
   }
 
-  if (hasKeyword(message, GOAL_KEYWORDS)) {
-    return "goal_tracking" satisfies AssistantIntent;
-  }
-
-  if (hasKeyword(message, SAVINGS_KEYWORDS)) {
-    return "savings_suggestion" satisfies AssistantIntent;
-  }
-
-  if (hasKeyword(message, REMINDER_KEYWORDS)) {
-    return "bill_reminder" satisfies AssistantIntent;
-  }
-
-  if (hasKeyword(message, BUDGET_KEYWORDS)) {
-    return "budget_plan" satisfies AssistantIntent;
-  }
-
-  if (hasKeyword(message, TOP_SPEND_KEYWORDS)) {
-    return "top_spend" satisfies AssistantIntent;
-  }
-
-  if (entity && hasKeyword(message, SPEND_KEYWORDS)) {
-    return "vendor_spend" satisfies AssistantIntent;
-  }
-
-  if (hasKeyword(message, PENDING_KEYWORDS)) {
-    return "pending_payments" satisfies AssistantIntent;
-  }
-
-  if (hasKeyword(message, CASHFLOW_KEYWORDS)) {
-    return "cashflow" satisfies AssistantIntent;
-  }
-
-  if (hasKeyword(message, PROFIT_KEYWORDS)) {
-    return "profit" satisfies AssistantIntent;
-  }
-
-  if (hasKeyword(message, SALES_KEYWORDS)) {
-    return "total_sales" satisfies AssistantIntent;
+  if (looksLikeCreateBillIntent(message)) {
+    return "create_bill" satisfies AssistantIntent;
   }
 
   return "help" satisfies AssistantIntent;
@@ -1378,95 +2301,99 @@ const buildAssistantSnapshot = async (
   snapshot: AssistantFinanceSnapshot;
   purchases: AssistantPurchaseRecord[];
 }> => {
-  const [salesSnapshot, purchases, expenseRows, sales, invoices] = await Promise.all([
-    fetchCashInflowSnapshot({
-      userId,
-      start: period.start,
-      endExclusive: period.endExclusive,
-      debugLabel: "assistant conversational snapshot",
-    }),
-    prisma.purchase.findMany({
-      where: {
-        user_id: userId,
-        OR: [
-          { paymentDate: { gte: period.start, lt: period.endExclusive } },
-          {
-            paymentDate: null,
-            purchase_date: { gte: period.start, lt: period.endExclusive },
-          },
-        ],
-      },
-      select: {
-        id: true,
-        purchase_date: true,
-        paymentDate: true,
-        total: true,
-        totalAmount: true,
-        paidAmount: true,
-        paymentStatus: true,
-        notes: true,
-        supplier: {
-          select: {
-            name: true,
-          },
+  const [salesSnapshot, purchases, expenseRows, sales, invoices] =
+    await Promise.all([
+      fetchCashInflowSnapshot({
+        userId,
+        start: period.start,
+        endExclusive: period.endExclusive,
+        debugLabel: "assistant conversational snapshot",
+      }),
+      prisma.purchase.findMany({
+        where: {
+          user_id: userId,
+          OR: [
+            { paymentDate: { gte: period.start, lt: period.endExclusive } },
+            {
+              paymentDate: null,
+              purchase_date: { gte: period.start, lt: period.endExclusive },
+            },
+          ],
         },
-        items: {
-          select: {
-            name: true,
-            line_total: true,
-            product: {
-              select: {
-                name: true,
-                category: {
-                  select: {
-                    name: true,
+        select: {
+          id: true,
+          purchase_date: true,
+          paymentDate: true,
+          total: true,
+          totalAmount: true,
+          paidAmount: true,
+          paymentStatus: true,
+          notes: true,
+          supplier: {
+            select: {
+              name: true,
+            },
+          },
+          items: {
+            select: {
+              name: true,
+              line_total: true,
+              product: {
+                select: {
+                  name: true,
+                  category: {
+                    select: {
+                      name: true,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    }),
-    getDailyExpenses({ userId, from: period.start }),
-    prisma.sale.findMany({
-      where: {
-        user_id: userId,
-        status: SaleStatus.COMPLETED,
-        sale_date: { gte: period.start, lt: period.endExclusive },
-      },
-      select: {
-        pendingAmount: true,
-        notes: true,
-      },
-    }),
-    prisma.invoice.findMany({
-      where: {
-        user_id: userId,
-        date: { gte: period.start, lt: period.endExclusive },
-        status: {
-          in: [
-            InvoiceStatus.SENT,
-            InvoiceStatus.PARTIALLY_PAID,
-            InvoiceStatus.OVERDUE,
-            InvoiceStatus.PAID,
-          ],
+      }),
+      getDailyExpenses({ userId, from: period.start }),
+      prisma.sale.findMany({
+        where: {
+          user_id: userId,
+          status: SaleStatus.COMPLETED,
+          sale_date: { gte: period.start, lt: period.endExclusive },
         },
-      },
-      select: {
-        total: true,
-        status: true,
-        payments: {
-          select: {
-            amount: true,
+        select: {
+          pendingAmount: true,
+          notes: true,
+        },
+      }),
+      prisma.invoice.findMany({
+        where: {
+          user_id: userId,
+          date: { gte: period.start, lt: period.endExclusive },
+          status: {
+            in: [
+              InvoiceStatus.SENT,
+              InvoiceStatus.PARTIALLY_PAID,
+              InvoiceStatus.OVERDUE,
+              InvoiceStatus.PAID,
+            ],
           },
         },
-      },
-    }),
-  ]);
+        select: {
+          total: true,
+          status: true,
+          payments: {
+            select: {
+              amount: true,
+            },
+          },
+        },
+      }),
+    ]);
 
   const purchasePayments = roundMetric(
-    purchases.reduce((sum, purchase) => sum + resolvePurchaseRealizedAmount(purchase), 0),
+    purchases.reduce(
+      (sum, purchase) => sum + resolvePurchaseRealizedAmount(purchase),
+      0,
+    ),
   );
   const expenses = roundMetric(
     expenseRows
@@ -1476,10 +2403,16 @@ const buildAssistantSnapshot = async (
   const pendingSales = roundMetric(
     sales
       .filter((sale) => !isSyncedInvoiceSale(sale.notes))
-      .reduce((sum, sale) => sum + Math.max(0, toNumber(sale.pendingAmount)), 0),
+      .reduce(
+        (sum, sale) => sum + Math.max(0, toNumber(sale.pendingAmount)),
+        0,
+      ),
   );
   const pendingInvoices = roundMetric(
-    invoices.reduce((sum, invoice) => sum + resolveInvoicePendingAmount(invoice), 0),
+    invoices.reduce(
+      (sum, invoice) => sum + resolveInvoicePendingAmount(invoice),
+      0,
+    ),
   );
   const totalOutflow = roundMetric(purchasePayments + expenses);
   const totalSales = roundMetric(salesSnapshot.total);
@@ -1545,10 +2478,67 @@ const buildActionExamples = (
       ];
     }
 
-    return [
-      "Add product Bread at ₹40 with GST 5",
-      "Add product Milk at ₹60",
-    ];
+    return ["Add product Bread at ₹40 with GST 5", "Add product Milk at ₹60"];
+  }
+
+  if (intent === "remove_product") {
+    if (language === "hi") {
+      return ["Speaker product हटा दो", "Bluetooth speaker delete करो"];
+    }
+
+    if (language === "hinglish") {
+      return ["Speaker hata do", "Bluetooth speaker delete karo"];
+    }
+
+    return ["Remove speaker", "Delete bluetooth speaker"];
+  }
+
+  if (intent === "show_invoices") {
+    if (language === "hi") {
+      return ["इनवॉइस दिखाओ", "बिल history दिखाओ"];
+    }
+
+    if (language === "hinglish") {
+      return ["Invoices dikhao", "Bill history dikhao"];
+    }
+
+    return ["Show invoices", "Open bill history"];
+  }
+
+  if (intent === "show_customers") {
+    if (language === "hi") {
+      return ["ग्राहक दिखाओ", "Customer list खोलो"];
+    }
+
+    if (language === "hinglish") {
+      return ["Customers dikhao", "Customer list kholo"];
+    }
+
+    return ["Show customers", "Open customer list"];
+  }
+
+  if (intent === "show_products") {
+    if (language === "hi") {
+      return ["Products dikhao", "Product list kholo"];
+    }
+
+    if (language === "hinglish") {
+      return ["Products dikhao", "Products page kholo"];
+    }
+
+    return ["Show products", "Open products page"];
+  }
+
+  if (intent === "navigate") {
+    if (language === "hi") {
+      return ["Customers page kholo", "Products page kholo"];
+    }
+
+    if (language === "hinglish") {
+      return ["Customers page kholo", "Invoices page open karo"];
+    }
+
+    return ["Open customers page", "Navigate to invoices"];
   }
 
   return HELP_EXAMPLES[language];
@@ -1584,26 +2574,104 @@ const executeAddProductAction = async (params: {
     };
   }
 
-  const productName = extractProductNameForCreate(params.message);
-  const price = extractAmount(params.message);
-  const gstRate = extractRequestedGstRate(params.message);
+  const parsedInput = parseAddProductMessage(params.message);
+  const { productName, price, gst: gstRate } = parsedInput;
+
+  logAssistantDebug("action.add_product.parsed", {
+    userId: params.userId,
+    payload: parsedInput,
+  });
 
   const productSuggestions = await searchProductSuggestions({
     userId: params.userId,
     message: params.message,
   });
 
-  if (!productName || price == null || price <= 0) {
+  if (!productName) {
     return {
       action: {
         type: "create_product",
         status: "failed",
         message:
           params.language === "hi"
-            ? "Product add करने के लिए नाम और price दोनों चाहिए। जैसे: Bread product ₹40 पर GST 5 जोड़ो।"
+            ? "Product ka naam bata do."
             : params.language === "hinglish"
-              ? "Product add karne ke liye naam aur price dono chahiye. Example: Bread product ₹40 par GST 5 add karo."
-              : "To add a product, I need both name and price. Example: Add product Bread at ₹40 with GST 5.",
+              ? "Product ka naam bata do."
+              : "Please share the product name.",
+      },
+      copilot:
+        productSuggestions.length > 0
+          ? {
+              productSuggestions,
+            }
+          : undefined,
+    };
+  }
+
+  const productNameWordCount = productName
+    .split(/\s+/)
+    .filter((token) => token.trim().length > 0).length;
+
+  if (productNameWordCount > 3 || productName.length > 40) {
+    return {
+      action: {
+        type: "create_product",
+        status: "failed",
+        message:
+          params.language === "en"
+            ? "Please confirm the product name only (1-3 words)."
+            : "Product ka naam confirm karein? (sirf 1-3 words)",
+      },
+      copilot:
+        productSuggestions.length > 0
+          ? {
+              productSuggestions,
+            }
+          : undefined,
+    };
+  }
+
+  if (price == null || price <= 0) {
+    const invalidPriceHint = parsedInput.hasPriceHint;
+
+    return {
+      action: {
+        type: "create_product",
+        status: "failed",
+        message:
+          params.language === "hi"
+            ? invalidPriceHint
+              ? `${productName} ka price valid number mein batao (₹ में).`
+              : `${productName} ka price bata do (₹ में).`
+            : params.language === "hinglish"
+              ? invalidPriceHint
+                ? `${productName} ka price valid number mein batao (₹ mein).`
+                : `${productName} ka price bata do (₹ mein).`
+              : invalidPriceHint
+                ? `Please share a valid numeric price for ${productName} in INR.`
+                : `Please share the price for ${productName} in INR.`,
+      },
+      copilot:
+        productSuggestions.length > 0
+          ? {
+              productSuggestions,
+            }
+          : undefined,
+    };
+  }
+
+  if (gstRate == null) {
+    return {
+      action: {
+        type: "create_product",
+        status: "failed",
+        message: parsedInput.hasGstMention
+          ? params.language === "hi"
+            ? "GST percent number mein batao (0 se 28)."
+            : params.language === "hinglish"
+              ? "GST percent number mein batao (0 se 28)."
+              : "Please share GST as a number between 0 and 28."
+          : `${productName} ₹${roundMetric(price, 2)} noted. GST kitna apply karna hai?`,
       },
       copilot:
         productSuggestions.length > 0
@@ -1635,25 +2703,18 @@ const executeAddProductAction = async (params: {
     };
   }
 
-  const gstRecommendation: AssistantCopilotGstRecommendation =
-    gstRate != null
-      ? {
-          rate: gstRate,
-          confidence: "high",
-          reason:
-            params.language === "hi"
-              ? `आपने GST ${gstRate}% दिया, वही लागू किया गया।`
-              : params.language === "hinglish"
-                ? `Aapne GST ${gstRate}% diya, wahi apply kiya gaya.`
-                : `Using the GST ${gstRate}% you provided.`,
-        }
-      : await buildGstRecommendation({
-          userId: params.userId,
-          productName,
-          language: params.language,
-        });
+  const gstRecommendation: AssistantCopilotGstRecommendation = {
+    rate: gstRate,
+    confidence: "high",
+    reason:
+      params.language === "hi"
+        ? `आपने GST ${gstRate}% दिया, वही लागू किया गया।`
+        : params.language === "hinglish"
+          ? `Aapne GST ${gstRate}% diya, wahi apply kiya gaya.`
+          : `Using the GST ${gstRate}% you provided.`,
+  };
 
-  const resolvedGstRate = gstRate ?? gstRecommendation.rate;
+  const resolvedGstRate = gstRate;
 
   const existingProduct = await prisma.product.findFirst({
     where: {
@@ -1688,7 +2749,7 @@ const executeAddProductAction = async (params: {
       },
       copilot: {
         gstRecommendation,
-        productSuggestions: [
+        productSuggestions: dedupeProductSuggestionsById([
           {
             id: existingProduct.id,
             name: existingProduct.name,
@@ -1696,7 +2757,7 @@ const executeAddProductAction = async (params: {
             gstRate: roundMetric(toNumber(existingProduct.gst_rate), 2),
           },
           ...productSuggestions,
-        ].slice(0, 5),
+        ]).slice(0, 5),
       },
     };
   }
@@ -1719,7 +2780,10 @@ const executeAddProductAction = async (params: {
     },
   });
 
-  emitDashboardUpdate({ userId: params.userId, source: "assistant.product.create" });
+  emitDashboardUpdate({
+    userId: params.userId,
+    source: "assistant.product.create",
+  });
 
   logAssistantDebug("action.add_product.completed", {
     userId: params.userId,
@@ -1745,7 +2809,7 @@ const executeAddProductAction = async (params: {
     action,
     copilot: {
       gstRecommendation,
-      productSuggestions: [
+      productSuggestions: dedupeProductSuggestionsById([
         {
           id: createdProduct.id,
           name: createdProduct.name,
@@ -1753,8 +2817,244 @@ const executeAddProductAction = async (params: {
           gstRate: roundMetric(toNumber(createdProduct.gst_rate), 2),
         },
         ...productSuggestions,
-      ].slice(0, 5),
+      ]).slice(0, 5),
     },
+  };
+};
+
+const executeRemoveProductAction = async (params: {
+  userId: number;
+  language: AssistantLanguage;
+  message: string;
+}): Promise<AssistantActionExecution> => {
+  logAssistantDebug("action.remove_product.started", {
+    userId: params.userId,
+  });
+
+  const dedupeKey = buildAssistantActionKey(
+    params.userId,
+    "remove_product",
+    params.message,
+  );
+  const recent = getRecentAssistantAction(dedupeKey);
+  if (recent?.status === "success") {
+    return {
+      action: {
+        ...recent,
+        status: "noop",
+        message:
+          params.language === "hi"
+            ? "Yeh product abhi remove kiya gaya hai. Product list refresh karke dekh lo."
+            : params.language === "hinglish"
+              ? "Yeh product abhi remove kiya gaya hai. Product list refresh karke dekh lo."
+              : "This product was removed just now. Please refresh the product list once.",
+      },
+    };
+  }
+
+  const parsedInput = parseRemoveProductMessage(params.message);
+  const { productName } = parsedInput;
+
+  logAssistantDebug("action.remove_product.parsed", {
+    userId: params.userId,
+    payload: parsedInput,
+  });
+
+  if (!productName) {
+    return {
+      action: {
+        type: "remove_product",
+        status: "failed",
+        message:
+          params.language === "en"
+            ? "Which product should I remove?"
+            : "Kaunsa product remove karna hai?",
+      },
+    };
+  }
+
+  const exactProduct = await prisma.product.findFirst({
+    where: {
+      user_id: params.userId,
+      name: {
+        equals: productName,
+        mode: "insensitive",
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      gst_rate: true,
+    },
+  });
+
+  const similarProducts = await prisma.product.findMany({
+    where: {
+      user_id: params.userId,
+      name: {
+        contains: productName,
+        mode: "insensitive",
+      },
+    },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      gst_rate: true,
+    },
+    orderBy: {
+      updated_at: "desc",
+    },
+    take: 5,
+  });
+
+  let fuzzyProducts: Array<{
+    id: number;
+    name: string;
+    price: unknown;
+    gst_rate: unknown;
+  }> = [];
+
+  if (!exactProduct && similarProducts.length === 0) {
+    const fallbackProducts = await prisma.product.findMany({
+      where: {
+        user_id: params.userId,
+      },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        gst_rate: true,
+      },
+      orderBy: {
+        updated_at: "desc",
+      },
+      take: 40,
+    });
+
+    fuzzyProducts = rankFuzzyProductMatches(productName, fallbackProducts, 5);
+  }
+
+  if (!exactProduct) {
+    const candidateProducts =
+      similarProducts.length > 0 ? similarProducts : fuzzyProducts;
+
+    if (candidateProducts.length === 0) {
+      return {
+        action: {
+          type: "remove_product",
+          status: "failed",
+          message:
+            params.language === "en"
+              ? `I could not find \"${productName}\". It may already be removed.`
+              : `Mujhe \"${productName}\" nahi mila. Shayad yeh pehle hi remove ho chuka hai.`,
+        },
+      };
+    }
+
+    if (candidateProducts.length === 1) {
+      return {
+        action: {
+          type: "remove_product",
+          status: "failed",
+          message:
+            params.language === "en"
+              ? `I could not find \"${productName}\". Did you mean \"${candidateProducts[0].name}\"?`
+              : `Mujhe \"${productName}\" nahi mila. Kya aap \"${candidateProducts[0].name}\" kehna chah rahe the?`,
+        },
+      };
+    }
+
+    const topMatches = candidateProducts
+      .slice(0, 3)
+      .map((product) => product.name)
+      .join(", ");
+
+    return {
+      action: {
+        type: "remove_product",
+        status: "failed",
+        message:
+          params.language === "en"
+            ? `I found ${candidateProducts.length} matching products: ${topMatches}. Which one should I remove?`
+            : `Aapke paas ${candidateProducts.length} matching products hain: ${topMatches}. Kaunsa remove karna hai?`,
+      },
+    };
+  }
+
+  try {
+    const deleted = await prisma.product.deleteMany({
+      where: {
+        id: exactProduct.id,
+        user_id: params.userId,
+      },
+    });
+
+    if (!deleted.count) {
+      return {
+        action: {
+          type: "remove_product",
+          status: "noop",
+          message:
+            params.language === "en"
+              ? `${exactProduct.name} is already removed.`
+              : `${exactProduct.name} pehle hi remove ho chuka hai.`,
+          resourceId: exactProduct.id,
+          resourceLabel: exactProduct.name,
+          route: "/products",
+        },
+      };
+    }
+  } catch (error) {
+    const isLinkedDataConstraint =
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === "P2003" || error.code === "P2014");
+
+    if (isLinkedDataConstraint) {
+      return {
+        action: {
+          type: "remove_product",
+          status: "failed",
+          message:
+            params.language === "en"
+              ? `${exactProduct.name} cannot be removed yet because it is linked to transactions.`
+              : `${exactProduct.name} abhi remove nahi ho sakta kyunki yeh transactions se linked hai.`,
+          resourceId: exactProduct.id,
+          resourceLabel: exactProduct.name,
+          route: "/products",
+        },
+      };
+    }
+
+    throw error;
+  }
+
+  emitDashboardUpdate({
+    userId: params.userId,
+    source: "assistant.product.remove",
+  });
+
+  logAssistantDebug("action.remove_product.completed", {
+    userId: params.userId,
+    productId: exactProduct.id,
+  });
+
+  const action: AssistantAction = {
+    type: "remove_product",
+    status: "success",
+    message:
+      params.language === "en"
+        ? `${exactProduct.name} removed. Want to add a new product now?`
+        : `${exactProduct.name} remove kar diya. Kya aap naya product add karna chahenge?`,
+    resourceId: exactProduct.id,
+    resourceLabel: exactProduct.name,
+    route: "/products",
+  };
+
+  rememberAssistantAction(dedupeKey, action);
+  return {
+    action,
   };
 };
 
@@ -1780,26 +3080,34 @@ const executeCreateBillAction = async (params: {
         status: "noop",
         message:
           params.language === "hi"
-            ? "यह command मैंने अभी run की थी। duplicate bill रोक दिया गया है।"
+            ? "Main bill page khol raha hoon."
             : params.language === "hinglish"
-              ? "Yeh command maine abhi run ki thi. Duplicate bill rok diya gaya hai."
-              : "I just ran this command. I prevented a duplicate bill.",
+              ? "Main bill page khol raha hoon."
+              : "Opening the billing page.",
+      },
+      command: {
+        intent: "CREATE_BILL",
       },
     };
   }
 
-  const customerName = extractCustomerNameForBill(params.message);
-  if (!customerName) {
+  const extractedCustomerName = extractCustomerNameForBill(params.message);
+  if (!extractedCustomerName) {
     return {
       action: {
-        type: "create_invoice",
+        type: "open_simple_bill",
         status: "failed",
         message:
           params.language === "hi"
-            ? "कृपया ग्राहक का नाम भी दें। जैसे: Ravi Kumar के लिए 2 x Rice @ ₹45 का bill बनाओ।"
+            ? "Kis customer ke liye bill banana hai?"
             : params.language === "hinglish"
-              ? "Please customer name bhi do. Example: Ravi Kumar ke liye 2 x Rice @ ₹45 ka bill banao."
-              : "Please include customer name too. Example: Create a bill for Ravi Kumar with 2 x Rice at ₹45.",
+              ? "Kis customer ke liye bill banana hai?"
+              : "Which customer should I create the bill for?",
+        route: `${DASHBOARD_ROUTE_TARGETS.simpleBill}?new=1`,
+      },
+      command: {
+        intent: "CREATE_BILL",
+        customerName: null,
       },
     };
   }
@@ -1809,7 +3117,7 @@ const executeCreateBillAction = async (params: {
       where: {
         user_id: params.userId,
         name: {
-          equals: customerName,
+          equals: extractedCustomerName,
           mode: "insensitive",
         },
       },
@@ -1819,7 +3127,7 @@ const executeCreateBillAction = async (params: {
       where: {
         user_id: params.userId,
         name: {
-          contains: customerName,
+          contains: extractedCustomerName,
           mode: "insensitive",
         },
       },
@@ -1827,247 +3135,30 @@ const executeCreateBillAction = async (params: {
       select: { id: true, name: true },
     }));
 
-  if (!customer) {
-    return {
-      action: {
-        type: "create_invoice",
-        status: "failed",
-        message:
-          params.language === "hi"
-            ? `मुझे "${customerName}" नाम का ग्राहक नहीं मिला। आप existing customer चुन सकते हैं या पहले ग्राहक जोड़ें।`
-            : params.language === "hinglish"
-              ? `Mujhe "${customerName}" naam ka customer nahi mila. Aap existing customer select kar sakte ho ya pehle customer add karo.`
-              : `I could not find customer "${customerName}". You can select an existing customer or add one first.`,
-      },
-    };
-  }
-
-  const catalogProducts = await prisma.product.findMany({
-    where: { user_id: params.userId },
-    select: {
-      id: true,
-      name: true,
-      price: true,
-      gst_rate: true,
-    },
-    take: 400,
-  });
-
-  const catalogByExactName = new Map(
-    catalogProducts.map((product) => [normalizeText(product.name), product]),
-  );
-
-  const explicitItems = extractInvoiceItemsFromMessage(params.message);
-  const messageNormalized = normalizeText(params.message);
-
-  const inferredItems = catalogProducts
-    .filter((product) => {
-      const normalizedName = normalizeText(product.name);
-      return normalizedName.length >= 3 && messageNormalized.includes(normalizedName);
-    })
-    .slice(0, 8)
-    .map((product) => ({
-      name: product.name,
-      quantity: 1,
-      price: Math.max(0, toNumber(product.price)),
-      productId: product.id,
-      taxRate: toNumber(product.gst_rate),
-      source: "catalog" as const,
-    }));
-
-  type DraftBillItem = {
-    name: string;
-    quantity: number;
-    price: number;
-    productId?: number;
-    taxRate?: number;
-    source: "explicit" | "catalog" | "top_seller";
+  const resolvedCustomerName = customer?.name ?? extractedCustomerName;
+  const action: AssistantAction = {
+    type: "open_simple_bill",
+    status: "success",
+    message: `${resolvedCustomerName} ke liye bill bana raha hoon...`,
+    resourceId: customer?.id,
+    resourceLabel: resolvedCustomerName,
+    route: `${DASHBOARD_ROUTE_TARGETS.simpleBill}?new=1&customer=${encodeURIComponent(
+      resolvedCustomerName,
+    )}`,
   };
-
-  let draftItems: DraftBillItem[] = [
-    ...explicitItems.map((item) => ({
-      name: item.name,
-      quantity: item.quantity,
-      price: item.price,
-      productId: undefined as number | undefined,
-      taxRate: undefined as number | undefined,
-      source: "explicit" as const,
-    })),
-    ...inferredItems,
-  ];
-
-  let autoCompleted = false;
-
-  const validDraftItems = draftItems.filter(
-    (item) =>
-      item.name.trim().length > 0 &&
-      Number.isFinite(item.quantity) &&
-      item.quantity > 0 &&
-      Number.isFinite(item.price) &&
-      item.price > 0,
-  );
-
-  if (validDraftItems.length === 0) {
-    const autocompleteItems = await buildAutocompleteItemsFromTopProducts({
-      userId: params.userId,
-      period: resolveAssistantPeriod(params.message),
-    });
-
-    draftItems = autocompleteItems.map((item) => {
-      const exactMatch = catalogByExactName.get(normalizeText(item.name));
-      return {
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price,
-        productId: exactMatch?.id,
-        taxRate: item.gstRate ?? undefined,
-        source: item.source,
-      };
-    });
-    autoCompleted = draftItems.length > 0;
-  }
-
-  const validItems = draftItems.filter(
-    (item) =>
-      item.name.trim().length > 0 &&
-      Number.isFinite(item.quantity) &&
-      item.quantity > 0 &&
-      Number.isFinite(item.price) &&
-      item.price > 0,
-  );
-
-  if (validItems.length === 0) {
-    return {
-      action: {
-        type: "create_invoice",
-        status: "failed",
-        message:
-          params.language === "hi"
-            ? "Bill बनाने के लिए कम से कम 1 item और valid price चाहिए। जैसे: Ravi Kumar के लिए 2 x Rice @ ₹45 का bill बनाओ।"
-            : params.language === "hinglish"
-              ? "Bill banane ke liye kam se kam 1 item aur valid price chahiye. Example: Ravi Kumar ke liye 2 x Rice @ ₹45 ka bill banao."
-              : "To create a bill, I need at least 1 item with a valid price. Example: Create a bill for Ravi Kumar with 2 x Rice at ₹45.",
-      },
-    };
-  }
-
-  const gstMemo = new Map<string, AssistantCopilotGstRecommendation>();
-  let primaryGstRecommendation: AssistantCopilotGstRecommendation | undefined;
-
-  const finalizedItems = await Promise.all(
-    validItems.map(async (item) => {
-      const normalizedName = normalizeText(item.name);
-      const exactMatch =
-        item.productId != null
-          ? catalogProducts.find((product) => product.id === item.productId) ?? null
-          : catalogByExactName.get(normalizedName) ?? null;
-
-      let taxRate =
-        item.taxRate != null && Number.isFinite(item.taxRate)
-          ? roundMetric(item.taxRate, 2)
-          : undefined;
-
-      if (taxRate == null) {
-        if (exactMatch) {
-          taxRate = roundMetric(toNumber(exactMatch.gst_rate), 2);
-          if (!primaryGstRecommendation) {
-            primaryGstRecommendation = {
-              rate: taxRate,
-              confidence: "high",
-              reason:
-                params.language === "hi"
-                  ? `${exactMatch.name} के existing catalog GST का उपयोग किया गया।`
-                  : params.language === "hinglish"
-                    ? `${exactMatch.name} ke existing catalog GST ka use kiya gaya.`
-                    : `Used existing catalog GST for ${exactMatch.name}.`,
-            };
-          }
-        } else {
-          const cached = gstMemo.get(normalizedName);
-          const recommendation =
-            cached ??
-            (await buildGstRecommendation({
-              userId: params.userId,
-              productName: item.name,
-              language: params.language,
-            }));
-          gstMemo.set(normalizedName, recommendation);
-          taxRate = recommendation.rate;
-          if (!primaryGstRecommendation) {
-            primaryGstRecommendation = recommendation;
-          }
-        }
-      }
-
-      return {
-        ...item,
-        productId: item.productId ?? exactMatch?.id,
-        taxRate,
-      };
-    }),
-  );
-
-  const invoiceAutocomplete: AssistantCopilotInvoiceAutocomplete = {
-    customerName: customer.name,
-    autoCompleted,
-    items: finalizedItems.map((item) => ({
-      name: item.name,
-      quantity: item.quantity,
-      price: item.price,
-      gstRate: item.taxRate ?? null,
-      source: item.source,
-    })),
-  };
-
-  const createdInvoice = await createInvoiceRecord(params.userId, {
-    customer_id: customer.id,
-    date: new Date(),
-    due_date: new Date(),
-    discount: 0,
-    discount_type: "FIXED",
-    status: InvoiceStatus.SENT,
-    sync_sales: false,
-    notes: "Created via Assistant",
-    items: finalizedItems.map((item) => ({
-      product_id: item.productId,
-      name: item.name,
-      quantity: item.quantity,
-      price: item.price,
-      tax_rate: item.taxRate,
-    })),
-  });
-
-  emitDashboardUpdate({ userId: params.userId, source: "assistant.invoice.create" });
 
   logAssistantDebug("action.create_bill.completed", {
     userId: params.userId,
-    invoiceId: createdInvoice.id,
+    customerId: customer?.id ?? null,
+    customerName: resolvedCustomerName,
   });
-
-  const action: AssistantAction = {
-    type: "create_invoice",
-    status: "success",
-    message:
-      params.language === "hi"
-        ? `Bill बन गया: ${createdInvoice.invoice_number}.${autoCompleted ? " मैंने items auto-complete भी किए हैं।" : ""} क्या अब PDF download करें या print करें?`
-        : params.language === "hinglish"
-          ? `Bill ban gaya: ${createdInvoice.invoice_number}.${autoCompleted ? " Maine items auto-complete bhi kiye hain." : ""} Kya ab PDF download karein ya print karein?`
-          : `Bill created: ${createdInvoice.invoice_number}.${autoCompleted ? " I also auto-completed the items for you." : ""} Do you want to download PDF or print now?`,
-    resourceId: createdInvoice.id,
-    resourceLabel: createdInvoice.invoice_number,
-    route: `/invoices/history/${createdInvoice.id}`,
-  };
 
   rememberAssistantAction(dedupeKey, action);
   return {
     action,
-    copilot: {
-      invoiceAutocomplete,
-      gstRecommendation: primaryGstRecommendation,
-      productSuggestions: await searchProductSuggestions({
-        userId: params.userId,
-        message: params.message,
-      }),
+    command: {
+      intent: "CREATE_BILL",
+      customerName: resolvedCustomerName,
     },
   };
 };
@@ -2101,14 +3192,24 @@ const buildHighlights = (
         ),
       },
       {
-        label: language === "hi" ? "बाकी room" : language === "hinglish" ? "Safe room" : "Safe room",
+        label:
+          language === "hi"
+            ? "बाकी room"
+            : language === "hinglish"
+              ? "Safe room"
+              : "Safe room",
         value: formatCopilotCurrency(
           Math.max(extra.copilotSummary.budget.remainingSafeToSpend, 0),
           language,
         ),
       },
       {
-        label: language === "hi" ? "Daily pace" : language === "hinglish" ? "Daily pace" : "Daily pace",
+        label:
+          language === "hi"
+            ? "Daily pace"
+            : language === "hinglish"
+              ? "Daily pace"
+              : "Daily pace",
         value: formatCopilotCurrency(
           extra.copilotSummary.budget.dailySafeSpend,
           language,
@@ -2127,7 +3228,12 @@ const buildHighlights = (
         ),
       },
       {
-        label: language === "hi" ? "Top idea" : language === "hinglish" ? "Top idea" : "Top idea",
+        label:
+          language === "hi"
+            ? "Top idea"
+            : language === "hinglish"
+              ? "Top idea"
+              : "Top idea",
         value: extra.copilotSummary.savings.opportunities[0]?.category ?? "--",
       },
     ];
@@ -2136,7 +3242,12 @@ const buildHighlights = (
   if (intent === "bill_reminder" && extra?.copilotSummary) {
     return [
       {
-        label: language === "hi" ? "Next bill" : language === "hinglish" ? "Next bill" : "Next bill",
+        label:
+          language === "hi"
+            ? "Next bill"
+            : language === "hinglish"
+              ? "Next bill"
+              : "Next bill",
         value: extra.copilotSummary.reminders.items[0]?.title ?? "--",
       },
       {
@@ -2165,11 +3276,21 @@ const buildHighlights = (
   if (intent === "behavior_insights" && extra?.copilotSummary) {
     return [
       {
-        label: language === "hi" ? "Pattern" : language === "hinglish" ? "Pattern" : "Pattern",
+        label:
+          language === "hi"
+            ? "Pattern"
+            : language === "hinglish"
+              ? "Pattern"
+              : "Pattern",
         value: extra.copilotSummary.behaviorInsights.items[0]?.title ?? "--",
       },
       {
-        label: language === "hi" ? "Watch" : language === "hinglish" ? "Watch" : "Watch",
+        label:
+          language === "hi"
+            ? "Watch"
+            : language === "hinglish"
+              ? "Watch"
+              : "Watch",
         value: extra.copilotSummary.behaviorInsights.items[1]?.title ?? "--",
       },
     ];
@@ -2178,7 +3299,12 @@ const buildHighlights = (
   if (intent === "goal_tracking" && extra?.copilotSummary) {
     return [
       {
-        label: language === "hi" ? "Monthly save" : language === "hinglish" ? "Monthly save" : "Monthly save",
+        label:
+          language === "hi"
+            ? "Monthly save"
+            : language === "hinglish"
+              ? "Monthly save"
+              : "Monthly save",
         value: formatCopilotCurrency(
           extra.copilotSummary.goals.projectedMonthlySavings,
           language,
@@ -2388,7 +3514,8 @@ const findSpendMatch = (
 
     const supplierName = purchase.supplier?.name?.trim() ?? "";
     const notes = purchase.notes?.trim() ?? "";
-    const supplierMatch = supplierName && normalizeText(supplierName).includes(normalizedEntity);
+    const supplierMatch =
+      supplierName && normalizeText(supplierName).includes(normalizedEntity);
     const noteMatch = notes && normalizeText(notes).includes(normalizedEntity);
 
     if (supplierMatch || noteMatch) {
@@ -2417,7 +3544,9 @@ const findSpendMatch = (
       );
       if (!matchedLabel) continue;
 
-      const lineAmount = roundMetric(toNumber(item.line_total) * allocationRatio);
+      const lineAmount = roundMetric(
+        toNumber(item.line_total) * allocationRatio,
+      );
       if (lineAmount <= 0) continue;
 
       purchaseItemAmount += lineAmount;
@@ -2438,14 +3567,16 @@ const findSpendMatch = (
   }
 
   const bestLabel =
-    [...labelTotals.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ??
-    entity;
+    [...labelTotals.entries()].sort(
+      (left, right) => right[1] - left[1],
+    )[0]?.[0] ?? entity;
 
   return {
     name: bestLabel,
     amount: roundMetric(amount),
     purchaseCount,
-    shareOfOutflow: totalOutflow > 0 ? roundMetric((amount / totalOutflow) * 100, 1) : 0,
+    shareOfOutflow:
+      totalOutflow > 0 ? roundMetric((amount / totalOutflow) * 100, 1) : 0,
   };
 };
 
@@ -2453,8 +3584,14 @@ const findTopSpend = (
   purchases: AssistantPurchaseRecord[],
   totalOutflow: number,
 ): AssistantTopSpend | null => {
-  const categoryTotals = new Map<string, { amount: number; purchaseIds: Set<number> }>();
-  const supplierTotals = new Map<string, { amount: number; purchaseIds: Set<number> }>();
+  const categoryTotals = new Map<
+    string,
+    { amount: number; purchaseIds: Set<number> }
+  >();
+  const supplierTotals = new Map<
+    string,
+    { amount: number; purchaseIds: Set<number> }
+  >();
 
   for (const purchase of purchases) {
     const realizedAmount = resolvePurchaseRealizedAmount(purchase);
@@ -2471,8 +3608,11 @@ const findTopSpend = (
 
     const allocationRatio = resolveAllocationRatio(purchase);
     for (const item of purchase.items) {
-      const categoryName = item.product?.category?.name?.trim() || "Uncategorized";
-      const lineAmount = roundMetric(toNumber(item.line_total) * allocationRatio);
+      const categoryName =
+        item.product?.category?.name?.trim() || "Uncategorized";
+      const lineAmount = roundMetric(
+        toNumber(item.line_total) * allocationRatio,
+      );
       if (lineAmount <= 0) continue;
 
       const current = categoryTotals.get(categoryName) ?? {
@@ -2491,7 +3631,9 @@ const findTopSpend = (
       amount: roundMetric(value.amount),
       purchaseCount: value.purchaseIds.size,
       shareOfOutflow:
-        totalOutflow > 0 ? roundMetric((value.amount / totalOutflow) * 100, 1) : 0,
+        totalOutflow > 0
+          ? roundMetric((value.amount / totalOutflow) * 100, 1)
+          : 0,
       source: "category" as const,
     }))
     .sort((left, right) => right.amount - left.amount)[0];
@@ -2506,7 +3648,9 @@ const findTopSpend = (
       amount: roundMetric(value.amount),
       purchaseCount: value.purchaseIds.size,
       shareOfOutflow:
-        totalOutflow > 0 ? roundMetric((value.amount / totalOutflow) * 100, 1) : 0,
+        totalOutflow > 0
+          ? roundMetric((value.amount / totalOutflow) * 100, 1)
+          : 0,
       source: "supplier" as const,
     }))
     .sort((left, right) => right.amount - left.amount)[0];
@@ -2801,11 +3945,7 @@ const buildAffordabilityAnswer = (
 
   const net = snapshot.cashflowNet;
   const status =
-    net >= amount
-      ? "comfortable"
-      : net >= amount * 0.6
-        ? "tight"
-        : "risky";
+    net >= amount ? "comfortable" : net >= amount * 0.6 ? "tight" : "risky";
 
   if (language === "hi") {
     if (status === "comfortable") {
@@ -3046,37 +4186,47 @@ const buildDecisionGuidanceAnswer = (
 };
 
 const buildHelpAnswer = (language: AssistantLanguage, usedHistory: boolean) => {
-  const historyHint = usedHistory
-    ? language === "hi"
-      ? "मैंने आपके पिछले message का context भी देखा। "
-      : language === "hinglish"
-        ? "Maine aapke pichle message ka context bhi use kiya. "
-        : "I also used your previous message for context. "
-    : "";
-
-  if (language === "hi") {
-    return `${historyHint}मैं उसे ठीक से समझ नहीं पाया। ऐसे पूछें: "आज की sales दिखाओ", "Ravi Kumar के लिए bill बनाओ", या "Bread product ₹40 पर GST 5 जोड़ो".`;
-  }
-
-  if (language === "hinglish") {
-    return `${historyHint}Main is query ko clearly samajh nahi paaya. Aise try karo: "Show today's sales", "Create a bill for Ravi Kumar", ya "Add product Bread at ₹40 with GST 5".`;
-  }
-
-  return `${historyHint}I could not understand that clearly. Try: "Show today's sales", "Create a bill for Ravi Kumar", or "Add product Bread at ₹40 with GST 5".`;
+  return BILLING_ONLY_FALLBACK_MESSAGE;
 };
 
 const parseAssistantQuery = (
   message: string,
   history: AssistantHistoryMessage[],
 ): AssistantParsedQuery => {
-  const { conversationMessage, usedHistory } = resolveConversationMessage(
-    message,
-    history,
+  const baseResolution = resolveConversationMessage(message, history);
+
+  let usedHistory = baseResolution.usedHistory;
+  let sanitizedMessage = sanitizeTranscriptMessage(
+    baseResolution.conversationMessage,
   );
   const languageProfile = detectAssistantLanguage(message);
-  const amount = extractAmount(conversationMessage);
-  const entity = extractEntity(conversationMessage);
-  const intent = detectIntent(conversationMessage, amount, entity);
+
+  let amount = extractAmount(sanitizedMessage);
+  let entity = extractEntity(sanitizedMessage);
+  let navigationTarget = resolveNavigationTarget(sanitizedMessage);
+  let intent: AssistantIntent = detectIntent(sanitizedMessage, amount, entity);
+  const currentAddProductParse =
+    intent === "add_product" ? parseAddProductMessage(sanitizedMessage) : null;
+  const shouldResolveAddProductFollowUp =
+    intent === "help" ||
+    (intent === "add_product" && currentAddProductParse?.productName == null);
+
+  if (shouldResolveAddProductFollowUp) {
+    const followUp = resolveAddProductFollowUpMessage(
+      sanitizedMessage,
+      history,
+    );
+    if (followUp) {
+      sanitizedMessage = sanitizeTranscriptMessage(
+        followUp.conversationMessage,
+      );
+      usedHistory = true;
+      amount = extractAmount(sanitizedMessage);
+      entity = extractEntity(sanitizedMessage);
+      navigationTarget = resolveNavigationTarget(sanitizedMessage);
+      intent = detectIntent(sanitizedMessage, amount, entity);
+    }
+  }
 
   return {
     language:
@@ -3084,10 +4234,11 @@ const parseAssistantQuery = (
         ? "hinglish"
         : languageProfile.language,
     intent,
-    period: resolveAssistantPeriod(conversationMessage),
+    period: resolveAssistantPeriod(sanitizedMessage),
     amount,
     entity,
-    conversationMessage,
+    navigationTarget,
+    conversationMessage: sanitizedMessage,
     usedHistory,
   };
 };
@@ -3109,7 +4260,44 @@ export const answerAssistantQuery = async (params: {
   });
 
   try {
+    const isAllowedBillingIntent =
+      parsed.intent === "navigate" ||
+      parsed.intent === "create_bill" ||
+      parsed.intent === "add_product" ||
+      parsed.intent === "remove_product" ||
+      parsed.intent === "show_products" ||
+      parsed.intent === "show_invoices" ||
+      parsed.intent === "show_customers";
+
+    if (!isAllowedBillingIntent) {
+      const outOfScopeReply: AssistantReply = {
+        language: parsed.language,
+        intent: "help",
+        answer: BILLING_ONLY_FALLBACK_MESSAGE,
+        highlights: [],
+        examples: [],
+        command: {
+          intent: "OUT_OF_SCOPE",
+        },
+        structured: buildStructuredPayload({
+          intent: "OUT_OF_SCOPE",
+          action: "NONE",
+          message: BILLING_ONLY_FALLBACK_MESSAGE,
+        }),
+      };
+
+      logAssistantDebug("query.completed", {
+        userId: params.userId,
+        intent: parsed.intent,
+        durationMs: Date.now() - startedAt,
+        outOfScope: true,
+      });
+
+      return outOfScopeReply;
+    }
+
     if (parsed.intent === "add_product") {
+      const addData = parseAddProductMessage(parsed.conversationMessage);
       const result = await executeAddProductAction({
         userId: params.userId,
         language: parsed.language,
@@ -3120,18 +4308,78 @@ export const answerAssistantQuery = async (params: {
         language: parsed.language,
         intent: parsed.intent,
         answer: result.action.message,
-        highlights:
-          result.action.resourceLabel
-            ? [
-                {
-                  label: parsed.language === "hi" ? "Product" : "Product",
-                  value: result.action.resourceLabel,
-                },
-              ]
-            : [],
+        highlights: result.action.resourceLabel
+          ? [
+              {
+                label: parsed.language === "hi" ? "Product" : "Product",
+                value: result.action.resourceLabel,
+              },
+            ]
+          : [],
         examples: buildActionExamples(parsed.language, parsed.intent),
         action: result.action,
         copilot: result.copilot,
+        command: result.command ?? {
+          intent: "ADD_PRODUCT",
+        },
+        structured: buildStructuredPayload({
+          intent: "ADD_PRODUCT",
+          data: {
+            productName: addData.productName,
+            price: addData.price,
+            gst: addData.gst,
+          },
+          action: "ADD_PRODUCT",
+          target: result.action.route,
+          message: result.action.message,
+        }),
+      };
+
+      logAssistantDebug("query.completed", {
+        userId: params.userId,
+        intent: parsed.intent,
+        actionStatus: result.action.status,
+        durationMs: Date.now() - startedAt,
+      });
+
+      return reply;
+    }
+
+    if (parsed.intent === "remove_product") {
+      const removeData = parseRemoveProductMessage(parsed.conversationMessage);
+      const result = await executeRemoveProductAction({
+        userId: params.userId,
+        language: parsed.language,
+        message: parsed.conversationMessage,
+      });
+
+      const reply: AssistantReply = {
+        language: parsed.language,
+        intent: parsed.intent,
+        answer: result.action.message,
+        highlights: result.action.resourceLabel
+          ? [
+              {
+                label: parsed.language === "hi" ? "Product" : "Product",
+                value: result.action.resourceLabel,
+              },
+            ]
+          : [],
+        examples: buildActionExamples(parsed.language, parsed.intent),
+        action: result.action,
+        copilot: result.copilot,
+        command: result.command ?? {
+          intent: "REMOVE_PRODUCT",
+        },
+        structured: buildStructuredPayload({
+          intent: "REMOVE_PRODUCT",
+          data: {
+            productName: removeData.productName,
+          },
+          action: "REMOVE_PRODUCT",
+          target: result.action.route,
+          message: result.action.message,
+        }),
       };
 
       logAssistantDebug("query.completed", {
@@ -3150,29 +4398,205 @@ export const answerAssistantQuery = async (params: {
         language: parsed.language,
         message: parsed.conversationMessage,
       });
+      const customerName =
+        result.command?.customerName ??
+        extractCustomerNameForBill(parsed.conversationMessage) ??
+        null;
 
       const reply: AssistantReply = {
         language: parsed.language,
         intent: parsed.intent,
         answer: result.action.message,
-        highlights:
-          result.action.resourceLabel
-            ? [
-                {
-                  label: parsed.language === "hi" ? "Invoice" : "Invoice",
-                  value: result.action.resourceLabel,
-                },
-              ]
-            : [],
+        highlights: result.action.resourceLabel
+          ? [
+              {
+                label: parsed.language === "hi" ? "Invoice" : "Invoice",
+                value: result.action.resourceLabel,
+              },
+            ]
+          : [],
         examples: buildActionExamples(parsed.language, parsed.intent),
         action: result.action,
         copilot: result.copilot,
+        command: result.command,
+        structured: buildStructuredPayload({
+          intent: "CREATE_BILL",
+          data: {
+            customerName,
+          },
+          action: "NAVIGATE",
+          target: result.action.route,
+          message: result.action.message,
+        }),
       };
 
       logAssistantDebug("query.completed", {
         userId: params.userId,
         intent: parsed.intent,
         actionStatus: result.action.status,
+        durationMs: Date.now() - startedAt,
+      });
+
+      return reply;
+    }
+
+    if (parsed.intent === "show_products") {
+      const message =
+        parsed.language === "en"
+          ? "Opening products..."
+          : "Products dikha raha hoon...";
+      const reply: AssistantReply = {
+        language: parsed.language,
+        intent: parsed.intent,
+        answer: message,
+        highlights: [],
+        examples: buildActionExamples(parsed.language, parsed.intent),
+        action: {
+          type: "show_products",
+          status: "success",
+          message,
+          route: DASHBOARD_ROUTE_TARGETS.products,
+        },
+        command: {
+          intent: "SHOW_PRODUCTS",
+        },
+        structured: buildStructuredPayload({
+          intent: "SHOW_PRODUCTS",
+          action: "NAVIGATE",
+          target: DASHBOARD_ROUTE_TARGETS.products,
+          message,
+        }),
+      };
+
+      logAssistantDebug("query.completed", {
+        userId: params.userId,
+        intent: parsed.intent,
+        durationMs: Date.now() - startedAt,
+      });
+
+      return reply;
+    }
+
+    if (parsed.intent === "navigate") {
+      const route = parsed.navigationTarget ?? "/dashboard";
+      const targetLabel =
+        route === DASHBOARD_ROUTE_TARGETS.products
+          ? "products"
+          : route === DASHBOARD_ROUTE_TARGETS.customers
+            ? "customers"
+            : route === DASHBOARD_ROUTE_TARGETS.invoices
+              ? "invoices"
+              : route === DASHBOARD_ROUTE_TARGETS.simpleBill
+                ? "simple bill"
+                : "dashboard";
+      const message =
+        parsed.language === "en"
+          ? `Opening ${targetLabel}...`
+          : `${targetLabel} page khol raha hoon...`;
+
+      const reply: AssistantReply = {
+        language: parsed.language,
+        intent: parsed.intent,
+        answer: message,
+        highlights: [],
+        examples: buildActionExamples(parsed.language, parsed.intent),
+        action: {
+          type: "navigate",
+          status: "success",
+          message,
+          route,
+        },
+        command: {
+          intent: "NAVIGATE",
+        },
+        structured: buildStructuredPayload({
+          intent: "NAVIGATE",
+          data: {
+            target: route,
+          },
+          action: "NAVIGATE",
+          target: route,
+          message,
+        }),
+      };
+
+      logAssistantDebug("query.completed", {
+        userId: params.userId,
+        intent: parsed.intent,
+        durationMs: Date.now() - startedAt,
+      });
+
+      return reply;
+    }
+
+    if (parsed.intent === "show_invoices") {
+      const message =
+        parsed.language === "en"
+          ? "Opening invoices..."
+          : "Invoices dikha raha hoon...";
+      const reply: AssistantReply = {
+        language: parsed.language,
+        intent: parsed.intent,
+        answer: message,
+        highlights: [],
+        examples: buildActionExamples(parsed.language, parsed.intent),
+        action: {
+          type: "show_invoices",
+          status: "success",
+          message,
+          route: DASHBOARD_ROUTE_TARGETS.invoices,
+        },
+        command: {
+          intent: "SHOW_INVOICES",
+        },
+        structured: buildStructuredPayload({
+          intent: "SHOW_INVOICES",
+          action: "NAVIGATE",
+          target: DASHBOARD_ROUTE_TARGETS.invoices,
+          message,
+        }),
+      };
+
+      logAssistantDebug("query.completed", {
+        userId: params.userId,
+        intent: parsed.intent,
+        durationMs: Date.now() - startedAt,
+      });
+
+      return reply;
+    }
+
+    if (parsed.intent === "show_customers") {
+      const message =
+        parsed.language === "en"
+          ? "Opening customers..."
+          : "Customers dikha raha hoon...";
+      const reply: AssistantReply = {
+        language: parsed.language,
+        intent: parsed.intent,
+        answer: message,
+        highlights: [],
+        examples: buildActionExamples(parsed.language, parsed.intent),
+        action: {
+          type: "show_customers",
+          status: "success",
+          message,
+          route: DASHBOARD_ROUTE_TARGETS.customers,
+        },
+        command: {
+          intent: "SHOW_CUSTOMERS",
+        },
+        structured: buildStructuredPayload({
+          intent: "SHOW_CUSTOMERS",
+          action: "NAVIGATE",
+          target: DASHBOARD_ROUTE_TARGETS.customers,
+          message,
+        }),
+      };
+
+      logAssistantDebug("query.completed", {
+        userId: params.userId,
+        intent: parsed.intent,
         durationMs: Date.now() - startedAt,
       });
 
@@ -3189,7 +4613,11 @@ export const answerAssistantQuery = async (params: {
       const reply: AssistantReply = {
         language: parsed.language,
         intent: parsed.intent,
-        answer: buildSmartInsightsAnswer(parsed.language, parsed.period, smartInsights),
+        answer: buildSmartInsightsAnswer(
+          parsed.language,
+          parsed.period,
+          smartInsights,
+        ),
         highlights: smartInsights.slice(0, 3).map((insight) => ({
           label: insight.title,
           value: insight.value ?? insight.detail,
@@ -3198,6 +4626,11 @@ export const answerAssistantQuery = async (params: {
         copilot: {
           smartInsights,
         },
+        structured: buildStructuredPayload({
+          intent: "OUT_OF_SCOPE",
+          action: "NONE",
+          message: BILLING_ONLY_FALLBACK_MESSAGE,
+        }),
       };
 
       logAssistantDebug("query.completed", {
@@ -3215,7 +4648,15 @@ export const answerAssistantQuery = async (params: {
         intent: parsed.intent,
         answer: buildHelpAnswer(parsed.language, parsed.usedHistory),
         highlights: [],
-        examples: buildExamples(parsed.language),
+        examples: [],
+        command: {
+          intent: "OUT_OF_SCOPE",
+        },
+        structured: buildStructuredPayload({
+          intent: "OUT_OF_SCOPE",
+          action: "NONE",
+          message: buildHelpAnswer(parsed.language, parsed.usedHistory),
+        }),
       };
 
       logAssistantDebug("query.completed", {
@@ -3245,9 +4686,9 @@ export const answerAssistantQuery = async (params: {
             fallbackMessage: parsed.conversationMessage,
             decisionAmount: parsed.amount,
           })
-        : Promise.resolve<Awaited<ReturnType<typeof buildFinancialCopilot>> | null>(
-            null,
-          ),
+        : Promise.resolve<Awaited<
+            ReturnType<typeof buildFinancialCopilot>
+          > | null>(null),
     ]);
 
     const { snapshot, purchases } = snapshotResult;
@@ -3293,7 +4734,11 @@ export const answerAssistantQuery = async (params: {
       answer = buildGoalTrackingAnswer(parsed.language, copilotSummary);
     } else if (parsed.intent === "affordability") {
       answer = copilotSummary
-        ? buildDecisionGuidanceAnswer(parsed.language, copilotSummary, parsed.amount)
+        ? buildDecisionGuidanceAnswer(
+            parsed.language,
+            copilotSummary,
+            parsed.amount,
+          )
         : buildAffordabilityAnswer(parsed.language, snapshot, parsed.amount);
     } else {
       answer = buildHelpAnswer(parsed.language, parsed.usedHistory);
@@ -3310,6 +4755,11 @@ export const answerAssistantQuery = async (params: {
         copilotSummary,
       }),
       examples: copilotSummary?.examples ?? buildExamples(parsed.language),
+      structured: buildStructuredPayload({
+        intent: "OUT_OF_SCOPE",
+        action: "NONE",
+        message: answer,
+      }),
     };
 
     logAssistantDebug("query.completed", {

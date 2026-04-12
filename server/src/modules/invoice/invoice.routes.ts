@@ -8,6 +8,7 @@ import {
   invoiceUpdateSchema,
 } from "../../validations/apiValidations.js";
 import {
+  bootstrap,
   destroy,
   duplicate as duplicateInvoice,
   index,
@@ -22,6 +23,7 @@ import {
 const router = Router();
 
 router.get("/", AuthMiddleware, index);
+router.get("/bootstrap", AuthMiddleware, bootstrap);
 router.post(
   "/",
   AuthMiddleware,

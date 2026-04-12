@@ -12,6 +12,7 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import BusinessAddressFields from "@/components/business-profile/BusinessAddressFields";
 import LogoUploader from "@/components/business-profile/LogoUploader";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
 import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
@@ -26,7 +27,16 @@ import {
 } from "@/lib/invoiceTemplateData";
 import { PREVIEW_INVOICE } from "@/lib/invoicePreviewData";
 import {
+  formatBusinessAddress,
+  lookupIndianPincode,
+  normalizeIndianPincode,
+  parseBusinessAddressText,
+  toBusinessAddressInput,
+} from "@/lib/indianAddress";
+import {
   validateEmail,
+  validateIndianPincode,
+  validateIndianState,
   validateName,
   validatePhone,
   validateRequired,
@@ -50,6 +60,12 @@ const BusinessProfileClient = ({
   image?: string;
 }) => {
   const { t } = useI18n();
+  const [autofillStatus, setAutofillStatus] = useState<{
+    tone: "success" | "neutral" | "error";
+    message: string;
+  } | null>(null);
+  const [autofillPending, setAutofillPending] = useState(false);
+  const [lastAutofilledPincode, setLastAutofilledPincode] = useState("");
   const [currentStep, setCurrentStep] = useState(1);
   const [businessTypeId, setBusinessTypeId] = useState("retail");
   const [enabledSections, setEnabledSections] = useState<SectionKey[]>(
@@ -58,7 +74,13 @@ const BusinessProfileClient = ({
   const [selectedTemplateId, setSelectedTemplateId] = useState("minimal");
   const [profile, setProfile] = useState<BusinessProfileInput>({
     businessName: "BillSutra Studio",
-    address: "",
+    address: PREVIEW_INVOICE.business.address,
+    businessAddress: {
+      addressLine1: "",
+      city: "",
+      state: "",
+      pincode: "",
+    },
     phone: "",
     email: "",
     website: "",
@@ -112,10 +134,38 @@ const BusinessProfileClient = ({
 
   useEffect(() => {
     if (!businessProfileRecord || profileLoaded) return;
+
+    const parsedLegacyAddress = parseBusinessAddressText(
+      businessProfileRecord.address,
+    );
+
+    const normalizedBusinessAddress = toBusinessAddressInput({
+      addressLine1:
+        businessProfileRecord.businessAddress?.addressLine1 ??
+        businessProfileRecord.address_line1 ??
+        parsedLegacyAddress.addressLine1,
+      city:
+        businessProfileRecord.businessAddress?.city ??
+        businessProfileRecord.city ??
+        parsedLegacyAddress.city,
+      state:
+        businessProfileRecord.businessAddress?.state ??
+        businessProfileRecord.state ??
+        parsedLegacyAddress.state,
+      pincode:
+        businessProfileRecord.businessAddress?.pincode ??
+        businessProfileRecord.pincode ??
+        parsedLegacyAddress.pincode,
+    });
+
     setProfile((prev) => ({
       ...prev,
       businessName: businessProfileRecord.business_name,
-      address: businessProfileRecord.address ?? "",
+      address: formatBusinessAddress(
+        normalizedBusinessAddress,
+        businessProfileRecord.address,
+      ),
+      businessAddress: normalizedBusinessAddress,
       phone: businessProfileRecord.phone ?? "",
       email: businessProfileRecord.email ?? "",
       website: businessProfileRecord.website ?? "",
@@ -128,6 +178,65 @@ const BusinessProfileClient = ({
     }));
     setProfileLoaded(true);
   }, [businessProfileRecord, profileLoaded]);
+
+  useEffect(() => {
+    const pincode = profile.businessAddress?.pincode ?? "";
+    if (pincode.length !== 6 || pincode === lastAutofilledPincode) {
+      return;
+    }
+
+    let isCancelled = false;
+    setAutofillPending(true);
+
+    lookupIndianPincode(pincode)
+      .then((result) => {
+        if (isCancelled) return;
+
+        if (result) {
+          setProfile((prev) => {
+            const currentAddress = toBusinessAddressInput(prev.businessAddress);
+            const nextAddress = toBusinessAddressInput({
+              ...currentAddress,
+              city: currentAddress.city || result.city,
+              state: currentAddress.state || result.state,
+            });
+
+            return {
+              ...prev,
+              businessAddress: nextAddress,
+              address: formatBusinessAddress(nextAddress, prev.address),
+            };
+          });
+
+          setAutofillStatus({
+            tone: "success",
+            message: t("businessProfilePage.messages.autofillSuccess"),
+          });
+          return;
+        }
+
+        setAutofillStatus({
+          tone: "neutral",
+          message: t("businessProfilePage.messages.autofillFallback"),
+        });
+      })
+      .catch(() => {
+        if (isCancelled) return;
+        setAutofillStatus({
+          tone: "error",
+          message: t("businessProfilePage.messages.autofillError"),
+        });
+      })
+      .finally(() => {
+        if (isCancelled) return;
+        setAutofillPending(false);
+        setLastAutofilledPincode(pincode);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [lastAutofilledPincode, profile.businessAddress?.pincode, t]);
 
   const templates = useMemo(() => {
     if (!templateRecords.length) return TEMPLATE_CATALOG;
@@ -159,12 +268,15 @@ const BusinessProfileClient = ({
   }, [templateRecords]);
 
   const selectedTemplate = useMemo(
-    () => templates.find((item) => item.id === selectedTemplateId) ?? templates[0],
+    () =>
+      templates.find((item) => item.id === selectedTemplateId) ?? templates[0],
     [selectedTemplateId, templates],
   );
 
   const selectedBusinessType = useMemo(
-    () => BUSINESS_TYPES.find((item) => item.id === businessTypeId) ?? BUSINESS_TYPES[0],
+    () =>
+      BUSINESS_TYPES.find((item) => item.id === businessTypeId) ??
+      BUSINESS_TYPES[0],
     [businessTypeId],
   );
 
@@ -181,6 +293,11 @@ const BusinessProfileClient = ({
       business: {
         ...PREVIEW_INVOICE.business,
         ...profile,
+        businessAddress: toBusinessAddressInput(profile.businessAddress),
+        address: formatBusinessAddress(
+          profile.businessAddress,
+          profile.address,
+        ),
       },
     }),
     [profile],
@@ -204,37 +321,119 @@ const BusinessProfileClient = ({
     }));
   };
 
+  const updateBusinessAddressField = (
+    field: "addressLine1" | "city" | "state" | "pincode",
+    value: string,
+  ) => {
+    setProfile((prev) => {
+      const nextAddress = toBusinessAddressInput({
+        ...prev.businessAddress,
+        [field]: field === "pincode" ? normalizeIndianPincode(value) : value,
+      });
+
+      return {
+        ...prev,
+        businessAddress: nextAddress,
+        address: formatBusinessAddress(nextAddress, prev.address),
+      };
+    });
+
+    if (field === "pincode") {
+      const normalized = normalizeIndianPincode(value);
+      if (normalized.length < 6) {
+        setAutofillStatus(null);
+        setAutofillPending(false);
+        setLastAutofilledPincode("");
+      }
+    }
+  };
+
+  const handleAddressPaste = (rawText: string) => {
+    const parsed = parseBusinessAddressText(rawText);
+
+    if (
+      !parsed.addressLine1 &&
+      !parsed.city &&
+      !parsed.state &&
+      !parsed.pincode
+    ) {
+      return;
+    }
+
+    setProfile((prev) => {
+      const nextAddress = toBusinessAddressInput({
+        ...prev.businessAddress,
+        ...parsed,
+        addressLine1:
+          parsed.addressLine1 ??
+          toBusinessAddressInput(prev.businessAddress).addressLine1,
+      });
+
+      return {
+        ...prev,
+        businessAddress: nextAddress,
+        address: formatBusinessAddress(nextAddress, rawText || prev.address),
+      };
+    });
+
+    setAutofillStatus(null);
+  };
+
   const validateAll = () =>
     !validateName(profile.businessName) &&
     !validatePhone(profile.phone) &&
     !validateEmail(profile.email) &&
-    !validateRequired(profile.address) &&
+    !validateRequired(profile.businessAddress?.addressLine1 ?? "") &&
+    !validateRequired(profile.businessAddress?.city ?? "") &&
+    !validateIndianState(profile.businessAddress?.state ?? "") &&
+    !validateIndianPincode(profile.businessAddress?.pincode ?? "") &&
     !validateRequired(profile.currency);
 
   const handleFinish = async () => {
     setProfileTouched(true);
     if (!validateAll()) return;
-    await saveProfileMutation.mutateAsync({
-      business_name: profile.businessName,
-      address: profile.address,
-      phone: profile.phone,
-      email: profile.email,
-      website: profile.website,
-      logo_url: profile.logoUrl,
-      tax_id: profile.taxId,
-      currency: profile.currency,
-      show_logo_on_invoice: profile.showLogoOnInvoice,
-      show_tax_number: profile.showTaxNumber,
-      show_payment_qr: profile.showPaymentQr,
-    });
-    setProfileTouched(false);
+
+    const normalizedBusinessAddress = toBusinessAddressInput(
+      profile.businessAddress,
+    );
+
+    const legacyAddress = formatBusinessAddress(
+      normalizedBusinessAddress,
+      profile.address,
+    );
+
+    try {
+      await saveProfileMutation.mutateAsync({
+        business_name: profile.businessName,
+        businessAddress: normalizedBusinessAddress,
+        address_line1: normalizedBusinessAddress.addressLine1,
+        city: normalizedBusinessAddress.city,
+        state: normalizedBusinessAddress.state,
+        pincode: normalizedBusinessAddress.pincode,
+        address: legacyAddress,
+        phone: profile.phone,
+        email: profile.email,
+        website: profile.website,
+        logo_url: profile.logoUrl,
+        tax_id: profile.taxId,
+        currency: profile.currency,
+        show_logo_on_invoice: profile.showLogoOnInvoice,
+        show_tax_number: profile.showTaxNumber,
+        show_payment_qr: profile.showPaymentQr,
+      });
+      setProfileTouched(false);
+    } catch {
+      // Toasts are handled in mutation callbacks.
+    }
   };
 
   const toggleOptions = [
     {
       key: "showLogoOnInvoice" as const,
       label: t("businessProfilePage.toggles.showLogoOnInvoice"),
-      description: t("businessProfilePage.toggleDescriptions.showLogoOnInvoice"),
+      description: t(
+        "businessProfilePage.toggleDescriptions.showLogoOnInvoice",
+      ),
     },
     {
       key: "showTaxNumber" as const,
@@ -289,7 +488,9 @@ const BusinessProfileClient = ({
                         {type.label}
                       </p>
                       <p className="mt-2 text-sm leading-6 text-[#627890]">
-                        {t("businessProfilePage.content.businessTypeCardDescription")}
+                        {t(
+                          "businessProfilePage.content.businessTypeCardDescription",
+                        )}
                       </p>
                     </div>
                     <span
@@ -412,16 +613,12 @@ const BusinessProfileClient = ({
             success
             className="mb-0"
           />
-          <ValidationField
-            id="address"
-            label={t("businessProfilePage.fields.address")}
-            value={profile.address}
-            onChange={(value) => updateProfile("address", value)}
-            validate={validateRequired}
-            required
-            placeholder={t("businessProfilePage.placeholders.address")}
-            success
-            className="mb-0 md:col-span-2"
+          <BusinessAddressFields
+            value={toBusinessAddressInput(profile.businessAddress)}
+            onFieldChange={updateBusinessAddressField}
+            onAddressPaste={handleAddressPaste}
+            autofillStatus={autofillStatus}
+            autofillPending={autofillPending}
           />
           <ValidationField
             id="email"
@@ -529,7 +726,8 @@ const BusinessProfileClient = ({
               style={{ backgroundColor: selectedTemplate?.theme.primaryColor }}
             />
             <p className="mt-4 text-base font-semibold text-[#10233f]">
-              {selectedTemplate?.name ?? t("businessProfilePage.templateFallback")}
+              {selectedTemplate?.name ??
+                t("businessProfilePage.templateFallback")}
             </p>
             <p className="mt-2 text-sm leading-6 text-[#627890]">
               {selectedTemplate?.description ??
@@ -573,7 +771,9 @@ const BusinessProfileClient = ({
                 <input
                   type="checkbox"
                   checked={profile[option.key]}
-                  onChange={() => updateProfile(option.key, !profile[option.key])}
+                  onChange={() =>
+                    updateProfile(option.key, !profile[option.key])
+                  }
                   className="mt-1 h-4 w-4 rounded border-[#b9d1e6] text-[#123d65] accent-[#123d65]"
                 />
                 <span className="min-w-0">

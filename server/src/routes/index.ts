@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import AuthController from "../controllers/AuthController.js";
 import AdminController from "../controllers/AdminController.js";
 import CustomersController from "../controllers/CustomersController.js";
@@ -16,6 +16,7 @@ import WarehousesController from "../controllers/WarehousesController.js";
 import InventoriesController from "../controllers/InventoriesController.js";
 import UsersController from "../controllers/UsersController.js";
 import BusinessProfileController from "../controllers/BusinessProfileController.js";
+import AddressLookupController from "../controllers/AddressLookupController.js";
 import TemplatesController from "../controllers/TemplatesController.js";
 import UserTemplateController from "../controllers/UserTemplateController.js";
 import UserSavedTemplateController from "../controllers/UserSavedTemplateController.js";
@@ -42,6 +43,7 @@ import {
   adminAccessPaymentVerifySchema,
   idParamSchema,
   invoiceIdParamSchema,
+  pincodeLookupParamSchema,
   publicInvoiceParamSchema,
   publicInvoiceQuerySchema,
   adminLoginSchema,
@@ -99,6 +101,40 @@ import ExportController from "../modules/export/export.controller.js";
 const router = Router();
 const readRouteParam = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
+
+const reservedInvoiceRouteSegments = new Set([
+  "bootstrap",
+  "history",
+  "summary",
+]);
+
+const shouldBypassPublicInvoiceRoute = (req: Request, invoiceParam: string) => {
+  if (/^\d+$/.test(invoiceParam)) {
+    return true;
+  }
+
+  if (reservedInvoiceRouteSegments.has(invoiceParam.toLowerCase())) {
+    return true;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (
+    typeof authHeader === "string" &&
+    authHeader.trim().toLowerCase().startsWith("bearer ")
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+router.get("/address/pincode/health", AddressLookupController.health);
+
+router.get(
+  "/address/pincode/:pincode",
+  validate({ params: pincodeLookupParamSchema }),
+  AddressLookupController.lookupPincode,
+);
 
 // Super admin routes
 router.post(
@@ -238,7 +274,7 @@ router.get(
   "/invoices/:id",
   (req, _res, next) => {
     const invoiceParam = readRouteParam(req.params.id);
-    if (invoiceParam && /^\d+$/.test(invoiceParam)) {
+    if (invoiceParam && shouldBypassPublicInvoiceRoute(req, invoiceParam)) {
       return next("route");
     }
 
@@ -585,6 +621,11 @@ router.use("/copilot", copilotRoutes);
 // Payments
 router.get("/payments", AuthMiddleware, PaymentsController.index);
 router.get(
+  "/payments/access/status",
+  AuthMiddleware,
+  AccessPaymentsController.status,
+);
+router.get(
   "/payments/:invoiceId",
   AuthMiddleware,
   validate({ params: invoiceIdParamSchema }),
@@ -595,11 +636,6 @@ router.post(
   AuthMiddleware,
   validate({ body: paymentCreateSchema }),
   PaymentsController.store,
-);
-router.get(
-  "/payments/access/status",
-  AuthMiddleware,
-  AccessPaymentsController.status,
 );
 router.post(
   "/payments/access/razorpay/order",

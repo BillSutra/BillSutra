@@ -33,7 +33,10 @@ import {
   saveActiveInvoiceTemplate,
 } from "@/lib/invoiceActiveTemplate";
 import { PREVIEW_INVOICE } from "@/lib/invoicePreviewData";
-import type { InvoiceTemplateConfig, SectionKey } from "@/types/invoice-template";
+import type {
+  InvoiceTemplateConfig,
+  SectionKey,
+} from "@/types/invoice-template";
 import {
   createUserSavedTemplate,
   deleteUserSavedTemplate,
@@ -44,6 +47,7 @@ import {
   saveUserTemplate,
   updateUserSavedTemplate,
 } from "@/lib/apiClient";
+import { formatBusinessAddressFromRecord } from "@/lib/indianAddress";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import { useI18n } from "@/providers/LanguageProvider";
 
@@ -106,13 +110,16 @@ const matchesTemplateIdentity = (
     return true;
   }
 
-  const templatePreset = resolveInvoiceTemplatePreset(template.id, template.name);
+  const templatePreset = resolveInvoiceTemplatePreset(
+    template.id,
+    template.name,
+  );
   const activePreset = resolveInvoiceTemplatePreset(templateId, templateName);
 
   return Boolean(
     templatePreset &&
-      activePreset &&
-      templatePreset.variant === activePreset.variant,
+    activePreset &&
+    templatePreset.variant === activePreset.variant,
   );
 };
 
@@ -315,7 +322,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
   const featuredTemplates = useMemo(() => {
     return buildCuratedTemplateList(templates);
   }, [templates]);
-  const templateCatalog = featuredTemplates.length ? featuredTemplates : templates;
+  const templateCatalog = featuredTemplates.length
+    ? featuredTemplates
+    : templates;
 
   const selectedTemplate = useMemo(() => {
     return (
@@ -491,16 +500,16 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
   };
 
   const availableSections = useMemo(() => {
-    return (selectedTemplate.sectionOrder ?? selectedTemplate.defaultSections).filter(
-      (section) => !sectionOrder.includes(section),
-    );
+    return (
+      selectedTemplate.sectionOrder ?? selectedTemplate.defaultSections
+    ).filter((section) => !sectionOrder.includes(section));
   }, [sectionOrder, selectedTemplate]);
 
   const previewAvailableSections = useMemo(() => {
     if (!previewTemplate) return [];
-    return (previewTemplate.sectionOrder ?? previewTemplate.defaultSections).filter(
-      (section) => !previewSectionOrder.includes(section),
-    );
+    return (
+      previewTemplate.sectionOrder ?? previewTemplate.defaultSections
+    ).filter((section) => !previewSectionOrder.includes(section));
   }, [previewSectionOrder, previewTemplate]);
 
   const removeSection = (section: SectionKey) => {
@@ -518,7 +527,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
   };
 
   const removePreviewSection = (section: SectionKey) => {
-    setPreviewEnabledSections((prev) => prev.filter((item) => item !== section));
+    setPreviewEnabledSections((prev) =>
+      prev.filter((item) => item !== section),
+    );
     setPreviewSectionOrder((prev) => prev.filter((item) => item !== section));
   };
 
@@ -614,7 +625,29 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
         businessName:
           businessProfile?.business_name ??
           PREVIEW_INVOICE.business.businessName,
-        address: businessProfile?.address ?? PREVIEW_INVOICE.business.address,
+        businessAddress: businessProfile
+          ? {
+              addressLine1:
+                businessProfile.businessAddress?.addressLine1 ??
+                businessProfile.address_line1 ??
+                "",
+              city:
+                businessProfile.businessAddress?.city ??
+                businessProfile.city ??
+                "",
+              state:
+                businessProfile.businessAddress?.state ??
+                businessProfile.state ??
+                "",
+              pincode:
+                businessProfile.businessAddress?.pincode ??
+                businessProfile.pincode ??
+                "",
+            }
+          : PREVIEW_INVOICE.business.businessAddress,
+        address:
+          formatBusinessAddressFromRecord(businessProfile) ||
+          PREVIEW_INVOICE.business.address,
         phone: businessProfile?.phone ?? PREVIEW_INVOICE.business.phone,
         email: businessProfile?.email ?? PREVIEW_INVOICE.business.email,
         website: businessProfile?.website ?? PREVIEW_INVOICE.business.website,
@@ -638,7 +671,29 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
         businessName:
           businessProfile?.business_name ??
           PREVIEW_INVOICE.business.businessName,
-        address: businessProfile?.address ?? PREVIEW_INVOICE.business.address,
+        businessAddress: businessProfile
+          ? {
+              addressLine1:
+                businessProfile.businessAddress?.addressLine1 ??
+                businessProfile.address_line1 ??
+                "",
+              city:
+                businessProfile.businessAddress?.city ??
+                businessProfile.city ??
+                "",
+              state:
+                businessProfile.businessAddress?.state ??
+                businessProfile.state ??
+                "",
+              pincode:
+                businessProfile.businessAddress?.pincode ??
+                businessProfile.pincode ??
+                "",
+            }
+          : PREVIEW_INVOICE.business.businessAddress,
+        address:
+          formatBusinessAddressFromRecord(businessProfile) ||
+          PREVIEW_INVOICE.business.address,
         phone: businessProfile?.phone ?? PREVIEW_INVOICE.business.phone,
         email: businessProfile?.email ?? PREVIEW_INVOICE.business.email,
         website: businessProfile?.website ?? PREVIEW_INVOICE.business.website,
@@ -662,7 +717,29 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
         businessName:
           businessProfile?.business_name ??
           PREVIEW_INVOICE.business.businessName,
-        address: businessProfile?.address ?? PREVIEW_INVOICE.business.address,
+        businessAddress: businessProfile
+          ? {
+              addressLine1:
+                businessProfile.businessAddress?.addressLine1 ??
+                businessProfile.address_line1 ??
+                "",
+              city:
+                businessProfile.businessAddress?.city ??
+                businessProfile.city ??
+                "",
+              state:
+                businessProfile.businessAddress?.state ??
+                businessProfile.state ??
+                "",
+              pincode:
+                businessProfile.businessAddress?.pincode ??
+                businessProfile.pincode ??
+                "",
+            }
+          : PREVIEW_INVOICE.business.businessAddress,
+        address:
+          formatBusinessAddressFromRecord(businessProfile) ||
+          PREVIEW_INVOICE.business.address,
         phone: businessProfile?.phone ?? PREVIEW_INVOICE.business.phone,
         email: businessProfile?.email ?? PREVIEW_INVOICE.business.email,
         website: businessProfile?.website ?? PREVIEW_INVOICE.business.website,
@@ -1061,7 +1138,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
               <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                 {t("templatesPage.kicker")}
               </p>
-              <h1 className="mt-2 text-3xl font-semibold">{t("templatesPage.heading")}</h1>
+              <h1 className="mt-2 text-3xl font-semibold">
+                {t("templatesPage.heading")}
+              </h1>
               <p className="mt-2 text-sm text-[#5c4b3b]">
                 {t("templatesPage.description")}
               </p>
@@ -1074,7 +1153,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 className="flex w-full items-center justify-between text-left"
                 aria-expanded={openBusinessType}
               >
-                <h2 className="text-sm font-semibold">{t("templatesPage.sections.businessType")}</h2>
+                <h2 className="text-sm font-semibold">
+                  {t("templatesPage.sections.businessType")}
+                </h2>
                 <ChevronDown
                   className={`h-4 w-4 text-[#8a6d56] transition ${
                     openBusinessType ? "rotate-0" : "-rotate-90"
@@ -1108,7 +1189,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 className="flex w-full items-center justify-between text-left"
                 aria-expanded={openCustomize}
               >
-                <h2 className="text-sm font-semibold">{t("templatesPage.sections.customize")}</h2>
+                <h2 className="text-sm font-semibold">
+                  {t("templatesPage.sections.customize")}
+                </h2>
                 <ChevronDown
                   className={`h-4 w-4 text-[#8a6d56] transition ${
                     openCustomize ? "rotate-0" : "-rotate-90"
@@ -1210,7 +1293,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           <button
                             key={`theme-${color}`}
                             type="button"
-                            aria-label={t("templatesPage.aria.setThemeColor", { color })}
+                            aria-label={t("templatesPage.aria.setThemeColor", {
+                              color,
+                            })}
                             onClick={() => setThemeColor(color)}
                             className="h-6 w-6 rounded-full border border-[#d6c8b8]"
                             style={{ backgroundColor: color }}
@@ -1267,7 +1352,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 className="flex w-full items-center justify-between text-left"
                 aria-expanded={openDesignPanel}
               >
-                <h2 className="text-sm font-semibold">{t("templatesPage.sections.styling")}</h2>
+                <h2 className="text-sm font-semibold">
+                  {t("templatesPage.sections.styling")}
+                </h2>
                 <ChevronDown
                   className={`h-4 w-4 text-[#8a6d56] transition ${
                     openDesignPanel ? "rotate-0" : "-rotate-90"
@@ -1295,7 +1382,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                   <div className="mt-5 grid gap-4 text-sm">
                     <div className="grid gap-2">
                       <label className="flex items-center justify-between gap-4">
-                        <span>{t("templatesPage.actions.backgroundColor")}</span>
+                        <span>
+                          {t("templatesPage.actions.backgroundColor")}
+                        </span>
                         <input
                           type="color"
                           value={activeDesignConfig.backgroundColor}
@@ -1312,7 +1401,10 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           <button
                             key={`bg-${color}`}
                             type="button"
-                            aria-label={t("templatesPage.aria.setBackgroundColor", { color })}
+                            aria-label={t(
+                              "templatesPage.aria.setBackgroundColor",
+                              { color },
+                            )}
                             onClick={() =>
                               updateDesignSection(activeDesignSection, {
                                 backgroundColor: color,
@@ -1366,7 +1458,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                           <button
                             key={`text-${color}`}
                             type="button"
-                            aria-label={t("templatesPage.aria.setTextColor", { color })}
+                            aria-label={t("templatesPage.aria.setTextColor", {
+                              color,
+                            })}
                             onClick={() =>
                               updateDesignSection(activeDesignSection, {
                                 textColor: color,
@@ -1417,7 +1511,11 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                       </select>
                     </label>
                     <label className="grid gap-2">
-                      <span>{t("templatesPage.actions.fontSize", { value: activeDesignConfig.fontSize })}</span>
+                      <span>
+                        {t("templatesPage.actions.fontSize", {
+                          value: activeDesignConfig.fontSize,
+                        })}
+                      </span>
                       <input
                         type="range"
                         min={10}
@@ -1432,7 +1530,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                     </label>
                     <label className="grid gap-2">
                       <span>
-                        {t("templatesPage.actions.sectionPadding", { value: activeDesignConfig.padding })}
+                        {t("templatesPage.actions.sectionPadding", {
+                          value: activeDesignConfig.padding,
+                        })}
                       </span>
                       <input
                         type="range"
@@ -1448,7 +1548,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                     </label>
                     <label className="grid gap-2">
                       <span>
-                        {t("templatesPage.actions.sectionMargin", { value: activeDesignConfig.margin })}
+                        {t("templatesPage.actions.sectionMargin", {
+                          value: activeDesignConfig.margin,
+                        })}
                       </span>
                       <input
                         type="range"
@@ -1464,7 +1566,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                     </label>
                     <label className="grid gap-2">
                       <span>
-                        {t("templatesPage.actions.borderRadius", { value: activeDesignConfig.borderRadius })}
+                        {t("templatesPage.actions.borderRadius", {
+                          value: activeDesignConfig.borderRadius,
+                        })}
                       </span>
                       <input
                         type="range"
@@ -1489,8 +1593,12 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         }
                         className="rounded-xl border border-border px-3 py-2 text-sm"
                       >
-                        <option value="contained">{t("templatesPage.actions.widthContained")}</option>
-                        <option value="full">{t("templatesPage.actions.widthFull")}</option>
+                        <option value="contained">
+                          {t("templatesPage.actions.widthContained")}
+                        </option>
+                        <option value="full">
+                          {t("templatesPage.actions.widthFull")}
+                        </option>
                       </select>
                     </label>
                     <label className="grid gap-2">
@@ -1524,7 +1632,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         disabled={createSavedTemplateMutation.isPending}
                         className="rounded-full border border-border px-3 py-2"
                       >
-                      {createSavedTemplateMutation.isPending
+                        {createSavedTemplateMutation.isPending
                           ? t("templatesPage.actions.savingTemplate")
                           : t("templatesPage.actions.saveAsTemplate")}
                       </button>
@@ -1583,7 +1691,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 aria-expanded={openLivePreview}
               >
                 {openLivePreview ? (
-                  <h2 className="text-sm font-semibold">{t("templatesPage.sections.livePreview")}</h2>
+                  <h2 className="text-sm font-semibold">
+                    {t("templatesPage.sections.livePreview")}
+                  </h2>
                 ) : (
                   <span className="text-xs font-semibold text-[#5c4b3b]">
                     {t("templatesPage.live")}
@@ -1596,7 +1706,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                 />
               </button>
               {openLivePreview ? (
-                <span className="text-xs text-[#8a6d56]">{t("templatesPage.mockData")}</span>
+                <span className="text-xs text-[#8a6d56]">
+                  {t("templatesPage.mockData")}
+                </span>
               ) : null}
             </div>
             {openLivePreview ? (
@@ -1632,7 +1744,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
             className="flex w-full items-center justify-between text-left"
             aria-expanded={openTemplateSelection}
           >
-            <h2 className="text-sm font-semibold">{t("templatesPage.sections.selection")}</h2>
+            <h2 className="text-sm font-semibold">
+              {t("templatesPage.sections.selection")}
+            </h2>
             <ChevronDown
               className={`h-4 w-4 text-[#8a6d56] transition ${
                 openTemplateSelection ? "rotate-0" : "-rotate-90"
@@ -1681,8 +1795,12 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                     }
                     className="rounded-xl border border-border px-3 py-2 text-sm"
                   >
-                    <option value="all">{t("templatesPage.filters.allTemplates")}</option>
-                    <option value="current-template">{t("templatesPage.filters.currentBase")}</option>
+                    <option value="all">
+                      {t("templatesPage.filters.allTemplates")}
+                    </option>
+                    <option value="current-template">
+                      {t("templatesPage.filters.currentBase")}
+                    </option>
                   </select>
                 </div>
                 {filteredUserSavedTemplates.length ? (
@@ -1697,10 +1815,13 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                         </p>
                         <p className="mt-1 text-xs text-[#6b5847]">
                           {t("templatesPage.updated", {
-                            value: formatDate(new Date(savedTemplate.updated_at), {
-                              dateStyle: "medium",
-                              timeStyle: "short",
-                            }),
+                            value: formatDate(
+                              new Date(savedTemplate.updated_at),
+                              {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                              },
+                            ),
                           })}
                         </p>
                         <div className="mt-4 flex flex-wrap gap-2">
@@ -1935,7 +2056,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
             <div className="grid flex-1 gap-6 overflow-y-auto px-6 py-6 lg:grid-cols-[0.4fr_0.6fr]">
               <div className="space-y-5">
                 <div className="rounded-2xl border border-border bg-muted/40 p-4">
-                  <h4 className="text-sm font-semibold">{t("templatesPage.previewSettings")}</h4>
+                  <h4 className="text-sm font-semibold">
+                    {t("templatesPage.previewSettings")}
+                  </h4>
                   <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
                     <label className="flex items-center gap-2">
                       <span>{t("templatesPage.actions.themeColor")}</span>
@@ -1960,7 +2083,9 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
                   </div>
                 </div>
                 <div className="rounded-2xl border border-border bg-white p-4">
-                  <h4 className="text-sm font-semibold">{t("templatesPage.previewSections")}</h4>
+                  <h4 className="text-sm font-semibold">
+                    {t("templatesPage.previewSections")}
+                  </h4>
                   <div className="mt-3 grid gap-2 text-sm">
                     {previewSectionOrder.map((section) => (
                       <div

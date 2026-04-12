@@ -15,11 +15,7 @@ import AuthTokenSync from "../providers/AuthTokenSync";
 import ThemeProvider from "@/components/theme-provider";
 import { LanguageProvider } from "@/providers/LanguageProvider";
 import ObservabilityProvider from "@/providers/ObservabilityProvider";
-import {
-  DEFAULT_LANGUAGE,
-  isLanguage,
-  LANGUAGE_COOKIE_KEY,
-} from "@/i18n";
+import { DEFAULT_LANGUAGE, isLanguage, LANGUAGE_COOKIE_KEY } from "@/i18n";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],

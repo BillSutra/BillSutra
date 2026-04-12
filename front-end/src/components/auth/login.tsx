@@ -82,9 +82,7 @@ export default function Login({ mode = "owner" }: LoginProps) {
   const hydrated = useHydrated();
 
   const supportsPasskeys = useMemo(
-    () =>
-      hydrated &&
-      typeof window.PublicKeyCredential !== "undefined",
+    () => hydrated && typeof window.PublicKeyCredential !== "undefined",
     [hydrated],
   );
 
@@ -367,7 +365,11 @@ export default function Login({ mode = "owner" }: LoginProps) {
 
   useEffect(() => {
     const code = otpDigits.join("");
-    if (code.length === OTP_LENGTH && !otpDigits.includes("") && !isOtpVerifying) {
+    if (
+      code.length === OTP_LENGTH &&
+      !otpDigits.includes("") &&
+      !isOtpVerifying
+    ) {
       void handleVerifyOtp(code);
     }
   }, [handleVerifyOtp, isOtpVerifying, otpDigits]);
@@ -421,11 +423,15 @@ export default function Login({ mode = "owner" }: LoginProps) {
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="email"
           />
-          <span className="text-xs text-destructive">{state.errors?.email}</span>
+          <span className="text-xs text-destructive">
+            {state.errors?.email}
+          </span>
         </div>
         <div className="grid gap-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password">{t("auth.loginForm.passwordLabel")}</Label>
+            <Label htmlFor="password">
+              {t("auth.loginForm.passwordLabel")}
+            </Label>
             {!isWorkerMode ? (
               <Link
                 href="/forgot-password"
@@ -442,7 +448,9 @@ export default function Login({ mode = "owner" }: LoginProps) {
             name="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            autoComplete={isWorkerMode ? "current-password" : "current-password"}
+            autoComplete={
+              isWorkerMode ? "current-password" : "current-password"
+            }
           />
           <span className="text-xs text-destructive">
             {state.errors?.password}
@@ -472,7 +480,9 @@ export default function Login({ mode = "owner" }: LoginProps) {
               onClick={handlePasskeyLogin}
               disabled={isPasskeyLoading || isSigningIn}
             >
-              {isPasskeyLoading ? "Checking passkey..." : "Continue with passkey"}
+              {isPasskeyLoading
+                ? "Checking passkey..."
+                : "Continue with passkey"}
             </Button>
 
             <div className="rounded-2xl border border-border bg-muted/35 p-4">

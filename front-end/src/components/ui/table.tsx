@@ -102,9 +102,7 @@ export function DataTable({
                   key={row.id}
                   className={cn(
                     "border-t border-border/65 transition-colors",
-                    index % 2 === 0
-                      ? "bg-transparent"
-                      : "bg-muted/20",
+                    index % 2 === 0 ? "bg-transparent" : "bg-muted/20",
                     "hover:bg-accent/45",
                   )}
                 >

@@ -1,11 +1,16 @@
 import type { InvoiceSectionProps } from "@/types/invoice-template";
 import { useSectionStyles } from "@/components/invoice/DesignConfigContext";
 import { useI18n } from "@/providers/LanguageProvider";
+import { buildBusinessAddressLines } from "@/lib/indianAddress";
 
 const CompanyDetails = ({ data, theme }: InvoiceSectionProps) => {
   const { style } = useSectionStyles("company_details");
   const { t } = useI18n();
   const business = data.business;
+  const businessAddressLines = buildBusinessAddressLines(
+    business.businessAddress,
+    business.address,
+  );
 
   return (
     <section
@@ -18,10 +23,19 @@ const CompanyDetails = ({ data, theme }: InvoiceSectionProps) => {
           <p className="text-[0.72em] font-semibold uppercase tracking-[0.22em] text-slate-500">
             {t("invoiceLabels.from")}
           </p>
-          <p className="mt-2 font-semibold" style={{ color: theme.primaryColor }}>
+          <p
+            className="mt-2 font-semibold"
+            style={{ color: theme.primaryColor }}
+          >
             {business.businessName}
           </p>
-          {business.address ? <p className="mt-1 text-slate-700">{business.address}</p> : null}
+          {businessAddressLines.length > 0 ? (
+            <div className="mt-1 grid gap-0.5 text-slate-700">
+              {businessAddressLines.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+            </div>
+          ) : null}
           <div className="mt-2 grid gap-1 text-slate-600">
             {business.phone ? <p>{business.phone}</p> : null}
             {business.email ? <p>{business.email}</p> : null}

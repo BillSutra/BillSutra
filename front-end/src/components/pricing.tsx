@@ -42,7 +42,11 @@ const comparisonRows = [
   },
   {
     label: "Payment tracking",
-    values: ["Paid and pending", "Paid, pending, partial", "Full tracking with history"],
+    values: [
+      "Paid and pending",
+      "Paid, pending, partial",
+      "Full tracking with history",
+    ],
     icon: Receipt,
   },
   {
@@ -100,12 +104,13 @@ const Pricing = ({ isAuthenticated = false }: PricingProps) => {
               India-first pricing
             </p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
-              Fair plans for small businesses that need speed, clarity, and local value
+              Fair plans for small businesses that need speed, clarity, and
+              local value
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
               Start free, upgrade only when your billing volume grows, and keep
-              every invoice GST-ready and customer-friendly from day one. No hidden
-              fees. No forced setup calls.
+              every invoice GST-ready and customer-friendly from day one. No
+              hidden fees. No forced setup calls.
             </p>
           </div>
 
@@ -175,7 +180,9 @@ const Pricing = ({ isAuthenticated = false }: PricingProps) => {
                   </div>
 
                   <div className="mt-5">
-                    <h3 className="text-2xl font-semibold text-foreground">{plan.name}</h3>
+                    <h3 className="text-2xl font-semibold text-foreground">
+                      {plan.name}
+                    </h3>
                     <p className="mt-3 min-h-16 text-sm leading-6 text-muted-foreground">
                       {plan.description}
                     </p>
@@ -195,8 +202,9 @@ const Pricing = ({ isAuthenticated = false }: PricingProps) => {
                       <p>Save {formatPricingAmount(savings)} every year</p>
                       {monthlyEquivalent ? (
                         <p className="text-xs font-medium text-muted-foreground">
-                          Works out to about {formatPricingAmount(monthlyEquivalent)} per
-                          month on annual billing
+                          Works out to about{" "}
+                          {formatPricingAmount(monthlyEquivalent)} per month on
+                          annual billing
                         </p>
                       ) : null}
                     </div>
@@ -230,7 +238,9 @@ const Pricing = ({ isAuthenticated = false }: PricingProps) => {
                   ) : null}
 
                   <div className="mt-4 rounded-2xl bg-[#f8f4ec] p-4 text-sm text-muted-foreground">
-                    <p className="font-medium text-foreground">Why teams upgrade</p>
+                    <p className="font-medium text-foreground">
+                      Why teams upgrade
+                    </p>
                     <ul className="mt-2 space-y-2">
                       {plan.upgradeHighlights.map((item) => (
                         <li key={item}>{item}</li>

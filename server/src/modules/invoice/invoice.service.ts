@@ -1,6 +1,5 @@
 import prisma from "../../config/db.config.js";
-import { InvoiceStatus, SaleStatus, StockReason } from "@prisma/client";
-import type { Prisma } from "@prisma/client";
+import { InvoiceStatus, Prisma, SaleStatus, StockReason } from "@prisma/client";
 import puppeteer from "puppeteer";
 import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
@@ -9,6 +8,10 @@ import {
   buildPublicInvoiceReference,
   buildPublicInvoiceUrl,
 } from "../../lib/appUrls.js";
+import {
+  buildBusinessAddressLines,
+  normalizeBusinessAddressDraft,
+} from "../../lib/indianAddress.js";
 
 type ListInvoiceFilters = {
   status?: InvoiceStatus;
@@ -30,7 +33,11 @@ export type PublicInvoiceViewData = {
   date: string;
   due_date: string | null;
   notes: string | null;
+  customer_type: "individual" | "business";
+  customer_display_name: string;
   customer_name: string;
+  customer_business_name: string | null;
+  customer_gstin: string | null;
   email: string | null;
   customer_phone: string | null;
   customer_address: string | null;
@@ -57,6 +64,10 @@ const publicInvoiceInclude = {
         select: {
           business_name: true,
           address: true,
+          address_line1: true,
+          city: true,
+          state: true,
+          pincode: true,
           phone: true,
           email: true,
           currency: true,
@@ -69,6 +80,16 @@ const publicInvoiceInclude = {
 type PublicInvoiceRecord = Prisma.InvoiceGetPayload<{
   include: typeof publicInvoiceInclude;
 }>;
+
+type CustomerInvoiceProfile = {
+  customer_type: string | null;
+  business_name: string | null;
+  gstin: string | null;
+  address_line1: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+};
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 
@@ -102,6 +123,95 @@ const escapeHtml = (text: unknown) =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 
+const normalizeCustomerType = (value: unknown) =>
+  value === "business" ? "business" : "individual";
+
+const toNullableString = (value: unknown) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
+const isCustomerSchemaMismatchError = (error: unknown) => {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2021" || error.code === "P2022") {
+      return true;
+    }
+
+    if (error.code === "P2010") {
+      const code = (error.meta as { code?: string } | undefined)?.code;
+      return code === "42703" || code === "42P01";
+    }
+  }
+
+  if (error instanceof Error) {
+    return (
+      /business_name/i.test(error.message) ||
+      /customer_type/i.test(error.message) ||
+      /address_line1/i.test(error.message)
+    );
+  }
+
+  return false;
+};
+
+const fetchCustomerInvoiceProfile = async (
+  userId: number,
+  customerId: number,
+): Promise<CustomerInvoiceProfile | null> => {
+  try {
+    const rows = await prisma.$queryRaw<
+      Array<
+        CustomerInvoiceProfile & {
+          id: number;
+        }
+      >
+    >(Prisma.sql`
+      SELECT
+        id,
+        customer_type,
+        business_name,
+        gstin,
+        address_line1,
+        city,
+        state,
+        pincode
+      FROM "customers"
+      WHERE id = ${customerId}
+        AND user_id = ${userId}
+      LIMIT 1
+    `);
+
+    return rows[0] ?? null;
+  } catch (error) {
+    if (isCustomerSchemaMismatchError(error)) {
+      return null;
+    }
+
+    throw error;
+  }
+};
+
+const buildCustomerAddressLines = (
+  customerAddress: string | null | undefined,
+  customerProfile?: CustomerInvoiceProfile | null,
+) => {
+  const normalizedStructuredAddress = normalizeBusinessAddressDraft({
+    addressLine1: customerProfile?.address_line1 ?? undefined,
+    city: customerProfile?.city ?? undefined,
+    state: customerProfile?.state ?? undefined,
+    pincode: customerProfile?.pincode ?? undefined,
+  });
+
+  return buildBusinessAddressLines(
+    normalizedStructuredAddress,
+    customerAddress,
+  );
+};
+
 const buildInvoicePdfHtml = (
   invoice: {
     invoice_number: string;
@@ -130,13 +240,38 @@ const buildInvoicePdfHtml = (
   company: {
     business_name: string;
     address: string | null;
+    address_line1: string | null;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
     phone: string | null;
     email: string | null;
     tax_id: string | null;
     currency: string;
   } | null,
+  customerProfile?: CustomerInvoiceProfile | null,
 ) => {
   const currency = company?.currency ?? "INR";
+  const companyAddressLines = buildBusinessAddressLines(
+    {
+      addressLine1: company?.address_line1 ?? undefined,
+      city: company?.city ?? undefined,
+      state: company?.state ?? undefined,
+      pincode: company?.pincode ?? undefined,
+    },
+    company?.address,
+  );
+  const customerType = normalizeCustomerType(customerProfile?.customer_type);
+  const customerBusinessName = toNullableString(customerProfile?.business_name);
+  const customerGstin = toNullableString(customerProfile?.gstin);
+  const customerDisplayName =
+    customerType === "business" && customerBusinessName
+      ? customerBusinessName
+      : invoice.customer.name;
+  const customerAddressLines = buildCustomerAddressLines(
+    invoice.customer.address,
+    customerProfile,
+  );
 
   const itemRows = invoice.items
     .map(
@@ -231,7 +366,9 @@ const buildInvoicePdfHtml = (
           <div>
             <h2>Company Details</h2>
             <div>${escapeHtml(company?.business_name ?? "Your Business")}</div>
-            <div class="muted">${escapeHtml(company?.address ?? "")}</div>
+            ${companyAddressLines
+              .map((line) => `<div class="muted">${escapeHtml(line)}</div>`)
+              .join("")}
             <div class="muted">${escapeHtml(company?.phone ?? "")}</div>
             <div class="muted">${escapeHtml(company?.email ?? "")}</div>
             <div class="muted">Tax ID: ${escapeHtml(company?.tax_id ?? "-")}</div>
@@ -241,10 +378,14 @@ const buildInvoicePdfHtml = (
         <div class="row" style="margin-top: 24px;">
           <div>
             <h2>Bill To</h2>
-            <div>${escapeHtml(invoice.customer.name)}</div>
+            <div>${escapeHtml(customerDisplayName)}</div>
+            ${customerType === "business" ? `<div class="muted">Type: Business</div>` : ""}
+            ${customerType === "business" && customerGstin ? `<div class="muted">GSTIN: ${escapeHtml(customerGstin)}</div>` : ""}
             <div class="muted">${escapeHtml(invoice.customer.email ?? "")}</div>
             <div class="muted">${escapeHtml(invoice.customer.phone ?? "")}</div>
-            <div class="muted">${escapeHtml(invoice.customer.address ?? "")}</div>
+            ${customerAddressLines
+              .map((line) => `<div class="muted">${escapeHtml(line)}</div>`)
+              .join("")}
           </div>
         </div>
 
@@ -326,41 +467,72 @@ const markPublicInvoiceOverdueIfNeeded = async (invoice: {
   }
 };
 
-const mapPublicInvoice = (invoice: {
-  id: number;
-  invoice_number: string;
-  status: InvoiceStatus;
-  date: Date;
-  due_date: Date | null;
-  notes: string | null;
-  subtotal: unknown;
-  tax: unknown;
-  discount: unknown;
-  total: unknown;
-  customer: {
-    name: string;
-    email: string | null;
-    phone: string | null;
-    address: string | null;
-  };
-  items: Array<{
-    name: string;
-    quantity: number;
-    price: unknown;
-    tax_rate: unknown;
+const mapPublicInvoice = (
+  invoice: {
+    id: number;
+    invoice_number: string;
+    status: InvoiceStatus;
+    date: Date;
+    due_date: Date | null;
+    notes: string | null;
+    subtotal: unknown;
+    tax: unknown;
+    discount: unknown;
     total: unknown;
-  }>;
-  user: {
-    business_profile: {
-      business_name: string;
-      address: string | null;
-      phone: string | null;
+    customer: {
+      name: string;
       email: string | null;
-      currency: string;
-    } | null;
-  };
-}): PublicInvoiceViewData => {
+      phone: string | null;
+      address: string | null;
+    };
+    items: Array<{
+      name: string;
+      quantity: number;
+      price: unknown;
+      tax_rate: unknown;
+      total: unknown;
+    }>;
+    user: {
+      business_profile: {
+        business_name: string;
+        address: string | null;
+        address_line1: string | null;
+        city: string | null;
+        state: string | null;
+        pincode: string | null;
+        phone: string | null;
+        email: string | null;
+        currency: string;
+      } | null;
+    };
+  },
+  customerProfile?: CustomerInvoiceProfile | null,
+): PublicInvoiceViewData => {
   const currency = invoice.user.business_profile?.currency ?? "INR";
+  const businessProfile = invoice.user.business_profile;
+  const customerType = normalizeCustomerType(customerProfile?.customer_type);
+  const customerBusinessName = toNullableString(customerProfile?.business_name);
+  const customerDisplayName =
+    customerType === "business" && customerBusinessName
+      ? customerBusinessName
+      : invoice.customer.name;
+  const customerAddressLines = buildCustomerAddressLines(
+    invoice.customer.address,
+    customerProfile,
+  );
+  const customerAddress =
+    customerAddressLines.length > 0 ? customerAddressLines.join("\n") : null;
+  const businessAddressLines = buildBusinessAddressLines(
+    {
+      addressLine1: businessProfile?.address_line1 ?? undefined,
+      city: businessProfile?.city ?? undefined,
+      state: businessProfile?.state ?? undefined,
+      pincode: businessProfile?.pincode ?? undefined,
+    },
+    businessProfile?.address,
+  );
+  const businessAddress =
+    businessAddressLines.length > 0 ? businessAddressLines.join("\n") : null;
 
   return {
     id: invoice.id,
@@ -375,14 +547,18 @@ const mapPublicInvoice = (invoice: {
     date: invoice.date.toISOString(),
     due_date: invoice.due_date?.toISOString() ?? null,
     notes: invoice.notes,
-    customer_name: invoice.customer.name,
+    customer_type: customerType,
+    customer_display_name: customerDisplayName,
+    customer_name: customerDisplayName,
+    customer_business_name: customerBusinessName,
+    customer_gstin: toNullableString(customerProfile?.gstin),
     email: invoice.customer.email,
     customer_phone: invoice.customer.phone,
-    customer_address: invoice.customer.address,
-    business_name: invoice.user.business_profile?.business_name ?? "BillSutra",
-    business_email: invoice.user.business_profile?.email ?? null,
-    business_phone: invoice.user.business_profile?.phone ?? null,
-    business_address: invoice.user.business_profile?.address ?? null,
+    customer_address: customerAddress,
+    business_name: businessProfile?.business_name ?? "BillSutra",
+    business_email: businessProfile?.email ?? null,
+    business_phone: businessProfile?.phone ?? null,
+    business_address: businessAddress,
     public_url: buildPublicInvoiceUrl(invoice.id, invoice.invoice_number),
     items: invoice.items.map((item) => ({
       name: item.name,
@@ -424,6 +600,46 @@ export const listInvoices = async (
     include: { customer: true, items: true, payments: true },
     orderBy: { createdAt: "desc" },
   });
+};
+
+export const getInvoiceBootstrap = async (userId: number) => {
+  const [customers, products, warehouses] = await prisma.$transaction([
+    prisma.customer.findMany({
+      where: { user_id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        address: true,
+      },
+      orderBy: { created_at: "desc" },
+      take: 1000,
+    }),
+    prisma.product.findMany({
+      where: { user_id: userId },
+      include: { category: true },
+      orderBy: { created_at: "desc" },
+      take: 1000,
+    }),
+    prisma.warehouse.findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: "desc" },
+    }),
+  ]);
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  return {
+    customers,
+    products,
+    warehouses,
+    defaults: {
+      invoiceDate: today,
+      dueDate: today,
+      taxMode: "CGST_SGST",
+    },
+  };
 };
 
 export const createInvoice = async (
@@ -671,7 +887,12 @@ export const getPublicInvoice = async (reference: string) => {
 
   await markPublicInvoiceOverdueIfNeeded(invoice);
 
-  return mapPublicInvoice(invoice);
+  const customerProfile = await fetchCustomerInvoiceProfile(
+    invoice.user_id,
+    invoice.customer_id,
+  );
+
+  return mapPublicInvoice(invoice, customerProfile);
 };
 
 export const getInvoiceForNotification = async (userId: number, id: number) => {
@@ -825,6 +1046,10 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
     select: {
       business_name: true,
       address: true,
+      address_line1: true,
+      city: true,
+      state: true,
+      pincode: true,
       phone: true,
       email: true,
       tax_id: true,
@@ -832,7 +1057,12 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
     },
   });
 
-  const html = buildInvoicePdfHtml(invoice, company);
+  const customerProfile = await fetchCustomerInvoiceProfile(
+    userId,
+    invoice.customer_id,
+  );
+
+  const html = buildInvoicePdfHtml(invoice, company, customerProfile);
 
   const browser = await puppeteer.launch({
     headless: true,

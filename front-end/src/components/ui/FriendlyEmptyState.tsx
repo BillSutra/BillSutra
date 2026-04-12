@@ -66,9 +66,7 @@ const FriendlyEmptyState = ({
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-card text-primary shadow-sm ring-1 ring-border/80">
         <Icon size={24} />
       </div>
-      <h3 className="mt-4 text-xl font-semibold text-foreground">
-        {title}
-      </h3>
+      <h3 className="mt-4 text-xl font-semibold text-foreground">{title}</h3>
       <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
         {description}
       </p>

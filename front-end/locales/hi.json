@@ -803,21 +803,100 @@
   },
   "suppliersPage": {
     "title": "सप्लायर्स",
-    "subtitle": "वेंडर कॉन्टैक्ट और खरीद साझेदारों को ट्रैक करें।",
+    "subtitle": "कम्प्लायंस, पता और भुगतान विवरण के साथ पूरी सप्लायर डायरेक्टरी बनाएं।",
     "kicker": "सप्लाई चेन",
     "formTitle": "सप्लायर जोड़ें",
-    "formDescription": "वेंडर कॉन्टैक्ट और पसंदीदा चैनल दर्ज करें।",
+    "formDescription": "एक ही फॉर्म में सप्लायर पहचान, टैक्स प्रोफाइल, पता और भुगतान डिफॉल्ट दर्ज करें।",
+    "form": {
+      "editTitle": "सप्लायर संपादित करें",
+      "profileTag": "स्ट्रक्चर्ड प्रोफाइल",
+      "notesCount": "{count}/500 अक्षर",
+      "totalSuppliers": "कुल सप्लायर्स: {count}"
+    },
+    "sections": {
+      "basic": {
+        "title": "बेसिक विवरण",
+        "description": "खरीद और मिलान के लिए जरूरी संपर्क जानकारी।"
+      },
+      "business": {
+        "title": "बिज़नेस विवरण",
+        "description": "कम्प्लायंट खरीद रिकॉर्ड के लिए GST और PAN विवरण।"
+      },
+      "address": {
+        "title": "पता",
+        "description": "डिस्पैच और लॉजिस्टिक्स के लिए पूरा लोकेशन रिकॉर्ड करें।"
+      },
+      "payment": {
+        "title": "भुगतान डिफॉल्ट",
+        "description": "बकाया ट्रैक करने के लिए टर्म्स और ओपनिंग बैलेंस सेट करें।"
+      }
+    },
     "fields": {
       "name": "नाम",
       "email": "ईमेल",
       "phone": "फ़ोन",
-      "address": "पता"
+      "address": "पता",
+      "businessName": "बिज़नेस नाम",
+      "gstin": "GSTIN",
+      "pan": "PAN",
+      "addressLine1": "पता पंक्ति 1",
+      "city": "शहर",
+      "state": "राज्य",
+      "pincode": "पिनकोड",
+      "paymentTerms": "भुगतान शर्तें",
+      "openingBalance": "ओपनिंग बैलेंस",
+      "notes": "नोट्स"
     },
     "placeholders": {
       "name": "सप्लायर का नाम",
       "email": "vendor@example.com",
-      "phone": "+91 98765 43210",
-      "address": "शहर, राज्य"
+      "phone": "9876543210",
+      "address": "शहर, राज्य",
+      "businessName": "रजिस्टर्ड इकाई का नाम",
+      "gstin": "27ABCDE1234F1Z5",
+      "pan": "ABCDE1234F",
+      "addressLine1": "दुकान / बिल्डिंग / सड़क",
+      "city": "मुंबई",
+      "pincode": "400001",
+      "openingBalance": "0",
+      "notes": "टीम के लिए वैकल्पिक नोट",
+      "search": "नाम, GSTIN या फ़ोन से सप्लायर खोजें"
+    },
+    "paymentTerms": {
+      "NET_7": "7 दिन में भुगतान",
+      "NET_15": "15 दिन में भुगतान",
+      "NET_30": "30 दिन में भुगतान"
+    },
+    "smartHints": {
+      "gstinState": "GSTIN के अनुसार राज्य: {state}",
+      "pincodeLookup": "पिनकोड जांच रहे हैं और शहर/राज्य ला रहे हैं...",
+      "pincodeSuccess": "ऑटो-फिल: {city}, {state}",
+      "pincodeManual": "शहर/राज्य ऑटो-फिल नहीं हो सका। आप मैन्युअली दर्ज कर सकते हैं।"
+    },
+    "actions": {
+      "addSupplier": "सप्लायर जोड़ें",
+      "updateSupplier": "सप्लायर अपडेट करें",
+      "cancelEdit": "संपादन रद्द करें",
+      "edit": "संपादित करें"
+    },
+    "messages": {
+      "saveError": "अभी सप्लायर सेव नहीं हो सका।",
+      "loadError": "सप्लायर्स लोड नहीं हो सके।",
+      "deleteError": "अभी सप्लायर हटाया नहीं जा सका।",
+      "confirmDelete": "क्या आप इस सप्लायर को हटाना चाहते हैं? यह कार्रवाई वापस नहीं होगी।",
+      "formInvalid": "सेव करने से पहले वैलिडेशन त्रुटियां ठीक करें।"
+    },
+    "list": {
+      "outstanding": "बकाया",
+      "gstin": "GSTIN",
+      "noGstin": "उपलब्ध नहीं",
+      "noResults": "खोज से मेल खाने वाला कोई सप्लायर नहीं मिला।"
+    },
+    "emptyState": {
+      "title": "अभी कोई सप्लायर नहीं",
+      "description": "पहला सप्लायर जोड़ें और खरीद, भुगतान शर्तें तथा बकाया राशि ट्रैक करना शुरू करें।",
+      "hint": "सुझाव: GSTIN और पिनकोड जोड़ें ताकि BillSutra लोकेशन स्वतः भर सके।",
+      "action": "+ सप्लायर जोड़ें"
     },
     "addSupplier": "सप्लायर जोड़ें",
     "saveError": "अभी सप्लायर सेव नहीं हो सका।",
@@ -910,7 +989,7 @@
       "saveError": "अभी सप्लायर बनाया नहीं जा सका।",
       "errors": {
         "name": "सप्लायर का नाम कम से कम 2 अक्षरों का होना चाहिए।",
-        "phone": "फ़ोन नंबर कम से कम 6 अक्षरों का होना चाहिए।"
+        "phone": "फ़ोन नंबर 10 अंकों का होना चाहिए।"
       }
     }
   },
@@ -972,7 +1051,7 @@
       },
       "errors": {
         "name": "ग्राहक का नाम कम से कम 2 अक्षरों का होना चाहिए।",
-        "phone": "फ़ोन नंबर कम से कम 6 अक्षरों का होना चाहिए।"
+        "phone": "फ़ोन नंबर में ठीक 10 अंक होने चाहिए।"
       }
     },
     "lineItems": {
@@ -1125,6 +1204,10 @@
     "fields": {
       "businessName": "बिज़नेस नाम",
       "phone": "फ़ोन",
+      "addressLine1": "पता लाइन 1",
+      "city": "शहर / ज़िला",
+      "state": "राज्य",
+      "pincode": "पिनकोड",
       "address": "पता",
       "email": "ईमेल",
       "website": "वेबसाइट",
@@ -1134,6 +1217,9 @@
     "placeholders": {
       "businessName": "बिज़नेस नाम",
       "phone": "9876543210",
+      "addressLine1": "दुकान/मकान नं., गली, क्षेत्र",
+      "city": "शहर या ज़िला",
+      "pincode": "6-अंकों का पिनकोड",
       "address": "बिज़नेस पता",
       "email": "name@example.com",
       "website": "https://example.com",
@@ -1155,7 +1241,11 @@
     "previewDescription": "यह चुने गए टेम्पलेट और बिज़नेस प्रोफाइल से मेल खाता है।",
     "messages": {
       "saved": "बिजनेस प्रोफाइल सेव हो गया",
-      "saveError": "बिजनेस प्रोफाइल सेव नहीं हो सका"
+      "saveError": "बिजनेस प्रोफाइल सेव नहीं हो सका",
+      "autofillLoading": "पिनकोड से शहर और राज्य जांचे जा रहे हैं...",
+      "autofillSuccess": "पिनकोड से शहर और राज्य अपने-आप भर गए।",
+      "autofillFallback": "ऑटो-फिल नहीं हो सका। आप शहर और राज्य मैन्युअली भर सकते हैं।",
+      "autofillError": "अभी ऑटो-फिल उपलब्ध नहीं है। मैन्युअल एंट्री चालू है।"
     },
     "logo": {
       "title": "बिज़नेस लोगो",
@@ -1211,6 +1301,16 @@
     "validName": "कृपया मान्य नाम दर्ज करें (केवल अक्षर)",
     "validEmail": "मान्य ईमेल पता दर्ज करें",
     "validPhone": "मान्य फ़ोन नंबर दर्ज करें",
+    "validPincode": "मान्य 6-अंकों का पिनकोड दर्ज करें",
+    "validIndianState": "मान्य भारतीय राज्य चुनें",
+    "validGstin": "मान्य GSTIN दर्ज करें",
+    "validPan": "मान्य PAN दर्ज करें",
+    "gstinStateMismatch": "GSTIN का राज्य कोड चुने गए राज्य से मेल नहीं खाता",
+    "requiredAddressLine": "पते की पहली पंक्ति आवश्यक है",
+    "requiredCity": "शहर आवश्यक है",
+    "requiredState": "राज्य आवश्यक है",
+    "requiredPincode": "पिनकोड आवश्यक है",
+    "nonNegative": "ओपनिंग बैलेंस ऋणात्मक नहीं हो सकता",
     "invoiceSelectCustomer": "ग्राहक चुनें।",
     "invoiceSelectWarehouse": "इन्वेंटरी सिंक के लिए वेयरहाउस चुनें।",
     "invoiceSelectProduct": "प्रोडक्ट चुनें।",
@@ -1697,9 +1797,64 @@
     "validation": {
       "enterName": "ग्राहक का नाम दर्ज करें।",
       "nameMin": "ग्राहक का नाम कम से कम 2 अक्षरों का होना चाहिए।",
+      "nameChars": "केवल अक्षर, स्पेस और सामान्य चिन्ह का उपयोग करें।",
       "enterPhone": "फोन नंबर दर्ज करें।",
-      "phoneDigits": "फोन नंबर में 10 से 15 अंक होने चाहिए।",
-      "emailOptional": "सही ईमेल दर्ज करें या इसे खाली छोड़ दें।"
+      "phoneDigits": "फोन नंबर में ठीक 10 अंक होने चाहिए।",
+      "emailOptional": "सही ईमेल दर्ज करें या इसे खाली छोड़ दें।",
+      "emailSuggestion": "क्या आपका मतलब {suggestion} है?",
+      "businessNameRequired": "बिजनेस ग्राहक के लिए बिजनेस नाम जरूरी है।",
+      "businessNameMin": "बिजनेस नाम कम से कम 2 अक्षरों का होना चाहिए।",
+      "gstinInvalid": "सही 15-अक्षर GSTIN दर्ज करें (जैसे 07ABCDE1234F1Z5)।",
+      "gstinStateMismatch": "GSTIN का स्टेट कोड चुने हुए राज्य से मेल नहीं खाता।",
+      "addressLine1Required": "पता लाइन 1 जरूरी है।",
+      "cityRequired": "शहर जरूरी है।",
+      "stateRequired": "राज्य जरूरी है।",
+      "pincodeDigits": "सही 6 अंकों का पिनकोड दर्ज करें।",
+      "creditLimitInvalid": "क्रेडिट लिमिट एक सही गैर-ऋणात्मक संख्या होनी चाहिए।",
+      "openingBalanceInvalid": "ओपनिंग बैलेंस एक सही गैर-ऋणात्मक संख्या होनी चाहिए।",
+      "notesTooLong": "नोट्स 500 अक्षरों से कम रखें।",
+      "looksGood": "सही लग रहा है"
+    },
+    "fields": {
+      "customerType": "ग्राहक प्रकार",
+      "businessName": "बिजनेस नाम",
+      "gstin": "GSTIN",
+      "addressLine1": "पता लाइन 1",
+      "city": "शहर",
+      "state": "राज्य",
+      "pincode": "पिनकोड",
+      "notes": "ग्राहक नोट्स",
+      "creditLimit": "क्रेडिट लिमिट (₹)",
+      "paymentTerms": "भुगतान शर्तें",
+      "openingBalance": "ओपनिंग बैलेंस (₹)"
+    },
+    "placeholders": {
+      "businessName": "Sharma Electricals Pvt Ltd",
+      "gstin": "07ABCDE1234F1Z5",
+      "addressLine1": "दुकान नंबर, गली, इलाका",
+      "city": "शहर",
+      "state": "राज्य चुनें",
+      "pincode": "6 अंकों का पिनकोड",
+      "notes": "रेगुलर खरीदार, WhatsApp याद दिलाना पसंद है",
+      "creditLimit": "जैसे 50000",
+      "openingBalance": "जैसे 12000"
+    },
+    "customerType": {
+      "individual": "व्यक्तिगत",
+      "business": "बिजनेस"
+    },
+    "form": {
+      "customerTypeHint": "सरल शुरुआत करें। जरूरत होने पर ही बिजनेस विवरण जोड़ें।",
+      "gstinHint": "वैकल्पिक है, लेकिन GST-ready इनवॉइस के लिए उपयोगी है।",
+      "addAddressDetails": "पता विवरण जोड़ें",
+      "addMoreDetails": "और वैकल्पिक विवरण जोड़ें",
+      "submitHint": "सेव करने से पहले जरूरी फ़ील्ड सही होना चाहिए।"
+    },
+    "paymentTerms": {
+      "dueOnReceipt": "तुरंत देय",
+      "net7": "7 दिन",
+      "net15": "15 दिन",
+      "net30": "30 दिन"
     },
     "phonePlaceholder": "10 अंकों का फोन नंबर",
     "emailOptional": "ईमेल (वैकल्पिक)",
@@ -1733,7 +1888,12 @@
       "paymentRecordError": "अभी भुगतान दर्ज नहीं हो सका।",
       "statementWindowError": "स्टेटमेंट विंडो नहीं खुल सकी।",
       "statementCopied": "स्टेटमेंट का सार कॉपी हो गया।",
-      "statementShareError": "अभी स्टेटमेंट साझा नहीं किया जा सका।"
+      "statementShareError": "अभी स्टेटमेंट साझा नहीं किया जा सका।",
+      "addressAutofillLoading": "पिनकोड से शहर/राज्य भरा जा रहा है...",
+      "addressAutofillSuccess": "पिनकोड से शहर और राज्य अपने आप भर गया।",
+      "addressAutofillUnavailable": "यह पिनकोड अभी नहीं मिला। आप शहर/राज्य हाथ से भर सकते हैं।",
+      "addressAutofillError": "अभी पिनकोड विवरण नहीं मिल सका।",
+      "addressParsed": "चिपकाए गए पते से विवरण निकाला गया। कृपया जांच लें।"
     },
     "statement": {
       "documentTitle": "{name} लेजर स्टेटमेंट",
@@ -2101,7 +2261,7 @@
     "enterProductName": "प्रोडक्ट का नाम दर्ज करें।",
     "enterValidSellingPrice": "सही बिक्री मूल्य दर्ज करें।",
     "customerNameMin": "ग्राहक का नाम कम से कम 2 अक्षरों का होना चाहिए।",
-    "customerPhoneMin": "फोन नंबर कम से कम 6 अक्षरों का होना चाहिए।"
+    "customerPhoneMin": "फोन नंबर में ठीक 10 अंक होने चाहिए।"
   },
   "invoiceDetail": {
     "back": "हिस्ट्री पर वापस जाएं",

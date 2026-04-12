@@ -9,7 +9,12 @@ export const metadata = {
 
 const todayInputValue = () => new Date().toISOString().slice(0, 10);
 
-const SimpleBillPage = async () => {
+const SimpleBillPage = async ({
+  searchParams,
+}: {
+  searchParams: Promise<{ customer?: string; new?: string }>;
+}) => {
+  const params = await searchParams;
   const session: CustomSession | null = await getServerSession(authOptions);
 
   if (!session?.user) {
@@ -23,6 +28,8 @@ const SimpleBillPage = async () => {
       name={name}
       image={session.user.image || undefined}
       initialInvoiceDate={todayInputValue()}
+      initialCustomerName={params.customer?.trim() || ""}
+      resetOnLoad={params.new === "1"}
     />
   );
 };

@@ -2,7 +2,12 @@
 
 import type { InvoiceSectionRendererProps } from "@/components/invoice/InvoiceRenderer";
 import { useBusinessLogo } from "@/hooks/useBusinessLogo";
-import { calculateTotals, formatAmountInWords, formatCurrency } from "../sections/utils";
+import { buildBusinessAddressLines } from "@/lib/indianAddress";
+import {
+  calculateTotals,
+  formatAmountInWords,
+  formatCurrency,
+} from "../sections/utils";
 
 const roundAmount = (value: number) => {
   return Math.round((value + Number.EPSILON) * 100) / 100;
@@ -120,19 +125,25 @@ const TemplateIndianModern = ({
   const showHeader = enabledSections.includes("header");
   const showClient = enabledSections.includes("client_details");
   const showItems =
-    enabledSections.includes("items") || enabledSections.includes("service_items");
+    enabledSections.includes("items") ||
+    enabledSections.includes("service_items");
   const showTax = enabledSections.includes("tax");
-  const showDiscount = enabledSections.includes("discount") && totals.discount > 0;
+  const showDiscount =
+    enabledSections.includes("discount") && totals.discount > 0;
   const showPayment = enabledSections.includes("payment_info");
   const showNotes = enabledSections.includes("notes");
   const showFooter = enabledSections.includes("footer");
   const terms = compactTerms(data.notes);
   const paymentLines = splitPaymentLines(data.paymentInfo);
+  const businessAddressLines = buildBusinessAddressLines(
+    data.business.businessAddress,
+    data.business.address,
+  );
   const derivedPan = getPanFromTaxId(
     data.business.showTaxNumber ? data.business.taxId : "",
   );
   const businessIdentity = [
-    data.business.address?.trim(),
+    ...businessAddressLines,
     formatIdentityLine("Phone", data.business.phone),
     data.business.email?.trim() ? `Email: ${data.business.email.trim()}` : null,
     data.business.website?.trim()
@@ -145,6 +156,11 @@ const TemplateIndianModern = ({
     formatIdentityLine("PAN", derivedPan ?? ""),
   ].filter((line): line is string => Boolean(line));
   const clientIdentity = [
+    data.client.type === "business" ? "Customer Type: Business" : null,
+    formatIdentityLine(
+      "GSTIN",
+      data.client.type === "business" ? data.client.gstin : "",
+    ),
     data.client.address?.trim(),
     formatIdentityLine("Phone", data.client.phone),
     formatIdentityLine("Email", data.client.email),
@@ -152,7 +168,8 @@ const TemplateIndianModern = ({
   const statusText =
     data.paymentSummary?.statusLabel?.trim() ||
     (balanceDue <= 0 ? "Paid" : "Pending");
-  const closingNote = data.closingNote?.trim() || "Thank you for your business.";
+  const closingNote =
+    data.closingNote?.trim() || "Thank you for your business.";
 
   return (
     <div
@@ -195,7 +212,8 @@ const TemplateIndianModern = ({
                 </p>
                 <div className="mt-2 ml-auto grid max-w-[220px] gap-1 border-t border-black pt-2 text-[9.5px]">
                   <p>
-                    <span className={labelClass}>Invoice No:</span> {data.invoiceNumber}
+                    <span className={labelClass}>Invoice No:</span>{" "}
+                    {data.invoiceNumber}
                   </p>
                   <p>
                     <span className={labelClass}>Date:</span> {data.invoiceDate}
@@ -255,7 +273,9 @@ const TemplateIndianModern = ({
               {showPayment ? (
                 <div className="flex items-center justify-between gap-3">
                   <span className={labelClass}>Paid</span>
-                  <span>{formatCurrency(paidAmount, data.business.currency)}</span>
+                  <span>
+                    {formatCurrency(paidAmount, data.business.currency)}
+                  </span>
                 </div>
               ) : null}
             </div>
@@ -286,7 +306,9 @@ const TemplateIndianModern = ({
               </thead>
               <tbody>
                 {data.items.map((item, index) => {
-                  const lineSubtotal = roundAmount(item.quantity * item.unitPrice);
+                  const lineSubtotal = roundAmount(
+                    item.quantity * item.unitPrice,
+                  );
                   const lineTax = roundAmount(
                     lineSubtotal * ((item.taxRate ?? 0) / 100),
                   );
@@ -345,7 +367,9 @@ const TemplateIndianModern = ({
                       <p key={line}>
                         {paymentLine.label ? (
                           <>
-                            <span className={labelClass}>{paymentLine.label}:</span>{" "}
+                            <span className={labelClass}>
+                              {paymentLine.label}:
+                            </span>{" "}
                             <span>{paymentLine.value}</span>
                           </>
                         ) : (
@@ -373,7 +397,8 @@ const TemplateIndianModern = ({
               <p className={sectionHeadingClass}>Declaration</p>
               <p className="mt-1 text-[8.85px] leading-4 text-black">
                 We declare that this invoice shows the actual price of the goods
-                or services described and that all particulars are true and correct.
+                or services described and that all particulars are true and
+                correct.
               </p>
             </div>
           </div>
@@ -382,7 +407,9 @@ const TemplateIndianModern = ({
             <div className="grid gap-1 text-[9.5px] text-black">
               <div className="flex items-center justify-between gap-3">
                 <span className={labelClass}>Subtotal</span>
-                <span>{formatCurrency(totals.subtotal, data.business.currency)}</span>
+                <span>
+                  {formatCurrency(totals.subtotal, data.business.currency)}
+                </span>
               </div>
               {showDiscount ? (
                 <div className="flex items-center justify-between gap-3">
@@ -395,25 +422,33 @@ const TemplateIndianModern = ({
               {showTax && totals.igst > 0 ? (
                 <div className="flex items-center justify-between gap-3">
                   <span className={labelClass}>IGST</span>
-                  <span>{formatCurrency(totals.igst, data.business.currency)}</span>
+                  <span>
+                    {formatCurrency(totals.igst, data.business.currency)}
+                  </span>
                 </div>
               ) : null}
               {showTax && totals.igst === 0 ? (
                 <>
                   <div className="flex items-center justify-between gap-3">
                     <span className={labelClass}>CGST</span>
-                    <span>{formatCurrency(totals.cgst, data.business.currency)}</span>
+                    <span>
+                      {formatCurrency(totals.cgst, data.business.currency)}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className={labelClass}>SGST</span>
-                    <span>{formatCurrency(totals.sgst, data.business.currency)}</span>
+                    <span>
+                      {formatCurrency(totals.sgst, data.business.currency)}
+                    </span>
                   </div>
                 </>
               ) : null}
               {showTax ? (
                 <div className="flex items-center justify-between gap-3">
                   <span className={labelClass}>Total GST</span>
-                  <span>{formatCurrency(totals.tax, data.business.currency)}</span>
+                  <span>
+                    {formatCurrency(totals.tax, data.business.currency)}
+                  </span>
                 </div>
               ) : null}
               <div className="border-t border-black pt-1">
@@ -449,7 +484,9 @@ const TemplateIndianModern = ({
               <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-black">
                 Notes
               </p>
-              <p className="text-[8.85px] leading-4 text-black">{closingNote}</p>
+              <p className="text-[8.85px] leading-4 text-black">
+                {closingNote}
+              </p>
             </div>
 
             <div className="justify-self-end text-right">

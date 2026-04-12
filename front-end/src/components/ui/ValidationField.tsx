@@ -9,6 +9,7 @@ interface ValidationFieldProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
+  onPaste?: (event: React.ClipboardEvent<HTMLInputElement>) => void;
   onBlur?: () => void;
   as?: "input" | "select";
   type?: string;
@@ -20,6 +21,9 @@ interface ValidationFieldProps {
   step?: string;
   success?: boolean;
   autoComplete?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
+  maxLength?: number;
+  pattern?: string;
   disabled?: boolean;
   className?: string;
   children?: React.ReactNode;
@@ -30,6 +34,7 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
   label,
   value,
   onChange,
+  onPaste,
   onBlur,
   as = "input",
   type = "text",
@@ -41,6 +46,9 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
   step,
   success = false,
   autoComplete,
+  inputMode,
+  maxLength,
+  pattern,
   disabled = false,
   className,
   children,
@@ -71,7 +79,10 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
 
   return (
     <div className={cn("mb-2", className)}>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-medium text-foreground">
+      <label
+        htmlFor={id}
+        className="mb-1.5 block text-sm font-medium text-foreground"
+      >
         {label}
         {required && <span className="ml-1 text-red-500">*</span>}
       </label>
@@ -107,6 +118,10 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
           max={max}
           step={step}
           autoComplete={autoComplete}
+          inputMode={inputMode}
+          maxLength={maxLength}
+          pattern={pattern}
+          onPaste={onPaste}
           disabled={disabled}
           aria-invalid={showError}
           aria-describedby={showError ? `${id}-error` : undefined}

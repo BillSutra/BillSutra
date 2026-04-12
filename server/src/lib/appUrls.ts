@@ -1,5 +1,5 @@
 const DEFAULT_FRONTEND_URL = "http://localhost:3000";
-const DEFAULT_BACKEND_URL = "http://localhost:8000";
+const DEFAULT_BACKEND_URL = "http://localhost:7000";
 
 const normalizeUrl = (value: string) => value.replace(/\/+$/, "");
 

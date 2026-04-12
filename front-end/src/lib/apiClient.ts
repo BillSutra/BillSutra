@@ -1,8 +1,18 @@
 import axios from "axios";
 import { getSession } from "next-auth/react";
+import type {
+  AssistantHistoryMessage as SharedAssistantHistoryMessage,
+  AssistantReply as SharedAssistantReply,
+} from "../../../server/src/modules/assistant/assistant.contract";
 import { API_URL } from "./apiEndPoints";
+import {
+  formatBusinessAddress,
+  parseBusinessAddressText,
+  toBusinessAddressInput,
+} from "./indianAddress";
 import { normalizeListResponse } from "./normalizeListResponse";
 import { captureApiFailure } from "./observability/shared";
+import { normalizeGstin } from "./gstin";
 
 const normalizeAuthToken = (rawToken: string | null | undefined) => {
   if (!rawToken) return null;
@@ -213,12 +223,45 @@ export type ExportPreviewResponse = {
   rows: string[][];
 };
 
+export type CustomerType = "individual" | "business";
+
+export type CustomerPaymentTerms =
+  | "DUE_ON_RECEIPT"
+  | "NET_7"
+  | "NET_15"
+  | "NET_30";
+
+export type CustomerAddressRecord = {
+  addressLine1: string;
+  city: string;
+  state: string;
+  pincode: string;
+};
+
 export type Customer = {
   id: number;
   name: string;
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  type?: CustomerType;
+  customer_type?: CustomerType;
+  businessName?: string | null;
+  business_name?: string | null;
+  gstin?: string | null;
+  customerAddress?: CustomerAddressRecord | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  notes?: string | null;
+  creditLimit?: number | null;
+  credit_limit?: number | null;
+  paymentTerms?: CustomerPaymentTerms | null;
+  payment_terms?: CustomerPaymentTerms | null;
+  openingBalance?: number | null;
+  opening_balance?: number | null;
+  display_name?: string | null;
   totalBilled?: number;
   totalPaid?: number;
   outstandingBalance?: number;
@@ -239,10 +282,27 @@ export type Customer = {
 };
 
 export type CustomerInput = {
+  type?: CustomerType;
+  customer_type?: CustomerType;
   name: string;
+  phone: string;
   email?: string | null;
-  phone?: string | null;
+  businessName?: string | null;
+  business_name?: string | null;
+  gstin?: string | null;
+  customerAddress?: Partial<CustomerAddressRecord> | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
   address?: string | null;
+  notes?: string | null;
+  creditLimit?: number | null;
+  credit_limit?: number | null;
+  paymentTerms?: CustomerPaymentTerms | null;
+  payment_terms?: CustomerPaymentTerms | null;
+  openingBalance?: number | null;
+  opening_balance?: number | null;
 };
 
 export type CustomerLedgerEntry = {
@@ -288,12 +348,53 @@ export type Supplier = {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  businessName?: string | null;
+  business_name?: string | null;
+  gstin?: string | null;
+  pan?: string | null;
+  supplierAddress?: SupplierAddressRecord | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  paymentTerms?: SupplierPaymentTerms | null;
+  payment_terms?: SupplierPaymentTerms | null;
+  openingBalance?: number | null;
+  opening_balance?: number | null;
+  notes?: string | null;
+  outstandingBalance?: number | null;
+  outstanding_balance?: number | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type SupplierPaymentTerms = "NET_7" | "NET_15" | "NET_30";
+
+export type SupplierAddressRecord = {
+  addressLine1: string;
+  city: string;
+  state: string;
+  pincode: string;
 };
 
 export type SupplierInput = {
   name: string;
+  phone: string;
   email?: string | null;
-  phone?: string | null;
+  businessName?: string | null;
+  business_name?: string | null;
+  gstin?: string | null;
+  pan?: string | null;
+  supplierAddress?: Partial<SupplierAddressRecord> | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  paymentTerms?: SupplierPaymentTerms | null;
+  payment_terms?: SupplierPaymentTerms | null;
+  openingBalance?: number | null;
+  opening_balance?: number | null;
+  notes?: string | null;
   address?: string | null;
 };
 
@@ -1053,75 +1154,8 @@ export type DashboardForecastResponse = {
   }>;
 };
 
-export type AssistantReply = {
-  language: "en" | "hi" | "hinglish";
-  intent:
-    | "profit"
-    | "total_sales"
-    | "pending_payments"
-    | "cashflow"
-    | "create_bill"
-    | "add_product"
-    | "smart_insights"
-    | "top_spend"
-    | "vendor_spend"
-    | "budget_plan"
-    | "savings_suggestion"
-    | "bill_reminder"
-    | "health_score"
-    | "behavior_insights"
-    | "goal_tracking"
-    | "affordability"
-    | "help";
-  answer: string;
-  highlights: Array<{
-    label: string;
-    value: string;
-  }>;
-  examples: string[];
-  action?: {
-    type: "create_invoice" | "create_product";
-    status: "success" | "failed" | "noop";
-    message: string;
-    resourceId?: number;
-    resourceLabel?: string;
-    route?: string;
-  };
-  copilot?: {
-    productSuggestions?: Array<{
-      id: number;
-      name: string;
-      price: number;
-      gstRate: number;
-    }>;
-    invoiceAutocomplete?: {
-      customerName: string;
-      autoCompleted: boolean;
-      items: Array<{
-        name: string;
-        quantity: number;
-        price: number;
-        gstRate: number | null;
-        source: "explicit" | "catalog" | "top_seller";
-      }>;
-    };
-    gstRecommendation?: {
-      rate: number;
-      reason: string;
-      confidence: "high" | "medium" | "low";
-    };
-    smartInsights?: Array<{
-      title: string;
-      detail: string;
-      value?: string;
-    }>;
-  };
-};
-
-export type AssistantHistoryMessage = {
-  role: "assistant" | "user";
-  content: string;
-};
+export type AssistantReply = SharedAssistantReply;
+export type AssistantHistoryMessage = SharedAssistantHistoryMessage;
 
 export type FinancialCopilotPayload = {
   generatedAt: string;
@@ -1320,11 +1354,23 @@ export type UserSavedTemplateRecord = {
   updated_at: string;
 };
 
+export type BusinessAddressRecord = {
+  addressLine1: string;
+  city: string;
+  state: string;
+  pincode: string;
+};
+
 export type BusinessProfileRecord = {
   id: number;
   user_id: number;
   business_name: string;
   address?: string | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  businessAddress?: BusinessAddressRecord | null;
   phone?: string | null;
   email?: string | null;
   website?: string | null;
@@ -1500,16 +1546,334 @@ export const downloadProductImportTemplate = async (): Promise<{
   }
 };
 
+const toOptionalString = (value: unknown) => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const toOptionalNumber = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+};
+
+const toCustomerAddress = (value: {
+  address?: string | null;
+  addressLine1?: string | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  customerAddress?: Partial<CustomerAddressRecord> | null;
+}): CustomerAddressRecord => {
+  const parsedLegacy = parseBusinessAddressText(value.address);
+
+  return toBusinessAddressInput({
+    addressLine1:
+      value.customerAddress?.addressLine1 ??
+      value.addressLine1 ??
+      value.address_line1 ??
+      parsedLegacy.addressLine1,
+    city: value.customerAddress?.city ?? value.city ?? parsedLegacy.city,
+    state: value.customerAddress?.state ?? value.state ?? parsedLegacy.state,
+    pincode:
+      value.customerAddress?.pincode ?? value.pincode ?? parsedLegacy.pincode,
+  });
+};
+
+const normalizeCustomerRecord = (record: Customer): Customer => {
+  const source = record as Customer & {
+    type?: CustomerType;
+    customer_type?: CustomerType;
+    businessName?: string | null;
+    business_name?: string | null;
+    customerAddress?: Partial<CustomerAddressRecord> | null;
+    address_line1?: string | null;
+    creditLimit?: number | null;
+    credit_limit?: number | null;
+    paymentTerms?: CustomerPaymentTerms | null;
+    payment_terms?: CustomerPaymentTerms | null;
+    openingBalance?: number | null;
+    opening_balance?: number | null;
+  };
+
+  const customerAddress = toCustomerAddress(source);
+  const normalizedAddress = formatBusinessAddress(
+    customerAddress,
+    source.address,
+  );
+  const customerType =
+    source.type ?? source.customer_type ?? ("individual" as CustomerType);
+
+  return {
+    ...source,
+    type: customerType,
+    customer_type: customerType,
+    businessName: source.businessName ?? source.business_name ?? null,
+    business_name: source.business_name ?? source.businessName ?? null,
+    gstin: source.gstin ? normalizeGstin(source.gstin) : null,
+    customerAddress,
+    address_line1: customerAddress.addressLine1 || null,
+    city: customerAddress.city || null,
+    state: customerAddress.state || null,
+    pincode: customerAddress.pincode || null,
+    creditLimit: source.creditLimit ?? source.credit_limit ?? null,
+    credit_limit: source.credit_limit ?? source.creditLimit ?? null,
+    paymentTerms: source.paymentTerms ?? source.payment_terms ?? null,
+    payment_terms: source.payment_terms ?? source.paymentTerms ?? null,
+    openingBalance: source.openingBalance ?? source.opening_balance ?? null,
+    opening_balance: source.opening_balance ?? source.openingBalance ?? null,
+    address: normalizedAddress || null,
+  };
+};
+
+const normalizeCustomerPayload = (
+  payload: Partial<CustomerInput>,
+  includeDefaults = false,
+) => {
+  const normalizedAddress = toCustomerAddress({
+    customerAddress: payload.customerAddress ?? null,
+    addressLine1:
+      payload.customerAddress?.addressLine1 ??
+      payload.address_line1 ??
+      undefined,
+    city: payload.customerAddress?.city ?? payload.city ?? undefined,
+    state: payload.customerAddress?.state ?? payload.state ?? undefined,
+    pincode: payload.customerAddress?.pincode ?? payload.pincode ?? undefined,
+    address: payload.address,
+  });
+
+  const hasStructuredAddress = Boolean(
+    normalizedAddress.addressLine1 ||
+    normalizedAddress.city ||
+    normalizedAddress.state ||
+    normalizedAddress.pincode,
+  );
+
+  const normalizedType =
+    payload.type ??
+    payload.customer_type ??
+    (includeDefaults ? "individual" : undefined);
+  const normalizedPaymentTerms =
+    payload.paymentTerms ??
+    payload.payment_terms ??
+    (includeDefaults ? "DUE_ON_RECEIPT" : undefined);
+
+  const normalizedPhone = toOptionalString(payload.phone)?.replace(/\D/g, "");
+  const normalizedGstin = toOptionalString(payload.gstin)
+    ? normalizeGstin(payload.gstin)
+    : undefined;
+  const legacyAddress = formatBusinessAddress(
+    normalizedAddress,
+    payload.address,
+  );
+
+  return {
+    type: normalizedType,
+    customer_type: normalizedType,
+    name: toOptionalString(payload.name),
+    phone: normalizedPhone,
+    email: toOptionalString(payload.email),
+    businessName: toOptionalString(
+      payload.businessName ?? payload.business_name,
+    ),
+    business_name: toOptionalString(
+      payload.business_name ?? payload.businessName,
+    ),
+    gstin: normalizedGstin,
+    customerAddress: hasStructuredAddress ? normalizedAddress : undefined,
+    address_line1: hasStructuredAddress
+      ? normalizedAddress.addressLine1
+      : undefined,
+    city: hasStructuredAddress ? normalizedAddress.city : undefined,
+    state: hasStructuredAddress ? normalizedAddress.state : undefined,
+    pincode: hasStructuredAddress ? normalizedAddress.pincode : undefined,
+    address: toOptionalString(legacyAddress),
+    notes: toOptionalString(payload.notes),
+    creditLimit: toOptionalNumber(payload.creditLimit ?? payload.credit_limit),
+    credit_limit: toOptionalNumber(payload.credit_limit ?? payload.creditLimit),
+    paymentTerms: normalizedPaymentTerms,
+    payment_terms: normalizedPaymentTerms,
+    openingBalance: toOptionalNumber(
+      payload.openingBalance ?? payload.opening_balance,
+    ),
+    opening_balance: toOptionalNumber(
+      payload.opening_balance ?? payload.openingBalance,
+    ),
+  };
+};
+
+const normalizePan = (value: string | null | undefined) =>
+  String(value ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 10);
+
+const toSupplierAddress = (value: {
+  address?: string | null;
+  addressLine1?: string | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  supplierAddress?: Partial<SupplierAddressRecord> | null;
+}): SupplierAddressRecord => {
+  const parsedLegacy = parseBusinessAddressText(value.address);
+
+  return toBusinessAddressInput({
+    addressLine1:
+      value.supplierAddress?.addressLine1 ??
+      value.addressLine1 ??
+      value.address_line1 ??
+      parsedLegacy.addressLine1,
+    city: value.supplierAddress?.city ?? value.city ?? parsedLegacy.city,
+    state: value.supplierAddress?.state ?? value.state ?? parsedLegacy.state,
+    pincode:
+      value.supplierAddress?.pincode ?? value.pincode ?? parsedLegacy.pincode,
+  });
+};
+
+const normalizeSupplierRecord = (record: Supplier): Supplier => {
+  const source = record as Supplier & {
+    businessName?: string | null;
+    business_name?: string | null;
+    supplierAddress?: Partial<SupplierAddressRecord> | null;
+    address_line1?: string | null;
+    paymentTerms?: SupplierPaymentTerms | null;
+    payment_terms?: SupplierPaymentTerms | null;
+    openingBalance?: number | null;
+    opening_balance?: number | null;
+    outstandingBalance?: number | null;
+    outstanding_balance?: number | null;
+  };
+
+  const supplierAddress = toSupplierAddress(source);
+  const normalizedAddress = formatBusinessAddress(supplierAddress, source.address);
+
+  return {
+    ...source,
+    businessName: source.businessName ?? source.business_name ?? null,
+    business_name: source.business_name ?? source.businessName ?? null,
+    gstin: source.gstin ? normalizeGstin(source.gstin) : null,
+    pan: source.pan ? normalizePan(source.pan) : null,
+    supplierAddress,
+    address_line1: supplierAddress.addressLine1 || null,
+    city: supplierAddress.city || null,
+    state: supplierAddress.state || null,
+    pincode: supplierAddress.pincode || null,
+    paymentTerms: source.paymentTerms ?? source.payment_terms ?? null,
+    payment_terms: source.payment_terms ?? source.paymentTerms ?? null,
+    openingBalance:
+      toOptionalNumber(source.openingBalance ?? source.opening_balance) ?? null,
+    opening_balance:
+      toOptionalNumber(source.opening_balance ?? source.openingBalance) ?? null,
+    outstandingBalance:
+      toOptionalNumber(source.outstandingBalance ?? source.outstanding_balance) ??
+      null,
+    outstanding_balance:
+      toOptionalNumber(source.outstanding_balance ?? source.outstandingBalance) ??
+      null,
+    address: normalizedAddress || null,
+  };
+};
+
+const normalizeSupplierPayload = (
+  payload: Partial<SupplierInput>,
+  includeDefaults = false,
+) => {
+  const normalizedAddress = toSupplierAddress({
+    supplierAddress: payload.supplierAddress ?? null,
+    addressLine1:
+      payload.supplierAddress?.addressLine1 ?? payload.address_line1 ?? undefined,
+    city: payload.supplierAddress?.city ?? payload.city ?? undefined,
+    state: payload.supplierAddress?.state ?? payload.state ?? undefined,
+    pincode: payload.supplierAddress?.pincode ?? payload.pincode ?? undefined,
+    address: payload.address,
+  });
+
+  const hasStructuredAddress = Boolean(
+    normalizedAddress.addressLine1 ||
+      normalizedAddress.city ||
+      normalizedAddress.state ||
+      normalizedAddress.pincode,
+  );
+
+  const normalizedPhone = toOptionalString(payload.phone)?.replace(/\D/g, "");
+  const normalizedGstin = toOptionalString(payload.gstin)
+    ? normalizeGstin(payload.gstin)
+    : undefined;
+  const normalizedPan = toOptionalString(payload.pan)
+    ? normalizePan(payload.pan)
+    : undefined;
+  const normalizedPaymentTerms =
+    payload.paymentTerms ??
+    payload.payment_terms ??
+    (includeDefaults ? "NET_15" : undefined);
+  const legacyAddress = formatBusinessAddress(normalizedAddress, payload.address);
+
+  return {
+    name: toOptionalString(payload.name),
+    phone: normalizedPhone,
+    email: toOptionalString(payload.email),
+    businessName: toOptionalString(payload.businessName ?? payload.business_name),
+    business_name: toOptionalString(
+      payload.business_name ?? payload.businessName,
+    ),
+    gstin: normalizedGstin,
+    pan: normalizedPan,
+    supplierAddress: hasStructuredAddress ? normalizedAddress : undefined,
+    address_line1: hasStructuredAddress
+      ? normalizedAddress.addressLine1
+      : undefined,
+    city: hasStructuredAddress ? normalizedAddress.city : undefined,
+    state: hasStructuredAddress ? normalizedAddress.state : undefined,
+    pincode: hasStructuredAddress ? normalizedAddress.pincode : undefined,
+    address: toOptionalString(legacyAddress),
+    paymentTerms: normalizedPaymentTerms,
+    payment_terms: normalizedPaymentTerms,
+    openingBalance: toOptionalNumber(
+      payload.openingBalance ?? payload.opening_balance,
+    ),
+    opening_balance: toOptionalNumber(
+      payload.opening_balance ?? payload.openingBalance,
+    ),
+    notes: toOptionalString(payload.notes),
+  };
+};
+
 export const fetchCustomers = async (): Promise<Customer[]> => {
   const response = await apiClient.get("/customers");
-  return normalizeListResponse<Customer>(response.data?.data);
+  return normalizeListResponse<Customer>(response.data?.data).map(
+    normalizeCustomerRecord,
+  );
 };
 
 export const fetchCustomerLedger = async (
   customerId: number,
 ): Promise<CustomerLedger> => {
   const response = await apiClient.get(`/customers/${customerId}/ledger`);
-  return response.data.data as CustomerLedger;
+  const payload = response.data.data as CustomerLedger;
+
+  return {
+    ...payload,
+    customer: normalizeCustomerRecord(payload.customer),
+  };
 };
 
 export const fetchCategories = async (): Promise<Category[]> => {
@@ -1527,15 +1891,18 @@ export const createCategory = async (payload: {
 export const createCustomer = async (
   payload: CustomerInput,
 ): Promise<Customer> => {
-  const response = await apiClient.post("/customers", payload);
-  return response.data.data as Customer;
+  const response = await apiClient.post(
+    "/customers",
+    normalizeCustomerPayload(payload, true),
+  );
+  return normalizeCustomerRecord(response.data.data as Customer);
 };
 
 export const updateCustomer = async (
   id: number,
   payload: Partial<CustomerInput>,
 ): Promise<void> => {
-  await apiClient.put(`/customers/${id}`, payload);
+  await apiClient.put(`/customers/${id}`, normalizeCustomerPayload(payload));
 };
 
 export const deleteCustomer = async (id: number): Promise<void> => {
@@ -1544,21 +1911,26 @@ export const deleteCustomer = async (id: number): Promise<void> => {
 
 export const fetchSuppliers = async (): Promise<Supplier[]> => {
   const response = await apiClient.get("/suppliers");
-  return response.data.data as Supplier[];
+  return normalizeListResponse<Supplier>(response.data?.data).map(
+    normalizeSupplierRecord,
+  );
 };
 
 export const createSupplier = async (
   payload: SupplierInput,
 ): Promise<Supplier> => {
-  const response = await apiClient.post("/suppliers", payload);
-  return response.data.data as Supplier;
+  const response = await apiClient.post(
+    "/suppliers",
+    normalizeSupplierPayload(payload, true),
+  );
+  return normalizeSupplierRecord(response.data.data as Supplier);
 };
 
 export const updateSupplier = async (
   id: number,
   payload: Partial<SupplierInput>,
 ): Promise<void> => {
-  await apiClient.put(`/suppliers/${id}`, payload);
+  await apiClient.put(`/suppliers/${id}`, normalizeSupplierPayload(payload));
 };
 
 export const deleteSupplier = async (id: number): Promise<void> => {
@@ -2241,6 +2613,11 @@ export const fetchBusinessProfile =
 
 export const saveBusinessProfile = async (payload: {
   business_name: string;
+  businessAddress?: Partial<BusinessAddressRecord>;
+  address_line1?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
   address?: string;
   phone?: string;
   email?: string;
@@ -2257,9 +2634,44 @@ export const saveBusinessProfile = async (payload: {
     return next ? next : undefined;
   };
 
+  const normalizedBusinessAddress = toBusinessAddressInput({
+    addressLine1:
+      payload.businessAddress?.addressLine1 ?? payload.address_line1,
+    city: payload.businessAddress?.city ?? payload.city,
+    state: payload.businessAddress?.state ?? payload.state,
+    pincode: payload.businessAddress?.pincode ?? payload.pincode,
+  });
+
+  const hasStructuredBusinessAddress = Boolean(
+    normalizedBusinessAddress.addressLine1 ||
+    normalizedBusinessAddress.city ||
+    normalizedBusinessAddress.state ||
+    normalizedBusinessAddress.pincode,
+  );
+
+  const legacyAddress = formatBusinessAddress(
+    normalizedBusinessAddress,
+    payload.address,
+  );
+
   const normalizedPayload = {
     business_name: payload.business_name.trim(),
-    address: toOptional(payload.address),
+    businessAddress: hasStructuredBusinessAddress
+      ? normalizedBusinessAddress
+      : undefined,
+    address_line1: hasStructuredBusinessAddress
+      ? normalizedBusinessAddress.addressLine1
+      : undefined,
+    city: hasStructuredBusinessAddress
+      ? normalizedBusinessAddress.city
+      : undefined,
+    state: hasStructuredBusinessAddress
+      ? normalizedBusinessAddress.state
+      : undefined,
+    pincode: hasStructuredBusinessAddress
+      ? normalizedBusinessAddress.pincode
+      : undefined,
+    address: toOptional(legacyAddress),
     phone: toOptional(payload.phone),
     email: toOptional(payload.email),
     website: toOptional(payload.website),

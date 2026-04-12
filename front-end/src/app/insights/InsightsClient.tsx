@@ -36,18 +36,27 @@ import { useI18n } from "@/providers/LanguageProvider";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { Button } from "@/components/ui/button";
 
-const SalesForecast = dynamic(() => import("@/components/dashboard/sales-forecast"), {
-  loading: () => dashboardSectionFallback("h-[320px]"),
-});
-const ProfitForecast = dynamic(() => import("@/components/dashboard/profit-forecast"), {
-  loading: () => dashboardSectionFallback("h-[320px]"),
-});
+const SalesForecast = dynamic(
+  () => import("@/components/dashboard/sales-forecast"),
+  {
+    loading: () => dashboardSectionFallback("h-[320px]"),
+  },
+);
+const ProfitForecast = dynamic(
+  () => import("@/components/dashboard/profit-forecast"),
+  {
+    loading: () => dashboardSectionFallback("h-[320px]"),
+  },
+);
 const SalesChart = dynamic(() => import("@/components/dashboard/sales-chart"), {
   loading: () => dashboardSectionFallback("h-[420px]"),
 });
-const CashFlowChart = dynamic(() => import("@/components/dashboard/cashflow-chart"), {
-  loading: () => dashboardSectionFallback("h-[420px]"),
-});
+const CashFlowChart = dynamic(
+  () => import("@/components/dashboard/cashflow-chart"),
+  {
+    loading: () => dashboardSectionFallback("h-[420px]"),
+  },
+);
 const PaymentMethodDistribution = dynamic(
   () => import("@/components/dashboard/payment-method-distribution"),
   { loading: () => dashboardSectionFallback("h-[380px]") },
@@ -130,14 +139,18 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
     token,
   });
 
-  const { data, isLoading, isError, dataUpdatedAt, isFetching } = useDashboardForecast();
+  const { data, isLoading, isError, dataUpdatedAt, isFetching } =
+    useDashboardForecast();
   const showLoadingState = !hydrated || (hasValidSessionToken && isLoading);
 
   const sectionLinks = [
     { label: t("dashboard.sectionLinks.overview"), href: "#summary" },
     { label: t("dashboard.sectionLinks.performance"), href: "#performance" },
     { label: t("dashboard.sectionLinks.forecasting"), href: "#forecasting" },
-    { label: t("insights.sections.demandSupply.title"), href: "#demand-supply" },
+    {
+      label: t("insights.sections.demandSupply.title"),
+      href: "#demand-supply",
+    },
     { label: t("insights.sections.ai.title"), href: "#intelligence" },
     { label: "Copilot", href: "#copilot" },
     { label: t("dashboard.sectionLinks.records"), href: "#records" },
@@ -206,7 +219,13 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
           className="flex flex-wrap items-center gap-2"
         >
           {sectionLinks.map((item) => (
-            <Button key={item.href} asChild variant="outline" size="sm" className="rounded-full">
+            <Button
+              key={item.href}
+              asChild
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+            >
               <Link href={item.href}>{item.label}</Link>
             </Button>
           ))}
@@ -262,8 +281,12 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
                       </div>
                     </div>
                     <div className="mt-auto">
-                      <p className="text-sm font-medium text-foreground">{card.helper}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{card.detail}</p>
+                      <p className="text-sm font-medium text-foreground">
+                        {card.helper}
+                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {card.detail}
+                      </p>
                     </div>
                   </div>
                 </section>

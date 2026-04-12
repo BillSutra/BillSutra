@@ -81,14 +81,6 @@ class ProductsController {
       take: limit,
     };
 
-    console.info("[products.index] query params", {
-      page: req.query.page ?? null,
-      limit: req.query.limit ?? null,
-      search: search || null,
-      category: category || null,
-    });
-    console.info("[products.index] db query", dbQuery);
-
     const [items, total] = await prisma.$transaction([
       prisma.product.findMany(dbQuery),
       prisma.product.count({ where }),

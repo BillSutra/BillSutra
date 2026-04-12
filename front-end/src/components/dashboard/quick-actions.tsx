@@ -544,7 +544,7 @@ const QuickActions = ({ className }: { className?: string }) => {
       return;
     }
 
-    if (trimmedPhone && !/^\d{10,15}$/.test(trimmedPhone)) {
+    if (!/^\d{10}$/.test(trimmedPhone)) {
       toast.error(t("dashboardQuickDesk.messages.enterValidPhone"));
       return;
     }
@@ -552,7 +552,7 @@ const QuickActions = ({ className }: { className?: string }) => {
     try {
       const createdCustomer = await createCustomer.mutateAsync({
         name: trimmedName,
-        phone: trimmedPhone || undefined,
+        phone: trimmedPhone,
       });
 
       await invalidateDashboardQueries(queryClient);
@@ -566,17 +566,11 @@ const QuickActions = ({ className }: { className?: string }) => {
 
       setDefaults(nextDefaults);
       writeStoredJson(QUICK_ACTION_DEFAULTS_KEY, nextDefaults);
-      pushRecentAction(
-        "add-customer",
-        createdCustomer.name,
-        trimmedPhone || t("dashboardQuickDesk.notSet"),
-      );
+      pushRecentAction("add-customer", createdCustomer.name, trimmedPhone);
       setSuccessState(t("dashboardQuickDesk.messages.customerSaved"));
       playSuccessFeedback();
       toast.success(t("dashboardQuickDesk.messages.customerAdded"), {
-        description: trimmedPhone
-          ? t("dashboardQuickDesk.messages.customerAddedPhone")
-          : t("dashboardQuickDesk.messages.customerAddedMinimal"),
+        description: t("dashboardQuickDesk.messages.customerAddedPhone"),
       });
       setActiveAction(null);
     } catch (error) {
@@ -1159,7 +1153,9 @@ const QuickActions = ({ className }: { className?: string }) => {
                 onChange={(event) =>
                   setCustomerForm((currentForm) => ({
                     ...currentForm,
-                    phone: event.target.value.replace(/[^\d]/g, ""),
+                    phone: event.target.value
+                      .replace(/[^\d]/g, "")
+                      .slice(0, 10),
                   }))
                 }
                 placeholder={t(

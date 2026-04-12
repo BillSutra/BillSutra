@@ -21,6 +21,12 @@ const ClientDetails = ({ data, theme }: InvoiceSectionProps) => {
           </p>
           <div className="mt-3 grid gap-1 text-[0.9em] text-slate-700">
             <p className="font-semibold text-slate-950">{client.name}</p>
+            {client.type === "business" ? (
+              <p className="font-medium text-slate-800">Business customer</p>
+            ) : null}
+            {client.type === "business" && client.gstin ? (
+              <p>GSTIN: {client.gstin}</p>
+            ) : null}
             {client.phone ? <p>{client.phone}</p> : null}
             {client.email ? <p>{client.email}</p> : null}
             {client.address ? <p>{client.address}</p> : null}
@@ -36,14 +42,20 @@ const ClientDetails = ({ data, theme }: InvoiceSectionProps) => {
           </p>
           <div className="mt-3 grid gap-2 text-[0.9em] text-slate-700">
             <p>
-              Invoice No.: <span className="font-semibold text-slate-950">{data.invoiceNumber}</span>
+              Invoice No.:{" "}
+              <span className="font-semibold text-slate-950">
+                {data.invoiceNumber}
+              </span>
             </p>
             <p>Date: {data.invoiceDate}</p>
             <p>Due: {data.dueDate}</p>
             {data.paymentSummary ? (
               <p>
                 Payment status:{" "}
-                <span className="font-semibold" style={{ color: theme.primaryColor }}>
+                <span
+                  className="font-semibold"
+                  style={{ color: theme.primaryColor }}
+                >
                   {data.paymentSummary.statusLabel}
                 </span>
               </p>

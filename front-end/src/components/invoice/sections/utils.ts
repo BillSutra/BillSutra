@@ -1,12 +1,45 @@
 import type { InvoiceLineItem } from "@/types/invoice-template";
 
+const DEFAULT_CURRENCY_CODE = "INR";
+
+const normalizeCurrencyCode = (currency: string) => {
+  const normalized = currency.trim().toUpperCase();
+
+  if (
+    normalized === "IN" ||
+    normalized === "RS" ||
+    normalized === "RUPEE" ||
+    normalized === "RUPEES" ||
+    normalized === "₹"
+  ) {
+    return DEFAULT_CURRENCY_CODE;
+  }
+
+  if (/^[A-Z]{3}$/.test(normalized)) {
+    return normalized;
+  }
+
+  return DEFAULT_CURRENCY_CODE;
+};
+
 export const formatCurrency = (value: number, currency: string) => {
-  return new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
+  const currencyCode = normalizeCurrencyCode(currency);
+
+  try {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  } catch {
+    return new Intl.NumberFormat("en-IN", {
+      style: "currency",
+      currency: DEFAULT_CURRENCY_CODE,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
 };
 
 const SMALL_NUMBER_WORDS = [
@@ -98,23 +131,24 @@ const numberToIndianWords = (value: number): string => {
 };
 
 export const formatAmountInWords = (value: number, currency: string) => {
+  const currencyCode = normalizeCurrencyCode(currency);
   const roundedValue = roundCurrencyValue(value);
   const wholeUnits = Math.floor(roundedValue);
   const minorUnits = Math.round((roundedValue - wholeUnits) * 100);
-  const usesIndianCurrency = currency.toUpperCase() === "INR";
+  const usesIndianCurrency = currencyCode === "INR";
   const mainUnitLabel = usesIndianCurrency
     ? wholeUnits === 1
       ? "Rupee"
       : "Rupees"
-    : currency.toUpperCase();
+    : currencyCode;
   const minorUnitLabel = usesIndianCurrency ? "Paise" : "Cents";
 
-  const amountParts = [
-    `${numberToIndianWords(wholeUnits)} ${mainUnitLabel}`,
-  ];
+  const amountParts = [`${numberToIndianWords(wholeUnits)} ${mainUnitLabel}`];
 
   if (minorUnits > 0) {
-    amountParts.push(`and ${numberToIndianWords(minorUnits)} ${minorUnitLabel}`);
+    amountParts.push(
+      `and ${numberToIndianWords(minorUnits)} ${minorUnitLabel}`,
+    );
   }
 
   return `${amountParts.join(" ")} Only`;
@@ -152,15 +186,14 @@ export const calculateTaxBreakdown = (
     });
   });
 
-  return Array.from(grouped.values()).sort((left, right) => left.rate - right.rate);
+  return Array.from(grouped.values()).sort(
+    (left, right) => left.rate - right.rate,
+  );
 };
 
 export const calculateTotals = (items: InvoiceLineItem[]) => {
   const subtotal = roundCurrencyValue(
-    items.reduce(
-      (sum, item) => sum + item.quantity * item.unitPrice,
-      0,
-    ),
+    items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
   );
   const tax = roundCurrencyValue(
     items.reduce((sum, item) => {

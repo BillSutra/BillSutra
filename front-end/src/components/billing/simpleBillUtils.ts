@@ -11,6 +11,10 @@ import type {
   InvoiceItemForm,
 } from "@/types/invoice";
 import type { InvoicePreviewData } from "@/types/invoice-template";
+import {
+  formatBusinessAddressFromRecord,
+  formatCustomerAddressFromRecord,
+} from "@/lib/indianAddress";
 
 export type SimpleBillMode = "simple" | "business";
 
@@ -271,7 +275,27 @@ export const buildSimpleBillInvoicePreviewData = ({
     dueDate,
     business: {
       businessName: businessProfile?.business_name || "BillSutra",
-      address: businessProfile?.address ?? "",
+      businessAddress: businessProfile
+        ? {
+            addressLine1:
+              businessProfile.businessAddress?.addressLine1 ??
+              businessProfile.address_line1 ??
+              "",
+            city:
+              businessProfile.businessAddress?.city ??
+              businessProfile.city ??
+              "",
+            state:
+              businessProfile.businessAddress?.state ??
+              businessProfile.state ??
+              "",
+            pincode:
+              businessProfile.businessAddress?.pincode ??
+              businessProfile.pincode ??
+              "",
+          }
+        : undefined,
+      address: formatBusinessAddressFromRecord(businessProfile),
       phone: businessProfile?.phone ?? "",
       email: businessProfile?.email ?? "",
       website: businessProfile?.website ?? "",
@@ -283,10 +307,17 @@ export const buildSimpleBillInvoicePreviewData = ({
       showPaymentQr: businessProfile?.show_payment_qr ?? false,
     },
     client: {
-      name: customer?.name ?? (fallbackCustomerName || WALK_IN_CUSTOMER_NAME),
+      name:
+        (customer?.type === "business"
+          ? customer.businessName || customer.business_name || customer.name
+          : customer?.name) ??
+        (fallbackCustomerName || WALK_IN_CUSTOMER_NAME),
+      type: customer?.type,
+      businessName: customer?.businessName ?? customer?.business_name ?? "",
+      gstin: customer?.gstin ?? "",
       email: customer?.email ?? "",
       phone: customer?.phone ?? fallbackCustomerPhone,
-      address: customer?.address ?? "",
+      address: formatCustomerAddressFromRecord(customer) || "",
     },
     items: items.filter(isInvoiceItemReady).map((item) => ({
       name: item.name.trim(),

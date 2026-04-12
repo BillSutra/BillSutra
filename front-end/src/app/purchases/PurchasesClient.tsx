@@ -282,14 +282,25 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
 
   const validateSupplierForm = () => {
     const errors: Partial<Record<keyof typeof supplierForm, string>> = {};
-    if (supplierForm.name.trim().length < 2) {
-      errors.name = t("purchasesPage.supplierForm.errors.name");
+    const normalizedName = supplierForm.name.trim();
+    const normalizedEmail = supplierForm.email.trim();
+    const normalizedPhone = supplierForm.phone.replace(/\D/g, "").slice(0, 10);
+
+    const nameError = validateName(normalizedName);
+    if (nameError) {
+      errors.name = translateValidationMessage(t, nameError);
     }
-    if (supplierForm.email && !/\S+@\S+\.\S+/.test(supplierForm.email)) {
-      errors.email = t("validation.validEmail");
+
+    if (normalizedEmail) {
+      const emailError = validateEmail(normalizedEmail);
+      if (emailError) {
+        errors.email = translateValidationMessage(t, emailError);
+      }
     }
-    if (supplierForm.phone && supplierForm.phone.trim().length < 6) {
-      errors.phone = t("purchasesPage.supplierForm.errors.phone");
+
+    const phoneError = validatePhone(normalizedPhone);
+    if (phoneError) {
+      errors.phone = translateValidationMessage(t, phoneError);
     }
 
     setSupplierFieldErrors(errors);
@@ -437,7 +448,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
       const created = await createSupplier.mutateAsync({
         name: supplierForm.name.trim(),
         email: supplierForm.email.trim() || undefined,
-        phone: supplierForm.phone.trim() || undefined,
+        phone: supplierForm.phone.replace(/\D/g, "").slice(0, 10),
         address: supplierForm.address.trim() || undefined,
       });
 

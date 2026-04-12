@@ -531,7 +531,8 @@
   /* Compatibility layer:
      while legacy screens are being migrated, remap hardcoded utility colors
      to design tokens in dark mode for readable, consistent UI. */
-  .dark :where(
+  .dark
+    :where(
       .bg-white,
       .bg-white\/95,
       .bg-white\/92,
@@ -555,10 +556,15 @@
       .bg-\[\#edf5fb\],
       .bg-\[\#f5f9fd\]
     ):not(.a4-page-frame):not(.a4-page-content) {
-    background-color: color-mix(in oklab, var(--card) 92%, transparent) !important;
+    background-color: color-mix(
+      in oklab,
+      var(--card) 92%,
+      transparent
+    ) !important;
   }
 
-  .dark :where(
+  .dark
+    :where(
       .text-\[\#10233f\],
       .text-\[\#1f1b16\],
       .text-\[\#5c4b3b\],
@@ -578,7 +584,8 @@
     color: var(--foreground) !important;
   }
 
-  .dark :where(
+  .dark
+    :where(
       .text-muted,
       .text-\[\#627890\],
       .text-\[\#70859d\],
@@ -592,7 +599,8 @@
     color: var(--muted-foreground) !important;
   }
 
-  .dark :where(
+  .dark
+    :where(
       .border-gray-200,
       .border-gray-300,
       .border-slate-200,
@@ -608,7 +616,8 @@
     border-color: var(--border) !important;
   }
 
-  .dark :where(
+  .dark
+    :where(
       .text-\[\#123d65\],
       .text-\[\#6d5bb3\],
       .text-\[\#5b4db0\],

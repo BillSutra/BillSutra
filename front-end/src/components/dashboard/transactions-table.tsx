@@ -20,7 +20,10 @@ import { Badge } from "@/components/ui/badge";
 import { ReceiptText } from "lucide-react";
 import { formatCurrency } from "@/lib/dashboardUtils";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
-import { dashboardQueryDefaults, DASHBOARD_REFRESH_INTERVAL_MS } from "@/lib/dashboardRefresh";
+import {
+  dashboardQueryDefaults,
+  DASHBOARD_REFRESH_INTERVAL_MS,
+} from "@/lib/dashboardRefresh";
 
 type TransactionRow = {
   date: string;
@@ -124,7 +127,9 @@ const TransactionsTable = ({
           <div className="h-32 animate-pulse rounded-xl bg-muted/80" />
         )}
         {isError && (
-          <p className="text-sm text-destructive">Unable to load transactions.</p>
+          <p className="text-sm text-destructive">
+            Unable to load transactions.
+          </p>
         )}
         {!isLoading && !isError && (
           <>
@@ -161,7 +166,10 @@ const TransactionsTable = ({
                         className="transition-colors odd:bg-transparent even:bg-muted/25 hover:bg-primary/[0.06] dark:even:bg-muted/18 dark:hover:bg-primary/[0.08]"
                       >
                         {row.getVisibleCells().map((cell) => (
-                          <td key={cell.id} className="px-4 py-3 text-foreground">
+                          <td
+                            key={cell.id}
+                            className="px-4 py-3 text-foreground"
+                          >
                             {flexRender(
                               cell.column.columnDef.cell,
                               cell.getContext(),

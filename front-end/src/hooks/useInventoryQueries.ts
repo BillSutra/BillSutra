@@ -50,10 +50,17 @@ const invalidateDashboard = (
   queryClient: ReturnType<typeof useQueryClient>,
 ) => invalidateDashboardQueries(queryClient);
 
+const defaultListQueryOptions = {
+  staleTime: 30_000,
+  refetchOnWindowFocus: false,
+  retry: 1,
+} as const;
+
 export const useProductsQuery = (params?: ProductListParams) =>
   useQuery({
     queryKey: ["products", "options", params],
     queryFn: () => fetchProductOptions(params),
+    ...defaultListQueryOptions,
   });
 
 export const useProductsPageQuery = (params: ProductListParams) =>
@@ -93,7 +100,11 @@ export const useCreateCategoryMutation = () => {
 };
 
 export const useCustomersQuery = () =>
-  useQuery({ queryKey: ["customers"], queryFn: fetchCustomers });
+  useQuery({
+    queryKey: ["customers"],
+    queryFn: fetchCustomers,
+    ...defaultListQueryOptions,
+  });
 
 export const useCustomerLedgerQuery = (customerId?: number) =>
   useQuery({
@@ -271,7 +282,11 @@ export const useSalesQuery = () =>
   useQuery({ queryKey: ["sales"], queryFn: fetchSales });
 
 export const useInvoicesQuery = () =>
-  useQuery({ queryKey: ["invoices"], queryFn: fetchInvoices });
+  useQuery({
+    queryKey: ["invoices"],
+    queryFn: fetchInvoices,
+    ...defaultListQueryOptions,
+  });
 
 export const useInvoiceQuery = (invoiceId?: number) =>
   useQuery({
@@ -393,7 +408,11 @@ export const useDeleteSaleMutation = () => {
 };
 
 export const useWarehousesQuery = () =>
-  useQuery({ queryKey: ["warehouses"], queryFn: fetchWarehouses });
+  useQuery({
+    queryKey: ["warehouses"],
+    queryFn: fetchWarehouses,
+    ...defaultListQueryOptions,
+  });
 
 export const useCreateWarehouseMutation = () => {
   const queryClient = useQueryClient();
