@@ -234,17 +234,18 @@ model Supplier {
   email   String?
   phone   String?
   address String?
+  categories String[] @default([])
 
-  business_name   String?  @db.VarChar(191)
-  gstin           String?  @db.VarChar(15)
-  pan             String?  @db.VarChar(10)
-  address_line1   String?  @db.VarChar(191)
-  city            String?  @db.VarChar(191)
-  state           String?  @db.VarChar(191)
-  pincode         String?  @db.VarChar(10)
-  payment_terms   String?  @db.VarChar(32)
-  opening_balance Decimal  @default(0) @db.Decimal(12, 2)
-  notes           String?  @db.VarChar(500)
+  business_name   String? @db.VarChar(191)
+  gstin           String? @db.VarChar(15)
+  pan             String? @db.VarChar(10)
+  address_line1   String? @db.VarChar(191)
+  city            String? @db.VarChar(191)
+  state           String? @db.VarChar(191)
+  pincode         String? @db.VarChar(10)
+  payment_terms   String? @db.VarChar(32)
+  opening_balance Decimal @default(0) @db.Decimal(12, 2)
+  notes           String? @db.VarChar(500)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt

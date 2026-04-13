@@ -152,21 +152,49 @@ export const accessBillingCycleSchema = z.enum(["monthly", "yearly"]);
 
 export const workerLoginSchema = authLoginSchema;
 
+const workerAccessRoleSchema = z.enum([
+  "ADMIN",
+  "SALESPERSON",
+  "STAFF",
+  "VIEWER",
+]);
+const workerStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
+const workerIncentiveTypeSchema = z.enum(["NONE", "PERCENTAGE", "PER_SALE"]);
+
+const nullableDateInput = z
+  .union([z.string(), z.date(), z.null(), z.undefined()])
+  .transform((value) => {
+    if (!value) return undefined;
+    const parsed = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  });
+
 export const workerCreateSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   phone: z.string().regex(/^\d{10,15}$/),
   password: z.string().min(6),
+  accessRole: workerAccessRoleSchema.optional(),
+  status: workerStatusSchema.optional(),
+  joiningDate: nullableDateInput.optional(),
+  incentiveType: workerIncentiveTypeSchema.optional(),
+  incentiveValue: z.coerce.number().min(0).optional(),
 });
 
 export const workerUpdateSchema = z
   .object({
     name: z.string().min(2).optional(),
+    email: z.string().email().optional(),
     phone: z
       .string()
       .regex(/^\d{10,15}$/)
       .optional(),
     password: z.string().min(6).optional(),
+    accessRole: workerAccessRoleSchema.optional(),
+    status: workerStatusSchema.optional(),
+    joiningDate: nullableDateInput.optional(),
+    incentiveType: workerIncentiveTypeSchema.optional(),
+    incentiveValue: z.coerce.number().min(0).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required",
@@ -343,6 +371,51 @@ const optionalPanString = z.preprocess(
     ),
 );
 
+const normalizeSupplierCategories = (items: string[]) => {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+
+  items.forEach((entry) => {
+    const normalized = entry.replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    unique.push(normalized.slice(0, 60));
+  });
+
+  return unique;
+};
+
+const optionalSupplierCategories = z
+  .preprocess(
+    (value) => {
+      if (value === undefined || value === null || value === "") {
+        return undefined;
+      }
+
+      if (Array.isArray(value)) {
+        return value;
+      }
+
+      if (typeof value === "string") {
+        return value.split(",");
+      }
+
+      return value;
+    },
+    z.array(z.string().trim().min(1).max(60)).max(20).optional(),
+  )
+  .transform((value) =>
+    value === undefined ? undefined : normalizeSupplierCategories(value),
+  );
+
 const supplierAddressSchema = z.object({
   addressLine1: optionalAddressLineString,
   city: optionalAddressLineString,
@@ -363,6 +436,7 @@ const supplierBaseSchema = z.object({
     }),
   phone: optionalPhoneString,
   email: optionalEmailString,
+  categories: optionalSupplierCategories,
   businessName: optionalAddressLineString,
   business_name: optionalAddressLineString,
   gstin: optionalGstinString,
@@ -406,9 +480,9 @@ const addSupplierSchemaRules = <
 
     const hasAnyAddressField = Boolean(
       supplierAddress.addressLine1 ||
-        supplierAddress.city ||
-        supplierAddress.state ||
-        supplierAddress.pincode,
+      supplierAddress.city ||
+      supplierAddress.state ||
+      supplierAddress.pincode,
     );
 
     if (hasAnyAddressField) {

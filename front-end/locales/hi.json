@@ -811,7 +811,8 @@
       "editTitle": "सप्लायर संपादित करें",
       "profileTag": "स्ट्रक्चर्ड प्रोफाइल",
       "notesCount": "{count}/500 अक्षर",
-      "totalSuppliers": "कुल सप्लायर्स: {count}"
+      "totalSuppliers": "कुल सप्लायर्स: {count}",
+      "categoriesHint": "टैग जोड़ें ताकि इस सप्लायर से मिलने वाले उत्पाद प्रकार आसानी से ट्रैक हों।"
     },
     "sections": {
       "basic": {
@@ -839,6 +840,7 @@
       "businessName": "बिज़नेस नाम",
       "gstin": "GSTIN",
       "pan": "PAN",
+      "categories": "उत्पाद / सप्लाई श्रेणी",
       "addressLine1": "पता पंक्ति 1",
       "city": "शहर",
       "state": "राज्य",
@@ -855,6 +857,7 @@
       "businessName": "रजिस्टर्ड इकाई का नाम",
       "gstin": "27ABCDE1234F1Z5",
       "pan": "ABCDE1234F",
+      "categories": "उदा. Electronics, Groceries, Clothing",
       "addressLine1": "दुकान / बिल्डिंग / सड़क",
       "city": "मुंबई",
       "pincode": "400001",
@@ -889,7 +892,10 @@
     "list": {
       "outstanding": "बकाया",
       "gstin": "GSTIN",
+      "categories": "श्रेणी",
       "noGstin": "उपलब्ध नहीं",
+      "filterByCategory": "श्रेणी के अनुसार सप्लायर फ़िल्टर करें",
+      "allCategories": "सभी श्रेणियां",
       "noResults": "खोज से मेल खाने वाला कोई सप्लायर नहीं मिला।"
     },
     "emptyState": {
@@ -935,7 +941,37 @@
     },
     "validation": {
       "selectSupplier": "कृपया एक सप्लायर चुनें",
-      "selectWarehouse": "कृपया एक वेयरहाउस चुनें"
+      "selectWarehouse": "कृपया एक वेयरहाउस चुनें",
+      "paymentMethodRequired": "भुगतान को Paid चिह्नित करने पर भुगतान तरीका आवश्यक है।",
+      "partialPaidRequired": "आंशिक भुगतान के लिए 0 से अधिक भुगतान राशि दर्ज करें।",
+      "partialPaidTooHigh": "आंशिक भुगतान राशि कुल से कम होनी चाहिए। पूरा भुगतान हो तो Paid चुनें।",
+      "totalRequired": "Paid चुनने से पहले कम से कम एक मान्य लाइन आइटम जोड़ें।"
+    },
+    "smart": {
+      "searchSupplier": "नाम, फ़ोन या श्रेणी से सप्लायर खोजें",
+      "filterByCategory": "श्रेणी से फ़िल्टर करें",
+      "allCategories": "सभी श्रेणियां",
+      "frequent": "अक्सर उपयोग",
+      "lastPurchase": "पिछली खरीद",
+      "outstanding": "बकाया",
+      "selected": "चयनित",
+      "noSuppliers": "खोज से मेल खाने वाला सप्लायर नहीं मिला।",
+      "suggestedFromSupplier": "इस सप्लायर से अक्सर खरीदे गए आइटम"
+    },
+    "quickActions": {
+      "title": "त्वरित क्रियाएं",
+      "repeatLast": "पिछली खरीद दोहराएं",
+      "addFrequent": "अक्सर उपयोग किए आइटम जोड़ें",
+      "compactOn": "कम्पैक्ट मोड चालू करें",
+      "compactOff": "कम्पैक्ट मोड बंद करें"
+    },
+    "summary": {
+      "title": "लाइव सारांश",
+      "subtotal": "उप-योग",
+      "tax": "टैक्स",
+      "total": "कुल",
+      "paid": "भुगतान",
+      "due": "बाकी"
     },
     "directPurchase": "सीधी खरीद",
     "defaultStock": "डिफ़ॉल्ट स्टॉक",
@@ -986,6 +1022,16 @@
     },
     "edit": "संपादित करें",
     "supplierForm": {
+      "quickAdd": "त्वरित सप्लायर जोड़ें",
+      "title": "सप्लायर जोड़ें",
+      "description": "खरीद स्क्रीन छोड़े बिना सप्लायर बनाएं।",
+      "save": "सप्लायर सेव करें",
+      "fields": {
+        "name": "नाम",
+        "email": "ईमेल",
+        "phone": "फ़ोन",
+        "address": "पता"
+      },
       "saveError": "अभी सप्लायर बनाया नहीं जा सका।",
       "errors": {
         "name": "सप्लायर का नाम कम से कम 2 अक्षरों का होना चाहिए।",
@@ -1950,13 +1996,13 @@
   },
   "workersPage": {
     "title": "वर्कर पैनल",
-    "subtitle": "इस बिजनेस से जुड़े वर्कर जोड़ें, अपडेट करें और हटाएं।",
+    "subtitle": "वर्कर मैनेज करें, परफॉर्मेंस ट्रैक करें और इंसेंटिव ऑटोमेट करें।",
     "kicker": "टीम एक्सेस",
-    "lead": "हर वर्कर अपने-आप इसी बिजनेस से जुड़ता है। सदस्यता हमेशा लॉग-इन एडमिन सत्र से तय होती है।",
+    "lead": "एक ही पैनल से रोल, स्टेटस, बिक्री प्रदर्शन और इंसेंटिव ट्रैक करें।",
     "addTitle": "वर्कर जोड़ें",
-    "addDescription": "एडमिन द्वारा बनाए गए पासवर्ड के साथ वर्कर अकाउंट बनाएं। वर्कर खुद साइन अप नहीं कर सकते।",
+    "addDescription": "वर्कर अकाउंट बनाते समय रोल, स्टेटस और इंसेंटिव सेट करें।",
     "listTitle": "बिजनेस वर्कर",
-    "listDescription": "इस बिजनेस से जुड़े सभी वर्कर देखें और जरूरत न होने पर एक्सेस हटाएं।",
+    "listDescription": "वर्कर प्रदर्शन देखें, एक्सेस अपडेट करें और निष्क्रिय सदस्यों को डिसेबल करें।",
     "loading": "वर्कर लोड हो रहे हैं...",
     "loadError": "अभी वर्कर लोड नहीं हो सके।",
     "empty": "अभी तक कोई वर्कर नहीं जोड़ा गया है।",
@@ -1965,31 +2011,78 @@
       "email": "वर्कर ईमेल",
       "phone": "फोन नंबर",
       "password": "पासवर्ड",
-      "newPassword": "नया पासवर्ड"
+      "newPassword": "नया पासवर्ड",
+      "role": "रोल",
+      "joiningDate": "जॉइनिंग डेट",
+      "status": "स्टेटस",
+      "incentiveType": "इंसेंटिव प्रकार",
+      "incentiveValue": "इंसेंटिव मान",
+      "lastActive": "आखिरी सक्रिय समय"
+    },
+    "roles": {
+      "admin": "एडमिन",
+      "sales": "सेल्सपर्सन",
+      "staff": "स्टाफ",
+      "viewer": "व्यूअर"
+    },
+    "statuses": {
+      "active": "सक्रिय",
+      "inactive": "निष्क्रिय"
+    },
+    "incentive": {
+      "none": "कोई नहीं",
+      "percentage": "बिक्री प्रतिशत",
+      "perSale": "प्रति बिक्री तय राशि"
     },
     "placeholders": {
       "name": "रिया शर्मा",
       "email": "riya@company.com",
       "phone": "9876543210",
       "password": "कम से कम 6 अक्षर",
-      "keepPassword": "मौजूदा पासवर्ड रखने के लिए खाली छोड़ें"
+      "keepPassword": "मौजूदा पासवर्ड रखने के लिए खाली छोड़ें",
+      "incentivePercent": "जैसे 2.5",
+      "incentiveAmount": "जैसे 50"
+    },
+    "filters": {
+      "today": "आज",
+      "thisWeek": "इस सप्ताह",
+      "thisMonth": "इस माह"
+    },
+    "cards": {
+      "totalSales": "कुल बिक्री",
+      "totalOrders": "कुल ऑर्डर",
+      "incentiveEarned": "कुल इंसेंटिव",
+      "thisMonthSales": "इस माह की बिक्री"
+    },
+    "activity": {
+      "title": "हाल की गतिविधि",
+      "empty": "अभी कोई इनवॉइस या सेल गतिविधि नहीं है।"
+    },
+    "leaderboard": {
+      "title": "टॉप परफॉर्मर",
+      "kicker": "लीडरबोर्ड"
     },
     "actions": {
       "create": "वर्कर बनाएं",
       "creating": "बनाया जा रहा है...",
       "save": "सहेजें",
       "saving": "सहेजा जा रहा है...",
-      "edit": "संपादित करें"
+      "edit": "संपादित करें",
+      "disable": "डिसेबल करें",
+      "enable": "सक्रिय करें"
     },
     "messages": {
       "createError": "अभी वर्कर नहीं बनाया जा सका।",
       "updateError": "अभी वर्कर अपडेट नहीं हो सका।",
       "noPhone": "फोन नंबर नहीं",
-      "addedMeta": "{role} - जोड़ा गया {date}"
+      "addedMeta": "{role} - जोड़ा गया {date}",
+      "neverActive": "कभी नहीं"
     },
     "validation": {
       "passwordRequired": "यह फ़ील्ड आवश्यक है",
-      "passwordMin": "पासवर्ड कम से कम 6 अक्षरों का होना चाहिए"
+      "passwordMin": "पासवर्ड कम से कम 6 अक्षरों का होना चाहिए",
+      "incentiveInvalid": "मान्य इंसेंटिव मान दर्ज करें",
+      "incentivePercentMax": "प्रतिशत 100 से अधिक नहीं हो सकता"
     }
   },
   "profilePage": {
@@ -2543,6 +2636,7 @@
     "suggestedQty": "सुझावित मात्रा",
     "runoutDate": "रनआउट तारीख",
     "reorderValue": "रीऑर्डर मूल्य",
-    "notProjected": "अनुमानित नहीं"
+    "notProjected": "अनुमानित नहीं",
+    "addItem": "आइटम जोड़ें"
   }
 }

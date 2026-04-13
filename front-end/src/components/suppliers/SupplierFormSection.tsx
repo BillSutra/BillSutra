@@ -61,7 +61,10 @@ const SupplierFormSection = ({
             aria-expanded={open}
           >
             <ChevronDown
-              className={cn("h-4 w-4 transition-transform", !open && "-rotate-90")}
+              className={cn(
+                "h-4 w-4 transition-transform",
+                !open && "-rotate-90",
+              )}
             />
           </Button>
         ) : null}

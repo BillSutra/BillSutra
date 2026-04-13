@@ -348,6 +348,7 @@ export type Supplier = {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  categories?: string[];
   businessName?: string | null;
   business_name?: string | null;
   gstin?: string | null;
@@ -381,6 +382,7 @@ export type SupplierInput = {
   name: string;
   phone: string;
   email?: string | null;
+  categories?: string[];
   businessName?: string | null;
   business_name?: string | null;
   gstin?: string | null;
@@ -406,6 +408,45 @@ export type Worker = {
   role: "ADMIN" | "WORKER";
   businessId: string;
   createdAt: string;
+  roleLabel?: "ADMIN" | "SALESPERSON" | "STAFF" | "VIEWER";
+  status?: "ACTIVE" | "INACTIVE";
+  joiningDate?: string | null;
+  incentiveType?: "NONE" | "PERCENTAGE" | "PER_SALE";
+  incentiveValue?: number;
+  lastActiveAt?: string | null;
+  metrics?: {
+    totalSales: number;
+    totalInvoices: number;
+    totalOrders: number;
+    averageOrderValue: number;
+    incentiveEarned: number;
+    thisMonthSales: number;
+  };
+};
+
+export type WorkerOverviewResponse = {
+  workers: Worker[];
+  summary: {
+    totalSales: number;
+    totalOrders: number;
+    incentiveEarned: number;
+    thisMonthSales: number;
+  };
+  recentActivity: Array<{
+    workerId: string;
+    workerName: string;
+    activityType: "SALE" | "INVOICE";
+    reference: string;
+    amount: number;
+    createdAt: string;
+  }>;
+  leaderboard: Array<{
+    rank: number;
+    workerId: string;
+    name: string;
+    totalSales: number;
+    totalOrders: number;
+  }>;
 };
 
 export type WorkerInput = {
@@ -413,12 +454,23 @@ export type WorkerInput = {
   email: string;
   phone: string;
   password: string;
+  accessRole?: "ADMIN" | "SALESPERSON" | "STAFF" | "VIEWER";
+  joiningDate?: string;
+  status?: "ACTIVE" | "INACTIVE";
+  incentiveType?: "NONE" | "PERCENTAGE" | "PER_SALE";
+  incentiveValue?: number;
 };
 
 export type WorkerUpdateInput = {
   name?: string;
+  email?: string;
   phone?: string;
   password?: string;
+  accessRole?: "ADMIN" | "SALESPERSON" | "STAFF" | "VIEWER";
+  joiningDate?: string;
+  status?: "ACTIVE" | "INACTIVE";
+  incentiveType?: "NONE" | "PERCENTAGE" | "PER_SALE";
+  incentiveValue?: number;
 };
 
 export type Purchase = {
@@ -1725,6 +1777,36 @@ const normalizePan = (value: string | null | undefined) =>
     .replace(/[^A-Z0-9]/g, "")
     .slice(0, 10);
 
+const normalizeSupplierCategories = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const unique: string[] = [];
+  const seen = new Set<string>();
+
+  value.forEach((entry) => {
+    if (typeof entry !== "string") {
+      return;
+    }
+
+    const normalized = entry.replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    unique.push(normalized.slice(0, 60));
+  });
+
+  return unique;
+};
+
 const toSupplierAddress = (value: {
   address?: string | null;
   addressLine1?: string | null;
@@ -1764,10 +1846,14 @@ const normalizeSupplierRecord = (record: Supplier): Supplier => {
   };
 
   const supplierAddress = toSupplierAddress(source);
-  const normalizedAddress = formatBusinessAddress(supplierAddress, source.address);
+  const normalizedAddress = formatBusinessAddress(
+    supplierAddress,
+    source.address,
+  );
 
   return {
     ...source,
+    categories: normalizeSupplierCategories(source.categories),
     businessName: source.businessName ?? source.business_name ?? null,
     business_name: source.business_name ?? source.businessName ?? null,
     gstin: source.gstin ? normalizeGstin(source.gstin) : null,
@@ -1784,11 +1870,13 @@ const normalizeSupplierRecord = (record: Supplier): Supplier => {
     opening_balance:
       toOptionalNumber(source.opening_balance ?? source.openingBalance) ?? null,
     outstandingBalance:
-      toOptionalNumber(source.outstandingBalance ?? source.outstanding_balance) ??
-      null,
+      toOptionalNumber(
+        source.outstandingBalance ?? source.outstanding_balance,
+      ) ?? null,
     outstanding_balance:
-      toOptionalNumber(source.outstanding_balance ?? source.outstandingBalance) ??
-      null,
+      toOptionalNumber(
+        source.outstanding_balance ?? source.outstandingBalance,
+      ) ?? null,
     address: normalizedAddress || null,
   };
 };
@@ -1800,7 +1888,9 @@ const normalizeSupplierPayload = (
   const normalizedAddress = toSupplierAddress({
     supplierAddress: payload.supplierAddress ?? null,
     addressLine1:
-      payload.supplierAddress?.addressLine1 ?? payload.address_line1 ?? undefined,
+      payload.supplierAddress?.addressLine1 ??
+      payload.address_line1 ??
+      undefined,
     city: payload.supplierAddress?.city ?? payload.city ?? undefined,
     state: payload.supplierAddress?.state ?? payload.state ?? undefined,
     pincode: payload.supplierAddress?.pincode ?? payload.pincode ?? undefined,
@@ -1809,9 +1899,9 @@ const normalizeSupplierPayload = (
 
   const hasStructuredAddress = Boolean(
     normalizedAddress.addressLine1 ||
-      normalizedAddress.city ||
-      normalizedAddress.state ||
-      normalizedAddress.pincode,
+    normalizedAddress.city ||
+    normalizedAddress.state ||
+    normalizedAddress.pincode,
   );
 
   const normalizedPhone = toOptionalString(payload.phone)?.replace(/\D/g, "");
@@ -1825,13 +1915,22 @@ const normalizeSupplierPayload = (
     payload.paymentTerms ??
     payload.payment_terms ??
     (includeDefaults ? "NET_15" : undefined);
-  const legacyAddress = formatBusinessAddress(normalizedAddress, payload.address);
+  const legacyAddress = formatBusinessAddress(
+    normalizedAddress,
+    payload.address,
+  );
 
   return {
     name: toOptionalString(payload.name),
     phone: normalizedPhone,
     email: toOptionalString(payload.email),
-    businessName: toOptionalString(payload.businessName ?? payload.business_name),
+    categories:
+      payload.categories === undefined
+        ? undefined
+        : normalizeSupplierCategories(payload.categories),
+    businessName: toOptionalString(
+      payload.businessName ?? payload.business_name,
+    ),
     business_name: toOptionalString(
       payload.business_name ?? payload.businessName,
     ),
@@ -1940,6 +2039,15 @@ export const deleteSupplier = async (id: number): Promise<void> => {
 export const fetchWorkers = async (): Promise<Worker[]> => {
   const response = await apiClient.get("/workers");
   return response.data.data as Worker[];
+};
+
+export const fetchWorkersOverview = async (
+  period: "today" | "this_week" | "this_month" = "this_month",
+): Promise<WorkerOverviewResponse> => {
+  const response = await apiClient.get("/workers/overview", {
+    params: { period },
+  });
+  return response.data.data as WorkerOverviewResponse;
 };
 
 export const createWorker = async (payload: WorkerInput): Promise<Worker> => {

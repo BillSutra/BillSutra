@@ -8,6 +8,11 @@ import {
   invoiceUpdateSchema,
 } from "../validations/apiValidations.js";
 import { calculateInvoiceTotals } from "../utils/invoiceCalculations.js";
+import {
+  canWorkerPerformBillingAction,
+  getWorkerAccessRole,
+  type BillingAction,
+} from "../lib/workerPermissions.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
@@ -19,6 +24,14 @@ type InvoiceCreateItem = {
   price: number;
   tax_rate?: number;
   total: number;
+};
+
+const canMutateBilling = async (req: Request, action: BillingAction) => {
+  if (!req.user?.workerId) return true;
+
+  const accessRole = await getWorkerAccessRole(req.user.workerId);
+  if (!accessRole) return true;
+  return canWorkerPerformBillingAction(accessRole, action);
 };
 
 class InvoicesController {
@@ -53,6 +66,12 @@ class InvoicesController {
     const userId = req.user?.id;
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    if (!(await canMutateBilling(req, "create"))) {
+      return sendResponse(res, 403, {
+        message: "You do not have permission for this billing action",
+      });
     }
 
     const body: InvoiceCreateInput = req.body;
@@ -91,6 +110,24 @@ class InvoicesController {
       include: { items: true },
     });
 
+    if (req.user?.workerId) {
+      try {
+        await prisma.$executeRaw`
+          UPDATE "invoices"
+          SET "worker_id" = ${req.user.workerId}
+          WHERE "id" = ${invoice.id}
+        `;
+        await prisma.$executeRaw`
+          UPDATE "worker_profiles"
+          SET "last_active_at" = CURRENT_TIMESTAMP,
+              "updated_at" = CURRENT_TIMESTAMP
+          WHERE "worker_id" = ${req.user.workerId}
+        `;
+      } catch {
+        // Migration-safe fallback: invoice creation should still succeed.
+      }
+    }
+
     return sendResponse(res, 201, {
       message: "Invoice created",
       data: invoice,
@@ -122,6 +159,12 @@ class InvoicesController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    if (!(await canMutateBilling(req, "update"))) {
+      return sendResponse(res, 403, {
+        message: "You do not have permission for this billing action",
+      });
+    }
+
     const id = Number(req.params.id);
     const body: InvoiceUpdateInput = req.body;
     const { status, due_date, notes } = body;
@@ -146,6 +189,12 @@ class InvoicesController {
     const userId = req.user?.id;
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    if (!(await canMutateBilling(req, "delete"))) {
+      return sendResponse(res, 403, {
+        message: "You do not have permission for this billing action",
+      });
     }
 
     const id = Number(req.params.id);

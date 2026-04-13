@@ -8,8 +8,8 @@ import { ValidationField } from "@/components/ui/ValidationField";
 import {
   useCreateWorkerMutation,
   useDeleteWorkerMutation,
+  useWorkersOverviewQuery,
   useUpdateWorkerMutation,
-  useWorkersQuery,
 } from "@/hooks/useInventoryQueries";
 import {
   translateValidationMessage,
@@ -24,28 +24,49 @@ type WorkersClientProps = {
   image?: string;
 };
 
+type WorkerFormState = {
+  name: string;
+  email: string;
+  phone: string;
+  password: string;
+  accessRole: "ADMIN" | "SALESPERSON" | "STAFF" | "VIEWER";
+  joiningDate: string;
+  status: "ACTIVE" | "INACTIVE";
+  incentiveType: "NONE" | "PERCENTAGE" | "PER_SALE";
+  incentiveValue: string;
+};
+
+const DEFAULT_FORM: WorkerFormState = {
+  name: "",
+  email: "",
+  phone: "",
+  password: "",
+  accessRole: "STAFF",
+  joiningDate: "",
+  status: "ACTIVE",
+  incentiveType: "NONE",
+  incentiveValue: "",
+};
+
 const WorkersClient = ({ name, image }: WorkersClientProps) => {
   const { language, t } = useI18n();
-  const { data, isLoading, isError } = useWorkersQuery();
+  const [period, setPeriod] = useState<"today" | "this_week" | "this_month">(
+    "this_month",
+  );
+  const { data, isLoading, isError } = useWorkersOverviewQuery(period);
   const createWorker = useCreateWorkerMutation();
   const deleteWorker = useDeleteWorkerMutation();
   const updateWorker = useUpdateWorkerMutation();
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    phone: "",
-    password: "",
-  });
+  const [form, setForm] = useState<WorkerFormState>(DEFAULT_FORM);
   const [createError, setCreateError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingForm, setEditingForm] = useState({
-    name: "",
-    phone: "",
-    password: "",
-  });
+  const [editingForm, setEditingForm] = useState<WorkerFormState>(DEFAULT_FORM);
   const [updateError, setUpdateError] = useState("");
 
-  const workers = useMemo(() => data ?? [], [data]);
+  const workers = useMemo(() => data?.workers ?? [], [data?.workers]);
+  const summary = data?.summary;
+  const recentActivity = data?.recentActivity ?? [];
+  const leaderboard = data?.leaderboard ?? [];
 
   const localizeValidation = (message: string) => {
     if (message === "Password must be at least 6 characters") {
@@ -61,10 +82,39 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
     return "";
   };
 
+  const validateIncentiveValue = (
+    type: "NONE" | "PERCENTAGE" | "PER_SALE",
+    rawValue: string,
+  ) => {
+    if (type === "NONE") return "";
+    const parsed = Number(rawValue);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return t("workersPage.validation.incentiveInvalid");
+    }
+    if (type === "PERCENTAGE" && parsed > 100) {
+      return t("workersPage.validation.incentivePercentMax");
+    }
+    return "";
+  };
+
+  const isCreateFormValid =
+    !validateName(form.name) &&
+    !validateEmail(form.email) &&
+    !validatePhone(form.phone) &&
+    !validatePassword(form.password) &&
+    !validateIncentiveValue(form.incentiveType, form.incentiveValue);
+
   const formatCreatedAt = (value: string) =>
     new Intl.DateTimeFormat(language === "hi" ? "hi-IN" : "en-IN", {
       dateStyle: "medium",
     }).format(new Date(value));
+
+  const formatCurrency = (value: number) =>
+    new Intl.NumberFormat(language === "hi" ? "hi-IN" : "en-IN", {
+      style: "currency",
+      currency: "INR",
+      maximumFractionDigits: 0,
+    }).format(value || 0);
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -76,8 +126,14 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
         email: form.email.trim(),
         phone: form.phone.trim(),
         password: form.password,
+        accessRole: form.accessRole,
+        status: form.status,
+        joiningDate: form.joiningDate || undefined,
+        incentiveType: form.incentiveType,
+        incentiveValue:
+          form.incentiveType === "NONE" ? 0 : Number(form.incentiveValue || "0"),
       });
-      setForm({ name: "", email: "", phone: "", password: "" });
+      setForm(DEFAULT_FORM);
     } catch (error) {
       if (isAxiosError<{ message?: string }>(error)) {
         setCreateError(
@@ -97,8 +153,14 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
     setEditingId(workerId);
     setEditingForm({
       name: worker.name,
+      email: worker.email,
       phone: worker.phone ?? "",
       password: "",
+      accessRole: worker.roleLabel ?? "STAFF",
+      joiningDate: worker.joiningDate ? worker.joiningDate.slice(0, 10) : "",
+      status: worker.status ?? "ACTIVE",
+      incentiveType: worker.incentiveType ?? "NONE",
+      incentiveValue: String(worker.incentiveValue ?? ""),
     });
   };
 
@@ -112,13 +174,22 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
         id: editingId,
         payload: {
           name: editingForm.name.trim(),
+          email: editingForm.email.trim(),
           phone: editingForm.phone.trim(),
           password: editingForm.password.trim() || undefined,
+          accessRole: editingForm.accessRole,
+          status: editingForm.status,
+          joiningDate: editingForm.joiningDate || undefined,
+          incentiveType: editingForm.incentiveType,
+          incentiveValue:
+            editingForm.incentiveType === "NONE"
+              ? 0
+              : Number(editingForm.incentiveValue || "0"),
         },
       });
 
       setEditingId(null);
-      setEditingForm({ name: "", phone: "", password: "" });
+      setEditingForm(DEFAULT_FORM);
     } catch (error) {
       if (isAxiosError<{ message?: string }>(error)) {
         setUpdateError(
@@ -127,6 +198,20 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
         return;
       }
 
+      setUpdateError(t("workersPage.messages.updateError"));
+    }
+  };
+
+  const handleDisableWorker = async (workerId: string, status: "ACTIVE" | "INACTIVE") => {
+    setUpdateError("");
+    try {
+      await updateWorker.mutateAsync({
+        id: workerId,
+        payload: {
+          status: status === "ACTIVE" ? "INACTIVE" : "ACTIVE",
+        },
+      });
+    } catch {
       setUpdateError(t("workersPage.messages.updateError"));
     }
   };
@@ -195,6 +280,95 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                   placeholder={t("workersPage.placeholders.phone")}
                   success
                 />
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="grid gap-1 text-sm font-medium text-[#1f1b16]">
+                    {t("workersPage.fields.role")}
+                    <select
+                      className="h-10 rounded-md border border-[#e6d5c6] bg-white px-3 text-sm"
+                      value={form.accessRole}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          accessRole: event.target.value as WorkerFormState["accessRole"],
+                        }))
+                      }
+                    >
+                      <option value="ADMIN">{t("workersPage.roles.admin")}</option>
+                      <option value="SALESPERSON">{t("workersPage.roles.sales")}</option>
+                      <option value="STAFF">{t("workersPage.roles.staff")}</option>
+                      <option value="VIEWER">{t("workersPage.roles.viewer")}</option>
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-[#1f1b16]">
+                    {t("workersPage.fields.status")}
+                    <select
+                      className="h-10 rounded-md border border-[#e6d5c6] bg-white px-3 text-sm"
+                      value={form.status}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          status: event.target.value as WorkerFormState["status"],
+                        }))
+                      }
+                    >
+                      <option value="ACTIVE">{t("workersPage.statuses.active")}</option>
+                      <option value="INACTIVE">{t("workersPage.statuses.inactive")}</option>
+                    </select>
+                  </label>
+                </div>
+                <label className="grid gap-1 text-sm font-medium text-[#1f1b16]">
+                  {t("workersPage.fields.joiningDate")}
+                  <input
+                    type="date"
+                    className="h-10 rounded-md border border-[#e6d5c6] bg-white px-3 text-sm"
+                    value={form.joiningDate}
+                    onChange={(event) =>
+                      setForm((prev) => ({ ...prev, joiningDate: event.target.value }))
+                    }
+                  />
+                </label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="grid gap-1 text-sm font-medium text-[#1f1b16]">
+                    {t("workersPage.fields.incentiveType")}
+                    <select
+                      className="h-10 rounded-md border border-[#e6d5c6] bg-white px-3 text-sm"
+                      value={form.incentiveType}
+                      onChange={(event) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          incentiveType: event.target.value as WorkerFormState["incentiveType"],
+                          incentiveValue:
+                            event.target.value === "NONE" ? "" : prev.incentiveValue,
+                        }))
+                      }
+                    >
+                      <option value="NONE">{t("workersPage.incentive.none")}</option>
+                      <option value="PERCENTAGE">
+                        {t("workersPage.incentive.percentage")}
+                      </option>
+                      <option value="PER_SALE">{t("workersPage.incentive.perSale")}</option>
+                    </select>
+                  </label>
+                  {form.incentiveType !== "NONE" ? (
+                    <ValidationField
+                      id="worker-incentive-value"
+                      label={t("workersPage.fields.incentiveValue")}
+                      value={form.incentiveValue}
+                      onChange={(value) =>
+                        setForm((prev) => ({ ...prev, incentiveValue: value }))
+                      }
+                      validate={(value) =>
+                        validateIncentiveValue(form.incentiveType, value)
+                      }
+                      required
+                      placeholder={
+                        form.incentiveType === "PERCENTAGE"
+                          ? t("workersPage.placeholders.incentivePercent")
+                          : t("workersPage.placeholders.incentiveAmount")
+                      }
+                    />
+                  ) : null}
+                </div>
                 <div className="grid gap-2">
                   <ValidationField
                     id="worker-password"
@@ -215,7 +389,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                 <Button
                   type="submit"
                   className="bg-[#1f1b16] text-white hover:bg-[#2c2520]"
-                  disabled={createWorker.isPending}
+                  disabled={createWorker.isPending || !isCreateFormValid}
                 >
                   {createWorker.isPending
                     ? t("workersPage.actions.creating")
@@ -228,13 +402,140 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                 ) : null}
               </form>
             </div>
+
+            <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold">{t("workersPage.leaderboard.title")}</h2>
+                <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
+                  {t("workersPage.leaderboard.kicker")}
+                </p>
+              </div>
+              <div className="mt-4 grid gap-2">
+                {leaderboard.length === 0 ? (
+                  <p className="text-sm text-[#8a6d56]">{t("workersPage.empty")}</p>
+                ) : (
+                  leaderboard.map((entry) => (
+                    <div
+                      key={entry.workerId}
+                      className="flex items-center justify-between rounded-lg border border-[#f2e6dc] px-3 py-2"
+                    >
+                      <p className="text-sm font-medium">
+                        #{entry.rank} {entry.name}
+                      </p>
+                      <div className="text-right text-xs text-[#5c4b3b]">
+                        <p>{formatCurrency(entry.totalSales)}</p>
+                        <p>{t("workersPage.cards.totalOrders")}: {entry.totalOrders}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
-            <h2 className="text-lg font-semibold">{t("workersPage.listTitle")}</h2>
-            <p className="text-sm text-[#8a6d56]">
-              {t("workersPage.listDescription")}
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">{t("workersPage.listTitle")}</h2>
+                <p className="text-sm text-[#8a6d56]">{t("workersPage.listDescription")}</p>
+              </div>
+              <div className="inline-flex rounded-lg border border-[#e6d5c6] bg-white p-1 text-xs font-medium">
+                <button
+                  type="button"
+                  className={`rounded-md px-3 py-1 ${
+                    period === "today" ? "bg-[#1f1b16] text-white" : "text-[#5c4b3b]"
+                  }`}
+                  onClick={() => setPeriod("today")}
+                >
+                  {t("workersPage.filters.today")}
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-md px-3 py-1 ${
+                    period === "this_week"
+                      ? "bg-[#1f1b16] text-white"
+                      : "text-[#5c4b3b]"
+                  }`}
+                  onClick={() => setPeriod("this_week")}
+                >
+                  {t("workersPage.filters.thisWeek")}
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-md px-3 py-1 ${
+                    period === "this_month"
+                      ? "bg-[#1f1b16] text-white"
+                      : "text-[#5c4b3b]"
+                  }`}
+                  onClick={() => setPeriod("this_month")}
+                >
+                  {t("workersPage.filters.thisMonth")}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-[#8a6d56]">
+                  {t("workersPage.cards.totalSales")}
+                </p>
+                <p className="mt-2 text-xl font-semibold">
+                  {formatCurrency(summary?.totalSales ?? 0)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-[#8a6d56]">
+                  {t("workersPage.cards.totalOrders")}
+                </p>
+                <p className="mt-2 text-xl font-semibold">{summary?.totalOrders ?? 0}</p>
+              </div>
+              <div className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-[#8a6d56]">
+                  {t("workersPage.cards.incentiveEarned")}
+                </p>
+                <p className="mt-2 text-xl font-semibold">
+                  {formatCurrency(summary?.incentiveEarned ?? 0)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-[#8a6d56]">
+                  {t("workersPage.cards.thisMonthSales")}
+                </p>
+                <p className="mt-2 text-xl font-semibold">
+                  {formatCurrency(summary?.thisMonthSales ?? 0)}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-[#f2e6dc] p-4">
+              <h3 className="text-sm font-semibold">{t("workersPage.activity.title")}</h3>
+              <div className="mt-3 grid gap-2">
+                {recentActivity.length === 0 ? (
+                  <p className="text-sm text-[#8a6d56]">{t("workersPage.activity.empty")}</p>
+                ) : (
+                  recentActivity.map((activity, index) => (
+                    <div
+                      key={`${activity.workerId}-${activity.reference}-${index}`}
+                      className="flex items-center justify-between gap-2 rounded-lg bg-[#fff9f2] px-3 py-2 text-sm"
+                    >
+                      <div>
+                        <p className="font-medium">{activity.workerName}</p>
+                        <p className="text-xs text-[#5c4b3b]">
+                          {activity.activityType} {activity.reference}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium">{formatCurrency(activity.amount)}</p>
+                        <p className="text-xs text-[#5c4b3b]">
+                          {formatCreatedAt(activity.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
             <div className="mt-4">
               {isLoading ? (
                 <p className="text-sm text-[#8a6d56]">{t("workersPage.loading")}</p>
@@ -272,6 +573,18 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                             success
                           />
                           <ValidationField
+                            id={`edit-worker-email-${worker.id}`}
+                            label={t("workersPage.fields.email")}
+                            type="email"
+                            value={editingForm.email}
+                            onChange={(value) =>
+                              setEditingForm((prev) => ({ ...prev, email: value }))
+                            }
+                            validate={(value) => localizeValidation(validateEmail(value))}
+                            required
+                            success
+                          />
+                          <ValidationField
                             id={`edit-worker-phone-${worker.id}`}
                             label={t("workersPage.fields.phone")}
                             value={editingForm.phone}
@@ -288,6 +601,113 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                             placeholder={t("workersPage.placeholders.phone")}
                             success
                           />
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <label className="grid gap-1 text-sm font-medium text-[#1f1b16]">
+                              {t("workersPage.fields.role")}
+                              <select
+                                className="h-10 rounded-md border border-[#e6d5c6] bg-white px-3 text-sm"
+                                value={editingForm.accessRole}
+                                onChange={(event) =>
+                                  setEditingForm((prev) => ({
+                                    ...prev,
+                                    accessRole:
+                                      event.target.value as WorkerFormState["accessRole"],
+                                  }))
+                                }
+                              >
+                                <option value="ADMIN">{t("workersPage.roles.admin")}</option>
+                                <option value="SALESPERSON">
+                                  {t("workersPage.roles.sales")}
+                                </option>
+                                <option value="STAFF">{t("workersPage.roles.staff")}</option>
+                                <option value="VIEWER">{t("workersPage.roles.viewer")}</option>
+                              </select>
+                            </label>
+                            <label className="grid gap-1 text-sm font-medium text-[#1f1b16]">
+                              {t("workersPage.fields.status")}
+                              <select
+                                className="h-10 rounded-md border border-[#e6d5c6] bg-white px-3 text-sm"
+                                value={editingForm.status}
+                                onChange={(event) =>
+                                  setEditingForm((prev) => ({
+                                    ...prev,
+                                    status: event.target.value as WorkerFormState["status"],
+                                  }))
+                                }
+                              >
+                                <option value="ACTIVE">
+                                  {t("workersPage.statuses.active")}
+                                </option>
+                                <option value="INACTIVE">
+                                  {t("workersPage.statuses.inactive")}
+                                </option>
+                              </select>
+                            </label>
+                          </div>
+                          <label className="grid gap-1 text-sm font-medium text-[#1f1b16]">
+                            {t("workersPage.fields.joiningDate")}
+                            <input
+                              type="date"
+                              className="h-10 rounded-md border border-[#e6d5c6] bg-white px-3 text-sm"
+                              value={editingForm.joiningDate}
+                              onChange={(event) =>
+                                setEditingForm((prev) => ({
+                                  ...prev,
+                                  joiningDate: event.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                          <div className="grid gap-2 sm:grid-cols-2">
+                            <label className="grid gap-1 text-sm font-medium text-[#1f1b16]">
+                              {t("workersPage.fields.incentiveType")}
+                              <select
+                                className="h-10 rounded-md border border-[#e6d5c6] bg-white px-3 text-sm"
+                                value={editingForm.incentiveType}
+                                onChange={(event) =>
+                                  setEditingForm((prev) => ({
+                                    ...prev,
+                                    incentiveType:
+                                      event.target.value as WorkerFormState["incentiveType"],
+                                    incentiveValue:
+                                      event.target.value === "NONE"
+                                        ? ""
+                                        : prev.incentiveValue,
+                                  }))
+                                }
+                              >
+                                <option value="NONE">{t("workersPage.incentive.none")}</option>
+                                <option value="PERCENTAGE">
+                                  {t("workersPage.incentive.percentage")}
+                                </option>
+                                <option value="PER_SALE">
+                                  {t("workersPage.incentive.perSale")}
+                                </option>
+                              </select>
+                            </label>
+                            {editingForm.incentiveType !== "NONE" ? (
+                              <ValidationField
+                                id={`edit-worker-incentive-${worker.id}`}
+                                label={t("workersPage.fields.incentiveValue")}
+                                value={editingForm.incentiveValue}
+                                onChange={(value) =>
+                                  setEditingForm((prev) => ({
+                                    ...prev,
+                                    incentiveValue: value,
+                                  }))
+                                }
+                                validate={(value) =>
+                                  validateIncentiveValue(editingForm.incentiveType, value)
+                                }
+                                required
+                                placeholder={
+                                  editingForm.incentiveType === "PERCENTAGE"
+                                    ? t("workersPage.placeholders.incentivePercent")
+                                    : t("workersPage.placeholders.incentiveAmount")
+                                }
+                              />
+                            ) : null}
+                          </div>
                           <ValidationField
                             id={`edit-worker-password-${worker.id}`}
                             label={t("workersPage.fields.newPassword")}
@@ -315,7 +735,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                               variant="outline"
                               onClick={() => {
                                 setEditingId(null);
-                                setEditingForm({ name: "", phone: "", password: "" });
+                                setEditingForm(DEFAULT_FORM);
                               }}
                             >
                               {t("common.cancel")}
@@ -333,9 +753,31 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                             <p className="text-sm text-[#5c4b3b]">
                               {worker.phone || t("workersPage.messages.noPhone")}
                             </p>
+                            <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                              <span className="rounded-full bg-[#f2e6dc] px-2 py-1">
+                                {worker.roleLabel ?? "STAFF"}
+                              </span>
+                              <span className="rounded-full bg-[#f2e6dc] px-2 py-1">
+                                {worker.status ?? "ACTIVE"}
+                              </span>
+                            </div>
+                            <div className="mt-2 grid gap-1 text-xs text-[#5c4b3b] sm:grid-cols-2">
+                              <p>
+                                {t("workersPage.cards.totalSales")}: {formatCurrency(worker.metrics?.totalSales ?? 0)}
+                              </p>
+                              <p>
+                                {t("workersPage.cards.totalOrders")}: {worker.metrics?.totalOrders ?? 0}
+                              </p>
+                              <p>
+                                {t("workersPage.cards.incentiveEarned")}: {formatCurrency(worker.metrics?.incentiveEarned ?? 0)}
+                              </p>
+                              <p>
+                                {t("workersPage.fields.lastActive")}: {worker.lastActiveAt ? formatCreatedAt(worker.lastActiveAt) : t("workersPage.messages.neverActive")}
+                              </p>
+                            </div>
                             <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                               {t("workersPage.messages.addedMeta", {
-                                role: worker.role,
+                                role: worker.roleLabel ?? worker.role,
                                 date: formatCreatedAt(worker.createdAt),
                               })}
                             </p>
@@ -355,6 +797,18 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                               disabled={deleteWorker.isPending}
                             >
                               {t("common.delete")}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                handleDisableWorker(worker.id, worker.status ?? "ACTIVE")
+                              }
+                              disabled={updateWorker.isPending}
+                            >
+                              {worker.status === "INACTIVE"
+                                ? t("workersPage.actions.enable")
+                                : t("workersPage.actions.disable")}
                             </Button>
                           </div>
                         </div>

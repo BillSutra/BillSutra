@@ -31,6 +31,7 @@ type SupplierBaseRecord = {
 
 type SupplierExtendedFields = {
   id: number;
+  categories: unknown;
   business_name: string | null;
   gstin: string | null;
   pan: string | null;
@@ -42,6 +43,8 @@ type SupplierExtendedFields = {
   opening_balance: unknown;
   notes: string | null;
 };
+
+type SupplierExtendedFieldsLegacy = Omit<SupplierExtendedFields, "categories">;
 
 const supplierBaseSelect = {
   id: true,
@@ -75,6 +78,36 @@ const normalizePaymentTerms = (value: unknown): SupplierPaymentTerms | null => {
   return null;
 };
 
+const normalizeSupplierCategories = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const unique: string[] = [];
+  const seen = new Set<string>();
+
+  value.forEach((entry) => {
+    if (typeof entry !== "string") {
+      return;
+    }
+
+    const normalized = entry.replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    unique.push(normalized.slice(0, 60));
+  });
+
+  return unique;
+};
+
 const isSupplierSchemaMismatchError = (error: unknown) => {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     if (error.code === "P2021" || error.code === "P2022") {
@@ -90,6 +123,7 @@ const isSupplierSchemaMismatchError = (error: unknown) => {
   if (error instanceof Error) {
     return (
       /business_name/i.test(error.message) ||
+      /categories/i.test(error.message) ||
       /opening_balance/i.test(error.message) ||
       /payment_terms/i.test(error.message) ||
       /address_line1/i.test(error.message)
@@ -111,6 +145,7 @@ const loadExtendedSupplierFields = async (
     const rows = await prisma.$queryRaw<SupplierExtendedFields[]>(Prisma.sql`
       SELECT
         id,
+        categories,
         business_name,
         gstin,
         pan,
@@ -129,7 +164,41 @@ const loadExtendedSupplierFields = async (
     return new Map(rows.map((row) => [row.id, row]));
   } catch (error) {
     if (isSupplierSchemaMismatchError(error)) {
-      return new Map<number, SupplierExtendedFields>();
+      try {
+        const fallbackRows = await prisma.$queryRaw<SupplierExtendedFieldsLegacy[]>(Prisma.sql`
+          SELECT
+            id,
+            business_name,
+            gstin,
+            pan,
+            address_line1,
+            city,
+            state,
+            pincode,
+            payment_terms,
+            opening_balance,
+            notes
+          FROM "suppliers"
+          WHERE user_id = ${userId}
+            AND id IN (${Prisma.join(supplierIds)})
+        `);
+
+        return new Map(
+          fallbackRows.map((row) => [
+            row.id,
+            {
+              ...row,
+              categories: [],
+            } satisfies SupplierExtendedFields,
+          ]),
+        );
+      } catch (fallbackError) {
+        if (isSupplierSchemaMismatchError(fallbackError)) {
+          return new Map<number, SupplierExtendedFields>();
+        }
+
+        throw fallbackError;
+      }
     }
 
     throw error;
@@ -169,6 +238,7 @@ const persistExtendedSupplierFields = async (
   userId: number,
   supplierId: number,
   payload: {
+    categories: string[];
     business_name: string | null;
     gstin: string | null;
     pan: string | null;
@@ -185,6 +255,7 @@ const persistExtendedSupplierFields = async (
     await prisma.$executeRaw(Prisma.sql`
       UPDATE "suppliers"
       SET
+        categories = ${payload.categories},
         business_name = ${payload.business_name},
         gstin = ${payload.gstin},
         pan = ${payload.pan},
@@ -200,7 +271,31 @@ const persistExtendedSupplierFields = async (
     `);
   } catch (error) {
     if (isSupplierSchemaMismatchError(error)) {
-      return;
+      try {
+        await prisma.$executeRaw(Prisma.sql`
+          UPDATE "suppliers"
+          SET
+            business_name = ${payload.business_name},
+            gstin = ${payload.gstin},
+            pan = ${payload.pan},
+            address_line1 = ${payload.address_line1},
+            city = ${payload.city},
+            state = ${payload.state},
+            pincode = ${payload.pincode},
+            payment_terms = ${payload.payment_terms},
+            opening_balance = ${payload.opening_balance},
+            notes = ${payload.notes}
+          WHERE id = ${supplierId}
+            AND user_id = ${userId}
+        `);
+        return;
+      } catch (fallbackError) {
+        if (isSupplierSchemaMismatchError(fallbackError)) {
+          return;
+        }
+
+        throw fallbackError;
+      }
     }
 
     throw error;
@@ -275,6 +370,7 @@ const serializeSupplier = (
   });
 
   const businessName = toNullableString(extended?.business_name);
+  const categories = normalizeSupplierCategories(extended?.categories);
   const gstin = toNullableString(extended?.gstin);
   const pan = toNullableString(extended?.pan);
   const paymentTerms = normalizePaymentTerms(extended?.payment_terms);
@@ -291,6 +387,7 @@ const serializeSupplier = (
     email: supplier.email,
     phone: supplier.phone,
     address: formatBusinessAddress(normalizedAddress, supplier.address),
+    categories,
     businessName,
     business_name: businessName,
     gstin: gstin ? normalizeGstin(gstin) : null,
@@ -355,7 +452,10 @@ class SuppliersController {
 
     const body: SupplierCreateInput = req.body;
     const structuredAddress = resolveSupplierAddress(body);
-    const legacyAddress = formatBusinessAddress(structuredAddress, body.address);
+    const legacyAddress = formatBusinessAddress(
+      structuredAddress,
+      body.address,
+    );
 
     const supplier = await prisma.supplier.create({
       data: {
@@ -369,6 +469,7 @@ class SuppliersController {
     });
 
     await persistExtendedSupplierFields(userId, supplier.id, {
+      categories: normalizeSupplierCategories(body.categories),
       business_name: toNullableString(body.businessName ?? body.business_name),
       gstin: toNullableString(body.gstin)
         ? normalizeGstin(body.gstin ?? undefined)
@@ -489,8 +590,13 @@ class SuppliersController {
     }
 
     await persistExtendedSupplierFields(userId, id, {
+      categories: normalizeSupplierCategories(
+        body.categories ?? existingExtended?.categories,
+      ),
       business_name: toNullableString(
-        body.businessName ?? body.business_name ?? existingExtended?.business_name,
+        body.businessName ??
+          body.business_name ??
+          existingExtended?.business_name,
       ),
       gstin: toNullableString(body.gstin ?? existingExtended?.gstin)
         ? normalizeGstin(body.gstin ?? existingExtended?.gstin)
@@ -501,7 +607,9 @@ class SuppliersController {
       state: structuredAddress.state ?? null,
       pincode: structuredAddress.pincode ?? null,
       payment_terms: normalizePaymentTerms(
-        body.paymentTerms ?? body.payment_terms ?? existingExtended?.payment_terms,
+        body.paymentTerms ??
+          body.payment_terms ??
+          existingExtended?.payment_terms,
       ),
       opening_balance: roundAmount(
         Math.max(

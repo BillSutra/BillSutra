@@ -27,6 +27,7 @@ import {
   createCategory,
   fetchSuppliers,
   fetchWorkers,
+  fetchWorkersOverview,
   fetchWarehouse,
   fetchWarehouses,
   fetchInventories,
@@ -46,9 +47,8 @@ import {
 } from "@/lib/apiClient";
 import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
 
-const invalidateDashboard = (
-  queryClient: ReturnType<typeof useQueryClient>,
-) => invalidateDashboardQueries(queryClient);
+const invalidateDashboard = (queryClient: ReturnType<typeof useQueryClient>) =>
+  invalidateDashboardQueries(queryClient);
 
 const defaultListQueryOptions = {
   staleTime: 30_000,
@@ -209,11 +209,23 @@ export const useDeleteSupplierMutation = () => {
 export const useWorkersQuery = () =>
   useQuery({ queryKey: ["workers"], queryFn: fetchWorkers });
 
+export const useWorkersOverviewQuery = (
+  period: "today" | "this_week" | "this_month",
+) =>
+  useQuery({
+    queryKey: ["workers", "overview", period],
+    queryFn: () => fetchWorkersOverview(period),
+  });
+
 export const useCreateWorkerMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createWorker,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workers"] }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workers"] }),
+        queryClient.invalidateQueries({ queryKey: ["workers", "overview"] }),
+      ]),
   });
 };
 
@@ -221,7 +233,11 @@ export const useDeleteWorkerMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: deleteWorker,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workers"] }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workers"] }),
+        queryClient.invalidateQueries({ queryKey: ["workers", "overview"] }),
+      ]),
   });
 };
 
@@ -235,7 +251,11 @@ export const useUpdateWorkerMutation = () => {
       id: string;
       payload: Parameters<typeof updateWorker>[1];
     }) => updateWorker(id, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["workers"] }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["workers"] }),
+        queryClient.invalidateQueries({ queryKey: ["workers", "overview"] }),
+      ]),
   });
 };
 

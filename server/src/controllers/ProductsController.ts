@@ -19,13 +19,16 @@ class ProductsController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const { page, limit, skip } = parsePagination({
-      page: req.query.page,
-      limit: req.query.limit,
-    }, {
-      defaultLimit: 20,
-      maxLimit: 200,
-    });
+    const { page, limit, skip } = parsePagination(
+      {
+        page: req.query.page,
+        limit: req.query.limit,
+      },
+      {
+        defaultLimit: 20,
+        maxLimit: 200,
+      },
+    );
 
     const search =
       typeof req.query.search === "string" ? req.query.search.trim() : "";

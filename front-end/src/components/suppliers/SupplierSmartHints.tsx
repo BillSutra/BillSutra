@@ -7,7 +7,10 @@ type SupplierSmartHintsProps = {
   pincodeHint?: string;
 };
 
-const SupplierSmartHints = ({ gstinHint, pincodeHint }: SupplierSmartHintsProps) => {
+const SupplierSmartHints = ({
+  gstinHint,
+  pincodeHint,
+}: SupplierSmartHintsProps) => {
   if (!gstinHint && !pincodeHint) {
     return null;
   }

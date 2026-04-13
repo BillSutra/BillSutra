@@ -10,6 +10,7 @@ import { ValidationField } from "@/components/ui/ValidationField";
 import SupplierFormSection from "@/components/suppliers/SupplierFormSection";
 import SupplierListItem from "@/components/suppliers/SupplierListItem";
 import SupplierSmartHints from "@/components/suppliers/SupplierSmartHints";
+import SupplierCategoryTagsInput from "@/components/suppliers/SupplierCategoryTagsInput";
 import {
   validateGstin,
   validateIndianPincode,
@@ -50,6 +51,7 @@ type SupplierFormState = {
   name: string;
   phone: string;
   email: string;
+  categories: string[];
   businessName: string;
   gstin: string;
   pan: string;
@@ -64,12 +66,30 @@ type SupplierFormState = {
 
 type SupplierFormErrors = Partial<Record<keyof SupplierFormState, string>>;
 
-const PAYMENT_TERM_OPTIONS: SupplierPaymentTerms[] = ["NET_7", "NET_15", "NET_30"];
+const PAYMENT_TERM_OPTIONS: SupplierPaymentTerms[] = [
+  "NET_7",
+  "NET_15",
+  "NET_30",
+];
+
+const SUPPLIER_CATEGORY_SUGGESTIONS = [
+  "Electronics",
+  "Groceries",
+  "Clothing",
+  "Mobile Accessories",
+  "Stationery",
+  "Furniture",
+  "Pharma",
+  "Kitchen Supplies",
+  "Hardware",
+  "Beauty Products",
+];
 
 const INITIAL_FORM: SupplierFormState = {
   name: "",
   phone: "",
   email: "",
+  categories: [],
   businessName: "",
   gstin: "",
   pan: "",
@@ -85,13 +105,36 @@ const INITIAL_FORM: SupplierFormState = {
 const resolveSupplierName = (supplier: Supplier) =>
   supplier.businessName || supplier.business_name || supplier.name;
 
-const normalizePhoneInput = (value: string) => value.replace(/\D/g, "").slice(0, 10);
+const normalizePhoneInput = (value: string) =>
+  value.replace(/\D/g, "").slice(0, 10);
 
 const normalizePanInput = (value: string) =>
   value
     .toUpperCase()
     .replace(/[^A-Z0-9]/g, "")
     .slice(0, 10);
+
+const normalizeCategoryTags = (tags: string[]) => {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+
+  tags.forEach((entry) => {
+    const normalized = entry.replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    unique.push(normalized.slice(0, 60));
+  });
+
+  return unique;
+};
 
 const toSupplierForm = (supplier: Supplier): SupplierFormState => {
   const address = supplier.supplierAddress ?? {
@@ -109,6 +152,7 @@ const toSupplierForm = (supplier: Supplier): SupplierFormState => {
     name: supplier.name ?? "",
     phone: normalizePhoneInput(supplier.phone ?? ""),
     email: supplier.email ?? "",
+    categories: normalizeCategoryTags(supplier.categories ?? []),
     businessName: supplier.businessName ?? supplier.business_name ?? "",
     gstin: normalizeGstin(supplier.gstin ?? ""),
     pan: normalizePanInput(supplier.pan ?? ""),
@@ -117,7 +161,9 @@ const toSupplierForm = (supplier: Supplier): SupplierFormState => {
     state: address.state ?? "",
     pincode: normalizeIndianPincode(address.pincode ?? ""),
     paymentTerms:
-      supplier.paymentTerms ?? supplier.payment_terms ?? PAYMENT_TERM_OPTIONS[1],
+      supplier.paymentTerms ??
+      supplier.payment_terms ??
+      PAYMENT_TERM_OPTIONS[1],
     openingBalance: openingBalance ? String(openingBalance) : "",
     notes: supplier.notes ?? "",
   };
@@ -133,6 +179,9 @@ const toSupplierPayload = (form: SupplierFormState): SupplierInput => {
     name: form.name.trim(),
     phone: normalizePhoneInput(form.phone),
     email: form.email.trim() || undefined,
+    categories: form.categories.length
+      ? normalizeCategoryTags(form.categories)
+      : undefined,
     businessName: form.businessName.trim() || undefined,
     gstin: normalizeGstin(form.gstin) || undefined,
     pan: normalizePanInput(form.pan) || undefined,
@@ -205,42 +254,80 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
 
   const [form, setForm] = useState<SupplierFormState>(INITIAL_FORM);
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeCategoryFilter, setActiveCategoryFilter] =
+    useState<string>("ALL");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isBusinessSectionOpen, setBusinessSectionOpen] = useState(false);
   const [isAddressSectionOpen, setAddressSectionOpen] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [pincodeHint, setPincodeHint] = useState("");
-  const [gstinHint, setGstinHint] = useState("");
   const [isPincodeLookupPending, setPincodeLookupPending] = useState(false);
 
   const suppliers = useMemo(
     () =>
       (data ?? []).slice().sort((left, right) =>
-        resolveSupplierName(left).localeCompare(resolveSupplierName(right), "en-IN", {
-          sensitivity: "base",
-        }),
+        resolveSupplierName(left).localeCompare(
+          resolveSupplierName(right),
+          "en-IN",
+          {
+            sensitivity: "base",
+          },
+        ),
       ),
     [data],
   );
 
+  const availableCategories = useMemo(() => {
+    const unique = new Set<string>();
+
+    suppliers.forEach((supplier) => {
+      (supplier.categories ?? []).forEach((category) => {
+        const normalized = category.replace(/\s+/g, " ").trim();
+        if (normalized) {
+          unique.add(normalized);
+        }
+      });
+    });
+
+    return Array.from(unique).sort((left, right) =>
+      left.localeCompare(right, "en-IN", { sensitivity: "base" }),
+    );
+  }, [suppliers]);
+
+  const resolvedCategoryFilter =
+    activeCategoryFilter !== "ALL" &&
+    !availableCategories.includes(activeCategoryFilter)
+      ? "ALL"
+      : activeCategoryFilter;
+
   const filteredSuppliers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return suppliers;
-    }
-
     return suppliers.filter((supplier) => {
+      const categories = supplier.categories ?? [];
+      const matchesCategory =
+        resolvedCategoryFilter === "ALL" ||
+        categories.some(
+          (category) =>
+            category.toLowerCase() === resolvedCategoryFilter.toLowerCase(),
+        );
+
       const tokens = [
         resolveSupplierName(supplier),
         supplier.phone ?? "",
         supplier.email ?? "",
         supplier.gstin ?? "",
         supplier.pan ?? "",
+        categories.join(" "),
       ];
-      return tokens.join(" ").toLowerCase().includes(query);
+
+      const matchesQuery = query
+        ? tokens.join(" ").toLowerCase().includes(query)
+        : true;
+
+      return matchesCategory && matchesQuery;
     });
-  }, [searchQuery, suppliers]);
+  }, [resolvedCategoryFilter, searchQuery, suppliers]);
 
   const formErrors = useMemo(() => validateSupplierForm(form), [form]);
   const isFormValid = useMemo(
@@ -258,7 +345,10 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
     deleteSupplier.isPending;
 
   const scrollToForm = () => {
-    formAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    formAnchorRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   };
 
   const resetForm = () => {
@@ -268,14 +358,11 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
     setAddressSectionOpen(false);
     setFormError(null);
     setPincodeHint("");
-    setGstinHint("");
   };
 
   useEffect(() => {
     const normalizedPincode = normalizeIndianPincode(form.pincode);
     if (normalizedPincode.length !== 6) {
-      setPincodeLookupPending(false);
-      setPincodeHint("");
       return;
     }
 
@@ -315,34 +402,19 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
     };
   }, [form.pincode, t]);
 
-  useEffect(() => {
+  const gstinHint = useMemo(() => {
     const normalized = normalizeGstin(form.gstin);
     if (!normalized) {
-      setGstinHint("");
-      return;
+      return "";
     }
 
     const extractedState = getStateFromGstin(normalized);
     if (!extractedState) {
-      setGstinHint("");
-      return;
+      return "";
     }
 
-    setGstinHint(
-      t("suppliersPage.smartHints.gstinState", {
-        state: extractedState,
-      }),
-    );
-
-    setForm((previous) => {
-      if (previous.state) {
-        return previous;
-      }
-
-      return {
-        ...previous,
-        state: extractedState,
-      };
+    return t("suppliersPage.smartHints.gstinState", {
+      state: extractedState,
     });
   }, [form.gstin, t]);
 
@@ -375,22 +447,23 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
     setForm(toSupplierForm(supplier));
     setBusinessSectionOpen(
       Boolean(
+        supplier.categories?.length ||
         supplier.businessName ||
-          supplier.business_name ||
-          supplier.gstin ||
-          supplier.pan,
+        supplier.business_name ||
+        supplier.gstin ||
+        supplier.pan,
       ),
     );
     setAddressSectionOpen(
       Boolean(
         supplier.supplierAddress?.addressLine1 ||
-          supplier.supplierAddress?.city ||
-          supplier.supplierAddress?.state ||
-          supplier.supplierAddress?.pincode ||
-          supplier.address_line1 ||
-          supplier.city ||
-          supplier.state ||
-          supplier.pincode,
+        supplier.supplierAddress?.city ||
+        supplier.supplierAddress?.state ||
+        supplier.supplierAddress?.pincode ||
+        supplier.address_line1 ||
+        supplier.city ||
+        supplier.state ||
+        supplier.pincode,
       ),
     );
     setFormError(null);
@@ -399,7 +472,9 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
 
   const handleDelete = async (supplierId: number) => {
     setListError(null);
-    const shouldDelete = window.confirm(t("suppliersPage.messages.confirmDelete"));
+    const shouldDelete = window.confirm(
+      t("suppliersPage.messages.confirmDelete"),
+    );
     if (!shouldDelete) {
       return;
     }
@@ -458,7 +533,11 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
               </span>
             </div>
 
-            <form className="mt-5 grid gap-4" onSubmit={handleCreateOrUpdate} noValidate>
+            <form
+              className="mt-5 grid gap-4"
+              onSubmit={handleCreateOrUpdate}
+              noValidate
+            >
               <SupplierFormSection
                 icon={Contact2}
                 title={t("suppliersPage.sections.basic.title")}
@@ -536,10 +615,16 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                   label={t("suppliersPage.fields.gstin")}
                   value={form.gstin}
                   onChange={(value) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      gstin: normalizeGstin(value),
-                    }))
+                    setForm((previous) => {
+                      const normalizedGstin = normalizeGstin(value);
+                      const extractedState = getStateFromGstin(normalizedGstin);
+
+                      return {
+                        ...previous,
+                        gstin: normalizedGstin,
+                        state: previous.state || extractedState || previous.state,
+                      };
+                    })
                   }
                   validate={(value) => {
                     if (!value) {
@@ -553,7 +638,11 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                     if (form.state) {
                       const gstState = getStateFromGstin(value);
                       const selectedState = normalizeIndianState(form.state);
-                      if (gstState && selectedState && gstState !== selectedState) {
+                      if (
+                        gstState &&
+                        selectedState &&
+                        gstState !== selectedState
+                      ) {
                         return "GSTIN state code does not match selected state";
                       }
                     }
@@ -578,6 +667,19 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                   placeholder={t("suppliersPage.placeholders.pan")}
                   maxLength={10}
                   success
+                />
+                <SupplierCategoryTagsInput
+                  label={t("suppliersPage.fields.categories")}
+                  placeholder={t("suppliersPage.placeholders.categories")}
+                  helperText={t("suppliersPage.form.categoriesHint")}
+                  value={form.categories}
+                  suggestions={SUPPLIER_CATEGORY_SUGGESTIONS}
+                  onChange={(next) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      categories: normalizeCategoryTags(next),
+                    }))
+                  }
                 />
               </SupplierFormSection>
 
@@ -651,10 +753,14 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                   label={t("suppliersPage.fields.pincode")}
                   value={form.pincode}
                   onChange={(value) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      pincode: normalizeIndianPincode(value),
-                    }))
+                    {
+                      setPincodeLookupPending(false);
+                      setPincodeHint("");
+                      setForm((previous) => ({
+                        ...previous,
+                        pincode: normalizeIndianPincode(value),
+                      }));
+                    }
                   }
                   validate={(value) =>
                     hasAnyAddressValue(form)
@@ -753,7 +859,10 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                 </div>
               </SupplierFormSection>
 
-              <SupplierSmartHints gstinHint={gstinHint} pincodeHint={pincodeHintText} />
+              <SupplierSmartHints
+                gstinHint={gstinHint}
+                pincodeHint={pincodeHintText}
+              />
 
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -772,7 +881,9 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                 ) : null}
               </div>
 
-              {(formError || createSupplier.isError || updateSupplier.isError) && (
+              {(formError ||
+                createSupplier.isError ||
+                updateSupplier.isError) && (
                 <p className="text-sm text-[#b45309]">
                   {formError ?? t("suppliersPage.messages.saveError")}
                 </p>
@@ -807,9 +918,37 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
               />
             </div>
 
+            {availableCategories.length > 0 ? (
+              <div className="mt-3">
+                <label
+                  htmlFor="supplier-category-filter"
+                  className="mb-1 block text-xs font-medium text-[#8a6d56]"
+                >
+                  {t("suppliersPage.list.filterByCategory")}
+                </label>
+                <select
+                  id="supplier-category-filter"
+                  value={resolvedCategoryFilter}
+                  onChange={(event) => setActiveCategoryFilter(event.target.value)}
+                  className="app-field h-9 w-full max-w-xs rounded-xl px-3 text-sm"
+                >
+                  <option value="ALL">
+                    {t("suppliersPage.list.allCategories")}
+                  </option>
+                  {availableCategories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
             <div className="mt-4 space-y-3">
               {isLoading && (
-                <p className="text-sm text-[#8a6d56]">{t("suppliersPage.loading")}</p>
+                <p className="text-sm text-[#8a6d56]">
+                  {t("suppliersPage.loading")}
+                </p>
               )}
 
               {isError && (
@@ -831,13 +970,16 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                 />
               )}
 
-              {!isLoading && !isError && suppliers.length > 0 && filteredSuppliers.length === 0 && (
-                <p className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] px-3 py-2 text-sm text-[#8a6d56]">
-                  {isShowingFilteredResults
-                    ? t("suppliersPage.list.noResults")
-                    : t("suppliersPage.empty")}
-                </p>
-              )}
+              {!isLoading &&
+                !isError &&
+                suppliers.length > 0 &&
+                filteredSuppliers.length === 0 && (
+                  <p className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] px-3 py-2 text-sm text-[#8a6d56]">
+                    {isShowingFilteredResults
+                      ? t("suppliersPage.list.noResults")
+                      : t("suppliersPage.empty")}
+                  </p>
+                )}
 
               {!isLoading && !isError && filteredSuppliers.length > 0 && (
                 <div className="grid gap-3">
@@ -847,6 +989,7 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                       supplier={supplier}
                       outstandingLabel={t("suppliersPage.list.outstanding")}
                       gstinLabel={t("suppliersPage.list.gstin")}
+                      categoriesLabel={t("suppliersPage.list.categories")}
                       noGstinLabel={t("suppliersPage.list.noGstin")}
                       editLabel={t("suppliersPage.actions.edit")}
                       deleteLabel={t("common.delete")}

@@ -307,7 +307,37 @@ class AuthController {
         });
       }
 
+      try {
+        const profileRows = await prisma.$queryRaw<
+          Array<{ status: string }>
+        >`
+          SELECT "status"
+          FROM "worker_profiles"
+          WHERE "worker_id" = ${worker.id}
+          LIMIT 1
+        `;
+
+        if (profileRows[0]?.status === "INACTIVE") {
+          return sendResponse(res, 403, {
+            message: "Worker account is inactive",
+          });
+        }
+      } catch {
+        // Migration-safe fallback: continue authentication for older schemas.
+      }
+
       const authUser = await buildWorkerAuthUser(worker);
+
+      try {
+        await prisma.$executeRaw`
+          UPDATE "worker_profiles"
+          SET "last_active_at" = CURRENT_TIMESTAMP,
+              "updated_at" = CURRENT_TIMESTAMP
+          WHERE "worker_id" = ${worker.id}
+        `;
+      } catch {
+        // Migration-safe fallback: login should still succeed.
+      }
 
       await recordAuthEvent({
         req,

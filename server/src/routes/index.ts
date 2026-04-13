@@ -358,6 +358,12 @@ router.get(
   RequireAdminMiddleware,
   WorkersController.index,
 );
+router.get(
+  "/workers/overview",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  WorkersController.overview,
+);
 router.post(
   "/workers/create",
   AuthMiddleware,

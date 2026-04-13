@@ -12,11 +12,13 @@ import { useI18n } from "@/providers/LanguageProvider";
 type SuggestedPurchasesPanelProps = {
   warehouseId?: number;
   onLoadItems: (items: PurchaseSuggestionItem[]) => void;
+  onAppendItem?: (item: PurchaseSuggestionItem) => void;
 };
 
 const SuggestedPurchasesPanel = ({
   warehouseId,
   onLoadItems,
+  onAppendItem,
 }: SuggestedPurchasesPanelProps) => {
   const { currency, dateWithYear, number } = useDashboardFormatters();
   const { t } = useI18n();
@@ -155,6 +157,27 @@ const SuggestedPurchasesPanel = ({
                           {item.alert_level}
                         </span>
                       </div>
+                      {onAppendItem ? (
+                        <div className="mt-2 flex justify-end">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              captureAnalyticsEvent("purchase_suggestions_loaded", {
+                                source: "append_single_suggestion",
+                                itemCount: 1,
+                                warehouseName: group.warehouseName,
+                                supplierName: group.supplierName,
+                                productId: item.product_id,
+                              });
+                              onAppendItem(item);
+                            }}
+                          >
+                            {t("suggestedPurchases.addItem")}
+                          </Button>
+                        </div>
+                      ) : null}
                       <div className="mt-3 grid gap-2 sm:grid-cols-4">
                         <div>
                           <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">

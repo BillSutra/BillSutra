@@ -1258,7 +1258,8 @@
       "editTitle": "Edit supplier",
       "profileTag": "Structured profile",
       "notesCount": "{count}/500 characters",
-      "totalSuppliers": "Total suppliers: {count}"
+      "totalSuppliers": "Total suppliers: {count}",
+      "categoriesHint": "Add one or more tags to describe what this supplier usually provides."
     },
     "sections": {
       "basic": {
@@ -1286,6 +1287,7 @@
       "businessName": "Business name",
       "gstin": "GSTIN",
       "pan": "PAN",
+      "categories": "Products / Category Supplied",
       "addressLine1": "Address line 1",
       "city": "City",
       "state": "State",
@@ -1302,6 +1304,7 @@
       "businessName": "Registered entity name",
       "gstin": "27ABCDE1234F1Z5",
       "pan": "ABCDE1234F",
+      "categories": "e.g., Electronics, Groceries, Clothing",
       "addressLine1": "Shop / building / street",
       "city": "Mumbai",
       "pincode": "400001",
@@ -1336,7 +1339,10 @@
     "list": {
       "outstanding": "Outstanding",
       "gstin": "GSTIN",
+      "categories": "Category",
       "noGstin": "Not provided",
+      "filterByCategory": "Filter suppliers by category",
+      "allCategories": "All categories",
       "noResults": "No suppliers matched your search."
     },
     "emptyState": {
@@ -1382,7 +1388,37 @@
     },
     "validation": {
       "selectSupplier": "Please select a supplier",
-      "selectWarehouse": "Please select a warehouse"
+      "selectWarehouse": "Please select a warehouse",
+      "paymentMethodRequired": "Payment method is required when marking as paid.",
+      "partialPaidRequired": "Enter a paid amount greater than 0 for partial payments.",
+      "partialPaidTooHigh": "Partial paid amount must be less than total. Mark it as paid instead.",
+      "totalRequired": "Add at least one valid line item before marking as paid."
+    },
+    "smart": {
+      "searchSupplier": "Search supplier by name, phone, category",
+      "filterByCategory": "Filter by category",
+      "allCategories": "All categories",
+      "frequent": "Frequent",
+      "lastPurchase": "Last purchase",
+      "outstanding": "Outstanding",
+      "selected": "Selected",
+      "noSuppliers": "No suppliers match your search.",
+      "suggestedFromSupplier": "Frequently purchased from this supplier"
+    },
+    "quickActions": {
+      "title": "Quick actions",
+      "repeatLast": "Repeat last purchase",
+      "addFrequent": "Add frequently used items",
+      "compactOn": "Enable compact mode",
+      "compactOff": "Exit compact mode"
+    },
+    "summary": {
+      "title": "Live summary",
+      "subtotal": "Subtotal",
+      "tax": "Tax",
+      "total": "Total",
+      "paid": "Paid",
+      "due": "Due"
     },
     "directPurchase": "Direct purchase",
     "defaultStock": "Default stock",
@@ -1433,6 +1469,16 @@
     },
     "edit": "Edit",
     "supplierForm": {
+      "quickAdd": "Quick add supplier",
+      "title": "Add supplier",
+      "description": "Create a supplier without leaving purchases.",
+      "save": "Save supplier",
+      "fields": {
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "address": "Address"
+      },
       "saveError": "Unable to create supplier right now.",
       "errors": {
         "name": "Supplier name must be at least 2 characters.",
@@ -1841,7 +1887,8 @@
     "suggestedQty": "Suggested qty",
     "runoutDate": "Runout date",
     "reorderValue": "Reorder value",
-    "notProjected": "Not projected"
+    "notProjected": "Not projected",
+    "addItem": "Add item"
   },
   "customersPage": {
     "pageTitle": "Customer khata",
@@ -2015,13 +2062,13 @@
   },
   "workersPage": {
     "title": "Worker panel",
-    "subtitle": "Create, update, and remove workers that belong to this business.",
+    "subtitle": "Manage workers, track output, and automate incentives.",
     "kicker": "Team access",
-    "lead": "Every worker is tied to this business automatically. Membership always comes from the authenticated admin session.",
+    "lead": "Run your team from one panel with role controls, sales visibility, and incentive tracking.",
     "addTitle": "Add worker",
-    "addDescription": "Create a worker account with an admin-generated password. Workers cannot sign themselves up.",
+    "addDescription": "Create a worker account and configure role, status, and incentive rules at setup time.",
     "listTitle": "Business workers",
-    "listDescription": "Review every worker connected to this business and remove access when someone no longer needs it.",
+    "listDescription": "Review worker performance, edit access, and disable inactive members.",
     "loading": "Loading workers...",
     "loadError": "Unable to load workers right now.",
     "empty": "No workers have been added yet.",
@@ -2030,31 +2077,78 @@
       "email": "Worker email",
       "phone": "Phone number",
       "password": "Password",
-      "newPassword": "New password"
+      "newPassword": "New password",
+      "role": "Role",
+      "joiningDate": "Joining date",
+      "status": "Status",
+      "incentiveType": "Incentive type",
+      "incentiveValue": "Incentive value",
+      "lastActive": "Last active"
+    },
+    "roles": {
+      "admin": "Admin",
+      "sales": "Salesperson",
+      "staff": "Staff",
+      "viewer": "Viewer"
+    },
+    "statuses": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "incentive": {
+      "none": "None",
+      "percentage": "Percentage of sales",
+      "perSale": "Per sale fixed amount"
     },
     "placeholders": {
       "name": "Riya Sharma",
       "email": "riya@company.com",
       "phone": "9876543210",
       "password": "Minimum 6 characters",
-      "keepPassword": "Leave blank to keep current password"
+      "keepPassword": "Leave blank to keep current password",
+      "incentivePercent": "e.g. 2.5",
+      "incentiveAmount": "e.g. 50"
+    },
+    "filters": {
+      "today": "Today",
+      "thisWeek": "This week",
+      "thisMonth": "This month"
+    },
+    "cards": {
+      "totalSales": "Total Sales",
+      "totalOrders": "Total Orders",
+      "incentiveEarned": "Incentive Earned",
+      "thisMonthSales": "This Month Sales"
+    },
+    "activity": {
+      "title": "Recent activity",
+      "empty": "No invoice or sale activity yet."
+    },
+    "leaderboard": {
+      "title": "Top performers",
+      "kicker": "Leaderboard"
     },
     "actions": {
       "create": "Create worker",
       "creating": "Creating...",
       "save": "Save",
       "saving": "Saving...",
-      "edit": "Edit"
+      "edit": "Edit",
+      "disable": "Disable",
+      "enable": "Enable"
     },
     "messages": {
       "createError": "Unable to create the worker right now.",
       "updateError": "Unable to update the worker right now.",
       "noPhone": "No phone number",
-      "addedMeta": "{role} - Added {date}"
+      "addedMeta": "{role} - Added {date}",
+      "neverActive": "Never"
     },
     "validation": {
       "passwordRequired": "This field is required",
-      "passwordMin": "Password must be at least 6 characters"
+      "passwordMin": "Password must be at least 6 characters",
+      "incentiveInvalid": "Enter a valid incentive value",
+      "incentivePercentMax": "Percentage cannot exceed 100"
     }
   },
   "profilePage": {
