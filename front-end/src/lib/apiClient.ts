@@ -1,8 +1,18 @@
 import axios from "axios";
 import { getSession } from "next-auth/react";
+import type {
+  AssistantHistoryMessage as SharedAssistantHistoryMessage,
+  AssistantReply as SharedAssistantReply,
+} from "../../../server/src/modules/assistant/assistant.contract";
 import { API_URL } from "./apiEndPoints";
+import {
+  formatBusinessAddress,
+  parseBusinessAddressText,
+  toBusinessAddressInput,
+} from "./indianAddress";
 import { normalizeListResponse } from "./normalizeListResponse";
 import { captureApiFailure } from "./observability/shared";
+import { normalizeGstin } from "./gstin";
 
 const normalizeAuthToken = (rawToken: string | null | undefined) => {
   if (!rawToken) return null;
@@ -47,6 +57,39 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     captureApiFailure(error);
+
+    if (typeof window !== "undefined") {
+      const status = Number(error?.response?.status ?? 0);
+      const payload = error?.response?.data;
+      const code =
+        typeof payload?.code === "string"
+          ? payload.code
+          : typeof payload?.error?.code === "string"
+            ? payload.error.code
+            : null;
+
+      if (
+        status === 402 &&
+        (code === "SUBSCRIPTION_REQUIRED" || code === "PLAN_LIMIT_REACHED")
+      ) {
+        window.dispatchEvent(
+          new CustomEvent("billsutra:subscription-required", {
+            detail: {
+              code,
+              message:
+                typeof payload?.message === "string"
+                  ? payload.message
+                  : "This feature requires a higher plan.",
+              requiredPlan:
+                typeof payload?.requiredPlan === "string"
+                  ? payload.requiredPlan
+                  : null,
+            },
+          }),
+        );
+      }
+    }
+
     return Promise.reject(error);
   },
 );
@@ -213,12 +256,45 @@ export type ExportPreviewResponse = {
   rows: string[][];
 };
 
+export type CustomerType = "individual" | "business";
+
+export type CustomerPaymentTerms =
+  | "DUE_ON_RECEIPT"
+  | "NET_7"
+  | "NET_15"
+  | "NET_30";
+
+export type CustomerAddressRecord = {
+  addressLine1: string;
+  city: string;
+  state: string;
+  pincode: string;
+};
+
 export type Customer = {
   id: number;
   name: string;
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  type?: CustomerType;
+  customer_type?: CustomerType;
+  businessName?: string | null;
+  business_name?: string | null;
+  gstin?: string | null;
+  customerAddress?: CustomerAddressRecord | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  notes?: string | null;
+  creditLimit?: number | null;
+  credit_limit?: number | null;
+  paymentTerms?: CustomerPaymentTerms | null;
+  payment_terms?: CustomerPaymentTerms | null;
+  openingBalance?: number | null;
+  opening_balance?: number | null;
+  display_name?: string | null;
   totalBilled?: number;
   totalPaid?: number;
   outstandingBalance?: number;
@@ -239,10 +315,27 @@ export type Customer = {
 };
 
 export type CustomerInput = {
+  type?: CustomerType;
+  customer_type?: CustomerType;
   name: string;
+  phone: string;
   email?: string | null;
-  phone?: string | null;
+  businessName?: string | null;
+  business_name?: string | null;
+  gstin?: string | null;
+  customerAddress?: Partial<CustomerAddressRecord> | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
   address?: string | null;
+  notes?: string | null;
+  creditLimit?: number | null;
+  credit_limit?: number | null;
+  paymentTerms?: CustomerPaymentTerms | null;
+  payment_terms?: CustomerPaymentTerms | null;
+  openingBalance?: number | null;
+  opening_balance?: number | null;
 };
 
 export type CustomerLedgerEntry = {
@@ -288,12 +381,55 @@ export type Supplier = {
   email?: string | null;
   phone?: string | null;
   address?: string | null;
+  categories?: string[];
+  businessName?: string | null;
+  business_name?: string | null;
+  gstin?: string | null;
+  pan?: string | null;
+  supplierAddress?: SupplierAddressRecord | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  paymentTerms?: SupplierPaymentTerms | null;
+  payment_terms?: SupplierPaymentTerms | null;
+  openingBalance?: number | null;
+  opening_balance?: number | null;
+  notes?: string | null;
+  outstandingBalance?: number | null;
+  outstanding_balance?: number | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type SupplierPaymentTerms = "NET_7" | "NET_15" | "NET_30";
+
+export type SupplierAddressRecord = {
+  addressLine1: string;
+  city: string;
+  state: string;
+  pincode: string;
 };
 
 export type SupplierInput = {
   name: string;
+  phone: string;
   email?: string | null;
-  phone?: string | null;
+  categories?: string[];
+  businessName?: string | null;
+  business_name?: string | null;
+  gstin?: string | null;
+  pan?: string | null;
+  supplierAddress?: Partial<SupplierAddressRecord> | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  paymentTerms?: SupplierPaymentTerms | null;
+  payment_terms?: SupplierPaymentTerms | null;
+  openingBalance?: number | null;
+  opening_balance?: number | null;
+  notes?: string | null;
   address?: string | null;
 };
 
@@ -305,6 +441,45 @@ export type Worker = {
   role: "ADMIN" | "WORKER";
   businessId: string;
   createdAt: string;
+  roleLabel?: "ADMIN" | "SALESPERSON" | "STAFF" | "VIEWER";
+  status?: "ACTIVE" | "INACTIVE";
+  joiningDate?: string | null;
+  incentiveType?: "NONE" | "PERCENTAGE" | "PER_SALE";
+  incentiveValue?: number;
+  lastActiveAt?: string | null;
+  metrics?: {
+    totalSales: number;
+    totalInvoices: number;
+    totalOrders: number;
+    averageOrderValue: number;
+    incentiveEarned: number;
+    thisMonthSales: number;
+  };
+};
+
+export type WorkerOverviewResponse = {
+  workers: Worker[];
+  summary: {
+    totalSales: number;
+    totalOrders: number;
+    incentiveEarned: number;
+    thisMonthSales: number;
+  };
+  recentActivity: Array<{
+    workerId: string;
+    workerName: string;
+    activityType: "SALE" | "INVOICE";
+    reference: string;
+    amount: number;
+    createdAt: string;
+  }>;
+  leaderboard: Array<{
+    rank: number;
+    workerId: string;
+    name: string;
+    totalSales: number;
+    totalOrders: number;
+  }>;
 };
 
 export type WorkerInput = {
@@ -312,12 +487,23 @@ export type WorkerInput = {
   email: string;
   phone: string;
   password: string;
+  accessRole?: "ADMIN" | "SALESPERSON" | "STAFF" | "VIEWER";
+  joiningDate?: string;
+  status?: "ACTIVE" | "INACTIVE";
+  incentiveType?: "NONE" | "PERCENTAGE" | "PER_SALE";
+  incentiveValue?: number;
 };
 
 export type WorkerUpdateInput = {
   name?: string;
+  email?: string;
   phone?: string;
   password?: string;
+  accessRole?: "ADMIN" | "SALESPERSON" | "STAFF" | "VIEWER";
+  joiningDate?: string;
+  status?: "ACTIVE" | "INACTIVE";
+  incentiveType?: "NONE" | "PERCENTAGE" | "PER_SALE";
+  incentiveValue?: number;
 };
 
 export type Purchase = {
@@ -332,13 +518,13 @@ export type Purchase = {
   paymentStatus: "PAID" | "PARTIALLY_PAID" | "UNPAID";
   paymentDate?: string | null;
   paymentMethod?:
-  | "CASH"
-  | "CARD"
-  | "BANK_TRANSFER"
-  | "UPI"
-  | "CHEQUE"
-  | "OTHER"
-  | null;
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "CHEQUE"
+    | "OTHER"
+    | null;
   notes?: string | null;
   supplier?: Supplier | null;
   warehouse?: { id: number; name: string } | null;
@@ -361,13 +547,13 @@ export type PurchaseInput = {
   amount_paid?: number | null;
   payment_date?: string | Date | null;
   payment_method?:
-  | "CASH"
-  | "CARD"
-  | "BANK_TRANSFER"
-  | "UPI"
-  | "CHEQUE"
-  | "OTHER"
-  | null;
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "CHEQUE"
+    | "OTHER"
+    | null;
   notes?: string | null;
   items: Array<{
     product_id: number;
@@ -390,13 +576,13 @@ export type Sale = {
   paymentStatus: "PAID" | "PARTIALLY_PAID" | "UNPAID";
   paymentDate?: string | null;
   paymentMethod?:
-  | "CASH"
-  | "CARD"
-  | "BANK_TRANSFER"
-  | "UPI"
-  | "CHEQUE"
-  | "OTHER"
-  | null;
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "CHEQUE"
+    | "OTHER"
+    | null;
   notes?: string | null;
   customer?: Customer | null;
   items: Array<{
@@ -419,13 +605,13 @@ export type SaleInput = {
   amount_paid?: number | null;
   payment_date?: string | Date | null;
   payment_method?:
-  | "CASH"
-  | "CARD"
-  | "BANK_TRANSFER"
-  | "UPI"
-  | "CHEQUE"
-  | "OTHER"
-  | null;
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "CHEQUE"
+    | "OTHER"
+    | null;
   notes?: string | null;
   items: Array<{
     product_id: number;
@@ -477,6 +663,12 @@ export type InvoiceInput = {
   due_date?: string | Date | null;
   discount?: number | null;
   discount_type?: "PERCENTAGE" | "FIXED" | null;
+  tax_mode?: "AUTO" | "CGST_SGST" | "IGST" | "NONE" | null;
+  customer_type?: "B2C" | "B2B" | null;
+  customer_gstin?: string | null;
+  business_gstin?: string | null;
+  place_of_supply_state_code?: string | null;
+  is_tax_inclusive?: boolean;
   status?: string | null;
   notes?: string | null;
   sync_sales?: boolean;
@@ -705,6 +897,139 @@ export type PaymentInput = {
   transaction_id?: string;
   reference?: string;
   paid_at?: string | Date;
+};
+
+export type AccessPaymentRecord = {
+  id: string;
+  userId: number;
+  planId: "pro" | "pro-plus";
+  billingCycle: "monthly" | "yearly";
+  method: "razorpay" | "upi";
+  amount: number;
+  status: "pending" | "approved" | "rejected" | "success";
+  name?: string | null;
+  utr?: string | null;
+  screenshotUrl?: string | null;
+  paymentId?: string | null;
+  orderId?: string | null;
+  provider?: string | null;
+  providerReference?: string | null;
+  reviewedByAdminId?: string | null;
+  reviewedByAdminEmail?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AccessPlanOption = {
+  id: "pro" | "pro-plus";
+  name: string;
+  description: string;
+  amounts: {
+    monthly: number;
+    yearly: number;
+  };
+  currency: "INR";
+  upiLink: {
+    monthly: string;
+    yearly: string;
+  };
+};
+
+export type SubscriptionSnapshot = {
+  planId: "free" | "pro" | "pro-plus";
+  planName: string;
+  status: "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED";
+  billingCycle: "monthly" | "yearly" | null;
+  startedAt: string;
+  trialEndsAt: string | null;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  cancelledAt: string | null;
+  expiresAt: string | null;
+  usage: {
+    periodKey: string;
+    periodStart: string;
+    periodEnd: string;
+    invoicesCreated: number;
+    productsCreated: number;
+    customersCreated: number;
+  };
+  limits: {
+    invoicesPerMonth: number | null;
+  };
+};
+
+export type UserSettingsPreferences = {
+  appPreferences: {
+    language: "en" | "hi";
+    currency: "INR" | "USD";
+    dateFormat: "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
+  };
+  notifications: {
+    paymentReminders: boolean;
+    lowStockAlerts: boolean;
+    dueInvoiceAlerts: boolean;
+  };
+  backup: {
+    autoBackupEnabled: boolean;
+  };
+  branding: {
+    templateId: string;
+    themeColor: string;
+    terms: string;
+    signature: string;
+  };
+};
+
+export type SecurityActivityEvent = {
+  id: number;
+  method: string;
+  success: boolean;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+};
+
+export type AccessPaymentStatusResponse = {
+  hasAccess: boolean;
+  activePayment: AccessPaymentRecord | null;
+  subscription: SubscriptionSnapshot;
+  payments: AccessPaymentRecord[];
+  upi: {
+    upiId: string;
+    payeeName: string;
+  };
+  razorpay: {
+    keyId: string | null;
+    enabled: boolean;
+  };
+  plans: AccessPlanOption[];
+};
+
+export type CreateAccessRazorpayOrderInput = {
+  plan_id: "pro" | "pro-plus";
+  billing_cycle: "monthly" | "yearly";
+};
+
+export type CreateAccessRazorpayOrderResponse = {
+  paymentRecordId: string;
+  orderId: string;
+  amount: number;
+  currency: string;
+  plan: {
+    planId: "pro" | "pro-plus";
+    billingCycle: "monthly" | "yearly";
+    amount: number;
+    currency: string;
+    name: string;
+  };
+};
+
+export type VerifyAccessRazorpayPaymentInput = {
+  razorpay_order_id: string;
+  razorpay_payment_id: string;
+  razorpay_signature: string;
 };
 
 export type DashboardSales = {
@@ -970,35 +1295,8 @@ export type DashboardForecastResponse = {
   }>;
 };
 
-export type AssistantReply = {
-  language: "en" | "hi" | "hinglish";
-  intent:
-    | "profit"
-    | "total_sales"
-    | "pending_payments"
-    | "cashflow"
-    | "top_spend"
-    | "vendor_spend"
-    | "budget_plan"
-    | "savings_suggestion"
-    | "bill_reminder"
-    | "health_score"
-    | "behavior_insights"
-    | "goal_tracking"
-    | "affordability"
-    | "help";
-  answer: string;
-  highlights: Array<{
-    label: string;
-    value: string;
-  }>;
-  examples: string[];
-};
-
-export type AssistantHistoryMessage = {
-  role: "assistant" | "user";
-  content: string;
-};
+export type AssistantReply = SharedAssistantReply;
+export type AssistantHistoryMessage = SharedAssistantHistoryMessage;
 
 export type FinancialCopilotPayload = {
   generatedAt: string;
@@ -1197,11 +1495,23 @@ export type UserSavedTemplateRecord = {
   updated_at: string;
 };
 
+export type BusinessAddressRecord = {
+  addressLine1: string;
+  city: string;
+  state: string;
+  pincode: string;
+};
+
 export type BusinessProfileRecord = {
   id: number;
   user_id: number;
   business_name: string;
   address?: string | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  businessAddress?: BusinessAddressRecord | null;
   phone?: string | null;
   email?: string | null;
   website?: string | null;
@@ -1239,7 +1549,9 @@ export const fetchProducts = async (
   }
 
   const query = searchParams.toString();
-  const response = await apiClient.get(query ? `/products?${query}` : "/products");
+  const response = await apiClient.get(
+    query ? `/products?${query}` : "/products",
+  );
   const payload = response.data?.data;
   const products = normalizeListResponse<Product>(
     payload?.products ?? payload?.items ?? payload,
@@ -1247,17 +1559,15 @@ export const fetchProducts = async (
 
   return {
     products,
-    total:
-      typeof payload?.total === "number" ? payload.total : products.length,
-    page: typeof payload?.page === "number" ? payload.page : params?.page ?? 1,
+    total: typeof payload?.total === "number" ? payload.total : products.length,
+    page:
+      typeof payload?.page === "number" ? payload.page : (params?.page ?? 1),
     limit:
       typeof payload?.limit === "number"
         ? payload.limit
-        : params?.limit ?? products.length,
+        : (params?.limit ?? products.length),
     totalPages:
-      typeof payload?.totalPages === "number"
-        ? payload.totalPages
-        : 1,
+      typeof payload?.totalPages === "number" ? payload.totalPages : 1,
   };
 };
 
@@ -1302,20 +1612,24 @@ export const previewProductImport = async (
   formData.append("file", file);
 
   try {
-    const response = await apiClient.post("/import/products/preview", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
-      onUploadProgress: (event) => {
-        if (!options?.onUploadProgress || !event.total) {
-          return;
-        }
+    const response = await apiClient.post(
+      "/import/products/preview",
+      formData,
+      {
+        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: (event) => {
+          if (!options?.onUploadProgress || !event.total) {
+            return;
+          }
 
-        const progress = Math.min(
-          100,
-          Math.round((event.loaded / event.total) * 100),
-        );
-        options.onUploadProgress(progress);
+          const progress = Math.min(
+            100,
+            Math.round((event.loaded / event.total) * 100),
+          );
+          options.onUploadProgress(progress);
+        },
       },
-    });
+    );
 
     return response.data.data as ProductImportPreview;
   } catch (error) {
@@ -1373,16 +1687,381 @@ export const downloadProductImportTemplate = async (): Promise<{
   }
 };
 
+const toOptionalString = (value: unknown) => {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+const toOptionalNumber = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return undefined;
+    }
+
+    const parsed = Number(trimmed);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+};
+
+const toCustomerAddress = (value: {
+  address?: string | null;
+  addressLine1?: string | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  customerAddress?: Partial<CustomerAddressRecord> | null;
+}): CustomerAddressRecord => {
+  const parsedLegacy = parseBusinessAddressText(value.address);
+
+  return toBusinessAddressInput({
+    addressLine1:
+      value.customerAddress?.addressLine1 ??
+      value.addressLine1 ??
+      value.address_line1 ??
+      parsedLegacy.addressLine1,
+    city: value.customerAddress?.city ?? value.city ?? parsedLegacy.city,
+    state: value.customerAddress?.state ?? value.state ?? parsedLegacy.state,
+    pincode:
+      value.customerAddress?.pincode ?? value.pincode ?? parsedLegacy.pincode,
+  });
+};
+
+const normalizeCustomerRecord = (record: Customer): Customer => {
+  const source = record as Customer & {
+    type?: CustomerType;
+    customer_type?: CustomerType;
+    businessName?: string | null;
+    business_name?: string | null;
+    customerAddress?: Partial<CustomerAddressRecord> | null;
+    address_line1?: string | null;
+    creditLimit?: number | null;
+    credit_limit?: number | null;
+    paymentTerms?: CustomerPaymentTerms | null;
+    payment_terms?: CustomerPaymentTerms | null;
+    openingBalance?: number | null;
+    opening_balance?: number | null;
+  };
+
+  const customerAddress = toCustomerAddress(source);
+  const normalizedAddress = formatBusinessAddress(
+    customerAddress,
+    source.address,
+  );
+  const customerType =
+    source.type ?? source.customer_type ?? ("individual" as CustomerType);
+
+  return {
+    ...source,
+    type: customerType,
+    customer_type: customerType,
+    businessName: source.businessName ?? source.business_name ?? null,
+    business_name: source.business_name ?? source.businessName ?? null,
+    gstin: source.gstin ? normalizeGstin(source.gstin) : null,
+    customerAddress,
+    address_line1: customerAddress.addressLine1 || null,
+    city: customerAddress.city || null,
+    state: customerAddress.state || null,
+    pincode: customerAddress.pincode || null,
+    creditLimit: source.creditLimit ?? source.credit_limit ?? null,
+    credit_limit: source.credit_limit ?? source.creditLimit ?? null,
+    paymentTerms: source.paymentTerms ?? source.payment_terms ?? null,
+    payment_terms: source.payment_terms ?? source.paymentTerms ?? null,
+    openingBalance: source.openingBalance ?? source.opening_balance ?? null,
+    opening_balance: source.opening_balance ?? source.openingBalance ?? null,
+    address: normalizedAddress || null,
+  };
+};
+
+const normalizeCustomerPayload = (
+  payload: Partial<CustomerInput>,
+  includeDefaults = false,
+) => {
+  const normalizedAddress = toCustomerAddress({
+    customerAddress: payload.customerAddress ?? null,
+    addressLine1:
+      payload.customerAddress?.addressLine1 ??
+      payload.address_line1 ??
+      undefined,
+    city: payload.customerAddress?.city ?? payload.city ?? undefined,
+    state: payload.customerAddress?.state ?? payload.state ?? undefined,
+    pincode: payload.customerAddress?.pincode ?? payload.pincode ?? undefined,
+    address: payload.address,
+  });
+
+  const hasStructuredAddress = Boolean(
+    normalizedAddress.addressLine1 ||
+    normalizedAddress.city ||
+    normalizedAddress.state ||
+    normalizedAddress.pincode,
+  );
+
+  const normalizedType =
+    payload.type ??
+    payload.customer_type ??
+    (includeDefaults ? "individual" : undefined);
+  const normalizedPaymentTerms =
+    payload.paymentTerms ??
+    payload.payment_terms ??
+    (includeDefaults ? "DUE_ON_RECEIPT" : undefined);
+
+  const normalizedPhone = toOptionalString(payload.phone)?.replace(/\D/g, "");
+  const normalizedGstin = toOptionalString(payload.gstin)
+    ? normalizeGstin(payload.gstin)
+    : undefined;
+  const legacyAddress = formatBusinessAddress(
+    normalizedAddress,
+    payload.address,
+  );
+
+  return {
+    type: normalizedType,
+    customer_type: normalizedType,
+    name: toOptionalString(payload.name),
+    phone: normalizedPhone,
+    email: toOptionalString(payload.email),
+    businessName: toOptionalString(
+      payload.businessName ?? payload.business_name,
+    ),
+    business_name: toOptionalString(
+      payload.business_name ?? payload.businessName,
+    ),
+    gstin: normalizedGstin,
+    customerAddress: hasStructuredAddress ? normalizedAddress : undefined,
+    address_line1: hasStructuredAddress
+      ? normalizedAddress.addressLine1
+      : undefined,
+    city: hasStructuredAddress ? normalizedAddress.city : undefined,
+    state: hasStructuredAddress ? normalizedAddress.state : undefined,
+    pincode: hasStructuredAddress ? normalizedAddress.pincode : undefined,
+    address: toOptionalString(legacyAddress),
+    notes: toOptionalString(payload.notes),
+    creditLimit: toOptionalNumber(payload.creditLimit ?? payload.credit_limit),
+    credit_limit: toOptionalNumber(payload.credit_limit ?? payload.creditLimit),
+    paymentTerms: normalizedPaymentTerms,
+    payment_terms: normalizedPaymentTerms,
+    openingBalance: toOptionalNumber(
+      payload.openingBalance ?? payload.opening_balance,
+    ),
+    opening_balance: toOptionalNumber(
+      payload.opening_balance ?? payload.openingBalance,
+    ),
+  };
+};
+
+const normalizePan = (value: string | null | undefined) =>
+  String(value ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 10);
+
+const normalizeSupplierCategories = (value: unknown): string[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const unique: string[] = [];
+  const seen = new Set<string>();
+
+  value.forEach((entry) => {
+    if (typeof entry !== "string") {
+      return;
+    }
+
+    const normalized = entry.replace(/\s+/g, " ").trim();
+    if (!normalized) {
+      return;
+    }
+
+    const key = normalized.toLowerCase();
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    unique.push(normalized.slice(0, 60));
+  });
+
+  return unique;
+};
+
+const toSupplierAddress = (value: {
+  address?: string | null;
+  addressLine1?: string | null;
+  address_line1?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
+  supplierAddress?: Partial<SupplierAddressRecord> | null;
+}): SupplierAddressRecord => {
+  const parsedLegacy = parseBusinessAddressText(value.address);
+
+  return toBusinessAddressInput({
+    addressLine1:
+      value.supplierAddress?.addressLine1 ??
+      value.addressLine1 ??
+      value.address_line1 ??
+      parsedLegacy.addressLine1,
+    city: value.supplierAddress?.city ?? value.city ?? parsedLegacy.city,
+    state: value.supplierAddress?.state ?? value.state ?? parsedLegacy.state,
+    pincode:
+      value.supplierAddress?.pincode ?? value.pincode ?? parsedLegacy.pincode,
+  });
+};
+
+const normalizeSupplierRecord = (record: Supplier): Supplier => {
+  const source = record as Supplier & {
+    businessName?: string | null;
+    business_name?: string | null;
+    supplierAddress?: Partial<SupplierAddressRecord> | null;
+    address_line1?: string | null;
+    paymentTerms?: SupplierPaymentTerms | null;
+    payment_terms?: SupplierPaymentTerms | null;
+    openingBalance?: number | null;
+    opening_balance?: number | null;
+    outstandingBalance?: number | null;
+    outstanding_balance?: number | null;
+  };
+
+  const supplierAddress = toSupplierAddress(source);
+  const normalizedAddress = formatBusinessAddress(
+    supplierAddress,
+    source.address,
+  );
+
+  return {
+    ...source,
+    categories: normalizeSupplierCategories(source.categories),
+    businessName: source.businessName ?? source.business_name ?? null,
+    business_name: source.business_name ?? source.businessName ?? null,
+    gstin: source.gstin ? normalizeGstin(source.gstin) : null,
+    pan: source.pan ? normalizePan(source.pan) : null,
+    supplierAddress,
+    address_line1: supplierAddress.addressLine1 || null,
+    city: supplierAddress.city || null,
+    state: supplierAddress.state || null,
+    pincode: supplierAddress.pincode || null,
+    paymentTerms: source.paymentTerms ?? source.payment_terms ?? null,
+    payment_terms: source.payment_terms ?? source.paymentTerms ?? null,
+    openingBalance:
+      toOptionalNumber(source.openingBalance ?? source.opening_balance) ?? null,
+    opening_balance:
+      toOptionalNumber(source.opening_balance ?? source.openingBalance) ?? null,
+    outstandingBalance:
+      toOptionalNumber(
+        source.outstandingBalance ?? source.outstanding_balance,
+      ) ?? null,
+    outstanding_balance:
+      toOptionalNumber(
+        source.outstanding_balance ?? source.outstandingBalance,
+      ) ?? null,
+    address: normalizedAddress || null,
+  };
+};
+
+const normalizeSupplierPayload = (
+  payload: Partial<SupplierInput>,
+  includeDefaults = false,
+) => {
+  const normalizedAddress = toSupplierAddress({
+    supplierAddress: payload.supplierAddress ?? null,
+    addressLine1:
+      payload.supplierAddress?.addressLine1 ??
+      payload.address_line1 ??
+      undefined,
+    city: payload.supplierAddress?.city ?? payload.city ?? undefined,
+    state: payload.supplierAddress?.state ?? payload.state ?? undefined,
+    pincode: payload.supplierAddress?.pincode ?? payload.pincode ?? undefined,
+    address: payload.address,
+  });
+
+  const hasStructuredAddress = Boolean(
+    normalizedAddress.addressLine1 ||
+    normalizedAddress.city ||
+    normalizedAddress.state ||
+    normalizedAddress.pincode,
+  );
+
+  const normalizedPhone = toOptionalString(payload.phone)?.replace(/\D/g, "");
+  const normalizedGstin = toOptionalString(payload.gstin)
+    ? normalizeGstin(payload.gstin)
+    : undefined;
+  const normalizedPan = toOptionalString(payload.pan)
+    ? normalizePan(payload.pan)
+    : undefined;
+  const normalizedPaymentTerms =
+    payload.paymentTerms ??
+    payload.payment_terms ??
+    (includeDefaults ? "NET_15" : undefined);
+  const legacyAddress = formatBusinessAddress(
+    normalizedAddress,
+    payload.address,
+  );
+
+  return {
+    name: toOptionalString(payload.name),
+    phone: normalizedPhone,
+    email: toOptionalString(payload.email),
+    categories:
+      payload.categories === undefined
+        ? undefined
+        : normalizeSupplierCategories(payload.categories),
+    businessName: toOptionalString(
+      payload.businessName ?? payload.business_name,
+    ),
+    business_name: toOptionalString(
+      payload.business_name ?? payload.businessName,
+    ),
+    gstin: normalizedGstin,
+    pan: normalizedPan,
+    supplierAddress: hasStructuredAddress ? normalizedAddress : undefined,
+    address_line1: hasStructuredAddress
+      ? normalizedAddress.addressLine1
+      : undefined,
+    city: hasStructuredAddress ? normalizedAddress.city : undefined,
+    state: hasStructuredAddress ? normalizedAddress.state : undefined,
+    pincode: hasStructuredAddress ? normalizedAddress.pincode : undefined,
+    address: toOptionalString(legacyAddress),
+    paymentTerms: normalizedPaymentTerms,
+    payment_terms: normalizedPaymentTerms,
+    openingBalance: toOptionalNumber(
+      payload.openingBalance ?? payload.opening_balance,
+    ),
+    opening_balance: toOptionalNumber(
+      payload.opening_balance ?? payload.openingBalance,
+    ),
+    notes: toOptionalString(payload.notes),
+  };
+};
+
 export const fetchCustomers = async (): Promise<Customer[]> => {
   const response = await apiClient.get("/customers");
-  return normalizeListResponse<Customer>(response.data?.data);
+  return normalizeListResponse<Customer>(response.data?.data).map(
+    normalizeCustomerRecord,
+  );
 };
 
 export const fetchCustomerLedger = async (
   customerId: number,
 ): Promise<CustomerLedger> => {
   const response = await apiClient.get(`/customers/${customerId}/ledger`);
-  return response.data.data as CustomerLedger;
+  const payload = response.data.data as CustomerLedger;
+
+  return {
+    ...payload,
+    customer: normalizeCustomerRecord(payload.customer),
+  };
 };
 
 export const fetchCategories = async (): Promise<Category[]> => {
@@ -1400,15 +2079,18 @@ export const createCategory = async (payload: {
 export const createCustomer = async (
   payload: CustomerInput,
 ): Promise<Customer> => {
-  const response = await apiClient.post("/customers", payload);
-  return response.data.data as Customer;
+  const response = await apiClient.post(
+    "/customers",
+    normalizeCustomerPayload(payload, true),
+  );
+  return normalizeCustomerRecord(response.data.data as Customer);
 };
 
 export const updateCustomer = async (
   id: number,
   payload: Partial<CustomerInput>,
 ): Promise<void> => {
-  await apiClient.put(`/customers/${id}`, payload);
+  await apiClient.put(`/customers/${id}`, normalizeCustomerPayload(payload));
 };
 
 export const deleteCustomer = async (id: number): Promise<void> => {
@@ -1417,21 +2099,26 @@ export const deleteCustomer = async (id: number): Promise<void> => {
 
 export const fetchSuppliers = async (): Promise<Supplier[]> => {
   const response = await apiClient.get("/suppliers");
-  return response.data.data as Supplier[];
+  return normalizeListResponse<Supplier>(response.data?.data).map(
+    normalizeSupplierRecord,
+  );
 };
 
 export const createSupplier = async (
   payload: SupplierInput,
 ): Promise<Supplier> => {
-  const response = await apiClient.post("/suppliers", payload);
-  return response.data.data as Supplier;
+  const response = await apiClient.post(
+    "/suppliers",
+    normalizeSupplierPayload(payload, true),
+  );
+  return normalizeSupplierRecord(response.data.data as Supplier);
 };
 
 export const updateSupplier = async (
   id: number,
   payload: Partial<SupplierInput>,
 ): Promise<void> => {
-  await apiClient.put(`/suppliers/${id}`, payload);
+  await apiClient.put(`/suppliers/${id}`, normalizeSupplierPayload(payload));
 };
 
 export const deleteSupplier = async (id: number): Promise<void> => {
@@ -1443,9 +2130,16 @@ export const fetchWorkers = async (): Promise<Worker[]> => {
   return response.data.data as Worker[];
 };
 
-export const createWorker = async (
-  payload: WorkerInput,
-): Promise<Worker> => {
+export const fetchWorkersOverview = async (
+  period: "today" | "this_week" | "this_month" = "this_month",
+): Promise<WorkerOverviewResponse> => {
+  const response = await apiClient.get("/workers/overview", {
+    params: { period },
+  });
+  return response.data.data as WorkerOverviewResponse;
+};
+
+export const createWorker = async (payload: WorkerInput): Promise<Worker> => {
   const response = await apiClient.post("/workers/create", payload);
   return response.data.data as Worker;
 };
@@ -1501,12 +2195,12 @@ export const updateSale = async (
     amount_paid?: number;
     payment_date?: string | Date | null;
     payment_method?:
-    | "CASH"
-    | "CARD"
-    | "BANK_TRANSFER"
-    | "UPI"
-    | "CHEQUE"
-    | "OTHER";
+      | "CASH"
+      | "CARD"
+      | "BANK_TRANSFER"
+      | "UPI"
+      | "CHEQUE"
+      | "OTHER";
   },
 ): Promise<void> => {
   await apiClient.put(`/sales/${id}`, payload);
@@ -1550,6 +2244,57 @@ export const deleteInvoice = async (invoiceId: number): Promise<void> => {
 
 export const createPayment = async (payload: PaymentInput): Promise<void> => {
   await apiClient.post("/payments", payload);
+};
+
+export const fetchAccessPaymentStatus =
+  async (): Promise<AccessPaymentStatusResponse> => {
+    const response = await apiClient.get("/payments/access/status");
+    return response.data.data as AccessPaymentStatusResponse;
+  };
+
+export const createAccessRazorpayOrder = async (
+  payload: CreateAccessRazorpayOrderInput,
+): Promise<CreateAccessRazorpayOrderResponse> => {
+  const response = await apiClient.post(
+    "/payments/access/razorpay/order",
+    payload,
+  );
+  return response.data.data as CreateAccessRazorpayOrderResponse;
+};
+
+export const verifyAccessRazorpayPayment = async (
+  payload: VerifyAccessRazorpayPaymentInput,
+): Promise<AccessPaymentRecord> => {
+  const response = await apiClient.post(
+    "/payments/access/razorpay/verify",
+    payload,
+  );
+  return response.data.data as AccessPaymentRecord;
+};
+
+export const submitAccessUpiPayment = async (
+  payload: FormData,
+): Promise<AccessPaymentRecord> => {
+  const response = await apiClient.post("/submit-upi", payload, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return response.data.data as AccessPaymentRecord;
+};
+
+export const fetchSubscriptionStatus =
+  async (): Promise<SubscriptionSnapshot> => {
+    const response = await apiClient.get("/subscriptions/me");
+    return response.data.data as SubscriptionSnapshot;
+  };
+
+export const cancelSubscription = async (): Promise<SubscriptionSnapshot> => {
+  const response = await apiClient.post("/subscriptions/cancel");
+  return response.data.data as SubscriptionSnapshot;
+};
+
+export const switchToFreePlan = async (): Promise<SubscriptionSnapshot> => {
+  const response = await apiClient.post("/subscriptions/free");
+  return response.data.data as SubscriptionSnapshot;
 };
 
 export const sendInvoiceEmail = async (
@@ -1682,7 +2427,8 @@ export const runDataExport = async (
 
       return {
         delivery: "email",
-        fileName: parsed.data?.fileName ?? `${payload.resource}.${payload.format}`,
+        fileName:
+          parsed.data?.fileName ?? `${payload.resource}.${payload.format}`,
         email: parsed.data?.email ?? payload.email ?? "",
         exportedCount: parsed.data?.exportedCount ?? 0,
         message: parsed.message ?? "Export sent successfully.",
@@ -1822,7 +2568,9 @@ export const fetchInventoryDemandPredictions = async (
 ): Promise<InventoryDemandPredictionsResponse> => {
   const query = buildInventoryPredictionParams(filters);
   const response = await apiClient.get(
-    query ? `/inventory-demand/predictions?${query}` : "/inventory-demand/predictions",
+    query
+      ? `/inventory-demand/predictions?${query}`
+      : "/inventory-demand/predictions",
   );
   return response.data.data as InventoryDemandPredictionsResponse;
 };
@@ -1868,7 +2616,7 @@ export const fetchDashboardInventory =
   };
 
 export const fetchDashboardProductSales = async (
-  period: "lifetime" | "month" | "week" | "year" = "lifetime"
+  period: "lifetime" | "month" | "week" | "year" = "lifetime",
 ): Promise<DashboardProductSales> => {
   const response = await apiClient.get("/dashboard/product-sales", {
     params: { period },
@@ -1885,13 +2633,14 @@ export const fetchDashboardPaymentMethods = async (
   return response.data.data as DashboardPaymentMethods;
 };
 
-export const fetchDashboardTransactions =
-  async (filters?: DashboardOverviewFilters): Promise<DashboardTransactions> => {
-    const response = await apiClient.get("/dashboard/transactions", {
-      params: buildDashboardFilterParams(filters),
-    });
-    return response.data.data as DashboardTransactions;
-  };
+export const fetchDashboardTransactions = async (
+  filters?: DashboardOverviewFilters,
+): Promise<DashboardTransactions> => {
+  const response = await apiClient.get("/dashboard/transactions", {
+    params: buildDashboardFilterParams(filters),
+  });
+  return response.data.data as DashboardTransactions;
+};
 
 export const fetchDashboardCustomers =
   async (): Promise<DashboardCustomers> => {
@@ -1919,7 +2668,7 @@ export const fetchDashboardForecast =
   };
 
 export const fetchFinancialCopilot = async (params?: {
-  language?: "en" | "hi" | "hinglish";
+  language?: "en" | "hi";
   amount?: number;
 }): Promise<FinancialCopilotPayload> => {
   const response = await apiClient.get("/copilot/summary", { params });
@@ -1954,8 +2703,34 @@ export const askAssistant = async (
   message: string,
   history: AssistantHistoryMessage[] = [],
 ): Promise<AssistantReply> => {
-  const response = await apiClient.post("/assistant/query", { message, history });
-  return response.data.data as AssistantReply;
+  try {
+    const response = await apiClient.post("/assistant/query", {
+      message,
+      history,
+    });
+    return response.data.data as AssistantReply;
+  } catch (error) {
+    const responseMessage =
+      axios.isAxiosError(error) &&
+      error.response?.data &&
+      typeof error.response.data === "object" &&
+      "message" in error.response.data &&
+      typeof error.response.data.message === "string"
+        ? error.response.data.message.trim()
+        : "";
+
+    if (responseMessage) {
+      throw new Error(responseMessage);
+    }
+
+    if (axios.isAxiosError(error) && error.code === "ERR_NETWORK") {
+      throw new Error(
+        "Network issue while contacting assistant. Please check internet and try again.",
+      );
+    }
+
+    throw new Error("Assistant request failed. Please try again.");
+  }
 };
 
 export const fetchUserProfile = async (): Promise<UserProfile> => {
@@ -1982,6 +2757,30 @@ export const deleteUserData = async (): Promise<void> => {
 
 export const deleteUserAccount = async (): Promise<void> => {
   await apiClient.delete("/user/account");
+};
+
+export const fetchUserSettingsPreferences =
+  async (): Promise<UserSettingsPreferences> => {
+    const response = await apiClient.get("/settings/preferences");
+    return response.data.data as UserSettingsPreferences;
+  };
+
+export const saveUserSettingsPreferences = async (
+  payload: Partial<UserSettingsPreferences>,
+): Promise<UserSettingsPreferences> => {
+  const response = await apiClient.put("/settings/preferences", payload);
+  return response.data.data as UserSettingsPreferences;
+};
+
+export const fetchSecurityActivity = async (): Promise<
+  SecurityActivityEvent[]
+> => {
+  const response = await apiClient.get("/security/activity");
+  return response.data.data as SecurityActivityEvent[];
+};
+
+export const logoutAllDevices = async (): Promise<void> => {
+  await apiClient.post("/security/logout-all");
 };
 
 export const fetchTemplates = async (): Promise<TemplateRecord[]> => {
@@ -2051,6 +2850,11 @@ export const fetchBusinessProfile =
 
 export const saveBusinessProfile = async (payload: {
   business_name: string;
+  businessAddress?: Partial<BusinessAddressRecord>;
+  address_line1?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
   address?: string;
   phone?: string;
   email?: string;
@@ -2067,9 +2871,44 @@ export const saveBusinessProfile = async (payload: {
     return next ? next : undefined;
   };
 
+  const normalizedBusinessAddress = toBusinessAddressInput({
+    addressLine1:
+      payload.businessAddress?.addressLine1 ?? payload.address_line1,
+    city: payload.businessAddress?.city ?? payload.city,
+    state: payload.businessAddress?.state ?? payload.state,
+    pincode: payload.businessAddress?.pincode ?? payload.pincode,
+  });
+
+  const hasStructuredBusinessAddress = Boolean(
+    normalizedBusinessAddress.addressLine1 ||
+    normalizedBusinessAddress.city ||
+    normalizedBusinessAddress.state ||
+    normalizedBusinessAddress.pincode,
+  );
+
+  const legacyAddress = formatBusinessAddress(
+    normalizedBusinessAddress,
+    payload.address,
+  );
+
   const normalizedPayload = {
     business_name: payload.business_name.trim(),
-    address: toOptional(payload.address),
+    businessAddress: hasStructuredBusinessAddress
+      ? normalizedBusinessAddress
+      : undefined,
+    address_line1: hasStructuredBusinessAddress
+      ? normalizedBusinessAddress.addressLine1
+      : undefined,
+    city: hasStructuredBusinessAddress
+      ? normalizedBusinessAddress.city
+      : undefined,
+    state: hasStructuredBusinessAddress
+      ? normalizedBusinessAddress.state
+      : undefined,
+    pincode: hasStructuredBusinessAddress
+      ? normalizedBusinessAddress.pincode
+      : undefined,
+    address: toOptional(legacyAddress),
     phone: toOptional(payload.phone),
     email: toOptional(payload.email),
     website: toOptional(payload.website),
@@ -2094,9 +2933,7 @@ export const fetchLogoUrl = async (): Promise<string | null> => {
 };
 
 /** Upload a logo for the first time (409 if one already exists → use replaceLogo). */
-export const uploadLogo = async (
-  file: File,
-): Promise<{ logo_url: string }> => {
+export const uploadLogo = async (file: File): Promise<{ logo_url: string }> => {
   const form = new FormData();
   form.append("logo", file);
   const response = await apiClient.post("/logo", form, {
@@ -2123,4 +2960,3 @@ export const removeLogo = async (): Promise<void> => {
 };
 
 export default apiClient;
-

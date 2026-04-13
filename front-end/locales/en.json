@@ -568,14 +568,16 @@
   },
   "navigation": {
     "dashboard": "Dashboard",
-    "insights": "Insights",
+    "simpleBill": "Simple Bill",
+    "simpleBillBadge": "Easy",
+    "insights": "Reports",
     "assistant": "Assistant",
     "products": "Products",
     "inventory": "Inventory",
     "warehouses": "Warehouses",
     "invoices": "Invoices",
-    "invoiceRecords": "Invoice Records",
-    "clients": "Clients",
+    "invoiceRecords": "Past Bills",
+    "clients": "Customers",
     "workers": "Worker Panel",
     "suppliers": "Suppliers",
     "purchases": "Purchases",
@@ -636,6 +638,11 @@
         "kicker": "AI insights",
         "title": "Actionable business suggestions",
         "description": "Plain-language suggestions generated from your receipts, expenses, and expected future movement."
+      },
+      "demandSupply": {
+        "kicker": "Demand intelligence",
+        "title": "Forecast-led inventory pressure",
+        "description": "Combine sales momentum with stockout risk here so buyers can act before the operational dashboard gets noisy."
       }
     },
     "cards": {
@@ -685,6 +692,7 @@
   "dashboard": {
     "title": "Welcome back, {name}.",
     "subtitle": "A sharper view of sales, cash movement, profit trend, and inventory demand.",
+    "createBillCta": "+ Simple Bill",
     "sectionLinks": {
       "overview": "Overview",
       "performance": "Performance",
@@ -1081,12 +1089,12 @@
     }
   },
   "invoice": {
-    "pageTitle": "Create invoice",
-    "pageSubtitle": "Build GST-ready invoices with live totals, customer details, and preview-ready layouts for printing.",
-    "viewHistory": "View invoice history",
+    "pageTitle": "Create bill",
+    "pageSubtitle": "Build a clear GST-ready bill with customer details, live totals, and a print-ready preview.",
+    "viewHistory": "View bill history",
     "statusUnsavedChanges": "Unsaved changes",
     "invoiceGeneratedAutomatically": "Invoice number is generated automatically.",
-    "createButton": "Create invoice",
+    "createButton": "Create bill",
     "createSuccess": "Invoice {{invoiceNumber}} created",
     "createError": "Unable to create invoice.",
     "pdfError": "Unable to generate PDF from preview",
@@ -1168,10 +1176,10 @@
     "total": "Total"
   },
   "invoiceHistory": {
-    "title": "Invoice history",
-    "subtitle": "Search completed invoices by their unique invoice number.",
-    "kicker": "Invoices",
-    "searchTitle": "Search invoices",
+    "title": "Bill history",
+    "subtitle": "Search completed bills by bill number.",
+    "kicker": "Bills",
+    "searchTitle": "Search bills",
     "searchDescription": "Type an invoice number like INV-0001.",
     "searchPlaceholder": "Search by invoice number",
     "clear": "Clear",
@@ -1180,9 +1188,9 @@
     "select": "Select",
     "resultsTitle": "Results",
     "resultsShown": "{count} shown",
-    "loading": "Loading invoices...",
-    "loadError": "Failed to load invoices.",
-    "empty": "No invoices found.",
+    "loading": "Loading bills...",
+    "loadError": "Failed to load bills.",
+    "empty": "No bills found.",
     "updateStatus": "Update status",
     "view": "View",
     "tableSearchPlaceholder": "Search invoice number",
@@ -1205,18 +1213,20 @@
     "paidAmountPlaceholder": "Enter paid amount",
     "paidRemainingHint": "Saving will record the remaining balance as paid.",
     "save": "Save",
-    "summarySettled": "{count} invoice(s) fully settled",
+    "summaryCollected": "Collected",
+    "summarySettled": "{count} bill(s) fully settled",
     "summaryOutstanding": "Outstanding",
     "summaryOutstandingBreakdown": "{pending} pending, {partial} partial",
-    "summaryValue": "Invoice value",
+    "summaryValue": "Bill value",
     "summaryValueDescription": "Track every bill from issue to settlement",
+    "afterPaymentProjection": "After this payment: paid {paid} | balance {balance}",
     "paidLabel": "Paid",
     "balanceLabel": "Balance",
     "paidInline": "Paid {amount}",
     "quickActionsTitle": "Quick actions",
     "quickActionsDescription": "Start common billing tasks from one place.",
-    "quickCreateInvoice": "Create invoice",
-    "quickCreateClient": "Create client",
+    "quickCreateInvoice": "Create bill",
+    "quickCreateClient": "Add customer",
     "quickEditProduct": "Edit product",
     "messages": {
       "paidAmountPositive": "Enter a paid amount greater than 0.",
@@ -1240,21 +1250,106 @@
   },
   "suppliersPage": {
     "title": "Suppliers",
-    "subtitle": "Track vendor contacts and procurement partners.",
+    "subtitle": "Build a complete supplier directory with compliance details, address intelligence, and payment defaults.",
     "kicker": "Supply chain",
     "formTitle": "Add supplier",
-    "formDescription": "Capture vendor contacts and preferred channels.",
+    "formDescription": "Capture supplier identity, tax profile, logistics address, and payment preferences in one flow.",
+    "form": {
+      "editTitle": "Edit supplier",
+      "profileTag": "Structured profile",
+      "notesCount": "{count}/500 characters",
+      "totalSuppliers": "Total suppliers: {count}",
+      "categoriesHint": "Add one or more tags to describe what this supplier usually provides."
+    },
+    "sections": {
+      "basic": {
+        "title": "Basic details",
+        "description": "Core contact info used across purchases and reconciliations."
+      },
+      "business": {
+        "title": "Business details",
+        "description": "GST and PAN information for compliant procurement records."
+      },
+      "address": {
+        "title": "Address",
+        "description": "Store dispatch-ready location details for purchase logistics."
+      },
+      "payment": {
+        "title": "Payment defaults",
+        "description": "Set terms and opening balance to track outstanding amounts."
+      }
+    },
     "fields": {
       "name": "Name",
       "email": "Email",
       "phone": "Phone",
-      "address": "Address"
+      "address": "Address",
+      "businessName": "Business name",
+      "gstin": "GSTIN",
+      "pan": "PAN",
+      "categories": "Products / Category Supplied",
+      "addressLine1": "Address line 1",
+      "city": "City",
+      "state": "State",
+      "pincode": "Pincode",
+      "paymentTerms": "Payment terms",
+      "openingBalance": "Opening balance",
+      "notes": "Notes"
     },
     "placeholders": {
       "name": "Supplier name",
       "email": "vendor@example.com",
-      "phone": "+91 98765 43210",
-      "address": "City, State"
+      "phone": "9876543210",
+      "address": "City, State",
+      "businessName": "Registered entity name",
+      "gstin": "27ABCDE1234F1Z5",
+      "pan": "ABCDE1234F",
+      "categories": "e.g., Electronics, Groceries, Clothing",
+      "addressLine1": "Shop / building / street",
+      "city": "Mumbai",
+      "pincode": "400001",
+      "openingBalance": "0",
+      "notes": "Optional notes for your team",
+      "search": "Search supplier by name, GSTIN, phone"
+    },
+    "paymentTerms": {
+      "NET_7": "Net 7 days",
+      "NET_15": "Net 15 days",
+      "NET_30": "Net 30 days"
+    },
+    "smartHints": {
+      "gstinState": "GSTIN indicates state: {state}",
+      "pincodeLookup": "Checking pincode and fetching city/state...",
+      "pincodeSuccess": "Auto-filled: {city}, {state}",
+      "pincodeManual": "Could not auto-fill city/state. You can enter them manually."
+    },
+    "actions": {
+      "addSupplier": "Add supplier",
+      "updateSupplier": "Update supplier",
+      "cancelEdit": "Cancel edit",
+      "edit": "Edit"
+    },
+    "messages": {
+      "saveError": "Unable to save supplier right now.",
+      "loadError": "Failed to load suppliers.",
+      "deleteError": "Unable to delete supplier right now.",
+      "confirmDelete": "Delete this supplier? This action cannot be undone.",
+      "formInvalid": "Fix validation issues before saving."
+    },
+    "list": {
+      "outstanding": "Outstanding",
+      "gstin": "GSTIN",
+      "categories": "Category",
+      "noGstin": "Not provided",
+      "filterByCategory": "Filter suppliers by category",
+      "allCategories": "All categories",
+      "noResults": "No suppliers matched your search."
+    },
+    "emptyState": {
+      "title": "No suppliers yet",
+      "description": "Add your first supplier to start tracking purchases, payment terms, and outstanding balances.",
+      "hint": "Tip: Include GSTIN and pincode so BillSutra can auto-fill location data.",
+      "action": "+ Add supplier"
     },
     "addSupplier": "Add supplier",
     "saveError": "Unable to save supplier right now.",
@@ -1293,7 +1388,37 @@
     },
     "validation": {
       "selectSupplier": "Please select a supplier",
-      "selectWarehouse": "Please select a warehouse"
+      "selectWarehouse": "Please select a warehouse",
+      "paymentMethodRequired": "Payment method is required when marking as paid.",
+      "partialPaidRequired": "Enter a paid amount greater than 0 for partial payments.",
+      "partialPaidTooHigh": "Partial paid amount must be less than total. Mark it as paid instead.",
+      "totalRequired": "Add at least one valid line item before marking as paid."
+    },
+    "smart": {
+      "searchSupplier": "Search supplier by name, phone, category",
+      "filterByCategory": "Filter by category",
+      "allCategories": "All categories",
+      "frequent": "Frequent",
+      "lastPurchase": "Last purchase",
+      "outstanding": "Outstanding",
+      "selected": "Selected",
+      "noSuppliers": "No suppliers match your search.",
+      "suggestedFromSupplier": "Frequently purchased from this supplier"
+    },
+    "quickActions": {
+      "title": "Quick actions",
+      "repeatLast": "Repeat last purchase",
+      "addFrequent": "Add frequently used items",
+      "compactOn": "Enable compact mode",
+      "compactOff": "Exit compact mode"
+    },
+    "summary": {
+      "title": "Live summary",
+      "subtotal": "Subtotal",
+      "tax": "Tax",
+      "total": "Total",
+      "paid": "Paid",
+      "due": "Due"
     },
     "directPurchase": "Direct purchase",
     "defaultStock": "Default stock",
@@ -1344,10 +1469,20 @@
     },
     "edit": "Edit",
     "supplierForm": {
+      "quickAdd": "Quick add supplier",
+      "title": "Add supplier",
+      "description": "Create a supplier without leaving purchases.",
+      "save": "Save supplier",
+      "fields": {
+        "name": "Name",
+        "email": "Email",
+        "phone": "Phone",
+        "address": "Address"
+      },
       "saveError": "Unable to create supplier right now.",
       "errors": {
         "name": "Supplier name must be at least 2 characters.",
-        "phone": "Phone number should be at least 6 characters."
+        "phone": "Phone number must be 10 digits."
       }
     }
   },
@@ -1409,7 +1544,7 @@
       },
       "errors": {
         "name": "Customer name must be at least 2 characters.",
-        "phone": "Phone number should be at least 6 characters."
+        "phone": "Phone number should contain exactly 10 digits."
       }
     },
     "lineItems": {
@@ -1562,6 +1697,10 @@
     "fields": {
       "businessName": "Business name",
       "phone": "Phone",
+      "addressLine1": "Address Line 1",
+      "city": "City / District",
+      "state": "State",
+      "pincode": "Pincode",
       "address": "Address",
       "email": "Email",
       "website": "Website",
@@ -1571,6 +1710,9 @@
     "placeholders": {
       "businessName": "Business name",
       "phone": "9876543210",
+      "addressLine1": "Shop/House No, Street, Area",
+      "city": "City or district",
+      "pincode": "6-digit pincode",
       "address": "Business address",
       "email": "name@example.com",
       "website": "https://example.com",
@@ -1621,7 +1763,11 @@
     "previewDescription": "Matches the selected template and business profile.",
     "messages": {
       "saved": "Business profile saved",
-      "saveError": "Unable to save business profile"
+      "saveError": "Unable to save business profile",
+      "autofillLoading": "Checking pincode and fetching city/state...",
+      "autofillSuccess": "City and state auto-filled from pincode.",
+      "autofillFallback": "Could not auto-fill. You can enter city and state manually.",
+      "autofillError": "Autofill is unavailable right now. Manual entry is enabled."
     },
     "logo": {
       "title": "Business Logo",
@@ -1648,6 +1794,16 @@
     "validName": "Please enter a valid name (letters only)",
     "validEmail": "Enter a valid email address",
     "validPhone": "Enter a valid phone number",
+    "validPincode": "Enter a valid 6-digit pincode",
+    "validIndianState": "Select a valid Indian state",
+    "validGstin": "Enter a valid GSTIN",
+    "validPan": "Enter a valid PAN",
+    "gstinStateMismatch": "GSTIN state code does not match selected state",
+    "requiredAddressLine": "Address line 1 is required",
+    "requiredCity": "City is required",
+    "requiredState": "State is required",
+    "requiredPincode": "Pincode is required",
+    "nonNegative": "Opening balance cannot be negative",
     "invoiceSelectCustomer": "Select a customer.",
     "invoiceSelectWarehouse": "Select a warehouse to sync inventory.",
     "invoiceSelectProduct": "Select a product.",
@@ -1731,7 +1887,8 @@
     "suggestedQty": "Suggested qty",
     "runoutDate": "Runout date",
     "reorderValue": "Reorder value",
-    "notProjected": "Not projected"
+    "notProjected": "Not projected",
+    "addItem": "Add item"
   },
   "customersPage": {
     "pageTitle": "Customer khata",
@@ -1752,9 +1909,64 @@
     "validation": {
       "enterName": "Enter a customer name.",
       "nameMin": "Customer name should be at least 2 characters.",
+      "nameChars": "Use letters, spaces, and common punctuation only.",
       "enterPhone": "Enter a phone number.",
-      "phoneDigits": "Phone number should contain 10 to 15 digits.",
-      "emailOptional": "Enter a valid email address or leave it blank."
+      "phoneDigits": "Phone number should contain exactly 10 digits.",
+      "emailOptional": "Enter a valid email address or leave it blank.",
+      "emailSuggestion": "Did you mean {suggestion}?",
+      "businessNameRequired": "Business name is required for business customers.",
+      "businessNameMin": "Business name should be at least 2 characters.",
+      "gstinInvalid": "Enter a valid 15-character GSTIN (e.g. 07ABCDE1234F1Z5).",
+      "gstinStateMismatch": "GSTIN state code does not match selected state.",
+      "addressLine1Required": "Address line 1 is required.",
+      "cityRequired": "City is required.",
+      "stateRequired": "State is required.",
+      "pincodeDigits": "Enter a valid 6-digit pincode.",
+      "creditLimitInvalid": "Credit limit must be a valid non-negative number.",
+      "openingBalanceInvalid": "Opening balance must be a valid non-negative number.",
+      "notesTooLong": "Notes must be 500 characters or less.",
+      "looksGood": "Looks good"
+    },
+    "fields": {
+      "customerType": "Customer type",
+      "businessName": "Business name",
+      "gstin": "GSTIN",
+      "addressLine1": "Address line 1",
+      "city": "City",
+      "state": "State",
+      "pincode": "Pincode",
+      "notes": "Customer notes",
+      "creditLimit": "Credit limit (₹)",
+      "paymentTerms": "Payment terms",
+      "openingBalance": "Opening balance (₹)"
+    },
+    "placeholders": {
+      "businessName": "Sharma Electricals Pvt Ltd",
+      "gstin": "07ABCDE1234F1Z5",
+      "addressLine1": "Shop no., street, locality",
+      "city": "City",
+      "state": "Select state",
+      "pincode": "6-digit pincode",
+      "notes": "Regular buyer, prefers WhatsApp reminders",
+      "creditLimit": "e.g. 50000",
+      "openingBalance": "e.g. 12000"
+    },
+    "customerType": {
+      "individual": "Individual",
+      "business": "Business"
+    },
+    "form": {
+      "customerTypeHint": "Start simple. Add business details only when needed.",
+      "gstinHint": "Optional, but useful for GST-ready invoices.",
+      "addAddressDetails": "Add address details",
+      "addMoreDetails": "Add more optional details",
+      "submitHint": "Required fields must be valid before saving."
+    },
+    "paymentTerms": {
+      "dueOnReceipt": "Due on receipt",
+      "net7": "7 days",
+      "net15": "15 days",
+      "net30": "30 days"
     },
     "phonePlaceholder": "10 digit phone number",
     "emailOptional": "Email (optional)",
@@ -1788,7 +2000,12 @@
       "paymentRecordError": "Unable to record payment right now.",
       "statementWindowError": "Unable to open the statement window.",
       "statementCopied": "Statement summary copied.",
-      "statementShareError": "Unable to share the statement right now."
+      "statementShareError": "Unable to share the statement right now.",
+      "addressAutofillLoading": "Checking pincode and filling city/state...",
+      "addressAutofillSuccess": "City and state autofilled from pincode.",
+      "addressAutofillUnavailable": "Could not find this pincode right now. You can enter city/state manually.",
+      "addressAutofillError": "Unable to fetch pincode details right now.",
+      "addressParsed": "Parsed pasted address. Please review and adjust if needed."
     },
     "statement": {
       "documentTitle": "{name} Ledger Statement",
@@ -1845,13 +2062,13 @@
   },
   "workersPage": {
     "title": "Worker panel",
-    "subtitle": "Create, update, and remove workers that belong to this business.",
+    "subtitle": "Manage workers, track output, and automate incentives.",
     "kicker": "Team access",
-    "lead": "Every worker is tied to this business automatically. Membership always comes from the authenticated admin session.",
+    "lead": "Run your team from one panel with role controls, sales visibility, and incentive tracking.",
     "addTitle": "Add worker",
-    "addDescription": "Create a worker account with an admin-generated password. Workers cannot sign themselves up.",
+    "addDescription": "Create a worker account and configure role, status, and incentive rules at setup time.",
     "listTitle": "Business workers",
-    "listDescription": "Review every worker connected to this business and remove access when someone no longer needs it.",
+    "listDescription": "Review worker performance, edit access, and disable inactive members.",
     "loading": "Loading workers...",
     "loadError": "Unable to load workers right now.",
     "empty": "No workers have been added yet.",
@@ -1860,31 +2077,78 @@
       "email": "Worker email",
       "phone": "Phone number",
       "password": "Password",
-      "newPassword": "New password"
+      "newPassword": "New password",
+      "role": "Role",
+      "joiningDate": "Joining date",
+      "status": "Status",
+      "incentiveType": "Incentive type",
+      "incentiveValue": "Incentive value",
+      "lastActive": "Last active"
+    },
+    "roles": {
+      "admin": "Admin",
+      "sales": "Salesperson",
+      "staff": "Staff",
+      "viewer": "Viewer"
+    },
+    "statuses": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "incentive": {
+      "none": "None",
+      "percentage": "Percentage of sales",
+      "perSale": "Per sale fixed amount"
     },
     "placeholders": {
       "name": "Riya Sharma",
       "email": "riya@company.com",
       "phone": "9876543210",
       "password": "Minimum 6 characters",
-      "keepPassword": "Leave blank to keep current password"
+      "keepPassword": "Leave blank to keep current password",
+      "incentivePercent": "e.g. 2.5",
+      "incentiveAmount": "e.g. 50"
+    },
+    "filters": {
+      "today": "Today",
+      "thisWeek": "This week",
+      "thisMonth": "This month"
+    },
+    "cards": {
+      "totalSales": "Total Sales",
+      "totalOrders": "Total Orders",
+      "incentiveEarned": "Incentive Earned",
+      "thisMonthSales": "This Month Sales"
+    },
+    "activity": {
+      "title": "Recent activity",
+      "empty": "No invoice or sale activity yet."
+    },
+    "leaderboard": {
+      "title": "Top performers",
+      "kicker": "Leaderboard"
     },
     "actions": {
       "create": "Create worker",
       "creating": "Creating...",
       "save": "Save",
       "saving": "Saving...",
-      "edit": "Edit"
+      "edit": "Edit",
+      "disable": "Disable",
+      "enable": "Enable"
     },
     "messages": {
       "createError": "Unable to create the worker right now.",
       "updateError": "Unable to update the worker right now.",
       "noPhone": "No phone number",
-      "addedMeta": "{role} - Added {date}"
+      "addedMeta": "{role} - Added {date}",
+      "neverActive": "Never"
     },
     "validation": {
       "passwordRequired": "This field is required",
-      "passwordMin": "Password must be at least 6 characters"
+      "passwordMin": "Password must be at least 6 characters",
+      "incentiveInvalid": "Enter a valid incentive value",
+      "incentivePercentMax": "Percentage cannot exceed 100"
     }
   },
   "profilePage": {
@@ -2156,7 +2420,7 @@
     "enterProductName": "Enter a product name.",
     "enterValidSellingPrice": "Enter a valid selling price.",
     "customerNameMin": "Customer name must be at least 2 characters.",
-    "customerPhoneMin": "Phone number should be at least 6 characters."
+    "customerPhoneMin": "Phone number should contain exactly 10 digits."
   },
   "invoiceDetail": {
     "back": "Back to history",

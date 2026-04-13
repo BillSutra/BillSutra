@@ -225,7 +225,8 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
     if (customerForm.email && !/\S+@\S+\.\S+/.test(customerForm.email)) {
       errors.email = t("validation.validEmail");
     }
-    if (customerForm.phone && customerForm.phone.trim().length < 6) {
+    const normalizedPhone = customerForm.phone.replace(/\D/g, "");
+    if (!normalizedPhone || normalizedPhone.length !== 10) {
       errors.phone = t("salesPage.customer.errors.phone");
     }
 
@@ -271,10 +272,8 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
     if (missingProduct) summary.push(t("salesPage.lineItems.summary.product"));
     if (invalidQuantity)
       summary.push(t("salesPage.lineItems.summary.quantity"));
-    if (invalidPrice)
-      summary.push(t("salesPage.lineItems.summary.unitPrice"));
-    if (invalidTax)
-      summary.push(t("salesPage.lineItems.summary.taxRate"));
+    if (invalidPrice) summary.push(t("salesPage.lineItems.summary.unitPrice"));
+    if (invalidTax) summary.push(t("salesPage.lineItems.summary.taxRate"));
 
     setLineItemErrors(errors);
     setLineItemSummary(summary);
@@ -342,7 +341,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
       const created = await createCustomer.mutateAsync({
         name: customerForm.name.trim(),
         email: customerForm.email.trim() || undefined,
-        phone: customerForm.phone.trim() || undefined,
+        phone: customerForm.phone.replace(/\D/g, ""),
         address: customerForm.address.trim() || undefined,
       });
 
@@ -407,9 +406,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
   };
 
   const handleDeleteSale = async (saleId: number) => {
-    const confirmed = window.confirm(
-      t("salesPage.messages.deleteConfirm"),
-    );
+    const confirmed = window.confirm(t("salesPage.messages.deleteConfirm"));
     if (!confirmed) return;
 
     try {
@@ -442,14 +439,18 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
 
         <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.1fr]">
           <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
-            <h2 className="text-lg font-semibold">{t("salesPage.formTitle")}</h2>
+            <h2 className="text-lg font-semibold">
+              {t("salesPage.formTitle")}
+            </h2>
             <p className="text-sm text-[#8a6d56]">
               {t("salesPage.formDescription")}
             </p>
             <form className="mt-4 grid gap-4" onSubmit={handleCreate}>
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="customer">{t("salesPage.fields.customer")}</Label>
+                  <Label htmlFor="customer">
+                    {t("salesPage.fields.customer")}
+                  </Label>
                   <Dialog
                     open={customerDialogOpen}
                     onOpenChange={(open) => {
@@ -467,7 +468,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
-                        <DialogTitle>{t("salesPage.customer.addTitle")}</DialogTitle>
+                        <DialogTitle>
+                          {t("salesPage.customer.addTitle")}
+                        </DialogTitle>
                         <DialogDescription>
                           {t("salesPage.customer.addDescription")}
                         </DialogDescription>
@@ -477,7 +480,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                         onSubmit={handleCreateCustomer}
                       >
                         <div className="grid gap-2">
-                          <Label htmlFor="customer_name">{t("salesPage.customer.fields.name")}</Label>
+                          <Label htmlFor="customer_name">
+                            {t("salesPage.customer.fields.name")}
+                          </Label>
                           <Input
                             id="customer_name"
                             value={customerForm.name}
@@ -500,7 +505,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                           )}
                         </div>
                         <div className="grid gap-2">
-                          <Label htmlFor="customer_email">{t("salesPage.customer.fields.email")}</Label>
+                          <Label htmlFor="customer_email">
+                            {t("salesPage.customer.fields.email")}
+                          </Label>
                           <Input
                             id="customer_email"
                             type="email"
@@ -524,14 +531,18 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                           )}
                         </div>
                         <div className="grid gap-2">
-                          <Label htmlFor="customer_phone">{t("salesPage.customer.fields.phone")}</Label>
+                          <Label htmlFor="customer_phone">
+                            {t("salesPage.customer.fields.phone")}
+                          </Label>
                           <Input
                             id="customer_phone"
                             value={customerForm.phone}
                             onChange={(event) => {
                               setCustomerForm((prev) => ({
                                 ...prev,
-                                phone: event.target.value,
+                                phone: event.target.value
+                                  .replace(/\D/g, "")
+                                  .slice(0, 10),
                               }));
                               setCustomerFieldErrors((prev) => ({
                                 ...prev,
@@ -547,7 +558,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                           )}
                         </div>
                         <div className="grid gap-2">
-                          <Label htmlFor="customer_address">{t("salesPage.customer.fields.address")}</Label>
+                          <Label htmlFor="customer_address">
+                            {t("salesPage.customer.fields.address")}
+                          </Label>
                           <Input
                             id="customer_address"
                             value={customerForm.address}
@@ -578,7 +591,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                           >
                             {t("common.cancel")}
                           </Button>
-                          <Button type="submit">{t("salesPage.customer.save")}</Button>
+                          <Button type="submit">
+                            {t("salesPage.customer.save")}
+                          </Button>
                         </div>
                       </form>
                     </DialogContent>
@@ -605,7 +620,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                 </select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="warehouse">{t("salesPage.fields.warehouse")}</Label>
+                <Label htmlFor="warehouse">
+                  {t("salesPage.fields.warehouse")}
+                </Label>
                 <select
                   id="warehouse"
                   className="h-9 w-full rounded-md border border-[#e4d6ca] bg-white px-3 text-sm"
@@ -627,7 +644,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                 </select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="sale_date">{t("salesPage.fields.saleDate")}</Label>
+                <Label htmlFor="sale_date">
+                  {t("salesPage.fields.saleDate")}
+                </Label>
                 <Input
                   id="sale_date"
                   type="date"
@@ -654,7 +673,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="payment_status">{t("salesPage.fields.paymentStatus")}</Label>
+                <Label htmlFor="payment_status">
+                  {t("salesPage.fields.paymentStatus")}
+                </Label>
                 <select
                   id="payment_status"
                   className="h-9 w-full rounded-md border border-[#e4d6ca] bg-white px-3 text-sm"
@@ -666,13 +687,19 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                     }))
                   }
                 >
-                  <option value="UNPAID">{translatePaymentStatus("UNPAID")}</option>
-                  <option value="PARTIALLY_PAID">{translatePaymentStatus("PARTIALLY_PAID")}</option>
+                  <option value="UNPAID">
+                    {translatePaymentStatus("UNPAID")}
+                  </option>
+                  <option value="PARTIALLY_PAID">
+                    {translatePaymentStatus("PARTIALLY_PAID")}
+                  </option>
                   <option value="PAID">{translatePaymentStatus("PAID")}</option>
                 </select>
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="amount_paid">{t("salesPage.fields.amountPaid")}</Label>
+                <Label htmlFor="amount_paid">
+                  {t("salesPage.fields.amountPaid")}
+                </Label>
                 <Input
                   id="amount_paid"
                   type="number"
@@ -688,7 +715,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="payment_date">{t("salesPage.fields.paymentDate")}</Label>
+                <Label htmlFor="payment_date">
+                  {t("salesPage.fields.paymentDate")}
+                </Label>
                 <Input
                   id="payment_date"
                   type="date"
@@ -702,7 +731,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                 />
               </div>
               <div className="grid gap-2">
-                <Label htmlFor="payment_method">{t("salesPage.fields.paymentMethod")}</Label>
+                <Label htmlFor="payment_method">
+                  {t("salesPage.fields.paymentMethod")}
+                </Label>
                 <select
                   id="payment_method"
                   className="h-9 w-full rounded-md border border-[#e4d6ca] bg-white px-3 text-sm"
@@ -717,10 +748,16 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                   <option value="">{t("salesPage.selectMethod")}</option>
                   <option value="CASH">{translatePaymentMethod("CASH")}</option>
                   <option value="CARD">{translatePaymentMethod("CARD")}</option>
-                  <option value="BANK_TRANSFER">{translatePaymentMethod("BANK_TRANSFER")}</option>
+                  <option value="BANK_TRANSFER">
+                    {translatePaymentMethod("BANK_TRANSFER")}
+                  </option>
                   <option value="UPI">{translatePaymentMethod("UPI")}</option>
-                  <option value="CHEQUE">{translatePaymentMethod("CHEQUE")}</option>
-                  <option value="OTHER">{translatePaymentMethod("OTHER")}</option>
+                  <option value="CHEQUE">
+                    {translatePaymentMethod("CHEQUE")}
+                  </option>
+                  <option value="OTHER">
+                    {translatePaymentMethod("OTHER")}
+                  </option>
                 </select>
               </div>
 
@@ -733,7 +770,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                 </div>
                 {lineItemSummary.length > 0 && (
                   <div className="rounded-xl border border-[#f2e6dc] bg-white px-3 py-2 text-xs text-[#b45309]">
-                    <p className="font-semibold">{t("salesPage.lineItems.fixTitle")}</p>
+                    <p className="font-semibold">
+                      {t("salesPage.lineItems.fixTitle")}
+                    </p>
                     <ul className="mt-1 list-disc pl-4">
                       {lineItemSummary.map((message) => (
                         <li key={message}>{message}</li>
@@ -751,7 +790,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                       <AsyncProductSelect
                         value={item.product_id}
                         selectedLabel={item.product_label}
-                        onSelect={(product) => handleProductSelect(index, product)}
+                        onSelect={(product) =>
+                          handleProductSelect(index, product)
+                        }
                         variant="warm"
                       />
                       {lineItemErrors[index]?.product_id && (
@@ -849,16 +890,22 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
           </div>
 
           <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
-            <h2 className="text-lg font-semibold">{t("salesPage.recentTitle")}</h2>
+            <h2 className="text-lg font-semibold">
+              {t("salesPage.recentTitle")}
+            </h2>
             <p className="text-sm text-[#8a6d56]">
               {t("salesPage.recentDescription")}
             </p>
             <div className="mt-4">
               {isLoading && (
-                <p className="text-sm text-[#8a6d56]">{t("salesPage.loading")}</p>
+                <p className="text-sm text-[#8a6d56]">
+                  {t("salesPage.loading")}
+                </p>
               )}
               {isError && (
-                <p className="text-sm text-[#b45309]">{t("salesPage.loadError")}</p>
+                <p className="text-sm text-[#b45309]">
+                  {t("salesPage.loadError")}
+                </p>
               )}
               {!isLoading && !isError && sales.length === 0 && (
                 <p className="text-sm text-[#8a6d56]">{t("salesPage.empty")}</p>
@@ -881,9 +928,15 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                                 setEditingStatus(event.target.value)
                               }
                             >
-                              <option value="DRAFT">{translateSaleStatus("DRAFT")}</option>
-                              <option value="COMPLETED">{translateSaleStatus("COMPLETED")}</option>
-                              <option value="VOID">{translateSaleStatus("VOID")}</option>
+                              <option value="DRAFT">
+                                {translateSaleStatus("DRAFT")}
+                              </option>
+                              <option value="COMPLETED">
+                                {translateSaleStatus("COMPLETED")}
+                              </option>
+                              <option value="VOID">
+                                {translateSaleStatus("VOID")}
+                              </option>
                             </select>
                           </div>
                           <div className="grid gap-2">
@@ -895,11 +948,15 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                                 setEditingPaymentStatus(event.target.value)
                               }
                             >
-                              <option value="UNPAID">{translatePaymentStatus("UNPAID")}</option>
+                              <option value="UNPAID">
+                                {translatePaymentStatus("UNPAID")}
+                              </option>
                               <option value="PARTIALLY_PAID">
                                 {translatePaymentStatus("PARTIALLY_PAID")}
                               </option>
-                              <option value="PAID">{translatePaymentStatus("PAID")}</option>
+                              <option value="PAID">
+                                {translatePaymentStatus("PAID")}
+                              </option>
                             </select>
                           </div>
                           <div className="grid gap-2">
@@ -932,15 +989,27 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                                 setEditingPaymentMethod(event.target.value)
                               }
                             >
-                              <option value="">{t("salesPage.selectMethod")}</option>
-                              <option value="CASH">{translatePaymentMethod("CASH")}</option>
-                              <option value="CARD">{translatePaymentMethod("CARD")}</option>
+                              <option value="">
+                                {t("salesPage.selectMethod")}
+                              </option>
+                              <option value="CASH">
+                                {translatePaymentMethod("CASH")}
+                              </option>
+                              <option value="CARD">
+                                {translatePaymentMethod("CARD")}
+                              </option>
                               <option value="BANK_TRANSFER">
                                 {translatePaymentMethod("BANK_TRANSFER")}
                               </option>
-                              <option value="UPI">{translatePaymentMethod("UPI")}</option>
-                              <option value="CHEQUE">{translatePaymentMethod("CHEQUE")}</option>
-                              <option value="OTHER">{translatePaymentMethod("OTHER")}</option>
+                              <option value="UPI">
+                                {translatePaymentMethod("UPI")}
+                              </option>
+                              <option value="CHEQUE">
+                                {translatePaymentMethod("CHEQUE")}
+                              </option>
+                              <option value="OTHER">
+                                {translatePaymentMethod("OTHER")}
+                              </option>
                             </select>
                           </div>
                           <div className="grid gap-2">
@@ -972,10 +1041,13 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div>
                             <p className="text-base font-semibold">
-                              {t("salesPage.invoiceCode", { id: sale.id })} - {sale.customer?.name ?? t("salesPage.customer.walkIn")}
+                              {t("salesPage.invoiceCode", { id: sale.id })} -{" "}
+                              {sale.customer?.name ??
+                                t("salesPage.customer.walkIn")}
                             </p>
                             <p className="text-xs text-[#8a6d56]">
-                              {formatSaleDate(sale.sale_date)} - {t("salesPage.itemsCount", {
+                              {formatSaleDate(sale.sale_date)} -{" "}
+                              {t("salesPage.itemsCount", {
                                 count: sale.items.length,
                               })}
                             </p>

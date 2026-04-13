@@ -2,6 +2,13 @@
 // Reusable validation utilities for BillSutra forms.
 // Validators return stable English messages that can be translated centrally.
 
+import {
+  isValidIndianPincode,
+  isValidIndianState,
+  normalizeIndianPincode,
+} from "@/lib/indianAddress";
+import { isValidGstin, normalizeGstin } from "@/lib/gstin";
+
 type TranslateFn = (key: string) => string;
 
 const VALIDATION_TRANSLATION_KEYS: Record<string, string> = {
@@ -12,6 +19,17 @@ const VALIDATION_TRANSLATION_KEYS: Record<string, string> = {
   "Enter a valid number": "validation.validNumber",
   "Select a valid date": "validation.validDate",
   "Please select an option": "common.selectOption",
+  "Enter a valid 6-digit pincode": "validation.validPincode",
+  "Select a valid Indian state": "validation.validIndianState",
+  "Enter a valid GSTIN": "validation.validGstin",
+  "Enter a valid PAN": "validation.validPan",
+  "GSTIN state code does not match selected state":
+    "validation.gstinStateMismatch",
+  "Address line 1 is required": "validation.requiredAddressLine",
+  "City is required": "validation.requiredCity",
+  "State is required": "validation.requiredState",
+  "Pincode is required": "validation.requiredPincode",
+  "Opening balance cannot be negative": "validation.nonNegative",
 };
 
 export function translateValidationMessage(
@@ -56,6 +74,35 @@ export function validateNumber(value: string, allowNegative = false): string {
 
 export function validateRequired(value: string): string {
   return value.trim() ? "" : "This field is required";
+}
+
+export function validateIndianPincode(value: string): string {
+  if (!value.trim()) return "This field is required";
+  if (!isValidIndianPincode(value)) return "Enter a valid 6-digit pincode";
+  if (normalizeIndianPincode(value).length !== 6)
+    return "Enter a valid 6-digit pincode";
+  return "";
+}
+
+export function validateIndianState(value: string): string {
+  if (!value.trim()) return "This field is required";
+  if (!isValidIndianState(value)) return "Select a valid Indian state";
+  return "";
+}
+
+export function validateGstin(value: string): string {
+  if (!value.trim()) return "This field is required";
+  if (!isValidGstin(value)) return "Enter a valid GSTIN";
+  if (normalizeGstin(value).length !== 15) return "Enter a valid GSTIN";
+  return "";
+}
+
+export function validatePan(value: string): string {
+  if (!value.trim()) return "This field is required";
+  if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/i.test(value.trim())) {
+    return "Enter a valid PAN";
+  }
+  return "";
 }
 
 export function validateDate(

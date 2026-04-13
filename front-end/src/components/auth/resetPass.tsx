@@ -47,7 +47,9 @@ const ResetPass = () => {
             readOnly
             value={sParams.get("email") ?? " "}
           />
-          <span className="text-sm text-[#b97908]">{state.errors?.email}</span>
+          <span className="text-sm text-destructive">
+            {state.errors?.email}
+          </span>
         </div>
         <div className="mt-4">
           <Label htmlFor="Password">{t("auth.resetForm.passwordLabel")}</Label>
@@ -57,7 +59,9 @@ const ResetPass = () => {
             placeholder={t("auth.resetForm.passwordPlaceholder")}
             type="password"
           />
-          <span className="text-sm text-[#b97908]">{state.errors?.password}</span>
+          <span className="text-sm text-destructive">
+            {state.errors?.password}
+          </span>
         </div>
         <div className="mt-4">
           <Label htmlFor="ConfirmPassword">
@@ -69,7 +73,7 @@ const ResetPass = () => {
             placeholder={t("auth.resetForm.confirmPasswordPlaceholder")}
             type="password"
           />
-          <span className="text-sm text-[#b97908]">
+          <span className="text-sm text-destructive">
             {state.errors?.confirm_password}
           </span>
         </div>

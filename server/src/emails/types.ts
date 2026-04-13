@@ -83,6 +83,14 @@ export type DeleteAccountConfirmationEmailData = {
   user_name: string;
 };
 
+export type PaymentAccessApprovedEmailData = {
+  email: string;
+  user_name: string;
+  plan_name: string;
+  amount: number;
+  status_page_url: string;
+};
+
 export type EmailTemplateDataMap = {
   welcome: WelcomeEmailData;
   password_reset: PasswordResetEmailData;
@@ -92,6 +100,7 @@ export type EmailTemplateDataMap = {
   export_ready: ExportReadyEmailData;
   delete_data_confirmation: DeleteDataConfirmationEmailData;
   delete_account_confirmation: DeleteAccountConfirmationEmailData;
+  payment_access_approved: PaymentAccessApprovedEmailData;
 };
 
 export type EmailType = keyof EmailTemplateDataMap;

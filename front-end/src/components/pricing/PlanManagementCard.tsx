@@ -58,8 +58,8 @@ const PlanManagementCard = ({
 
       <div className="mt-5 flex flex-wrap gap-3">
         <Button asChild>
-          <Link href="/pricing">
-            Compare plans
+          <Link href="/payments">
+            Manage payments
             <ArrowRight size={16} />
           </Link>
         </Button>

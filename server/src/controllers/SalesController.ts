@@ -14,12 +14,25 @@ import {
 } from "../validations/apiValidations.js";
 import { computePaymentState } from "../utils/paymentCalculations.js";
 import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
+import {
+  canWorkerPerformBillingAction,
+  getWorkerAccessRole,
+  type BillingAction,
+} from "../lib/workerPermissions.js";
 
 type SaleCreateInput = z.infer<typeof saleCreateSchema>;
 type SaleUpdateInput = z.infer<typeof saleUpdateSchema>;
 type SaleItemInput = SaleCreateInput["items"][number];
 
 const toNumber = (value: unknown) => Number(value ?? 0);
+
+const canMutateBilling = async (req: Request, action: BillingAction) => {
+  if (!req.user?.workerId) return true;
+
+  const accessRole = await getWorkerAccessRole(req.user.workerId);
+  if (!accessRole) return true;
+  return canWorkerPerformBillingAction(accessRole, action);
+};
 
 const decorateSaleFinancials = <T extends { total: unknown }>(
   sale: T & {
@@ -63,6 +76,12 @@ class SalesController {
     const userId = req.user?.id;
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    if (!(await canMutateBilling(req, "create"))) {
+      return sendResponse(res, 403, {
+        message: "You do not have permission for this billing action",
+      });
     }
 
     const body: SaleCreateInput = req.body;
@@ -234,6 +253,24 @@ class SalesController {
       return created;
     });
 
+    if (req.user?.workerId) {
+      try {
+        await prisma.$executeRaw`
+            UPDATE "sales"
+            SET "worker_id" = ${req.user.workerId}
+            WHERE "id" = ${sale.id}
+          `;
+        await prisma.$executeRaw`
+            UPDATE "worker_profiles"
+            SET "last_active_at" = CURRENT_TIMESTAMP,
+                "updated_at" = CURRENT_TIMESTAMP
+            WHERE "worker_id" = ${req.user.workerId}
+          `;
+      } catch {
+        // Migration-safe fallback: sale creation should still succeed.
+      }
+    }
+
     emitDashboardUpdate({ userId, source: "sale.create" });
     return sendResponse(res, 201, {
       message: "Sale recorded",
@@ -264,6 +301,12 @@ class SalesController {
     const userId = req.user?.id;
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    if (!(await canMutateBilling(req, "update"))) {
+      return sendResponse(res, 403, {
+        message: "You do not have permission for this billing action",
+      });
     }
 
     const id = Number(req.params.id);
@@ -316,6 +359,12 @@ class SalesController {
     const userId = req.user?.id;
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    if (!(await canMutateBilling(req, "delete"))) {
+      return sendResponse(res, 403, {
+        message: "You do not have permission for this billing action",
+      });
     }
 
     const id = Number(req.params.id);

@@ -1,11 +1,18 @@
 "use client";
 
-import React, { startTransition, useDeferredValue, useEffect, useState } from "react";
+import React, {
+  startTransition,
+  useDeferredValue,
+  useEffect,
+  useState,
+} from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   fetchDashboardCardMetrics,
+  fetchBusinessProfile,
   fetchDashboardOverview,
   fetchInvoices,
   fetchProducts,
@@ -19,6 +26,7 @@ import {
   dashboardSectionFallback,
 } from "@/components/dashboard/dashboard-section-shared";
 import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
+import { useCustomersQuery } from "@/hooks/useInventoryQueries";
 import DashboardFilters, {
   type DashboardFilters as DashboardFilterState,
 } from "@/components/dashboard/dashboard-filters";
@@ -33,6 +41,8 @@ import {
   Landmark,
   Minus,
   Package,
+  ReceiptText,
+  Sparkles,
   TrendingUp,
   Wallet,
 } from "lucide-react";
@@ -47,12 +57,26 @@ import { useI18n } from "@/providers/LanguageProvider";
 import { useDashboardFormatters } from "@/components/dashboard/use-dashboard-formatters";
 import DashboardPlanCard from "@/components/dashboard/dashboard-plan-card";
 import InventoryRiskSummaryBanner from "@/components/dashboard/inventory-risk-summary-banner";
+import SetupProgressCard from "@/components/dashboard/SetupProgressCard";
+import BeginnerGuideCard from "@/components/beginner/BeginnerGuideCard";
 import { cn } from "@/lib/utils";
 import { formatPercent } from "@/lib/dashboardUtils";
+import {
+  getBeginnerState,
+  invalidateBeginnerQueries,
+  seedDemoWorkspace,
+} from "@/lib/firstRun";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
-const QuickActions = dynamic(() => import("@/components/dashboard/quick-actions"), {
-  loading: () => dashboardSectionFallback("h-[300px]"),
-});
+const FIRST_BILL_REDIRECT_KEY = "billsutra.dashboard.first-bill-redirected.v1";
+
+const QuickActions = dynamic(
+  () => import("@/components/dashboard/quick-actions"),
+  {
+    loading: () => dashboardSectionFallback("h-[300px]"),
+  },
+);
 const ActivityTimeline = dynamic(
   () => import("@/components/dashboard/activity-timeline"),
   { loading: () => dashboardSectionFallback("h-[320px]") },
@@ -69,7 +93,9 @@ type DashboardClientProps = {
 };
 
 const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
-  const { t } = useI18n();
+  const router = useRouter();
+  const { language, t } = useI18n();
+  const queryClient = useQueryClient();
   const { currency, dateLabel, dateWithYear, timeLabel, translateEnum } =
     useDashboardFormatters();
   const hydrated = useHydrated();
@@ -133,6 +159,19 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     placeholderData: keepPreviousData,
     ...dashboardQueryDefaults,
   });
+  const { data: customers = [] } = useCustomersQuery();
+  const { data: businessProfile } = useQuery({
+    queryKey: ["business-profile"],
+    queryFn: fetchBusinessProfile,
+    enabled: hydrated && hasValidSessionToken,
+  });
+  const [isSeedingDemo, setIsSeedingDemo] = useState(false);
+  const [demoSeeded, setDemoSeeded] = useState(false);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    setDemoSeeded(getBeginnerState().demoSeeded);
+  }, [hydrated]);
 
   const metrics = metricsQuery.data?.metrics;
   const metricsUpdatedAt = metricsQuery.dataUpdatedAt;
@@ -156,6 +195,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     );
   }).length;
   const productCount = productsPage?.total ?? 0;
+  const customerCount = customers.length;
   const prioritizedPendingSalesPayments = [...pendingSalesPayments]
     .sort((left, right) => right.pendingAmount - left.pendingAmount)
     .slice(0, 4);
@@ -166,7 +206,8 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     return "bg-rose-100 text-rose-700";
   };
 
-  const showLoadingState = !hydrated || (hasValidSessionToken && metricsLoading);
+  const showLoadingState =
+    !hydrated || (hasValidSessionToken && metricsLoading);
   const unreadNotifications =
     data?.notifications.filter((notification) => !notification.read).length ??
     data?.notifications.length ??
@@ -237,7 +278,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           change: metrics.changes.pendingSalesPayments,
           icon: <CreditCard size={18} />,
           trendLabel: t("dashboard.primaryMetrics.pendingSalesPaymentsTrend"),
-          description: t("dashboard.primaryMetrics.pendingSalesPaymentsDescription"),
+          description: t(
+            "dashboard.primaryMetrics.pendingSalesPaymentsDescription",
+          ),
           helperText: t("dashboard.primaryMetrics.pendingSalesPaymentsHelper"),
           theme: "pending-sales" as const,
         },
@@ -246,9 +289,15 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           value: metrics.pendingPurchasePayments,
           change: metrics.changes.pendingPurchasePayments,
           icon: <Banknote size={18} />,
-          trendLabel: t("dashboard.primaryMetrics.pendingPurchasePaymentsTrend"),
-          description: t("dashboard.primaryMetrics.pendingPurchasePaymentsDescription"),
-          helperText: t("dashboard.primaryMetrics.pendingPurchasePaymentsHelper"),
+          trendLabel: t(
+            "dashboard.primaryMetrics.pendingPurchasePaymentsTrend",
+          ),
+          description: t(
+            "dashboard.primaryMetrics.pendingPurchasePaymentsDescription",
+          ),
+          helperText: t(
+            "dashboard.primaryMetrics.pendingPurchasePaymentsHelper",
+          ),
           theme: "pending-purchases" as const,
         },
       ]
@@ -297,34 +346,158 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
       value: invoiceStats?.overdue ?? 0,
       meta: t("dashboard.focus.overdueInvoicesMeta"),
       href: "/invoices/history",
-      tone:
-        "border-rose-200/80 bg-rose-50/80 text-rose-950 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-100",
+      tone: "border-rose-200/80 bg-rose-50/80 text-rose-950 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-100",
     },
     {
       label: t("dashboard.focus.pendingCollectionsLabel"),
       value: pendingSalesPayments.length,
       meta: currency(metrics?.pendingSalesPayments ?? 0),
       href: "#operations",
-      tone:
-        "border-amber-200/80 bg-amber-50/80 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100",
+      tone: "border-amber-200/80 bg-amber-50/80 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100",
     },
     {
       label: t("dashboard.focus.lowStockAlertsLabel"),
       value: data?.alerts.lowStock.length ?? 0,
       meta: t("dashboard.focus.lowStockAlertsMeta"),
       href: "/inventory",
-      tone:
-        "border-orange-200/80 bg-orange-50/80 text-orange-950 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-100",
+      tone: "border-orange-200/80 bg-orange-50/80 text-orange-950 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-100",
     },
     {
       label: t("dashboard.focus.unreadSignalsLabel"),
       value: unreadNotifications,
       meta: t("dashboard.focus.unreadSignalsMeta"),
       href: "#operations",
-      tone:
-        "border-border/80 bg-card/90 text-foreground dark:border-border/70 dark:bg-card/70",
+      tone: "border-border/80 bg-card/90 text-foreground dark:border-border/70 dark:bg-card/70",
     },
   ];
+  const setupProgress = {
+    businessReady: Boolean(businessProfile?.business_name?.trim()),
+    productsReady: productCount > 0,
+    customersReady: customerCount > 0,
+    billsReady: allInvoices.length > 0,
+  };
+  const shouldShowSetupProgress = Object.values(setupProgress).some(
+    (done) => !done,
+  );
+  const isBeginnerWorkspace =
+    shouldShowSetupProgress && allInvoices.length === 0;
+  const createBillCtaLabel =
+    language === "hi" ? "नया बिल बनाएं" : "Create New Bill";
+
+  useEffect(() => {
+    if (!hydrated || !hasValidSessionToken || !isBeginnerWorkspace) {
+      return;
+    }
+
+    const alreadyRedirected =
+      window.localStorage.getItem(FIRST_BILL_REDIRECT_KEY) === "1";
+    if (alreadyRedirected) {
+      return;
+    }
+
+    window.localStorage.setItem(FIRST_BILL_REDIRECT_KEY, "1");
+    router.replace("/simple-bill?firstVisit=1");
+  }, [hydrated, hasValidSessionToken, isBeginnerWorkspace, router]);
+
+  const beginnerGuideCopy =
+    language === "hi"
+      ? {
+          kicker: "नया काम शुरू करें",
+          title: "पहला बिल 2 मिनट में बनाने का आसान रास्ता",
+          description:
+            "अभी बस इन्हीं जरूरी स्टेप्स पर ध्यान दें। बाकी फीचर्स बाद में भी देखे जा सकते हैं।",
+          progressLabel: `अभी स्टेप ${setupProgress.businessReady ? (setupProgress.productsReady ? (setupProgress.customersReady ? 4 : 3) : 2) : 1} पर हैं`,
+          stepLabels: [
+            {
+              title: "दुकान की जानकारी भरें",
+              description: "दुकान का नाम और फोन भरने से बिल तैयार दिखेगा।",
+              href: "/business-profile",
+              actionLabel: "दुकान सेट करें",
+            },
+            {
+              title: "कम से कम एक प्रोडक्ट जोड़ें",
+              description: "नाम और कीमत भरना काफी है।",
+              href: "/products",
+              actionLabel: "प्रोडक्ट जोड़ें",
+            },
+            {
+              title: "एक ग्राहक जोड़ें",
+              description: "नाम और फोन से शुरुआत कर सकते हैं।",
+              href: "/customers",
+              actionLabel: "ग्राहक जोड़ें",
+            },
+            {
+              title: "अब पहला बिल बनाएं",
+              description: "ग्राहक चुनें, प्रोडक्ट जोड़ें, और बिल बनाएं।",
+              href: "/simple-bill",
+              actionLabel: "बिल बनाएं",
+            },
+          ],
+          primary: "डेमो डेटा जोड़ें",
+          secondary: "नया बिल बनाएं",
+          focusTitle: "अभी आपको बस 3 चीजें दिखेंगी",
+          focusDescription:
+            "Create Bill, Add Product, और Add Customer. यही सबसे जरूरी शॉर्टकट हैं।",
+        }
+      : {
+          kicker: "Start Simple",
+          title: "The easiest path to your first bill in under 2 minutes",
+          description:
+            "Focus only on the essentials for now. The rest of the business tools can wait until after your first bill.",
+          progressLabel: `You are on step ${setupProgress.businessReady ? (setupProgress.productsReady ? (setupProgress.customersReady ? 4 : 3) : 2) : 1} of 4`,
+          stepLabels: [
+            {
+              title: "Fill in your shop details",
+              description:
+                "Your shop name and phone are enough to get started.",
+              href: "/business-profile",
+              actionLabel: "Set up shop",
+            },
+            {
+              title: "Add at least one product",
+              description: "Product name and selling price are enough.",
+              href: "/products",
+              actionLabel: "Add product",
+            },
+            {
+              title: "Add one customer",
+              description:
+                "A name and phone number are enough for the first bill.",
+              href: "/customers",
+              actionLabel: "Add customer",
+            },
+            {
+              title: "Create your first bill",
+              description:
+                "Pick the customer, add products, and generate the bill.",
+              href: "/simple-bill",
+              actionLabel: "Create bill",
+            },
+          ],
+          primary: "Load demo data",
+          secondary: "Create New Bill",
+          focusTitle: "You only need 3 main actions right now",
+          focusDescription:
+            "Create Bill, Add Product, and Add Customer are the only shortcuts you need to start selling.",
+        };
+
+  const handleSeedDemo = async () => {
+    if (isSeedingDemo) return;
+
+    try {
+      setIsSeedingDemo(true);
+      await seedDemoWorkspace();
+      await invalidateBeginnerQueries(queryClient);
+      setDemoSeeded(true);
+      toast.success(
+        "Sample data is ready. You can change or delete it anytime.",
+      );
+    } catch {
+      toast.error("Could not load sample data right now.");
+    } finally {
+      setIsSeedingDemo(false);
+    }
+  };
 
   const sectionLinks = [
     { label: t("dashboard.sectionLinks.overview"), href: "#overview" },
@@ -370,7 +543,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
 
   const heroSection = (
     <section className="grid gap-5 xl:grid-cols-12">
-      <header className="dashboard-chart-surface rounded-[2rem] xl:col-span-8">
+      <header className="dashboard-chart-surface rounded-4xl xl:col-span-8">
         <div className="dashboard-chart-content p-6 sm:p-7">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
@@ -406,7 +579,12 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                   <ArrowRight size={16} />
                 </Link>
               </Button>
-              <Button asChild variant="outline" size="lg" className="w-full sm:w-auto">
+              <Button
+                asChild
+                variant="outline"
+                size="lg"
+                className="w-full sm:w-auto"
+              >
                 <Link href="/invoices/history">
                   {t("dashboard.sections.records.openRecords")}
                 </Link>
@@ -497,7 +675,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         </div>
       </header>
 
-      <aside className="dashboard-chart-surface rounded-[2rem] xl:col-span-4">
+      <aside className="dashboard-chart-surface rounded-4xl xl:col-span-4">
         <div className="dashboard-chart-content flex h-full flex-col p-6 sm:p-7">
           <div className="flex items-start gap-3">
             <div className="rounded-2xl border border-border/70 bg-card/80 p-2 text-primary shadow-sm">
@@ -529,7 +707,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                     <p className="mt-2 text-2xl font-semibold leading-none">
                       {item.value}
                     </p>
-                    <p className="mt-2 text-sm leading-5 opacity-80">{item.meta}</p>
+                    <p className="mt-2 text-sm leading-5 opacity-80">
+                      {item.meta}
+                    </p>
                   </div>
                   <ArrowRight
                     size={16}
@@ -547,7 +727,11 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 <ArrowRight size={16} />
               </Link>
             </Button>
-            <Button asChild variant="outline" className="w-full justify-between">
+            <Button
+              asChild
+              variant="outline"
+              className="w-full justify-between"
+            >
               <Link href="/invoices/history">
                 {t("dashboard.sections.records.openRecords")}
                 <ArrowRight size={16} />
@@ -560,7 +744,11 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   );
 
   const performanceSection = (
-    <section id="overview" aria-labelledby="overview-heading" className="grid gap-4">
+    <section
+      id="overview"
+      aria-labelledby="overview-heading"
+      className="grid gap-4"
+    >
       <DashboardSectionIntro
         headingId="overview-heading"
         kicker={t("dashboard.sections.overview.kicker")}
@@ -598,7 +786,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           <div className="dashboard-chart-content flex h-full flex-col p-6">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="app-kicker">{t("dashboard.sections.profit.kicker")}</p>
+                <p className="app-kicker">
+                  {t("dashboard.sections.profit.kicker")}
+                </p>
                 <h2
                   id="profit-heading"
                   className="mt-2 text-xl font-semibold tracking-tight text-foreground"
@@ -640,7 +830,10 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                             {card.title}
                           </p>
                           <p className="mt-2 text-xl font-semibold leading-tight text-foreground">
-                            <AnimatedNumber value={card.value} format={currency} />
+                            <AnimatedNumber
+                              value={card.value}
+                              format={currency}
+                            />
                           </p>
                         </div>
                         <div className="rounded-2xl border border-border/70 bg-card/80 p-3 text-primary shadow-sm">
@@ -676,7 +869,11 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   );
 
   const operationsSection = (
-    <section id="operations" aria-labelledby="operations-heading" className="grid gap-4">
+    <section
+      id="operations"
+      aria-labelledby="operations-heading"
+      className="grid gap-4"
+    >
       <DashboardSectionIntro
         headingId="operations-heading"
         kicker={t("dashboard.sections.operations.kicker")}
@@ -684,7 +881,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         description={t("dashboard.sections.operations.description")}
         action={
           <Button asChild variant="outline">
-            <Link href="/sales">{t("dashboard.sections.operations.openSalesLedger")}</Link>
+            <Link href="/sales">
+              {t("dashboard.sections.operations.openSalesLedger")}
+            </Link>
           </Button>
         }
       />
@@ -766,7 +965,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                             )}
                           </span>
                           <Button asChild type="button" variant="outline">
-                            <Link href="/sales">{t("dashboard.operations.openSales")}</Link>
+                            <Link href="/sales">
+                              {t("dashboard.operations.openSales")}
+                            </Link>
                           </Button>
                         </div>
                       </div>
@@ -774,7 +975,8 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                   ))
                 )}
               </div>
-              {pendingSalesPayments.length > prioritizedPendingSalesPayments.length ? (
+              {pendingSalesPayments.length >
+              prioritizedPendingSalesPayments.length ? (
                 <div className="mt-4">
                   <Button asChild variant="outline">
                     <Link href="/sales">
@@ -865,7 +1067,11 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   );
 
   const recordsSection = (
-    <section id="records" aria-labelledby="records-heading" className="grid gap-4">
+    <section
+      id="records"
+      aria-labelledby="records-heading"
+      className="grid gap-4"
+    >
       <DashboardSectionIntro
         headingId="records-heading"
         kicker={t("dashboard.sections.records.kicker")}
@@ -873,7 +1079,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         description={t("dashboard.sections.records.description")}
         action={
           <Button asChild variant="outline">
-            <Link href="/invoices/history">{t("dashboard.sections.records.openRecords")}</Link>
+            <Link href="/invoices/history">
+              {t("dashboard.sections.records.openRecords")}
+            </Link>
           </Button>
         }
       />
@@ -883,7 +1091,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           <div className="dashboard-chart-content p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="app-kicker">{t("dashboard.records.invoiceRecordsKicker")}</p>
+                <p className="app-kicker">
+                  {t("dashboard.records.invoiceRecordsKicker")}
+                </p>
                 <h3 className="mt-2 text-xl font-semibold text-foreground">
                   {t("dashboard.records.recentInvoiceHistoryTitle")}
                 </h3>
@@ -913,8 +1123,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                         {invoice.invoice_number}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {invoice.customer?.name ?? t("invoice.fallbackCustomer")} -{" "}
-                        {dateWithYear(invoice.date)}
+                        {invoice.customer?.name ??
+                          t("invoice.fallbackCustomer")}{" "}
+                        - {dateWithYear(invoice.date)}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -922,7 +1133,10 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                         {currency(Number(invoice.total))}
                       </span>
                       <span className="rounded-full border border-border bg-background px-2.5 py-1 font-medium text-muted-foreground">
-                        {translateEnum("dashboard.enums.paymentStatus", invoice.status)}
+                        {translateEnum(
+                          "invoiceHistory.status",
+                          invoice.status,
+                        )}
                       </span>
                     </div>
                   </div>
@@ -945,27 +1159,162 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     </section>
   );
 
-  return (
-    <DashboardLayout
-      name={displayName}
-      image={image}
-      title={t("dashboard.title", { name: displayName })}
-      subtitle={t("dashboard.subtitle")}
-      actions={
+  const beginnerExperienceSection = (
+    <>
+      <BeginnerGuideCard
+        kicker={beginnerGuideCopy.kicker}
+        title={beginnerGuideCopy.title}
+        description={beginnerGuideCopy.description}
+        icon={Sparkles}
+        progressLabel={beginnerGuideCopy.progressLabel}
+        steps={beginnerGuideCopy.stepLabels.map((step, index) => ({
+          ...step,
+          done:
+            index === 0
+              ? setupProgress.businessReady
+              : index === 1
+                ? setupProgress.productsReady
+                : index === 2
+                  ? setupProgress.customersReady
+                  : setupProgress.billsReady,
+          active:
+            (index === 0 && !setupProgress.businessReady) ||
+            (index === 1 &&
+              setupProgress.businessReady &&
+              !setupProgress.productsReady) ||
+            (index === 2 &&
+              setupProgress.businessReady &&
+              setupProgress.productsReady &&
+              !setupProgress.customersReady) ||
+            (index === 3 &&
+              setupProgress.businessReady &&
+              setupProgress.productsReady &&
+              setupProgress.customersReady &&
+              !setupProgress.billsReady),
+        }))}
+        primaryAction={{
+          label: beginnerGuideCopy.primary,
+          onClick: () => void handleSeedDemo(),
+        }}
+        secondaryAction={{
+          label: beginnerGuideCopy.secondary,
+          href: "/simple-bill",
+          variant: "outline",
+        }}
+      />
+
+      <section className="grid gap-5 xl:grid-cols-12">
+        <div className="xl:col-span-8">
+          <QuickActions className="w-full self-auto" />
+        </div>
+        <aside className="grid gap-5 xl:col-span-4">
+          <div className="dashboard-chart-surface rounded-[1.85rem]">
+            <div className="dashboard-chart-content p-6">
+              <div className="flex items-start gap-3">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+                  <ReceiptText size={18} />
+                </div>
+                <div>
+                  <p className="app-kicker">{beginnerGuideCopy.focusTitle}</p>
+                  <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
+                    {t("dashboard.sections.records.title")}
+                  </h2>
+                </div>
+              </div>
+              <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                {beginnerGuideCopy.focusDescription}
+              </p>
+              <div className="mt-5 grid gap-3">
+                {focusCards.slice(0, 3).map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className={`group rounded-[1.35rem] border px-4 py-4 transition hover:-translate-y-0.5 ${item.tone}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] opacity-70">
+                          {item.label}
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold leading-none">
+                          {item.value}
+                        </p>
+                        <p className="mt-2 text-sm leading-5 opacity-80">
+                          {item.meta}
+                        </p>
+                      </div>
+                      <ArrowRight
+                        size={16}
+                        className="mt-1 shrink-0 transition-transform group-hover:translate-x-1"
+                      />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DashboardPlanCard
+            monthlyInvoiceCount={monthlyInvoiceCount}
+            productCount={productCount}
+          />
+        </aside>
+      </section>
+    </>
+  );
+
+  const dashboardHeaderActions = (
+    <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+      <Button
+        asChild
+        size="lg"
+        className="h-12 w-full text-base font-semibold shadow-[0_20px_44px_-28px_rgba(18,61,101,0.55)] sm:w-auto"
+      >
+        <Link href="/simple-bill">
+          {createBillCtaLabel}
+          <ArrowRight size={16} />
+        </Link>
+      </Button>
+      {isBeginnerWorkspace ? null : (
         <DashboardFilters
           filters={filters}
           onChange={(next) => startTransition(() => setFilters(next))}
           disabled={showLoadingState}
           className="w-full sm:w-auto"
         />
-      }
+      )}
+    </div>
+  );
+
+  return (
+    <DashboardLayout
+      name={displayName}
+      image={image}
+      title={t("dashboard.title", { name: displayName })}
+      subtitle={t("dashboard.subtitle")}
+      actions={dashboardHeaderActions}
     >
       <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-7">
-        {heroSection}
-        <InventoryRiskSummaryBanner />
-        {performanceSection}
-        {operationsSection}
-        {recordsSection}
+        {shouldShowSetupProgress ? (
+          <SetupProgressCard
+            language={language}
+            progress={setupProgress}
+            onSeedDemo={() => void handleSeedDemo()}
+            isSeedingDemo={isSeedingDemo}
+            demoSeeded={demoSeeded}
+          />
+        ) : null}
+        {isBeginnerWorkspace ? (
+          beginnerExperienceSection
+        ) : (
+          <>
+            {heroSection}
+            <InventoryRiskSummaryBanner />
+            {performanceSection}
+            {operationsSection}
+            {recordsSection}
+          </>
+        )}
       </div>
     </DashboardLayout>
   );

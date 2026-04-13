@@ -11,6 +11,7 @@ import {
   duplicateInvoice,
   deleteInvoice,
   generateInvoicePdf,
+  getInvoiceBootstrap,
   getInvoice,
   listInvoices,
   markInvoiceAsSent,
@@ -19,6 +20,7 @@ import {
 import { emitDashboardUpdate } from "../../services/dashboardRealtime.js";
 import { sendEmail } from "../../emails/index.js";
 import { buildPublicInvoiceUrl } from "../../lib/appUrls.js";
+import { incrementInvoiceUsage } from "../../services/subscription.service.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
@@ -127,6 +129,16 @@ export const index = async (req: Request, res: Response) => {
   return res.status(200).json({ data: invoices });
 };
 
+export const bootstrap = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  const data = await getInvoiceBootstrap(userId);
+  return res.status(200).json({ data });
+};
+
 export const store = async (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) {
@@ -136,6 +148,7 @@ export const store = async (req: Request, res: Response) => {
   try {
     const body = req.body as InvoiceCreateInput;
     const invoice = await createInvoice(userId, body);
+    await incrementInvoiceUsage(userId);
     emitDashboardUpdate({ userId, source: "invoice.create" });
 
     return res.status(201).json({
@@ -339,7 +352,11 @@ export const send = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       message: `Invoice email sent to ${recipientEmail}`,
-      data: { invoiceId: invoice.id, status: invoice.status, email: recipientEmail },
+      data: {
+        invoiceId: invoice.id,
+        status: invoice.status,
+        email: recipientEmail,
+      },
     });
   } catch (error) {
     const err = error as Error & { status?: number };
@@ -368,7 +385,8 @@ export const reminder = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Invoice not found" });
     }
 
-    const recipientEmail = requestedEmail || invoice.customer?.email?.trim() || "";
+    const recipientEmail =
+      requestedEmail || invoice.customer?.email?.trim() || "";
     if (!recipientEmail) {
       return res.status(422).json({
         message: "Customer email is required to send this reminder",

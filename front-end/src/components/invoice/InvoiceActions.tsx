@@ -22,10 +22,10 @@ const InvoiceActions = ({
     <div className="no-print rounded-[1.7rem] bg-white/90 p-4 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.18)] ring-1 ring-slate-200/80 dark:bg-slate-900/80 dark:ring-slate-700/70">
       <div className="mb-3">
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
-          Utilities
+          Optional tools
         </p>
         <h3 className="mt-2 text-lg font-semibold text-slate-950 dark:text-slate-100">
-          Print, export, and share
+          Save or share this bill
         </h3>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">

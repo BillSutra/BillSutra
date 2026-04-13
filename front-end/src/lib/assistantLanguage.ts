@@ -1,3 +1,5 @@
+import type { Language } from "@/i18n";
+
 export type AssistantChatLanguage = "en" | "hi" | "hinglish";
 
 const DEVANAGARI_PATTERN = /[\u0900-\u097F]/g;
@@ -82,12 +84,11 @@ export const detectAssistantChatLanguage = (
     return "hi";
   }
 
-  if (devanagariCount > 0 || (englishHintCount > 0 && hindiHintCount > 0)) {
-    // Mixed input should feel natural in the loading state too.
+  if (devanagariCount > 0 || (hindiHintCount > 0 && englishHintCount > 0)) {
     return "hinglish";
   }
 
-  if (hindiHintCount > 0) {
+  if (hindiHintCount > 0 && englishHintCount === 0) {
     return "hinglish";
   }
 
@@ -95,5 +96,13 @@ export const detectAssistantChatLanguage = (
     return "en";
   }
 
+  if (hindiHintCount > 0) {
+    return "hinglish";
+  }
+
   return "hinglish";
 };
+
+export const assistantLanguageToUiLanguage = (
+  language: AssistantChatLanguage,
+): Language => (language === "hi" ? "hi" : "en");

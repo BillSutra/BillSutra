@@ -6,6 +6,7 @@ import { buildInvoiceReminderEmail } from "./templates/invoice-reminder.js";
 import { buildInvoiceSentEmail } from "./templates/invoice-sent.js";
 import { buildOtpLoginEmail } from "./templates/otp-login.js";
 import { buildPasswordResetEmail } from "./templates/password-reset.js";
+import { buildPaymentAccessApprovedEmail } from "./templates/payment-access-approved.js";
 import { buildWelcomeEmail } from "./templates/welcome.js";
 import type {
   EmailMessage,
@@ -39,6 +40,7 @@ const templateBuilders = {
   export_ready: buildExportReadyEmail,
   delete_data_confirmation: buildDeleteDataConfirmationEmail,
   delete_account_confirmation: buildDeleteAccountConfirmationEmail,
+  payment_access_approved: buildPaymentAccessApprovedEmail,
 } satisfies {
   [K in EmailType]: (payload: EmailTemplateDataMap[K]) => EmailMessage;
 };

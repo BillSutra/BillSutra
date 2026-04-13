@@ -45,6 +45,13 @@
 
 :root {
   --radius: 0.625rem;
+  --bg: #f3f8fc;
+  --text: #10233f;
+  --card-bg: #ffffff;
+  --input-bg: #ffffff;
+  --text-muted: #627890;
+  --line: #d7e4f1;
+  --invoice-text: #1f1b16;
   --background: #f3f8fc;
   --foreground: #10233f;
   --card: #ffffff;
@@ -76,8 +83,16 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
-  --dashboard-bg: linear-gradient(180deg, #edf5fb 0%, #f5f9fd 56%, #ffffff 100%);
-  --dashboard-grid: radial-gradient(rgba(18, 61, 101, 0.1) 0.5px, transparent 0.5px);
+  --dashboard-bg: linear-gradient(
+    180deg,
+    #edf5fb 0%,
+    #f5f9fd 56%,
+    #ffffff 100%
+  );
+  --dashboard-grid: radial-gradient(
+    rgba(18, 61, 101, 0.1) 0.5px,
+    transparent 0.5px
+  );
   --dashboard-surface: #ffffff;
   --dashboard-surface-muted: #edf4fa;
   --dashboard-surface-border: #d8e4ef;
@@ -99,6 +114,13 @@
      softer contrast than black/white, layered surfaces, and muted fintech accents. */
   --background: #11161d;
   --foreground: #e7ecf3;
+  --bg: #11161d;
+  --text: #e7ecf3;
+  --card-bg: #171d25;
+  --input-bg: #1b2330;
+  --text-muted: #97a7b9;
+  --line: #2a3442;
+  --invoice-text: #1f1b16;
   --card: #171d25;
   --card-foreground: #e7ecf3;
   --popover: #1b2330;
@@ -131,7 +153,10 @@
   --dashboard-bg:
     radial-gradient(circle at top, rgba(123, 161, 207, 0.12), transparent 28%),
     linear-gradient(180deg, #10151c 0%, #131922 52%, #161d27 100%);
-  --dashboard-grid: radial-gradient(rgba(144, 162, 184, 0.11) 0.5px, transparent 0.5px);
+  --dashboard-grid: radial-gradient(
+    rgba(144, 162, 184, 0.11) 0.5px,
+    transparent 0.5px
+  );
   --dashboard-surface: #171d25;
   --dashboard-surface-muted: #1d2530;
   --dashboard-surface-border: #2a3442;
@@ -152,14 +177,33 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
+  body {
+    background: var(--bg);
+    color: var(--text);
+  }
   body {
     @apply bg-background text-foreground;
     transition:
       background-color 220ms ease,
       color 220ms ease;
   }
+  :where(input, textarea, select) {
+    color: var(--foreground);
+    caret-color: var(--foreground);
+  }
+  :where(input, textarea)::placeholder {
+    color: color-mix(in oklab, var(--muted-foreground) 90%, transparent);
+    opacity: 1;
+  }
+  :where(select option) {
+    background: var(--card);
+    color: var(--foreground);
+  }
   html[data-language="hi"] body {
-    font-family: var(--font-hindi-sans), var(--font-sora), var(--font-geist-sans), sans-serif;
+    font-family:
+      var(--font-hindi-sans), var(--font-sora), var(--font-geist-sans),
+      sans-serif;
   }
   :where(h1, h2, h3, h4, h5, h6, p, span, a, li, td, th, label) {
     overflow-wrap: anywhere;
@@ -191,7 +235,7 @@
   .a4-page-frame {
     transform-origin: top left;
     overflow: hidden;
-    border: 1px solid #ddd6cf;
+    border: 1px solid color-mix(in oklab, var(--border) 68%, #ddd6cf);
     border-radius: 12px;
     background: #ffffff;
     box-shadow: 0 16px 36px -28px rgba(15, 23, 42, 0.45);
@@ -235,7 +279,7 @@
   }
 
   .invoice-content-root {
-    color: #1f1b16;
+    color: var(--invoice-text, #1f1b16);
   }
 
   .invoice-section,
@@ -256,7 +300,10 @@
     --dashboard-bg:
       radial-gradient(circle at top, rgba(18, 61, 101, 0.09), transparent 28%),
       linear-gradient(180deg, #edf5fb 0%, #f6f9fd 54%, #ffffff 100%);
-    --dashboard-grid: radial-gradient(rgba(18, 61, 101, 0.1) 0.6px, transparent 0.6px);
+    --dashboard-grid: radial-gradient(
+      rgba(18, 61, 101, 0.1) 0.6px,
+      transparent 0.6px
+    );
     --dashboard-surface: #ffffff;
     --dashboard-surface-muted: #edf4fa;
     --dashboard-surface-border: #d8e4ef;
@@ -280,9 +327,16 @@
     --primary-foreground: #0f151d;
     --ring: #7b9dc2;
     --dashboard-bg:
-      radial-gradient(circle at top, rgba(123, 161, 207, 0.12), transparent 28%),
+      radial-gradient(
+        circle at top,
+        rgba(123, 161, 207, 0.12),
+        transparent 28%
+      ),
       linear-gradient(180deg, #10151c 0%, #131922 54%, #161d27 100%);
-    --dashboard-grid: radial-gradient(rgba(144, 162, 184, 0.11) 0.6px, transparent 0.6px);
+    --dashboard-grid: radial-gradient(
+      rgba(144, 162, 184, 0.11) 0.6px,
+      transparent 0.6px
+    );
     --dashboard-surface: #171d25;
     --dashboard-surface-muted: #1d2530;
     --dashboard-surface-border: #2a3442;
@@ -330,7 +384,10 @@
     box-shadow:
       var(--app-shadow),
       inset 0 1px 0 color-mix(in oklab, white 22%, transparent);
-    transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+    transition:
+      transform 220ms ease,
+      box-shadow 220ms ease,
+      border-color 220ms ease;
     will-change: transform, box-shadow;
   }
 
@@ -339,7 +396,11 @@
     box-shadow:
       0 24px 56px -36px rgba(15, 23, 42, 0.18),
       inset 0 1px 0 color-mix(in oklab, white 24%, transparent);
-    border-color: color-mix(in oklab, var(--dashboard-surface-border) 70%, var(--dashboard-accent));
+    border-color: color-mix(
+      in oklab,
+      var(--dashboard-surface-border) 70%,
+      var(--dashboard-accent)
+    );
   }
 
   .dark .dashboard-chart-surface:hover {
@@ -352,7 +413,11 @@
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(120deg, rgba(255, 255, 255, 0.2), transparent 45%);
+    background: linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0.2),
+      transparent 45%
+    );
     pointer-events: none;
   }
 
@@ -373,7 +438,9 @@
     box-shadow:
       inset 0 1px 0 color-mix(in oklab, white 18%, transparent),
       0 10px 24px -22px rgba(15, 23, 42, 0.22);
-    transition: transform 200ms ease, box-shadow 200ms ease;
+    transition:
+      transform 200ms ease,
+      box-shadow 200ms ease;
   }
 
   .dashboard-chart-metric:hover {
@@ -461,6 +528,128 @@
     border-color: var(--dashboard-surface-border);
   }
 
+  /* Compatibility layer:
+     while legacy screens are being migrated, remap hardcoded utility colors
+     to design tokens in dark mode for readable, consistent UI. */
+  .dark
+    :where(
+      .bg-white,
+      .bg-white\/95,
+      .bg-white\/92,
+      .bg-white\/90,
+      .bg-white\/88,
+      .bg-white\/85,
+      .bg-white\/80,
+      .bg-white\/75,
+      .bg-white\/72,
+      .bg-white\/70,
+      .bg-\[\#ffffff\],
+      .bg-\[\#f7fbff\],
+      .bg-\[\#f8fbff\],
+      .bg-\[\#f8fafc\],
+      .bg-\[\#f7f3ee\],
+      .bg-\[\#f8f4ec\],
+      .bg-\[\#f3eadc\],
+      .bg-\[\#fffdf9\],
+      .bg-\[\#fff8ec\],
+      .bg-\[\#fffaf5\],
+      .bg-\[\#edf5fb\],
+      .bg-\[\#f5f9fd\]
+    ):not(.a4-page-frame):not(.a4-page-content) {
+    background-color: color-mix(
+      in oklab,
+      var(--card) 92%,
+      transparent
+    ) !important;
+  }
+
+  .dark
+    :where(
+      .text-\[\#10233f\],
+      .text-\[\#1f1b16\],
+      .text-\[\#5c4b3b\],
+      .text-\[\#8a6d56\],
+      .text-\[\#627890\],
+      .text-\[\#70859d\],
+      .text-\[\#546a80\],
+      .text-\[\#7a8ea4\],
+      .text-slate-950,
+      .text-slate-700,
+      .text-slate-600,
+      .text-gray-900,
+      .text-gray-700,
+      .text-gray-600,
+      .text-gray-500
+    ) {
+    color: var(--foreground) !important;
+  }
+
+  .dark
+    :where(
+      .text-muted,
+      .text-\[\#627890\],
+      .text-\[\#70859d\],
+      .text-\[\#546a80\],
+      .text-\[\#7a8ea4\],
+      .text-slate-500,
+      .text-slate-400,
+      .text-gray-500,
+      .text-gray-400
+    ) {
+    color: var(--muted-foreground) !important;
+  }
+
+  .dark
+    :where(
+      .border-gray-200,
+      .border-gray-300,
+      .border-slate-200,
+      .border-slate-300,
+      .border-white\/60,
+      .border-white\/70,
+      .border-white\/80,
+      .border-\[\#d8e4ef\],
+      .border-\[\#dce7f1\],
+      .border-\[\#eadfcf\],
+      .border-\[\#d8d3ff\]
+    ) {
+    border-color: var(--border) !important;
+  }
+
+  .dark
+    :where(
+      .text-\[\#123d65\],
+      .text-\[\#6d5bb3\],
+      .text-\[\#5b4db0\],
+      .text-\[\#0f766e\],
+      .text-\[\#b97908\],
+      .text-amber-800
+    ) {
+    color: var(--primary) !important;
+  }
+
+  .app-panel table {
+    color: var(--foreground);
+  }
+
+  .app-panel table thead th {
+    background: color-mix(in oklab, var(--muted) 58%, transparent);
+    color: var(--muted-foreground);
+    border-bottom: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  }
+
+  .app-panel table tbody tr {
+    border-top: 1px solid color-mix(in oklab, var(--border) 74%, transparent);
+  }
+
+  .app-panel table tbody tr:nth-child(even) {
+    background: color-mix(in oklab, var(--muted) 18%, transparent);
+  }
+
+  .app-panel table tbody tr:hover {
+    background: color-mix(in oklab, var(--accent) 38%, transparent);
+  }
+
   .app-page-intro {
     display: flex;
     flex-direction: column;
@@ -484,7 +673,11 @@
 
   .app-panel {
     border: 1px solid var(--app-surface-border);
-    background: linear-gradient(180deg, var(--app-surface-strong), var(--app-surface));
+    background: linear-gradient(
+      180deg,
+      var(--app-surface-strong),
+      var(--app-surface)
+    );
     box-shadow:
       var(--app-shadow-soft),
       inset 0 1px 0 color-mix(in oklab, white 18%, transparent);
@@ -493,7 +686,11 @@
 
   .app-panel-muted {
     border: 1px solid var(--app-surface-border);
-    background: linear-gradient(180deg, var(--app-surface-muted), var(--app-surface));
+    background: linear-gradient(
+      180deg,
+      var(--app-surface-muted),
+      var(--app-surface)
+    );
     box-shadow:
       var(--app-shadow-soft),
       inset 0 1px 0 color-mix(in oklab, white 16%, transparent);
@@ -515,7 +712,11 @@
 
   .app-empty-state {
     border: 1px dashed var(--app-surface-border);
-    background: linear-gradient(180deg, var(--app-surface-muted), var(--app-surface));
+    background: linear-gradient(
+      180deg,
+      var(--app-surface-muted),
+      var(--app-surface)
+    );
     color: var(--dashboard-text-muted);
     border-radius: 1rem;
     padding: 1rem;
@@ -523,7 +724,11 @@
 
   .app-list-item {
     border: 1px solid var(--app-surface-border);
-    background: linear-gradient(180deg, var(--app-surface-strong), var(--app-surface));
+    background: linear-gradient(
+      180deg,
+      var(--app-surface-strong),
+      var(--app-surface)
+    );
     box-shadow:
       var(--app-shadow-soft),
       inset 0 1px 0 color-mix(in oklab, white 14%, transparent);
@@ -546,23 +751,43 @@
     width: 100%;
     min-width: 0;
     border-radius: 0.9rem;
-    border: 1px solid color-mix(in oklab, var(--border) 84%, transparent);
-    background: color-mix(in oklab, var(--card) 90%, transparent);
+    color: var(--foreground);
+    caret-color: var(--foreground);
+    border: 1px solid color-mix(in oklab, var(--line) 86%, transparent);
+    background: color-mix(in oklab, var(--input-bg) 94%, transparent);
     box-shadow:
       0 1px 2px rgba(15, 23, 42, 0.04),
       inset 0 1px 0 color-mix(in oklab, white 12%, transparent);
-    transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease,
+      background-color 160ms ease;
   }
 
   .dark .app-field {
-    background: color-mix(in oklab, var(--card) 94%, transparent);
+    border-color: color-mix(in oklab, var(--line) 88%, transparent);
+    background: color-mix(in oklab, var(--input-bg) 96%, transparent);
     box-shadow:
       0 10px 24px -20px rgba(1, 4, 9, 0.6),
       inset 0 1px 0 rgba(255, 255, 255, 0.035);
   }
 
+  .app-field::placeholder {
+    color: color-mix(in oklab, var(--muted-foreground) 92%, transparent);
+    opacity: 1;
+  }
+
+  .app-field:focus,
+  .app-field:focus-visible {
+    outline: none;
+    border-color: color-mix(in oklab, var(--ring) 72%, var(--line));
+    box-shadow:
+      0 0 0 3px color-mix(in oklab, var(--ring) 24%, transparent),
+      inset 0 1px 0 color-mix(in oklab, white 10%, transparent);
+  }
+
   .app-field:hover {
-    border-color: color-mix(in oklab, var(--ring) 32%, var(--border));
+    border-color: color-mix(in oklab, var(--ring) 34%, var(--line));
   }
 
   .app-scrollbar {
@@ -617,6 +842,30 @@
   @page {
     size: A4;
     margin: 12mm;
+  }
+
+  :root,
+  .light,
+  .dark {
+    --bg: #ffffff !important;
+    --text: #111111 !important;
+    --background: #ffffff !important;
+    --foreground: #111111 !important;
+    --card: #ffffff !important;
+    --card-foreground: #111111 !important;
+    --popover: #ffffff !important;
+    --popover-foreground: #111111 !important;
+    --muted: #f4f4f5 !important;
+    --muted-foreground: #52525b !important;
+    --border: #d4d4d8 !important;
+    --line: #d4d4d8 !important;
+    --input-bg: #ffffff !important;
+    --invoice-text: #111111 !important;
+  }
+
+  html,
+  body {
+    color-scheme: light !important;
   }
 
   body {

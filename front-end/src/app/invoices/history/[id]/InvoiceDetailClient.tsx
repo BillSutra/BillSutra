@@ -1,10 +1,17 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, Clock3, Download, Mail, Share2, Wallet } from "lucide-react";
+import {
+  CheckCircle2,
+  Clock3,
+  Download,
+  Mail,
+  Share2,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
@@ -23,12 +30,17 @@ import {
   formatPaymentMethodLabel,
   getInvoicePaymentSnapshot,
 } from "@/lib/invoicePayments";
+import {
+  formatBusinessAddressFromRecord,
+  formatCustomerAddressFromRecord,
+} from "@/lib/indianAddress";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import {
   useCreatePaymentMutation,
   useInvoiceQuery,
   useUpdateInvoiceMutation,
 } from "@/hooks/useInventoryQueries";
+import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   InvoicePreviewData,
@@ -74,20 +86,42 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   const [partialError, setPartialError] = useState<string | null>(null);
   const [invoiceEmailOpen, setInvoiceEmailOpen] = useState(false);
   const [invoiceEmailRecipient, setInvoiceEmailRecipient] = useState("");
-  const [invoiceEmailError, setInvoiceEmailError] = useState<string | null>(null);
+  const [invoiceEmailError, setInvoiceEmailError] = useState<string | null>(
+    null,
+  );
   const [invoiceEmailSending, setInvoiceEmailSending] = useState(false);
-  const designConfig = useMemo(() => normalizeDesignConfig(null), []);
+  const fallbackActiveTemplate = useMemo(
+    () => ({
+      templateId: "professional",
+      templateName: "Professional",
+      enabledSections: DEFAULT_INVOICE_SECTIONS,
+      sectionOrder: DEFAULT_INVOICE_SECTIONS,
+      theme: DEFAULT_INVOICE_THEME,
+      designConfig: normalizeDesignConfig(null),
+    }),
+    [],
+  );
+  const activeTemplate = useActiveInvoiceTemplate(fallbackActiveTemplate);
+  const activeEnabledSections = activeTemplate.enabledSections;
+  const activeSectionOrder = activeTemplate.sectionOrder.length
+    ? activeTemplate.sectionOrder
+    : activeTemplate.enabledSections;
+  const activeTheme = activeTemplate.theme;
+  const designConfig = activeTemplate.designConfig;
 
-  const invoiceDate = (value?: string | null) => {
-    if (!value) return "-";
-    const parsed = new Date(value);
-    if (Number.isNaN(parsed.getTime())) return value;
-    return formatDate(parsed, {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  };
+  const invoiceDate = useCallback(
+    (value?: string | null) => {
+      if (!value) return "-";
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return value;
+      return formatDate(parsed, {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    },
+    [formatDate],
+  );
 
   const paymentSnapshot = useMemo(
     () => (data ? getInvoicePaymentSnapshot(data) : null),
@@ -96,8 +130,10 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
 
   const localizedPaymentLabel = useMemo(() => {
     if (!paymentSnapshot) return "";
-    if (paymentSnapshot.paymentStatus === "PAID") return t("invoiceDetail.markPaid");
-    if (paymentSnapshot.paymentStatus === "PARTIAL") return t("invoiceDetail.markPartial");
+    if (paymentSnapshot.paymentStatus === "PAID")
+      return t("invoiceDetail.markPaid");
+    if (paymentSnapshot.paymentStatus === "PARTIAL")
+      return t("invoiceDetail.markPartial");
     return t("invoiceDetail.markPending");
   }, [paymentSnapshot, t]);
 
@@ -129,13 +165,14 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     });
   }, [data]);
 
-  const formatLocalizedPaymentMethod = (
-    method?: Parameters<typeof formatPaymentMethodLabel>[0],
-  ) => {
-    const normalized = (method ?? "MANUAL").toUpperCase();
-    const key = `invoiceDetail.paymentMethods.${normalized}`;
-    return t(key) === key ? formatPaymentMethodLabel(method) : t(key);
-  };
+  const formatLocalizedPaymentMethod = useCallback(
+    (method?: Parameters<typeof formatPaymentMethodLabel>[0]) => {
+      const normalized = (method ?? "MANUAL").toUpperCase();
+      const key = `invoiceDetail.paymentMethods.${normalized}`;
+      return t(key) === key ? formatPaymentMethodLabel(method) : t(key);
+    },
+    [t],
+  );
 
   const previewData = useMemo<InvoicePreviewData | null>(() => {
     if (!data || !paymentSnapshot) return null;
@@ -149,7 +186,27 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
       dueDate: invoiceDate(data.due_date),
       business: {
         businessName,
-        address: businessProfile?.address ?? "",
+        businessAddress: businessProfile
+          ? {
+              addressLine1:
+                businessProfile.businessAddress?.addressLine1 ??
+                businessProfile.address_line1 ??
+                "",
+              city:
+                businessProfile.businessAddress?.city ??
+                businessProfile.city ??
+                "",
+              state:
+                businessProfile.businessAddress?.state ??
+                businessProfile.state ??
+                "",
+              pincode:
+                businessProfile.businessAddress?.pincode ??
+                businessProfile.pincode ??
+                "",
+            }
+          : undefined,
+        address: formatBusinessAddressFromRecord(businessProfile),
         phone: businessProfile?.phone ?? "",
         email: businessProfile?.email ?? "",
         website: businessProfile?.website ?? "",
@@ -161,14 +218,26 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
         showPaymentQr: businessProfile?.show_payment_qr ?? false,
       },
       client: {
-        name: data.customer?.name ?? t("invoiceDetail.customerFallback"),
+        name:
+          data.customer?.type === "business"
+            ? data.customer.businessName ||
+              data.customer.business_name ||
+              data.customer.name ||
+              t("invoiceDetail.customerFallback")
+            : (data.customer?.name ?? t("invoiceDetail.customerFallback")),
+        type: data.customer?.type,
+        businessName:
+          data.customer?.businessName ?? data.customer?.business_name ?? "",
+        gstin: data.customer?.gstin ?? "",
         email: data.customer?.email ?? "",
         phone: data.customer?.phone ?? "",
-        address: data.customer?.address ?? "",
+        address: formatCustomerAddressFromRecord(data.customer) || "",
       },
       items: data.items.map((item) => ({
         name: item.name,
-        description: item.tax_rate ? `GST ${item.tax_rate}%` : t("invoiceComposer.noGst"),
+        description: item.tax_rate
+          ? `GST ${item.tax_rate}%`
+          : t("invoiceComposer.noGst"),
         quantity: Number(item.quantity) || 0,
         unitPrice: Number(item.price) || 0,
         taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
@@ -193,6 +262,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
         paidAmount: paymentSnapshot.paid,
         remainingAmount: paymentSnapshot.remaining,
         history: paymentHistory.map((payment) => ({
+          id: payment.id,
           amount: Number(payment.amount ?? 0),
           paidAt: invoiceDate(payment.paid_at),
           method: formatLocalizedPaymentMethod(payment.method),
@@ -206,6 +276,8 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   }, [
     businessProfile,
     data,
+    formatLocalizedPaymentMethod,
+    invoiceDate,
     localizedPaymentHint,
     localizedPaymentLabel,
     paymentHistory,
@@ -219,10 +291,12 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     try {
       await downloadPdf({
         previewPayload: {
+          templateId: activeTemplate.templateId,
+          templateName: activeTemplate.templateName,
           data: previewData,
-          enabledSections: DEFAULT_INVOICE_SECTIONS,
-          sectionOrder: DEFAULT_INVOICE_SECTIONS,
-          theme: DEFAULT_INVOICE_THEME,
+          enabledSections: activeEnabledSections,
+          sectionOrder: activeSectionOrder,
+          theme: activeTheme,
           designConfig,
         },
         fileName: `${data.invoice_number}.pdf`,
@@ -420,10 +494,14 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     >
       <div className="mx-auto grid w-full max-w-7xl gap-6">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">{t("invoiceDetail.loading")}</p>
+          <p className="text-sm text-muted-foreground">
+            {t("invoiceDetail.loading")}
+          </p>
         ) : null}
         {isError ? (
-          <p className="text-sm text-[#b45309]">{t("invoiceDetail.loadError")}</p>
+          <p className="text-sm text-[#b45309]">
+            {t("invoiceDetail.loadError")}
+          </p>
         ) : null}
 
         {!isLoading && !isError && data && paymentSnapshot && previewData ? (
@@ -440,7 +518,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                     </h2>
                     <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
                       {t("invoiceDetail.issuedOn", {
-                        customer: data.customer?.name || t("invoiceDetail.customerFallback"),
+                        customer:
+                          data.customer?.name ||
+                          t("invoiceDetail.customerFallback"),
                         date: invoiceDate(data.date),
                       })}
                     </p>
@@ -455,7 +535,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                 <div className="mt-6 grid gap-4 sm:grid-cols-3">
                   <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-slate-500">{t("invoiceDetail.grandTotal")}</span>
+                      <span className="text-sm text-slate-500">
+                        {t("invoiceDetail.grandTotal")}
+                      </span>
                       <Wallet className="h-4 w-4 text-slate-500" />
                     </div>
                     <p className="mt-3 text-2xl font-semibold text-slate-950 dark:text-slate-50">
@@ -465,7 +547,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
 
                   <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-emerald-700">{t("invoiceDetail.paid")}</span>
+                      <span className="text-sm text-emerald-700">
+                        {t("invoiceDetail.paid")}
+                      </span>
                       <CheckCircle2 className="h-4 w-4 text-emerald-700" />
                     </div>
                     <p className="mt-3 text-2xl font-semibold text-emerald-950">
@@ -475,7 +559,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
 
                   <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-amber-700">{t("invoiceDetail.balance")}</span>
+                      <span className="text-sm text-amber-700">
+                        {t("invoiceDetail.balance")}
+                      </span>
                       <Clock3 className="h-4 w-4 text-amber-700" />
                     </div>
                     <p className="mt-3 text-2xl font-semibold text-amber-950">
@@ -571,7 +657,10 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                         >
                           <div>
                             <p className="font-semibold text-slate-950 dark:text-slate-50">
-                              {formatCurrency(Number(payment.amount ?? 0), "INR")}
+                              {formatCurrency(
+                                Number(payment.amount ?? 0),
+                                "INR",
+                              )}
                             </p>
                             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                               {formatLocalizedPaymentMethod(payment.method)}
@@ -617,13 +706,15 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                     className="rounded-[1.75rem] border border-slate-200 bg-white p-2 dark:border-slate-700"
                   >
                     <A4PreviewStack
-                      stackKey={`invoice-detail-${data.id}-${data.status}-${paymentHistory.length}`}
+                      stackKey={`invoice-detail-${data.id}-${activeTemplate.templateId}-${data.status}-${paymentHistory.length}`}
                     >
                       <TemplatePreviewRenderer
+                        templateId={activeTemplate.templateId}
+                        templateName={activeTemplate.templateName}
                         data={previewData}
-                        enabledSections={DEFAULT_INVOICE_SECTIONS}
-                        sectionOrder={DEFAULT_INVOICE_SECTIONS}
-                        theme={DEFAULT_INVOICE_THEME}
+                        enabledSections={activeEnabledSections}
+                        sectionOrder={activeSectionOrder}
+                        theme={activeTheme}
                       />
                     </A4PreviewStack>
                   </div>
@@ -648,7 +739,8 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
               <p>
                 {t("invoiceDetail.emailDebugCustomer", {
-                  value: data?.customer?.name ?? t("invoiceDetail.customerFallback"),
+                  value:
+                    data?.customer?.name ?? t("invoiceDetail.customerFallback"),
                 })}
               </p>
               <p className="mt-1">
@@ -669,7 +761,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="invoice-email-recipient">{t("invoiceDetail.emailLabel")}</Label>
+              <Label htmlFor="invoice-email-recipient">
+                {t("invoiceDetail.emailLabel")}
+              </Label>
               <Input
                 id="invoice-email-recipient"
                 type="email"
@@ -701,7 +795,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                 onClick={() => void handleSendInvoiceEmail()}
                 disabled={invoiceEmailSending}
               >
-                {invoiceEmailSending ? t("invoiceDetail.sending") : t("invoiceDetail.sendEmail")}
+                {invoiceEmailSending
+                  ? t("invoiceDetail.sending")
+                  : t("invoiceDetail.sendEmail")}
               </Button>
             </div>
           </div>
@@ -722,18 +818,23 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
           <div className="grid gap-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
               <p>
-                {t("invoiceDetail.totalLabel")}: {formatCurrency(paymentSnapshot?.total ?? 0, "INR")}
+                {t("invoiceDetail.totalLabel")}:{" "}
+                {formatCurrency(paymentSnapshot?.total ?? 0, "INR")}
               </p>
               <p className="mt-1">
-                {t("invoiceDetail.paid")}: {formatCurrency(paymentSnapshot?.paid ?? 0, "INR")}
+                {t("invoiceDetail.paid")}:{" "}
+                {formatCurrency(paymentSnapshot?.paid ?? 0, "INR")}
               </p>
               <p className="mt-1">
-                {t("invoiceDetail.remainingLabel")}: {formatCurrency(paymentSnapshot?.remaining ?? 0, "INR")}
+                {t("invoiceDetail.remainingLabel")}:{" "}
+                {formatCurrency(paymentSnapshot?.remaining ?? 0, "INR")}
               </p>
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="partial-payment-amount">{t("invoiceDetail.amountReceived")}</Label>
+              <Label htmlFor="partial-payment-amount">
+                {t("invoiceDetail.amountReceived")}
+              </Label>
               <Input
                 id="partial-payment-amount"
                 type="number"

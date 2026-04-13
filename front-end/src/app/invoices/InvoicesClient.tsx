@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { CheckCircle2, Circle, PackagePlus, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
@@ -22,6 +23,8 @@ import {
   normalizeDesignConfig,
 } from "@/components/invoice/DesignConfigContext";
 import { Button } from "@/components/ui/button";
+import FriendlyEmptyState from "@/components/ui/FriendlyEmptyState";
+import FirstTimeHint from "@/components/ui/FirstTimeHint";
 import Modal from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,7 +41,12 @@ import {
   formatRelativeTime,
   useInvoiceDrafts,
 } from "@/hooks/invoice/useInvoiceDrafts";
+import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
+import {
+  formatBusinessAddressFromRecord,
+  formatCustomerAddressFromRecord,
+} from "@/lib/indianAddress";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   InvoiceDraft,
@@ -69,10 +77,7 @@ type InvoiceClientProps = {
   image?: string;
 };
 
-const sanitizeItemFieldValue = (
-  key: keyof InvoiceItemForm,
-  value: string,
-) => {
+const sanitizeItemFieldValue = (key: keyof InvoiceItemForm, value: string) => {
   if (key === "quantity") {
     if (value === "") return value;
     const quantity = Number(value);
@@ -137,9 +142,7 @@ type QuickCustomerForm = {
 
 const RECENT_PRODUCT_USAGE_STORAGE_KEY = "invoice-smart-recent-products";
 
-const createEmptyInvoiceForm = (
-  customerId = "",
-): InvoiceFormState => ({
+const createEmptyInvoiceForm = (customerId = ""): InvoiceFormState => ({
   customer_id: customerId,
   date: "",
   due_date: "",
@@ -165,25 +168,35 @@ const buildProductSku = (name: string, barcode: string) => {
 };
 
 const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
-  const { formatDate, locale, t } = useI18n();
+  const { formatDate, language, locale, t } = useI18n();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
-  const { data: customers } = useCustomersQuery();
-  const { data: products = [] } = useProductsQuery({ limit: 1000 });
-  const { data: invoices = [] } = useInvoicesQuery();
-  const { data: warehouses } = useWarehousesQuery();
+  const {
+    data: customers = [],
+    isLoading: customersLoading,
+    isError: customersError,
+    refetch: refetchCustomers,
+  } = useCustomersQuery();
+  const {
+    data: products = [],
+    isLoading: productsLoading,
+    isError: productsError,
+    refetch: refetchProducts,
+  } = useProductsQuery({ limit: 1000 });
+  const { data: invoices = [], refetch: refetchInvoices } = useInvoicesQuery();
+  const {
+    data: warehouses = [],
+    isLoading: warehousesLoading,
+    isError: warehousesError,
+    refetch: refetchWarehouses,
+  } = useWarehousesQuery();
   const { data: businessProfile } = useQuery({
     queryKey: ["business-profile"],
     queryFn: fetchBusinessProfile,
   });
   const sendInvoiceEmailMutation = useMutation({
-    mutationFn: ({
-      invoiceId,
-      email,
-    }: {
-      invoiceId: number;
-      email: string;
-    }) => sendInvoiceEmail(invoiceId, { email }),
+    mutationFn: ({ invoiceId, email }: { invoiceId: number; email: string }) =>
+      sendInvoiceEmail(invoiceId, { email }),
   });
   const createInvoice = useCreateInvoiceMutation();
   const createProduct = useCreateProductMutation();
@@ -221,9 +234,15 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   );
   const [taxMode, setTaxMode] = useState<TaxMode>("CGST_SGST");
   const [items, setItems] = useState<InvoiceItemForm[]>([]);
-  const [quickEntryProduct, setQuickEntryProduct] = useState<Product | null>(null);
-  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
-  const [recentCartProductId, setRecentCartProductId] = useState<string | null>(null);
+  const [quickEntryProduct, setQuickEntryProduct] = useState<Product | null>(
+    null,
+  );
+  const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(
+    null,
+  );
+  const [recentCartProductId, setRecentCartProductId] = useState<string | null>(
+    null,
+  );
   const [shortcutHighlight, setShortcutHighlight] =
     useState<ShortcutHighlightSection>(null);
   const [shortcutHelpOpen, setShortcutHelpOpen] = useState(false);
@@ -234,11 +253,15 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     price: "",
     barcode: "",
   });
-  const [quickCustomerForm, setQuickCustomerForm] = useState<QuickCustomerForm>({
-    name: "",
-    phone: "",
-  });
-  const [recentProductUsage, setRecentProductUsage] = useState<RecentProductUsage[]>(() => {
+  const [quickCustomerForm, setQuickCustomerForm] = useState<QuickCustomerForm>(
+    {
+      name: "",
+      phone: "",
+    },
+  );
+  const [recentProductUsage, setRecentProductUsage] = useState<
+    RecentProductUsage[]
+  >(() => {
     if (typeof window === "undefined") return [];
 
     try {
@@ -269,17 +292,144 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     form.discount_type,
     taxMode,
   );
-  const activeEnabledSections = DEFAULT_INVOICE_SECTIONS;
-  const activeSectionOrder = DEFAULT_INVOICE_SECTIONS;
-  const activeTheme = DEFAULT_INVOICE_THEME;
-  const activeDesignConfig = useMemo(() => normalizeDesignConfig(null), []);
-  const autoFocusProductSearch =
-    searchParams.get("quickAction") === "new-bill";
+  const fallbackActiveTemplate = useMemo(
+    () => ({
+      templateId: "professional",
+      templateName: "Professional",
+      enabledSections: DEFAULT_INVOICE_SECTIONS,
+      sectionOrder: DEFAULT_INVOICE_SECTIONS,
+      theme: DEFAULT_INVOICE_THEME,
+      designConfig: normalizeDesignConfig(null),
+    }),
+    [],
+  );
+  const activeTemplate = useActiveInvoiceTemplate(fallbackActiveTemplate);
+  const activeEnabledSections = activeTemplate.enabledSections;
+  const activeSectionOrder = activeTemplate.sectionOrder.length
+    ? activeTemplate.sectionOrder
+    : activeTemplate.enabledSections;
+  const activeTheme = activeTemplate.theme;
+  const activeDesignConfig = activeTemplate.designConfig;
+  const autoFocusProductSearch = searchParams.get("quickAction") === "new-bill";
   const isMacShortcutPlatform = useMemo(() => {
     if (typeof navigator === "undefined") return false;
     return /Mac|iPhone|iPad/i.test(navigator.platform);
   }, []);
   const shortcutModifierLabel = isMacShortcutPlatform ? "Cmd" : "Ctrl";
+  const isBootstrapLoading =
+    customersLoading || productsLoading || warehousesLoading;
+  const hasBootstrapError = customersError || productsError || warehousesError;
+  const noCustomers = !customersLoading && customers.length === 0;
+  const noProducts = !productsLoading && products.length === 0;
+  const guidedStep = !form.customer_id ? 1 : items.length === 0 ? 2 : 3;
+  const guidedFlowCopy =
+    language === "hi"
+      ? {
+          bannerTitle: "पहला बिल आसान तरीके से बनाएं",
+          bannerDescription:
+            "नीचे दिए गए 3 स्टेप्स पूरे करें। पहले ग्राहक, फिर प्रोडक्ट, फिर बिल की जांच करके बनाएं।",
+          steps: [
+            {
+              title: "ग्राहक चुनें या जोड़ें",
+              description:
+                "पहले ग्राहक चुनें ताकि बिल सही व्यक्ति के नाम से बने।",
+            },
+            {
+              title: "प्रोडक्ट जोड़ें",
+              description: "अब वे प्रोडक्ट जोड़ें जो ग्राहक खरीद रहा है।",
+            },
+            {
+              title: "जांचें और बिल बनाएं",
+              description:
+                "कुल राशि देखकर बिल बनाएं और चाहें तो PDF या ईमेल भी करें।",
+            },
+          ],
+        }
+      : {
+          bannerTitle: "Create your first bill in 3 simple steps",
+          bannerDescription:
+            "Start with the customer, then add products, then review and generate the bill.",
+          steps: [
+            {
+              title: "Select or add a customer",
+              description:
+                "Choose the customer first so the bill is created for the right person.",
+            },
+            {
+              title: "Add products",
+              description: "Add the products your customer is buying.",
+            },
+            {
+              title: "Review and generate the bill",
+              description:
+                "Check the total, then create the bill and share it if needed.",
+            },
+          ],
+        };
+  const helperCopy =
+    language === "hi"
+      ? {
+          noCustomersTitle: "अभी कोई ग्राहक नहीं है",
+          noCustomersDescription:
+            "पहला बिल बनाने से पहले एक ग्राहक जोड़ें ताकि बिल सही व्यक्ति के नाम पर बने।",
+          noCustomersHint:
+            "शुरुआत के लिए सिर्फ ग्राहक का नाम काफी है। फोन नंबर बाद में भी जोड़ सकते हैं।",
+          addCustomer: "ग्राहक जोड़ें",
+          openCustomers: "ग्राहक खोलें",
+          missingCustomerQuestion: "ग्राहक नहीं दिख रहा?",
+          missingCustomerAnswer:
+            "ऊपर Add Customer का इस्तेमाल करें। नया ग्राहक तुरंत इसी बिल में चुन लिया जाएगा।",
+          noProductsTitle: "अभी कोई प्रोडक्ट नहीं है",
+          noProductsDescription:
+            "बिल बनाने से पहले कम से कम एक प्रोडक्ट जोड़ना जरूरी है।",
+          noProductsHint:
+            "शुरुआत एक प्रोडक्ट से करें। बाद में और प्रोडक्ट जोड़ सकते हैं।",
+          addProduct: "प्रोडक्ट जोड़ें",
+          openProducts: "प्रोडक्ट खोलें",
+          reviewMissing: "आगे बढ़ने के लिए कम से कम एक प्रोडक्ट जोड़ें।",
+          reviewReady: "सब तैयार है। अब आख़िरी बिल बनाया जा सकता है।",
+          reviewMissingHelp:
+            "कृपया बिल बनाने के लिए कम से कम एक प्रोडक्ट जोड़ें।",
+        }
+      : {
+          noCustomersTitle: "No customers yet",
+          noCustomersDescription:
+            "Add your first customer before making a bill so the bill goes to the right person.",
+          noCustomersHint:
+            "You only need a customer name to get started. Phone number is optional.",
+          addCustomer: "Add Customer",
+          openCustomers: "Open Customers",
+          missingCustomerQuestion: "Do not see the customer yet?",
+          missingCustomerAnswer:
+            "Use Add Customer and the new customer will be selected in this bill right away.",
+          noProductsTitle: "No products yet",
+          noProductsDescription:
+            "Add at least one product before creating a bill.",
+          noProductsHint:
+            "Start with one item you sell most often. You can add more products later.",
+          addProduct: "Add Product",
+          openProducts: "Open Products",
+          reviewMissing: "Add at least one product to continue.",
+          reviewReady: "Everything looks ready for the final bill.",
+          reviewMissingHelp:
+            "Please add at least one product to create a bill.",
+          reviewAction: "Review bill",
+          advancedHelpTitle: "You can start with the default settings",
+          advancedHelpBody:
+            "GST mode, PDF, and email are optional. For the first bill, you only need a customer and at least one product.",
+        };
+  const reviewActionLabel =
+    language === "hi" ? "बिल रिव्यू करें" : "Review bill";
+  const advancedHelpCopy =
+    language === "hi"
+      ? {
+          title: "डिफॉल्ट सेटिंग के साथ शुरू कर सकते हैं",
+          body: "GST mode, PDF, और email optional हैं. पहला बिल बनाने के लिए सिर्फ ग्राहक और प्रोडक्ट काफी है.",
+        }
+      : {
+          title: "You can start with the default settings",
+          body: "GST mode, PDF, and email are optional. For the first bill, you only need a customer and at least one product.",
+        };
 
   const parseServerErrors = useCallback((error: unknown, fallback: string) => {
     if (axios.isAxiosError(error)) {
@@ -304,16 +454,34 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       quickEntryRef.current?.focus({ select });
     }, 70);
   }, []);
-
-  const flashShortcutSection = useCallback((section: ShortcutHighlightSection) => {
-    setShortcutHighlight(section);
-    if (shortcutHighlightTimerRef.current) {
-      window.clearTimeout(shortcutHighlightTimerRef.current);
-    }
-    shortcutHighlightTimerRef.current = window.setTimeout(() => {
-      setShortcutHighlight(null);
-    }, 1200);
+  const scrollToCheckout = useCallback(() => {
+    document.getElementById("bill-create-button")?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
   }, []);
+
+  const handleRetryBootstrapData = useCallback(() => {
+    void Promise.all([
+      refetchCustomers(),
+      refetchProducts(),
+      refetchWarehouses(),
+      refetchInvoices(),
+    ]);
+  }, [refetchCustomers, refetchInvoices, refetchProducts, refetchWarehouses]);
+
+  const flashShortcutSection = useCallback(
+    (section: ShortcutHighlightSection) => {
+      setShortcutHighlight(section);
+      if (shortcutHighlightTimerRef.current) {
+        window.clearTimeout(shortcutHighlightTimerRef.current);
+      }
+      shortcutHighlightTimerRef.current = window.setTimeout(() => {
+        setShortcutHighlight(null);
+      }, 1200);
+    },
+    [],
+  );
 
   useEffect(() => {
     return () => {
@@ -365,14 +533,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         : Math.min(selectedItemIndex, items.length - 1);
 
   const customer = useMemo(
-    () =>
-      (customers ?? []).find((item) => String(item.id) === form.customer_id),
+    () => customers.find((item) => String(item.id) === form.customer_id),
     [customers, form.customer_id],
   );
 
   const customerNameById = useMemo(() => {
     const map = new Map<string, string>();
-    (customers ?? []).forEach((item) => {
+    customers.forEach((item) => {
       map.set(String(item.id), item.name);
     });
     return map;
@@ -380,9 +547,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
   const currentCartProductIds = useMemo(
     () =>
-      Array.from(
-        new Set(items.map((item) => item.product_id).filter(Boolean)),
-      ),
+      Array.from(new Set(items.map((item) => item.product_id).filter(Boolean))),
     [items],
   );
 
@@ -429,7 +594,27 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       dueDate,
       business: {
         businessName,
-        address: businessProfile?.address ?? "",
+        businessAddress: businessProfile
+          ? {
+              addressLine1:
+                businessProfile.businessAddress?.addressLine1 ??
+                businessProfile.address_line1 ??
+                "",
+              city:
+                businessProfile.businessAddress?.city ??
+                businessProfile.city ??
+                "",
+              state:
+                businessProfile.businessAddress?.state ??
+                businessProfile.state ??
+                "",
+              pincode:
+                businessProfile.businessAddress?.pincode ??
+                businessProfile.pincode ??
+                "",
+            }
+          : undefined,
+        address: formatBusinessAddressFromRecord(businessProfile),
         phone: businessProfile?.phone ?? "",
         email: businessProfile?.email ?? "",
         website: businessProfile?.website ?? "",
@@ -441,10 +626,18 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         showPaymentQr: businessProfile?.show_payment_qr ?? false,
       },
       client: {
-        name: customer?.name ?? t("invoice.fallbackCustomer"),
+        name:
+          customer?.type === "business"
+            ? customer.businessName ||
+              customer.name ||
+              t("invoice.fallbackCustomer")
+            : (customer?.name ?? t("invoice.fallbackCustomer")),
+        type: customer?.type,
+        businessName: customer?.businessName ?? customer?.business_name ?? "",
+        gstin: customer?.gstin ?? "",
         email: customer?.email ?? "",
         phone: customer?.phone ?? "",
-        address: customer?.address ?? "",
+        address: formatCustomerAddressFromRecord(customer) || "",
       },
       items: items.map((item) => ({
         name: item.name || t("invoice.fallbackItem"),
@@ -460,9 +653,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         label:
           form.discount_type === "PERCENTAGE"
             ? t("invoice.discountPercentageLabel", {
-                value: Math.min(100, Math.max(0, Number(form.discount) || 0)).toFixed(
-                  2,
-                ),
+                value: Math.min(
+                  100,
+                  Math.max(0, Number(form.discount) || 0),
+                ).toFixed(2),
               })
             : t("invoice.discountFixedLabel"),
       },
@@ -677,33 +871,42 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       flashShortcutSection("items");
 
       if (options?.announce !== false) {
-        toast.success(t("invoiceComposer.itemRemoved", { name: removedLabel }), {
-          action:
-            removedItem !== null
-              ? {
-                  label: t("invoiceComposer.undo"),
-                  onClick: () => {
-                    const itemToRestore = removedItem;
-                    if (!itemToRestore) return;
-                    setItems((currentItems) => {
-                      const nextItems = [...currentItems];
-                      nextItems.splice(index, 0, itemToRestore);
-                      return nextItems;
-                    });
-                    setSelectedItemIndex(index);
-                    setRecentCartProductId(itemToRestore.product_id || null);
-                    markDirty();
-                    flashShortcutSection("items");
-                    focusProductSearch(false);
-                  },
-                }
-              : undefined,
-        });
+        toast.success(
+          t("invoiceComposer.itemRemoved", { name: removedLabel }),
+          {
+            action:
+              removedItem !== null
+                ? {
+                    label: t("invoiceComposer.undo"),
+                    onClick: () => {
+                      const itemToRestore = removedItem;
+                      if (!itemToRestore) return;
+                      setItems((currentItems) => {
+                        const nextItems = [...currentItems];
+                        nextItems.splice(index, 0, itemToRestore);
+                        return nextItems;
+                      });
+                      setSelectedItemIndex(index);
+                      setRecentCartProductId(itemToRestore.product_id || null);
+                      markDirty();
+                      flashShortcutSection("items");
+                      focusProductSearch(false);
+                    },
+                  }
+                : undefined,
+          },
+        );
       }
 
       focusProductSearch(false);
     },
-    [flashShortcutSection, focusProductSearch, markDirty, resolvedSelectedItemIndex, t],
+    [
+      flashShortcutSection,
+      focusProductSearch,
+      markDirty,
+      resolvedSelectedItemIndex,
+      t,
+    ],
   );
 
   const handleFormChange = useCallback(
@@ -770,7 +973,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         return;
       }
 
-      if (!trimmedPrice || Number.isNaN(Number(trimmedPrice)) || Number(trimmedPrice) <= 0) {
+      if (
+        !trimmedPrice ||
+        Number.isNaN(Number(trimmedPrice)) ||
+        Number(trimmedPrice) <= 0
+      ) {
         toast.error(t("invoiceComposer.enterValidSellingPrice"));
         return;
       }
@@ -795,9 +1002,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           toastMessage: `${createdProduct.name} ${t("invoiceComposer.addToCart").toLowerCase()}`,
         });
       } catch (error) {
-        toast.error(
-          parseServerErrors(error, t("inventory.saveError")),
-        );
+        toast.error(parseServerErrors(error, t("inventory.saveError")));
       }
     },
     [addProductToBill, createProduct, parseServerErrors, quickProductForm, t],
@@ -808,7 +1013,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       event.preventDefault();
 
       const trimmedName = quickCustomerForm.name.trim();
-      const trimmedPhone = quickCustomerForm.phone.trim();
+      const normalizedPhone = quickCustomerForm.phone.replace(/\D/g, "");
 
       if (trimmedName.length < 2) {
         toast.error(t("invoiceComposer.customerNameMin"));
@@ -816,7 +1021,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         return;
       }
 
-      if (trimmedPhone && trimmedPhone.length < 6) {
+      if (!/^\d{10}$/.test(normalizedPhone)) {
         toast.error(t("invoiceComposer.customerPhoneMin"));
         return;
       }
@@ -824,16 +1029,21 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       try {
         const createdCustomer = await createCustomer.mutateAsync({
           name: trimmedName,
-          phone: trimmedPhone || undefined,
+          phone: normalizedPhone,
         });
 
-        queryClient.setQueryData<Customer[]>(["customers"], (currentCustomers) => {
-          const safeCustomers = currentCustomers ?? [];
-          return [
-            createdCustomer,
-            ...safeCustomers.filter((customer) => customer.id !== createdCustomer.id),
-          ];
-        });
+        queryClient.setQueryData<Customer[]>(
+          ["customers"],
+          (currentCustomers) => {
+            const safeCustomers = currentCustomers ?? [];
+            return [
+              createdCustomer,
+              ...safeCustomers.filter(
+                (customer) => customer.id !== createdCustomer.id,
+              ),
+            ];
+          },
+        );
 
         handleFormChange({
           ...form,
@@ -846,13 +1056,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         });
         flashShortcutSection("form");
         toast.success(
-          t("invoiceComposer.billCustomerAdded", { name: createdCustomer.name }),
+          t("invoiceComposer.billCustomerAdded", {
+            name: createdCustomer.name,
+          }),
         );
         focusProductSearch();
       } catch (error) {
-        toast.error(
-          parseServerErrors(error, t("customers.saveError")),
-        );
+        toast.error(parseServerErrors(error, t("customers.saveError")));
       }
     },
     [
@@ -875,6 +1085,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     try {
       await downloadPdf({
         previewPayload: {
+          templateId: activeTemplate.templateId,
+          templateName: activeTemplate.templateName,
           data: invoicePreviewData,
           enabledSections: activeEnabledSections,
           sectionOrder: activeSectionOrder,
@@ -890,6 +1102,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     activeDesignConfig,
     activeEnabledSections,
     activeSectionOrder,
+    activeTemplate.templateId,
+    activeTemplate.templateName,
     activeTheme,
     downloadPdf,
     invoicePreviewData,
@@ -919,8 +1133,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
     try {
       const selectedCustomer =
-        customers?.find((customer) => customer.id === Number(form.customer_id)) ??
-        null;
+        customers?.find(
+          (customer) => customer.id === Number(form.customer_id),
+        ) ?? null;
 
       const createdInvoice = await createInvoice.mutateAsync({
         customer_id: Number(form.customer_id),
@@ -959,7 +1174,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         warehouseId: form.warehouse_id ? Number(form.warehouse_id) : null,
       });
       toast.success(
-        t("invoice.createSuccess", { invoiceNumber: createdInvoice.invoice_number }),
+        t("invoice.createSuccess", {
+          invoiceNumber: createdInvoice.invoice_number,
+        }),
       );
       resetInvoiceComposer();
     } catch (error) {
@@ -1038,7 +1255,6 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         }),
       );
     } catch (error) {
-      console.error("Invoice email failed:", error);
       setServerError(parseServerErrors(error, t("invoice.sendEmailError")));
       toast.error(t("invoice.sendEmailFailureToast"));
     }
@@ -1071,7 +1287,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       const hasModifier = event.ctrlKey || event.metaKey;
 
       const inputHasSelection =
-        target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement
           ? (target.selectionStart ?? 0) !== (target.selectionEnd ?? 0)
           : false;
       const hasPageSelection =
@@ -1144,7 +1361,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           toast.success(t("invoiceComposer.productSearchFocused"));
           break;
         default:
-          if (key === "delete" || (isMacShortcutPlatform && key === "backspace")) {
+          if (
+            key === "delete" ||
+            (isMacShortcutPlatform && key === "backspace")
+          ) {
             event.preventDefault();
             if (resolvedSelectedItemIndex === null || items.length === 0) {
               toast.error(t("invoiceComposer.selectLineItemFirst"));
@@ -1214,118 +1434,324 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title={t("invoice.pageTitle")}
-      subtitle={t("invoice.pageSubtitle")}
+      title={language === "hi" ? "बिल बनाएं" : "Create Bill"}
+      subtitle={
+        language === "hi"
+          ? "ग्राहक चुनें, प्रोडक्ट जोड़ें और कुछ ही स्टेप्स में बिल तैयार करें।"
+          : "Choose a customer, add products, and create a bill in a few simple steps."
+      }
       actions={headerActions}
     >
       <div className="mx-auto w-full max-w-[1500px] font-[var(--font-sora),var(--font-geist-sans)]">
-        <div className="mb-6 flex flex-wrap items-center gap-2 rounded-[1.4rem] bg-white/85 px-4 py-3 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.12)] ring-1 ring-slate-200/80 dark:bg-slate-900/75 dark:text-slate-300 dark:ring-slate-700/70">
-          <span className="font-semibold text-slate-950 dark:text-slate-100">
-            {t("invoiceComposer.keyboardFirst")}
-          </span>
-          <span>{t("invoiceComposer.bannerEnter")}</span>
-          <span>{t("invoiceComposer.bannerRefocus", { key: shortcutModifierLabel })}</span>
-          <span>{t("invoiceComposer.bannerFinish", { key: shortcutModifierLabel })}</span>
-        </div>
+        {hasBootstrapError ? (
+          <section className="mb-6 rounded-2xl border border-amber-300/70 bg-amber-50/80 p-4 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
+            <p className="text-sm font-semibold">
+              {language === "hi"
+                ? "कुछ डेटा लोड नहीं हो पाया"
+                : "Some setup data could not be loaded"}
+            </p>
+            <p className="mt-1 text-xs opacity-90">
+              {language === "hi"
+                ? "ग्राहक, प्रोडक्ट या वेयरहाउस डेटा में दिक्कत है। कृपया फिर से लोड करें।"
+                : "Customers, products, or warehouse data failed to load. Please retry."}
+            </p>
+            <div className="mt-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleRetryBootstrapData}
+              >
+                {language === "hi" ? "फिर से लोड करें" : "Retry loading"}
+              </Button>
+            </div>
+          </section>
+        ) : isBootstrapLoading ? (
+          <section className="mb-6 rounded-2xl border border-slate-200 bg-slate-50/90 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+            {language === "hi"
+              ? "ग्राहक, प्रोडक्ट और वेयरहाउस डेटा लोड हो रहा है..."
+              : "Loading customers, products, and warehouse data..."}
+          </section>
+        ) : null}
 
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.72fr)_minmax(340px,0.62fr)] xl:items-start xl:gap-8">
-          <div className="min-w-0">
-            <InvoiceTable
-              items={items}
-              errors={itemErrors}
-              quickEntryProduct={quickEntryProduct}
-              quickEntryRef={quickEntryRef}
-              autoFocusProductSearch={autoFocusProductSearch}
-              selectedItemIndex={resolvedSelectedItemIndex}
-              recentProductId={recentCartProductId}
-              suggestedProducts={suggestedProducts}
-              recentProducts={quickAccessProducts}
-              shortcutMetaLabel={shortcutModifierLabel}
-              entryHighlighted={shortcutHighlight === "entry"}
-              itemsHighlighted={shortcutHighlight === "items"}
-              onFocusEntry={() => focusProductSearch()}
-              onQuickEntrySelect={setQuickEntryProduct}
-              onQuickEntrySubmit={handleQuickEntrySubmit}
-              onSelectItem={setSelectedItemIndex}
-              onItemChange={handleItemChange}
-              onRemoveItem={removeItem}
-              onAddSuggestedProduct={handleSuggestedProductAdd}
-            />
+        <section className="rounded-[2rem] border border-slate-200 bg-white/90 p-6 shadow-[0_24px_54px_-38px_rgba(15,23,42,0.16)] ring-1 ring-slate-200/70 dark:border-slate-700 dark:bg-slate-900/75 dark:ring-slate-700/60">
+          <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
+                Guided bill flow
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-950 dark:text-slate-50">
+                {guidedFlowCopy.bannerTitle}
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                {guidedFlowCopy.bannerDescription}
+              </p>
+            </div>
+
+            <div className="rounded-[1.4rem] border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100">
+              <p className="font-semibold">Step {guidedStep} of 3</p>
+              <p className="mt-1">
+                {guidedFlowCopy.steps[guidedStep - 1]?.description}
+              </p>
+            </div>
           </div>
 
-          <aside className="xl:sticky xl:top-24">
-            <InvoiceTotals
-              totals={totals}
-              taxMode={taxMode}
-              discountValue={form.discount}
-              discountType={form.discount_type}
-              className="xl:max-w-[390px]"
-              action={
-                <div className="mt-6 grid gap-3">
-                  <Button
-                    type="button"
-                    size="lg"
-                    className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
-                    disabled={createInvoice.isPending || items.length === 0}
-                    onClick={() => void submitInvoice()}
-                  >
-                    {createInvoice.isPending
-                      ? t("invoiceComposer.generating")
-                      : t("invoiceComposer.checkout")}
-                  </Button>
-                  <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
-                    <span>
-                      {items.length === 0
-                        ? t("invoiceComposer.addItemsToContinue")
-                        : t("invoiceComposer.readyToCheckout")}
-                    </span>
-                    <span className="font-semibold">
-                      {t("invoiceComposer.lineItemsCount", { count: items.length })}
-                    </span>
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            {guidedFlowCopy.steps.map((step, index) => {
+              const stepNumber = index + 1;
+              const isDone = guidedStep > stepNumber;
+              const isActive = guidedStep === stepNumber;
+
+              return (
+                <div
+                  key={step.title}
+                  className={[
+                    "rounded-[1.45rem] border px-4 py-4 transition",
+                    isActive
+                      ? "border-primary/40 bg-primary/5"
+                      : isDone
+                        ? "border-emerald-200 bg-emerald-50/80"
+                        : "border-slate-200 bg-slate-50/80 dark:border-slate-700 dark:bg-slate-900/60",
+                  ].join(" ")}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="mt-0.5 text-primary">
+                      {isDone ? (
+                        <CheckCircle2 size={18} />
+                      ) : (
+                        <Circle size={18} />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
+                        Step {stepNumber}
+                      </p>
+                      <p className="mt-1 font-semibold text-slate-950 dark:text-slate-100">
+                        {step.title}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+                        {step.description}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">
-                    {items.length === 0
-                      ? t("invoiceComposer.scanToCheckout")
-                      : t("invoiceComposer.keyboardCheckout", {
-                          key: shortcutModifierLabel,
-                        })}
-                  </p>
                 </div>
-              }
-            />
-          </aside>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+            {noCustomers ? (
+              <>
+                <Button
+                  type="button"
+                  onClick={() => setQuickAddCustomerOpen(true)}
+                >
+                  {helperCopy.addCustomer}
+                </Button>
+                <Button type="button" variant="outline" asChild>
+                  <Link href="/customers">{helperCopy.openCustomers}</Link>
+                </Button>
+              </>
+            ) : noProducts ? (
+              <>
+                <Button
+                  type="button"
+                  onClick={() => setQuickAddProductOpen(true)}
+                >
+                  {helperCopy.addProduct}
+                </Button>
+                <Button type="button" variant="outline" asChild>
+                  <Link href="/products">{helperCopy.openProducts}</Link>
+                </Button>
+              </>
+            ) : (
+              <Button type="button" onClick={scrollToCheckout}>
+                {reviewActionLabel}
+              </Button>
+            )}
+          </div>
         </section>
 
         <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.08fr)_minmax(320px,0.64fr)]">
-          <div
-            className={
-              shortcutHighlight === "form"
-                ? "rounded-[2rem] shadow-[0_0_0_4px_rgba(37,99,235,0.12)]"
-                : undefined
-            }
-          >
-            <InvoiceForm
-              form={form}
-              customers={customers ?? []}
-              warehouses={warehouses ?? []}
-              taxMode={taxMode}
-              onFormChange={handleFormChange}
-              onTaxModeChange={handleTaxModeChange}
-              onSubmit={handleSubmit}
-              isSubmitting={createInvoice.isPending}
-              summaryErrors={summaryErrors}
-              serverError={serverError}
-              hideSubmit
-            />
+          <div className="grid gap-4">
+            <div className="rounded-[1.6rem] border border-slate-200 bg-white/90 px-5 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                Step 1
+              </p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-950 dark:text-slate-100">
+                {guidedFlowCopy.steps[0]?.title}
+              </h3>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                {guidedFlowCopy.steps[0]?.description}
+              </p>
+            </div>
+
+            {noCustomers ? (
+              <FriendlyEmptyState
+                icon={UsersRound}
+                title={helperCopy.noCustomersTitle}
+                description={helperCopy.noCustomersDescription}
+                hint={helperCopy.noCustomersHint}
+                primaryAction={{
+                  label: helperCopy.addCustomer,
+                  onClick: () => setQuickAddCustomerOpen(true),
+                }}
+                secondaryAction={{
+                  label: helperCopy.openCustomers,
+                  href: "/customers",
+                  variant: "outline",
+                }}
+              />
+            ) : null}
+
+            <FirstTimeHint
+              id="bill-step-customer"
+              message="Choose the customer first. This makes the rest of the bill easier."
+            >
+              <div
+                className={
+                  shortcutHighlight === "form"
+                    ? "rounded-[2rem] shadow-[0_0_0_4px_rgba(37,99,235,0.12)]"
+                    : undefined
+                }
+              >
+                <InvoiceForm
+                  form={form}
+                  customers={customers}
+                  warehouses={warehouses}
+                  taxMode={taxMode}
+                  onFormChange={handleFormChange}
+                  onTaxModeChange={handleTaxModeChange}
+                  onSubmit={handleSubmit}
+                  isSubmitting={createInvoice.isPending}
+                  summaryErrors={summaryErrors}
+                  serverError={serverError}
+                  hideSubmit
+                />
+              </div>
+            </FirstTimeHint>
           </div>
 
           <aside className="grid gap-4">
+            <div className="rounded-[1.7rem] bg-white/90 p-6 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.14)] ring-1 ring-slate-200/80 dark:bg-slate-900/80 dark:text-slate-300 dark:ring-slate-700/70">
+              <p className="font-semibold text-slate-950 dark:text-slate-100">
+                {helperCopy.missingCustomerQuestion}
+              </p>
+              <p className="mt-2 leading-6">
+                {helperCopy.missingCustomerAnswer}
+              </p>
+            </div>
             <div className="no-print rounded-[1.7rem] bg-white/90 p-6 text-sm text-slate-600 shadow-[0_18px_40px_-32px_rgba(15,23,42,0.14)] ring-1 ring-slate-200/80 dark:bg-slate-900/80 dark:text-slate-300 dark:ring-slate-700/70">
               <p className="font-semibold text-slate-950 dark:text-slate-100">
-                {t("invoice.gstNoteTitle")}
+                {advancedHelpCopy.title}
               </p>
-              <p className="mt-2 leading-6">{t("invoice.gstNoteBody")}</p>
+              <p className="mt-2 leading-6">{advancedHelpCopy.body}</p>
             </div>
+          </aside>
+        </section>
+
+        <section className="mt-8 grid gap-6">
+          <div className="rounded-[1.6rem] border border-slate-200 bg-white/90 px-5 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+              Step 2
+            </p>
+            <h3 className="mt-2 text-xl font-semibold text-slate-950 dark:text-slate-100">
+              {guidedFlowCopy.steps[1]?.title}
+            </h3>
+            <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+              {guidedFlowCopy.steps[1]?.description}
+            </p>
+          </div>
+
+          {noProducts ? (
+            <FriendlyEmptyState
+              icon={PackagePlus}
+              title={helperCopy.noProductsTitle}
+              description={helperCopy.noProductsDescription}
+              hint={helperCopy.noProductsHint}
+              primaryAction={{
+                label: helperCopy.addProduct,
+                onClick: () => setQuickAddProductOpen(true),
+              }}
+              secondaryAction={{
+                label: helperCopy.openProducts,
+                href: "/products",
+                variant: "outline",
+              }}
+            />
+          ) : (
+            <FirstTimeHint
+              id="bill-step-products"
+              message="Search or scan a product here, then add it to the bill."
+            >
+              <InvoiceTable
+                items={items}
+                errors={itemErrors}
+                quickEntryProduct={quickEntryProduct}
+                quickEntryRef={quickEntryRef}
+                autoFocusProductSearch={autoFocusProductSearch}
+                selectedItemIndex={resolvedSelectedItemIndex}
+                recentProductId={recentCartProductId}
+                suggestedProducts={suggestedProducts}
+                recentProducts={quickAccessProducts}
+                shortcutMetaLabel={shortcutModifierLabel}
+                entryHighlighted={shortcutHighlight === "entry"}
+                itemsHighlighted={shortcutHighlight === "items"}
+                onFocusEntry={() => focusProductSearch()}
+                onQuickEntrySelect={setQuickEntryProduct}
+                onQuickEntrySubmit={handleQuickEntrySubmit}
+                onSelectItem={setSelectedItemIndex}
+                onItemChange={handleItemChange}
+                onRemoveItem={removeItem}
+                onAddSuggestedProduct={handleSuggestedProductAdd}
+              />
+            </FirstTimeHint>
+          )}
+        </section>
+
+        <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,1.72fr)_minmax(340px,0.62fr)] xl:items-start xl:gap-8">
+          <div className="grid gap-6">
+            <div className="rounded-[1.6rem] border border-slate-200 bg-white/90 px-5 py-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/70">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                Step 3
+              </p>
+              <h3 className="mt-2 text-xl font-semibold text-slate-950 dark:text-slate-100">
+                {guidedFlowCopy.steps[2]?.title}
+              </h3>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                {guidedFlowCopy.steps[2]?.description}
+              </p>
+            </div>
+
+            <div className="printable">
+              <DesignConfigProvider
+                value={{
+                  designConfig: activeDesignConfig,
+                  updateSection: () => {},
+                  resetSection: () => {},
+                  resetAll: () => {},
+                }}
+              >
+                <div
+                  id="invoice-preview-pdf-root"
+                  className="rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none"
+                >
+                  <A4PreviewStack
+                    stackKey={`invoices-preview-${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
+                  >
+                    <TemplatePreviewRenderer
+                      key={`${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
+                      templateId={activeTemplate.templateId}
+                      templateName={activeTemplate.templateName}
+                      data={invoicePreviewData}
+                      enabledSections={activeEnabledSections}
+                      sectionOrder={activeSectionOrder}
+                      theme={activeTheme}
+                    />
+                  </A4PreviewStack>
+                </div>
+              </DesignConfigProvider>
+            </div>
+
             <div
               className={
                 shortcutHighlight === "actions"
@@ -1340,52 +1766,73 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 isSendingEmail={sendInvoiceEmailMutation.isPending}
               />
             </div>
-          </aside>
-        </section>
-
-        <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(320px,0.72fr)_minmax(0,1.28fr)]">
-          <div className="grid gap-6">
-            <InvoiceDraftPanel
-              isDirty={isDirty}
-              lastSavedAt={lastSavedAt}
-              onSaveDraft={saveNewDraft}
-            />
-            <InvoiceDraftList
-              drafts={drafts}
-              currentDraftId={draftId}
-              customerNameById={customerNameById}
-              onLoadDraft={loadDraft}
-              onDeleteDraft={deleteDraft}
-            />
           </div>
 
-          <div className="printable">
-            <DesignConfigProvider
-              value={{
-                designConfig: activeDesignConfig,
-                updateSection: () => {},
-                resetSection: () => {},
-                resetAll: () => {},
-              }}
-            >
-              <div
-                id="invoice-preview-pdf-root"
-                className="rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none"
-              >
-                <A4PreviewStack
-                  stackKey={`invoices-preview-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
+          <aside className="grid gap-6 xl:sticky xl:top-24">
+            <InvoiceTotals
+              totals={totals}
+              taxMode={taxMode}
+              discountValue={form.discount}
+              discountType={form.discount_type}
+              className="xl:max-w-[390px]"
+              action={
+                <FirstTimeHint
+                  id="bill-step-generate"
+                  message="When the customer and products are ready, use this button to create the bill."
+                  position="bottom"
                 >
-                  <TemplatePreviewRenderer
-                    key={`${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
-                    data={invoicePreviewData}
-                    enabledSections={activeEnabledSections}
-                    sectionOrder={activeSectionOrder}
-                    theme={activeTheme}
-                  />
-                </A4PreviewStack>
-              </div>
-            </DesignConfigProvider>
-          </div>
+                  <div className="mt-6 grid gap-3">
+                    <Button
+                      id="bill-create-button"
+                      type="button"
+                      size="lg"
+                      className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
+                      disabled={createInvoice.isPending || items.length === 0}
+                      onClick={() => void submitInvoice()}
+                    >
+                      {createInvoice.isPending
+                        ? t("invoiceComposer.generating")
+                        : t("invoiceComposer.checkout")}
+                    </Button>
+                    <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
+                      <span>
+                        {items.length === 0
+                          ? helperCopy.reviewMissing
+                          : helperCopy.reviewReady}
+                      </span>
+                      <span className="font-semibold">
+                        {t("invoiceComposer.lineItemsCount", {
+                          count: items.length,
+                        })}
+                      </span>
+                    </div>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                      {items.length === 0
+                        ? helperCopy.reviewMissingHelp
+                        : t("invoiceComposer.keyboardCheckout", {
+                            key: shortcutModifierLabel,
+                          })}
+                    </p>
+                  </div>
+                </FirstTimeHint>
+              }
+            />
+
+            <div className="grid gap-6">
+              <InvoiceDraftPanel
+                isDirty={isDirty}
+                lastSavedAt={lastSavedAt}
+                onSaveDraft={saveNewDraft}
+              />
+              <InvoiceDraftList
+                drafts={drafts}
+                currentDraftId={draftId}
+                customerNameById={customerNameById}
+                onLoadDraft={loadDraft}
+                onDeleteDraft={deleteDraft}
+              />
+            </div>
+          </aside>
         </section>
 
         <Modal
@@ -1401,7 +1848,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         >
           <div className="grid gap-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
-              <p>{t("invoiceDetail.emailDebugInvoice", { value: lastCreatedInvoiceNumber ?? "-" })}</p>
+              <p>
+                {t("invoiceDetail.emailDebugInvoice", {
+                  value: lastCreatedInvoiceNumber ?? "-",
+                })}
+              </p>
               <p className="mt-1">
                 {t("invoiceDetail.emailDebugAmount", {
                   value: `INR ${(lastCreatedInvoiceTotal ?? 0).toFixed(2)}`,
@@ -1417,7 +1868,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             </div>
 
             <div className="grid gap-2">
-              <Label htmlFor="invoice-email-recipient">{t("invoiceComposer.emailLabel")}</Label>
+              <Label htmlFor="invoice-email-recipient">
+                {t("invoiceComposer.emailLabel")}
+              </Label>
               <Input
                 id="invoice-email-recipient"
                 type="email"
@@ -1465,13 +1918,34 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         >
           <div className="grid gap-3 text-sm text-muted-foreground">
             {[
-              [`${shortcutModifierLabel}+B`, t("invoiceComposer.shortcutNewBill")],
-              [`${shortcutModifierLabel}+P`, t("invoiceComposer.shortcutQuickProduct")],
-              [`${shortcutModifierLabel}+C`, t("invoiceComposer.shortcutQuickCustomer")],
-              [`${shortcutModifierLabel}+S`, t("invoiceComposer.shortcutSaveBill")],
-              [`${shortcutModifierLabel}+D`, t("invoiceComposer.shortcutDiscount")],
-              [`${shortcutModifierLabel}+Q`, t("invoiceComposer.shortcutFocusSearch")],
-              [`${shortcutModifierLabel}+Delete`, t("invoiceComposer.shortcutRemoveItem")],
+              [
+                `${shortcutModifierLabel}+B`,
+                t("invoiceComposer.shortcutNewBill"),
+              ],
+              [
+                `${shortcutModifierLabel}+P`,
+                t("invoiceComposer.shortcutQuickProduct"),
+              ],
+              [
+                `${shortcutModifierLabel}+C`,
+                t("invoiceComposer.shortcutQuickCustomer"),
+              ],
+              [
+                `${shortcutModifierLabel}+S`,
+                t("invoiceComposer.shortcutSaveBill"),
+              ],
+              [
+                `${shortcutModifierLabel}+D`,
+                t("invoiceComposer.shortcutDiscount"),
+              ],
+              [
+                `${shortcutModifierLabel}+Q`,
+                t("invoiceComposer.shortcutFocusSearch"),
+              ],
+              [
+                `${shortcutModifierLabel}+Delete`,
+                t("invoiceComposer.shortcutRemoveItem"),
+              ],
               ["Enter", t("invoiceComposer.shortcutEnter")],
               ["?", t("invoiceComposer.shortcutHelp")],
             ].map(([shortcut, description]) => (
@@ -1502,7 +1976,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         >
           <form className="grid gap-4" onSubmit={handleQuickCreateProduct}>
             <div className="grid gap-2">
-              <Label htmlFor="quick-product-name">{t("invoiceComposer.name")}</Label>
+              <Label htmlFor="quick-product-name">
+                {t("invoiceComposer.name")}
+              </Label>
               <Input
                 ref={quickProductNameRef}
                 id="quick-product-name"
@@ -1517,7 +1993,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="quick-product-price">{t("invoiceComposer.price")}</Label>
+              <Label htmlFor="quick-product-price">
+                {t("invoiceComposer.price")}
+              </Label>
               <Input
                 id="quick-product-price"
                 type="number"
@@ -1534,7 +2012,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="quick-product-barcode">{t("invoiceComposer.barcode")}</Label>
+              <Label htmlFor="quick-product-barcode">
+                {t("invoiceComposer.barcode")}
+              </Label>
               <Input
                 id="quick-product-barcode"
                 value={quickProductForm.barcode}
@@ -1556,7 +2036,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={createProduct.isPending}>
-                {createProduct.isPending ? t("common.processing") : t("invoiceComposer.saveProduct")}
+                {createProduct.isPending
+                  ? t("common.processing")
+                  : t("invoiceComposer.saveProduct")}
               </Button>
             </div>
           </form>
@@ -1570,7 +2052,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         >
           <form className="grid gap-4" onSubmit={handleQuickCreateCustomer}>
             <div className="grid gap-2">
-              <Label htmlFor="quick-customer-name">{t("invoiceComposer.name")}</Label>
+              <Label htmlFor="quick-customer-name">
+                {t("invoiceComposer.name")}
+              </Label>
               <Input
                 ref={quickCustomerNameRef}
                 id="quick-customer-name"
@@ -1585,17 +2069,20 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="quick-customer-phone">{t("invoiceComposer.phone")}</Label>
+              <Label htmlFor="quick-customer-phone">
+                {t("invoiceComposer.phone")}
+              </Label>
               <Input
                 id="quick-customer-phone"
                 value={quickCustomerForm.phone}
                 onChange={(event) =>
                   setQuickCustomerForm((currentForm) => ({
                     ...currentForm,
-                    phone: event.target.value,
+                    phone: event.target.value.replace(/\D/g, "").slice(0, 10),
                   }))
                 }
                 placeholder={t("invoiceComposer.customerPhonePlaceholder")}
+                inputMode="numeric"
               />
             </div>
             <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -1607,7 +2094,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                 {t("common.cancel")}
               </Button>
               <Button type="submit" disabled={createCustomer.isPending}>
-                {createCustomer.isPending ? t("common.processing") : t("invoiceComposer.saveCustomer")}
+                {createCustomer.isPending
+                  ? t("common.processing")
+                  : t("invoiceComposer.saveCustomer")}
               </Button>
             </div>
           </form>

@@ -71,17 +71,17 @@ export function DataTable({
             setPage(1);
           }}
           placeholder={searchPlaceholder}
-          className="h-10 max-w-md rounded-xl border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
+          className="h-10 max-w-md rounded-xl"
         />
         <p className="text-sm text-muted-foreground">
           {filteredRows.length} results
         </p>
       </div>
 
-      <div className="app-panel overflow-hidden rounded-2xl">
+      <div className="app-panel overflow-hidden rounded-2xl border border-border/75">
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
-            <thead className="bg-muted/70 text-muted-foreground">
+          <table className="min-w-full text-sm text-foreground">
+            <thead className="bg-muted/55 text-muted-foreground">
               <tr>
                 {columns.map((column) => (
                   <th
@@ -101,11 +101,9 @@ export function DataTable({
                 <tr
                   key={row.id}
                   className={cn(
-                    "border-t border-border/70 transition-colors",
-                    index % 2 === 0
-                      ? "bg-transparent"
-                      : "bg-muted/25",
-                    "hover:bg-accent/40",
+                    "border-t border-border/65 transition-colors",
+                    index % 2 === 0 ? "bg-transparent" : "bg-muted/20",
+                    "hover:bg-accent/45",
                   )}
                 >
                   {columns.map((column) => (

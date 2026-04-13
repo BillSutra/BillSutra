@@ -10,6 +10,8 @@ class AssistantController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    const startedAt = Date.now();
+
     try {
       const body = req.body as AssistantQueryInput;
       const reply = await answerAssistantQuery({
@@ -18,11 +20,24 @@ class AssistantController {
         history: body.history,
       });
 
+      if (process.env.NODE_ENV !== "production") {
+        console.info("[assistant.controller] query completed", {
+          userId,
+          durationMs: Date.now() - startedAt,
+        });
+      }
+
       return sendResponse(res, 200, { data: reply });
     } catch (error) {
-      console.error("Assistant query error:", error);
+      console.error("[assistant.controller] query failed", {
+        userId,
+        durationMs: Date.now() - startedAt,
+        message: error instanceof Error ? error.message : "unknown",
+      });
+
       return sendResponse(res, 500, {
-        message: error instanceof Error ? error.message : "Assistant request failed",
+        message:
+          "Assistant could not complete that request. Please try a short command like 'Show today's sales'.",
       });
     }
   }

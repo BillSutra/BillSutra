@@ -30,6 +30,14 @@ const formatDate = (value: string | null) => {
   });
 };
 
+const renderMultiline = (value: string | null | undefined) =>
+  String(value ?? "")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => escapeHtml(line))
+    .join("<br />");
+
 export const renderPublicInvoiceHtml = (invoice: PublicInvoiceViewData) => {
   const itemRows = invoice.items
     .map(
@@ -301,7 +309,7 @@ export const renderPublicInvoiceHtml = (invoice: PublicInvoiceViewData) => {
                 <div style="margin-top:12px;color:var(--muted);font-size:14px;line-height:1.7;">
                   ${escapeHtml(invoice.business_email ?? "")}<br />
                   ${escapeHtml(invoice.business_phone ?? "")}<br />
-                  ${escapeHtml(invoice.business_address ?? "")}
+                  ${renderMultiline(invoice.business_address)}
                 </div>
               </aside>
             </section>
@@ -311,10 +319,12 @@ export const renderPublicInvoiceHtml = (invoice: PublicInvoiceViewData) => {
                 <div class="detail-card">
                   <h2>Customer details</h2>
                   <div class="detail-list">
-                    <div class="detail-row"><span class="label">Name</span><strong>${escapeHtml(invoice.customer_name)}</strong></div>
+                    <div class="detail-row"><span class="label">Name</span><strong>${escapeHtml(invoice.customer_display_name || invoice.customer_name)}</strong></div>
+                    ${invoice.customer_type === "business" ? `<div class="detail-row"><span class="label">Type</span><span>Business</span></div>` : ""}
+                    ${invoice.customer_type === "business" && invoice.customer_gstin ? `<div class="detail-row"><span class="label">GSTIN</span><span>${escapeHtml(invoice.customer_gstin)}</span></div>` : ""}
                     <div class="detail-row"><span class="label">Email</span><span>${escapeHtml(invoice.email ?? "-")}</span></div>
                     <div class="detail-row"><span class="label">Phone</span><span>${escapeHtml(invoice.customer_phone ?? "-")}</span></div>
-                    <div class="detail-row"><span class="label">Address</span><span>${escapeHtml(invoice.customer_address ?? "-")}</span></div>
+                    <div class="detail-row"><span class="label">Address</span><span>${invoice.customer_address ? renderMultiline(invoice.customer_address) : "-"}</span></div>
                   </div>
                 </div>
 

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import AuthMiddleware from "../../middlewares/AuthMIddleware.js";
+import RequireFeatureAccessMiddleware from "../../middlewares/RequireFeatureAccessMiddleware.js";
 import validate from "../../middlewares/validate.js";
 import {
   idParamSchema,
@@ -8,6 +9,7 @@ import {
   invoiceUpdateSchema,
 } from "../../validations/apiValidations.js";
 import {
+  bootstrap,
   destroy,
   duplicate as duplicateInvoice,
   index,
@@ -22,9 +24,11 @@ import {
 const router = Router();
 
 router.get("/", AuthMiddleware, index);
+router.get("/bootstrap", AuthMiddleware, bootstrap);
 router.post(
   "/",
   AuthMiddleware,
+  RequireFeatureAccessMiddleware("INVOICE_CREATE"),
   validate({ body: invoiceCreateSchema }),
   store,
 );

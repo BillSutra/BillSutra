@@ -1,6 +1,9 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
-import { resolveAuthUserFromDecoded } from "../lib/authSession.js";
+import {
+  getUserSessionVersionIfAvailable,
+  resolveAuthUserFromDecoded,
+} from "../lib/authSession.js";
 import { setObservabilityUser } from "../lib/observability.js";
 
 const workerAllowedRoutes = [
@@ -28,7 +31,7 @@ const isWorkerRequestAllowed = (path: string, method: string) =>
 const AuthMiddleware = (
   req: Request,
   res: Response,
-  next: NextFunction
+  next: NextFunction,
 ): void => {
   const authHeader = req.headers?.authorization;
 
@@ -59,6 +62,24 @@ const AuthMiddleware = (
       }
 
       req.user = authUser;
+
+      const latestSessionVersion = await getUserSessionVersionIfAvailable(
+        authUser.ownerUserId,
+      );
+
+      if (
+        latestSessionVersion !== null &&
+        latestSessionVersion !== authUser.sessionVersion
+      ) {
+        res
+          .status(401)
+          .json({
+            status: 401,
+            message: "Session expired. Please login again.",
+          });
+        return;
+      }
+
       setObservabilityUser(authUser);
 
       if (

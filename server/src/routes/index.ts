@@ -1,10 +1,11 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import AuthController from "../controllers/AuthController.js";
 import AdminController from "../controllers/AdminController.js";
 import CustomersController from "../controllers/CustomersController.js";
 import CategoriesController from "../controllers/CategoriesController.js";
 import ProductsController from "../controllers/ProductsController.js";
 import PaymentsController from "../controllers/PaymentsController.js";
+import AccessPaymentsController from "../controllers/AccessPaymentsController.js";
 import ReportsController from "../controllers/ReportsController.js";
 import AnalyticsController from "../controllers/AnalyticsController.js";
 import DashboardController from "../controllers/DashboardController.js";
@@ -15,22 +16,37 @@ import WarehousesController from "../controllers/WarehousesController.js";
 import InventoriesController from "../controllers/InventoriesController.js";
 import UsersController from "../controllers/UsersController.js";
 import BusinessProfileController from "../controllers/BusinessProfileController.js";
+import AddressLookupController from "../controllers/AddressLookupController.js";
 import TemplatesController from "../controllers/TemplatesController.js";
 import UserTemplateController from "../controllers/UserTemplateController.js";
 import UserSavedTemplateController from "../controllers/UserSavedTemplateController.js";
 import PublicInvoiceController from "../controllers/PublicInvoiceController.js";
 import LogoController from "../controllers/LogoController.js";
 import WorkersController from "../controllers/WorkersController.js";
+import SubscriptionController from "../controllers/SubscriptionController.js";
+import SettingsController from "../controllers/SettingsController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
 import AdminAuthMiddleware from "../middlewares/AdminAuthMiddleware.js";
 import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
 import RequireAdminMiddleware from "../middlewares/RequireAdminMiddleware.js";
+import RequirePaymentAccessMiddleware from "../middlewares/RequirePaymentAccessMiddleware.js";
+import RequireFeatureAccessMiddleware from "../middlewares/RequireFeatureAccessMiddleware.js";
 import { logoUploadMiddleware } from "../middlewares/logo.upload.js";
-import { authRateLimiter } from "../middlewares/rateLimit.middleware.js";
+import { paymentProofUploadMiddleware } from "../middlewares/paymentProof.upload.js";
+import {
+  adminPaymentRateLimiter,
+  authRateLimiter,
+  paymentRateLimiter,
+} from "../middlewares/rateLimit.middleware.js";
 import validate from "../middlewares/validate.js";
 import {
+  accessRazorpayOrderSchema,
+  accessRazorpayVerifySchema,
+  accessUpiSubmitSchema,
+  adminAccessPaymentVerifySchema,
   idParamSchema,
   invoiceIdParamSchema,
+  pincodeLookupParamSchema,
   publicInvoiceParamSchema,
   publicInvoiceQuerySchema,
   adminLoginSchema,
@@ -76,6 +92,7 @@ import {
   exportPreviewRequestSchema,
   exportRequestSchema,
   exportResourceParamSchema,
+  settingsPreferencesUpsertSchema,
 } from "../validations/apiValidations.js";
 import invoiceRoutes from "../modules/invoice/invoice.routes.js";
 import importRoutes from "../modules/import/import.routes.js";
@@ -86,6 +103,42 @@ import copilotRoutes from "../modules/copilot/copilot.routes.js";
 import ExportController from "../modules/export/export.controller.js";
 
 const router = Router();
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
+const reservedInvoiceRouteSegments = new Set([
+  "bootstrap",
+  "history",
+  "summary",
+]);
+
+const shouldBypassPublicInvoiceRoute = (req: Request, invoiceParam: string) => {
+  if (/^\d+$/.test(invoiceParam)) {
+    return true;
+  }
+
+  if (reservedInvoiceRouteSegments.has(invoiceParam.toLowerCase())) {
+    return true;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (
+    typeof authHeader === "string" &&
+    authHeader.trim().toLowerCase().startsWith("bearer ")
+  ) {
+    return true;
+  }
+
+  return false;
+};
+
+router.get("/address/pincode/health", AddressLookupController.health);
+
+router.get(
+  "/address/pincode/:pincode",
+  validate({ params: pincodeLookupParamSchema }),
+  AddressLookupController.lookupPincode,
+);
 
 // Super admin routes
 router.post(
@@ -93,11 +146,7 @@ router.post(
   validate({ body: adminLoginSchema }),
   AdminController.login,
 );
-router.get(
-  "/admin/summary",
-  AdminAuthMiddleware,
-  AdminController.summary,
-);
+router.get("/admin/summary", AdminAuthMiddleware, AdminController.summary);
 router.get(
   "/admin/businesses",
   AdminAuthMiddleware,
@@ -115,10 +164,18 @@ router.delete(
   validate({ params: adminBusinessIdParamSchema }),
   AdminController.deleteBusiness,
 );
+router.get("/admin/workers", AdminAuthMiddleware, AdminController.listWorkers);
 router.get(
-  "/admin/workers",
+  "/admin/payments",
   AdminAuthMiddleware,
-  AdminController.listWorkers,
+  AccessPaymentsController.listAdminPayments,
+);
+router.post(
+  "/admin/verify",
+  AdminAuthMiddleware,
+  adminPaymentRateLimiter,
+  validate({ body: adminAccessPaymentVerifySchema }),
+  AccessPaymentsController.verifyAdminPayment,
 );
 
 // Auth routes
@@ -220,7 +277,8 @@ router.get(
 router.get(
   "/invoices/:id",
   (req, _res, next) => {
-    if (/^\d+$/.test(req.params.id)) {
+    const invoiceParam = readRouteParam(req.params.id);
+    if (invoiceParam && shouldBypassPublicInvoiceRoute(req, invoiceParam)) {
       return next("route");
     }
 
@@ -302,12 +360,21 @@ router.get(
   "/workers",
   AuthMiddleware,
   RequireAdminMiddleware,
+  RequireFeatureAccessMiddleware("WORKERS_MANAGEMENT"),
   WorkersController.index,
+);
+router.get(
+  "/workers/overview",
+  AuthMiddleware,
+  RequireAdminMiddleware,
+  RequireFeatureAccessMiddleware("WORKERS_MANAGEMENT"),
+  WorkersController.overview,
 );
 router.post(
   "/workers/create",
   AuthMiddleware,
   RequireAdminMiddleware,
+  RequireFeatureAccessMiddleware("WORKERS_MANAGEMENT"),
   validate({ body: workerCreateSchema }),
   WorkersController.store,
 );
@@ -315,6 +382,7 @@ router.put(
   "/workers/:id",
   AuthMiddleware,
   RequireAdminMiddleware,
+  RequireFeatureAccessMiddleware("WORKERS_MANAGEMENT"),
   validate({ params: workerIdParamSchema, body: workerUpdateSchema }),
   WorkersController.update,
 );
@@ -322,19 +390,31 @@ router.delete(
   "/workers/:id",
   AuthMiddleware,
   RequireAdminMiddleware,
+  RequireFeatureAccessMiddleware("WORKERS_MANAGEMENT"),
   validate({ params: workerIdParamSchema }),
   WorkersController.destroy,
 );
 
 // Logo management
 router.get("/logo", AuthMiddleware, LogoController.get);
-router.post("/logo", AuthMiddleware, logoUploadMiddleware, LogoController.upload);
-router.put("/logo", AuthMiddleware, logoUploadMiddleware, LogoController.update);
+router.post(
+  "/logo",
+  AuthMiddleware,
+  logoUploadMiddleware,
+  LogoController.upload,
+);
+router.put(
+  "/logo",
+  AuthMiddleware,
+  logoUploadMiddleware,
+  LogoController.update,
+);
 router.delete("/logo", AuthMiddleware, LogoController.remove);
 
 router.post(
   "/exports/:resource/preview",
   AuthMiddleware,
+  RequireFeatureAccessMiddleware("DATA_EXPORT"),
   validate({
     params: exportResourceParamSchema,
     body: exportPreviewRequestSchema,
@@ -345,6 +425,7 @@ router.post(
 router.post(
   "/exports/:resource",
   AuthMiddleware,
+  RequireFeatureAccessMiddleware("DATA_EXPORT"),
   validate({ params: exportResourceParamSchema, body: exportRequestSchema }),
   ExportController.run,
 );
@@ -549,31 +630,129 @@ router.use("/forecast", forecastRoutes);
 router.use("/inventory-demand", inventoryDemandRoutes);
 
 // Assistant
-router.use("/assistant", assistantRoutes);
+router.use(
+  "/assistant",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("SMART_SUGGESTIONS"),
+  assistantRoutes,
+);
 
 // Financial copilot
-router.use("/copilot", copilotRoutes);
+router.use(
+  "/copilot",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("SMART_SUGGESTIONS"),
+  copilotRoutes,
+);
 
 // Payments
-router.get("/payments", AuthMiddleware, PaymentsController.index);
+router.get(
+  "/payments",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
+  PaymentsController.index,
+);
+router.get(
+  "/payments/access/status",
+  AuthMiddleware,
+  AccessPaymentsController.status,
+);
 router.get(
   "/payments/:invoiceId",
   AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
   validate({ params: invoiceIdParamSchema }),
   PaymentsController.showByInvoice,
 );
 router.post(
   "/payments",
   AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
   validate({ body: paymentCreateSchema }),
   PaymentsController.store,
 );
+router.post(
+  "/payments/access/razorpay/order",
+  AuthMiddleware,
+  paymentRateLimiter,
+  validate({ body: accessRazorpayOrderSchema }),
+  AccessPaymentsController.createRazorpayOrder,
+);
+router.post(
+  "/payments/access/razorpay/verify",
+  AuthMiddleware,
+  paymentRateLimiter,
+  validate({ body: accessRazorpayVerifySchema }),
+  AccessPaymentsController.verifyRazorpayPayment,
+);
+router.post(
+  "/payments/access/webhooks/razorpay",
+  AccessPaymentsController.razorpayWebhook,
+);
+router.post(
+  "/submit-upi",
+  AuthMiddleware,
+  paymentRateLimiter,
+  paymentProofUploadMiddleware,
+  validate({ body: accessUpiSubmitSchema }),
+  AccessPaymentsController.submitUpi,
+);
+router.get(
+  "/payments/access/protected",
+  AuthMiddleware,
+  RequirePaymentAccessMiddleware,
+  AccessPaymentsController.protectedContent,
+);
+
+router.get("/subscriptions/me", AuthMiddleware, SubscriptionController.me);
+router.post(
+  "/subscriptions/cancel",
+  AuthMiddleware,
+  SubscriptionController.cancel,
+);
+router.post(
+  "/subscriptions/free",
+  AuthMiddleware,
+  SubscriptionController.switchToFree,
+);
+
+router.get(
+  "/settings/preferences",
+  AuthMiddleware,
+  SettingsController.preferences,
+);
+router.put(
+  "/settings/preferences",
+  AuthMiddleware,
+  validate({ body: settingsPreferencesUpsertSchema }),
+  SettingsController.savePreferences,
+);
+router.get(
+  "/security/activity",
+  AuthMiddleware,
+  SettingsController.securityActivity,
+);
+router.post(
+  "/security/logout-all",
+  AuthMiddleware,
+  SettingsController.logoutAll,
+);
 
 // Reports
-router.get("/reports/summary", AuthMiddleware, ReportsController.summary);
+router.get(
+  "/reports/summary",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("REPORTS_BASIC"),
+  ReportsController.summary,
+);
 
 // Analytics
-router.get("/analytics/overview", AuthMiddleware, AnalyticsController.overview);
+router.get(
+  "/analytics/overview",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("ANALYTICS_ADVANCED"),
+  AnalyticsController.overview,
+);
 
 // Dashboard
 router.get("/dashboard/stream", AuthSseMiddleware, DashboardController.stream);
@@ -606,7 +785,11 @@ router.get(
   DashboardController.suppliers,
 );
 router.get("/dashboard/cashflow", AuthMiddleware, DashboardController.cashflow);
-router.get("/dashboard/product-sales", AuthMiddleware, DashboardController.productSales);
+router.get(
+  "/dashboard/product-sales",
+  AuthMiddleware,
+  DashboardController.productSales,
+);
 router.get("/dashboard/forecast", AuthMiddleware, DashboardController.forecast);
 
 export default router;

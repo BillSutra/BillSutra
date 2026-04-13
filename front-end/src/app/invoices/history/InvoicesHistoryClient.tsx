@@ -2,11 +2,12 @@
 
 import React, { useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Clock3, Wallet } from "lucide-react";
+import { CheckCircle2, Clock3, ReceiptText, Wallet } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import InvoicePaymentStatusBadge from "@/components/invoice/InvoicePaymentStatusBadge";
 import DataExportDialog from "@/components/export/DataExportDialog";
+import FriendlyEmptyState from "@/components/ui/FriendlyEmptyState";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -47,15 +48,14 @@ const humanizeEnum = (status: string) =>
     .join(" ");
 
 const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
-  const { t, formatCurrency, formatDate } = useI18n();
+  const { language, t, formatCurrency, formatDate } = useI18n();
   const { data, isLoading, isError } = useInvoicesQuery();
   const updateInvoice = useUpdateInvoiceMutation();
   const createPayment = useCreatePaymentMutation();
   const [query, setQuery] = useState("");
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
-  const [statusEditorInvoice, setStatusEditorInvoice] = useState<Invoice | null>(
-    null,
-  );
+  const [statusEditorInvoice, setStatusEditorInvoice] =
+    useState<Invoice | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string>("SENT");
   const [paidAmount, setPaidAmount] = useState("");
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -84,13 +84,15 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
   const localizeSnapshotLabel = (invoice: Invoice) => {
     const snapshot = getInvoicePaymentSnapshot(invoice);
     if (snapshot.paymentStatus === "PAID") return t("invoiceDetail.markPaid");
-    if (snapshot.paymentStatus === "PARTIAL") return t("invoiceDetail.markPartial");
+    if (snapshot.paymentStatus === "PARTIAL")
+      return t("invoiceDetail.markPartial");
     return t("invoiceDetail.markPending");
   };
 
   const localizeSnapshotHint = (invoice: Invoice) => {
     const snapshot = getInvoicePaymentSnapshot(invoice);
-    if (snapshot.paymentStatus === "PAID") return t("invoiceDetail.settledInFull");
+    if (snapshot.paymentStatus === "PAID")
+      return t("invoiceDetail.settledInFull");
     if (snapshot.paymentStatus === "PARTIAL") {
       return invoice.status === "OVERDUE"
         ? t("invoiceDetail.followUpNeeded")
@@ -110,8 +112,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
     );
   }, [invoices, query]);
 
-  const getPaidTotal = (invoice: Invoice) =>
-    sumPaymentAmount(invoice.payments);
+  const getPaidTotal = (invoice: Invoice) => sumPaymentAmount(invoice.payments);
 
   const openStatusEditor = (
     invoice: Invoice,
@@ -214,9 +215,11 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
         id: invoice.id,
         payload: { status: selectedStatus },
       });
-      toast.success(t("invoiceHistory.messages.markedStatus", {
-        status: formatStatusLabel(selectedStatus),
-      }));
+      toast.success(
+        t("invoiceHistory.messages.markedStatus", {
+          status: formatStatusLabel(selectedStatus),
+        }),
+      );
       closeStatusEditor();
     } catch {
       setStatusError(t("invoiceHistory.messages.statusUpdateError"));
@@ -292,6 +295,23 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
       },
     );
   }, [filtered]);
+  const emptyStateCopy =
+    language === "hi"
+      ? {
+          title: "अभी कोई बिल नहीं है",
+          description: "पहला बिल बनते ही उसका रिकॉर्ड यहां दिखेगा।",
+          hint: "शुरुआत के लिए एक ग्राहक और कम से कम एक प्रोडक्ट जोड़ें, फिर पहला बिल बनाएं।",
+          primary: "बिल बनाएं",
+          secondary: "प्रोडक्ट जोड़ें",
+        }
+      : {
+          title: "No bills yet",
+          description:
+            "Your bill history will appear here after you create the first bill.",
+          hint: "Start by adding a customer and at least one product, then create your first bill.",
+          primary: "Create Bill",
+          secondary: "Add Product",
+        };
 
   return (
     <DashboardLayout
@@ -316,7 +336,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700 dark:text-emerald-200">
-                    Collected
+                    {t("invoiceHistory.summaryCollected")}
                   </p>
                   <p className="mt-3 text-3xl font-semibold tracking-tight text-emerald-950 dark:text-emerald-50">
                     {formatCurrencyValue(summary.paid)}
@@ -434,125 +454,145 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                 </p>
               )}
               {!isLoading && !isError && filtered.length === 0 && (
-                <p className="text-sm text-gray-500">
-                  {t("invoiceHistory.empty")}
-                </p>
+                <FriendlyEmptyState
+                  icon={ReceiptText}
+                  title={emptyStateCopy.title}
+                  description={emptyStateCopy.description}
+                  hint={emptyStateCopy.hint}
+                  primaryAction={{
+                    label: emptyStateCopy.primary,
+                    href: "/invoices",
+                  }}
+                  secondaryAction={{
+                    label: emptyStateCopy.secondary,
+                    href: "/products",
+                    variant: "outline",
+                  }}
+                />
               )}
               {!isLoading && !isError && filtered.length > 0 && (
                 <DataTable
                   rows={filtered.map((invoice) => {
                     const snapshot = getInvoicePaymentSnapshot(invoice);
 
-                    return ({
-                    id: invoice.id,
-                    select: (
-                      <input
-                        type="checkbox"
-                        checked={selectedInvoiceIds.includes(invoice.id)}
-                        onChange={() => toggleInvoiceSelection(invoice.id)}
-                        aria-label={`${t("invoiceHistory.select")} ${invoice.invoice_number}`}
-                      />
-                    ),
-                    invoice_number: (
-                      <span className="font-semibold">
-                        {invoice.invoice_number}
-                      </span>
-                    ),
-                    customer: invoice.customer?.name || "-",
-                    date: formatInvoiceDate(invoice.date),
-                    status: (
-                      <div className="flex min-w-[220px] flex-col gap-3">
-                        <InvoicePaymentStatusBadge
-                          label={localizeSnapshotLabel(invoice)}
-                          variant={snapshot.badgeVariant}
-                          hint={localizeSnapshotHint(invoice)}
+                    return {
+                      id: invoice.id,
+                      select: (
+                        <input
+                          type="checkbox"
+                          checked={selectedInvoiceIds.includes(invoice.id)}
+                          onChange={() => toggleInvoiceSelection(invoice.id)}
+                          aria-label={`${t("invoiceHistory.select")} ${invoice.invoice_number}`}
                         />
-                        <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
-                          <div className="flex items-center justify-between gap-3">
-                            <span>{t("invoiceHistory.paidLabel")}</span>
-                            <span className="font-semibold">
-                              {formatCurrencyValue(snapshot.paid)}
-                            </span>
-                          </div>
-                          <div className="mt-1 flex items-center justify-between gap-3">
-                            <span>{t("invoiceHistory.balanceLabel")}</span>
-                            <span className="font-semibold">
-                              {formatCurrencyValue(snapshot.remaining)}
-                            </span>
+                      ),
+                      invoice_number: (
+                        <span className="font-semibold">
+                          {invoice.invoice_number}
+                        </span>
+                      ),
+                      customer: invoice.customer?.name || "-",
+                      date: formatInvoiceDate(invoice.date),
+                      status: (
+                        <div className="flex min-w-[220px] flex-col gap-3">
+                          <InvoicePaymentStatusBadge
+                            label={localizeSnapshotLabel(invoice)}
+                            variant={snapshot.badgeVariant}
+                            hint={localizeSnapshotHint(invoice)}
+                          />
+                          <div className="rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2 text-xs text-gray-600 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-300">
+                            <div className="flex items-center justify-between gap-3">
+                              <span>{t("invoiceHistory.paidLabel")}</span>
+                              <span className="font-semibold">
+                                {formatCurrencyValue(snapshot.paid)}
+                              </span>
+                            </div>
+                            <div className="mt-1 flex items-center justify-between gap-3">
+                              <span>{t("invoiceHistory.balanceLabel")}</span>
+                              <span className="font-semibold">
+                                {formatCurrencyValue(snapshot.remaining)}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ),
-                    total: (
-                      <div className="text-right">
-                        <p className="font-semibold">{formatCurrencyValue(invoice.total)}</p>
-                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          {t("invoiceHistory.paidInline", {
-                            amount: formatCurrencyValue(snapshot.paid),
-                          })}
-                        </p>
-                      </div>
-                    ),
-                    quick_update: (
-                      <div className="flex min-w-[230px] flex-wrap justify-end gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className={cn(
-                            "rounded-full",
-                            snapshot.paymentStatus === "PENDING" &&
-                              "border-amber-300 bg-amber-50 text-amber-800",
-                          )}
-                          onClick={() => void handleQuickStatusUpdate(invoice, "SENT")}
-                        >
-                          {t("invoiceDetail.markPending")}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="rounded-full"
-                          onClick={() =>
-                            openStatusEditor(invoice, { status: "PARTIALLY_PAID" })
-                          }
-                        >
-                          {t("invoiceDetail.markPartial")}
-                        </Button>
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="rounded-full"
-                          onClick={() => void handleQuickStatusUpdate(invoice, "PAID")}
-                        >
-                          {t("invoiceDetail.markPaid")}
-                        </Button>
-                      </div>
-                    ),
-                    actions: (
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="rounded-lg"
-                          onClick={() => openStatusEditor(invoice)}
-                        >
-                          {t("invoiceHistory.updateStatus")}
-                        </Button>
-                        <Button
-                          asChild
-                          variant="outline"
-                          size="sm"
-                          className="rounded-lg"
-                        >
-                          <Link href={`/invoices/history/${invoice.id}`}>
-                            {t("invoiceHistory.view")}
-                          </Link>
-                        </Button>
-                      </div>
-                    ),
-                  });
+                      ),
+                      total: (
+                        <div className="text-right">
+                          <p className="font-semibold">
+                            {formatCurrencyValue(invoice.total)}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                            {t("invoiceHistory.paidInline", {
+                              amount: formatCurrencyValue(snapshot.paid),
+                            })}
+                          </p>
+                        </div>
+                      ),
+                      quick_update: (
+                        <div className="flex min-w-[230px] flex-wrap justify-end gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className={cn(
+                              "rounded-full",
+                              snapshot.paymentStatus === "PENDING" &&
+                                "border-amber-300 bg-amber-50 text-amber-800",
+                            )}
+                            onClick={() =>
+                              void handleQuickStatusUpdate(invoice, "SENT")
+                            }
+                          >
+                            {t("invoiceDetail.markPending")}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="rounded-full"
+                            onClick={() =>
+                              openStatusEditor(invoice, {
+                                status: "PARTIALLY_PAID",
+                              })
+                            }
+                          >
+                            {t("invoiceDetail.markPartial")}
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="rounded-full"
+                            onClick={() =>
+                              void handleQuickStatusUpdate(invoice, "PAID")
+                            }
+                          >
+                            {t("invoiceDetail.markPaid")}
+                          </Button>
+                        </div>
+                      ),
+                      actions: (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-lg"
+                            onClick={() => openStatusEditor(invoice)}
+                          >
+                            {t("invoiceHistory.updateStatus")}
+                          </Button>
+                          <Button
+                            asChild
+                            variant="outline"
+                            size="sm"
+                            className="rounded-lg"
+                          >
+                            <Link href={`/invoices/history/${invoice.id}`}>
+                              {t("invoiceHistory.view")}
+                            </Link>
+                          </Button>
+                        </div>
+                      ),
+                    };
                   })}
                   searchPlaceholder={t("invoiceHistory.tableSearchPlaceholder")}
                   searchKeys={["invoice_number", "customer", "date"]}
@@ -611,10 +651,12 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
             <div className="grid gap-4">
               <div className="grid gap-1 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-700 dark:bg-gray-900/40">
                 {(() => {
-                  const snapshot = getInvoicePaymentSnapshot(statusEditorInvoice);
+                  const snapshot =
+                    getInvoicePaymentSnapshot(statusEditorInvoice);
                   const enteredAmount = Number(paidAmount || 0);
                   const projectedPaid =
-                    selectedStatus === "PARTIALLY_PAID" && Number.isFinite(enteredAmount)
+                    selectedStatus === "PARTIALLY_PAID" &&
+                    Number.isFinite(enteredAmount)
                       ? snapshot.paid + Math.max(enteredAmount, 0)
                       : snapshot.paid;
                   const projectedBalance = Math.max(
@@ -624,34 +666,40 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
 
                   return (
                     <>
-                <span className="font-semibold">
-                  {statusEditorInvoice.invoice_number}
-                </span>
-                <span>
-                  {t("invoiceHistory.summary.total", {
-                    amount: formatCurrencyValue(statusEditorInvoice.total),
-                  })}
-                </span>
-                <span>
-                  {t("invoiceHistory.summary.paid", {
-                    amount: formatCurrencyValue(getPaidTotal(statusEditorInvoice)),
-                  })}
-                </span>
-                <span>
-                  {t("invoiceHistory.summary.balance", {
-                    amount: formatCurrencyValue(
-                      Math.max(
-                        Number(statusEditorInvoice.total) -
-                          getPaidTotal(statusEditorInvoice),
-                        0,
-                      ),
-                    ),
-                  })}
-                </span>
+                      <span className="font-semibold">
+                        {statusEditorInvoice.invoice_number}
+                      </span>
+                      <span>
+                        {t("invoiceHistory.summary.total", {
+                          amount: formatCurrencyValue(
+                            statusEditorInvoice.total,
+                          ),
+                        })}
+                      </span>
+                      <span>
+                        {t("invoiceHistory.summary.paid", {
+                          amount: formatCurrencyValue(
+                            getPaidTotal(statusEditorInvoice),
+                          ),
+                        })}
+                      </span>
+                      <span>
+                        {t("invoiceHistory.summary.balance", {
+                          amount: formatCurrencyValue(
+                            Math.max(
+                              Number(statusEditorInvoice.total) -
+                                getPaidTotal(statusEditorInvoice),
+                              0,
+                            ),
+                          ),
+                        })}
+                      </span>
                       {selectedStatus === "PARTIALLY_PAID" ? (
                         <span className="text-xs text-gray-500 dark:text-gray-400">
-                          After this payment: paid {formatCurrencyValue(projectedPaid)} | balance{" "}
-                          {formatCurrencyValue(projectedBalance)}
+                          {t("invoiceHistory.afterPaymentProjection", {
+                            paid: formatCurrencyValue(projectedPaid),
+                            balance: formatCurrencyValue(projectedBalance),
+                          })}
                         </span>
                       ) : null}
                     </>
@@ -722,9 +770,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                   type="button"
                   variant="primary"
                   onClick={handleSaveStatus}
-                  disabled={
-                    updateInvoice.isPending || createPayment.isPending
-                  }
+                  disabled={updateInvoice.isPending || createPayment.isPending}
                 >
                   {t("invoiceHistory.save")}
                 </Button>
@@ -745,21 +791,27 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
               variant="primary"
               className="justify-start rounded-xl"
             >
-              <Link href="/invoices">{t("invoiceHistory.quickCreateInvoice")}</Link>
+              <Link href="/invoices">
+                {t("invoiceHistory.quickCreateInvoice")}
+              </Link>
             </Button>
             <Button
               asChild
               variant="secondary"
               className="justify-start rounded-xl"
             >
-              <Link href="/customers">{t("invoiceHistory.quickCreateClient")}</Link>
+              <Link href="/customers">
+                {t("invoiceHistory.quickCreateClient")}
+              </Link>
             </Button>
             <Button
               asChild
               variant="outline"
               className="justify-start rounded-xl"
             >
-              <Link href="/products">{t("invoiceHistory.quickEditProduct")}</Link>
+              <Link href="/products">
+                {t("invoiceHistory.quickEditProduct")}
+              </Link>
             </Button>
           </div>
         </Modal>

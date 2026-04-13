@@ -1,6 +1,5 @@
 import en from "../../locales/en.json";
 import hi from "../../locales/hi.json";
-import { hiOverrides } from "@/i18n/hi-overrides";
 
 export type Language = "en" | "hi";
 
@@ -20,34 +19,44 @@ export const LOCALE_BY_LANGUAGE: Record<Language, string> = {
   hi: "hi-IN",
 };
 
-const mergeTranslations = (
-  base: TranslationMap,
-  overrides: TranslationMap,
-): TranslationMap => {
-  const result: TranslationMap = { ...base };
-
-  for (const [key, value] of Object.entries(overrides)) {
-    const current = result[key];
-    if (
-      value &&
-      typeof value !== "string" &&
-      current &&
-      typeof current !== "string"
-    ) {
-      result[key] = mergeTranslations(current, value);
-      continue;
-    }
-
-    result[key] = value;
-  }
-
-  return result;
-};
-
 export const translations = {
   en,
-  hi: mergeTranslations(hi as TranslationMap, hiOverrides),
+  hi,
 } satisfies Record<Language, TranslationMap>;
+
+const listTranslationKeys = (source: TranslationMap, parent = ""): string[] => {
+  return Object.entries(source).flatMap(([key, value]) => {
+    const path = parent ? `${parent}.${key}` : key;
+    if (typeof value === "string") {
+      return [path];
+    }
+    return listTranslationKeys(value, path);
+  });
+};
+
+const getMissingTranslationKeys = (
+  base: TranslationMap,
+  target: TranslationMap,
+): string[] => {
+  const targetKeys = new Set(listTranslationKeys(target));
+  return listTranslationKeys(base).filter((key) => !targetKeys.has(key));
+};
+
+const missingTranslationWarnings = new Set<string>();
+
+if (process.env.NODE_ENV !== "production") {
+  const missingHindiKeys = getMissingTranslationKeys(
+    translations.en as TranslationMap,
+    translations.hi as TranslationMap,
+  );
+
+  if (missingHindiKeys.length > 0) {
+    console.error(
+      `[i18n] Missing Hindi translation keys (${missingHindiKeys.length}):`,
+      missingHindiKeys,
+    );
+  }
+}
 
 export const resolveTranslation = (
   source: TranslationMap,
@@ -90,10 +99,18 @@ export const translate = (
   params?: Record<string, string | number>,
 ) => {
   const active = resolveTranslation(translations[language], key);
-  const fallback =
-    language === DEFAULT_LANGUAGE
-      ? resolveTranslation(translations[DEFAULT_LANGUAGE], key)
-      : undefined;
 
-  return interpolate(active ?? fallback ?? key, params);
+  if (!active) {
+    if (
+      process.env.NODE_ENV !== "production" &&
+      !missingTranslationWarnings.has(`${language}:${key}`)
+    ) {
+      missingTranslationWarnings.add(`${language}:${key}`);
+      console.error(`[i18n] Missing translation for ${language}:${key}`);
+    }
+
+    return key;
+  }
+
+  return interpolate(active, params);
 };

@@ -6,6 +6,19 @@ import {
   initServerObservability,
 } from "./lib/observability.js";
 
+const requiredEnv = ["JWT_SECRET"] as const;
+
+const missingEnv = requiredEnv.filter((key) => {
+  const value = process.env[key];
+  return !value || value.trim().length === 0;
+});
+
+if (missingEnv.length > 0) {
+  throw new Error(
+    `Missing required environment variable(s): ${missingEnv.join(", ")}`,
+  );
+}
+
 const PORT = process.env.PORT || 7000;
 
 initServerObservability();

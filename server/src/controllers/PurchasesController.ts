@@ -1,7 +1,12 @@
 import type { Request, Response } from "express";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
-import { PaymentMethod, PaymentStatus, StockReason } from "@prisma/client";
+import {
+  PaymentMethod,
+  PaymentStatus,
+  Prisma,
+  StockReason,
+} from "@prisma/client";
 import type { z } from "zod";
 import {
   purchaseCreateSchema,
@@ -15,6 +20,14 @@ type PurchaseItemInput = PurchaseCreateInput["items"][number];
 type PurchaseUpdateInput = z.infer<typeof purchaseUpdateSchema>;
 
 const toNumber = (value: unknown) => Number(value ?? 0);
+
+const purchaseSupplierSelect = {
+  id: true,
+  name: true,
+  email: true,
+  phone: true,
+  address: true,
+} satisfies Prisma.SupplierSelect;
 
 const decoratePurchaseFinancials = <T extends { total: unknown }>(
   purchase: T & {
@@ -44,7 +57,11 @@ class PurchasesController {
 
     const purchases = await prisma.purchase.findMany({
       where: { user_id: userId },
-      include: { supplier: true, items: true, warehouse: true },
+      include: {
+        supplier: { select: purchaseSupplierSelect },
+        items: true,
+        warehouse: true,
+      },
       orderBy: { created_at: "desc" },
     });
 
@@ -64,6 +81,7 @@ class PurchasesController {
     if (body.supplier_id) {
       const supplier = await prisma.supplier.findFirst({
         where: { id: body.supplier_id, user_id: userId },
+        select: { id: true },
       });
 
       if (!supplier) {
@@ -155,7 +173,11 @@ class PurchasesController {
           notes: body.notes,
           items: { create: items },
         },
-        include: { items: true, supplier: true, warehouse: true },
+        include: {
+          items: true,
+          supplier: { select: purchaseSupplierSelect },
+          warehouse: true,
+        },
       });
 
       for (const item of items) {
@@ -212,7 +234,11 @@ class PurchasesController {
     const id = Number(req.params.id);
     const purchase = await prisma.purchase.findFirst({
       where: { id, user_id: userId },
-      include: { supplier: true, items: true, warehouse: true },
+      include: {
+        supplier: { select: purchaseSupplierSelect },
+        items: true,
+        warehouse: true,
+      },
     });
 
     if (!purchase) {
@@ -245,6 +271,7 @@ class PurchasesController {
     if (body.supplier_id) {
       const supplier = await prisma.supplier.findFirst({
         where: { id: body.supplier_id, user_id: userId },
+        select: { id: true },
       });
 
       if (!supplier) {
@@ -379,7 +406,11 @@ class PurchasesController {
             create: items,
           },
         },
-        include: { items: true, supplier: true, warehouse: true },
+        include: {
+          items: true,
+          supplier: { select: purchaseSupplierSelect },
+          warehouse: true,
+        },
       });
 
       for (const productId of productIdsToAdjust) {

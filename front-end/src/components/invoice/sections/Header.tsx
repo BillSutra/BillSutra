@@ -1,6 +1,7 @@
 import type { InvoiceSectionProps } from "@/types/invoice-template";
 import { useSectionStyles } from "@/components/invoice/DesignConfigContext";
 import { useBusinessLogo } from "@/hooks/useBusinessLogo";
+import { buildBusinessAddressLines } from "@/lib/indianAddress";
 
 const Header = ({ data, theme }: InvoiceSectionProps) => {
   const { style } = useSectionStyles("header");
@@ -9,6 +10,10 @@ const Header = ({ data, theme }: InvoiceSectionProps) => {
   // so SSR and initial client render both see null → no hydration mismatch.
   const { logo: storedLogo } = useBusinessLogo();
   const effectiveLogo = data.business.logoUrl || storedLogo;
+  const businessAddressLines = buildBusinessAddressLines(
+    data.business.businessAddress,
+    data.business.address,
+  );
   const paymentToneClassName =
     data.paymentSummary?.statusTone === "paid"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -20,10 +25,12 @@ const Header = ({ data, theme }: InvoiceSectionProps) => {
     <section
       className="overflow-hidden rounded-[22px] border border-slate-200 bg-white"
       style={style}
+      data-template-block="header"
     >
       <div
         className="flex items-center justify-between border-b border-slate-200 px-5 py-3"
         style={{ backgroundColor: `${theme.primaryColor}0f` }}
+        data-part="header-ribbon"
       >
         <div>
           <p className="text-[0.72em] font-semibold uppercase tracking-[0.26em] text-slate-500">
@@ -44,7 +51,10 @@ const Header = ({ data, theme }: InvoiceSectionProps) => {
       </div>
 
       <div className="grid gap-4 px-5 py-4 sm:grid-cols-[92px_minmax(0,1fr)_auto] sm:items-center">
-        <div className="flex h-[74px] w-[74px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-[0.78em] font-semibold text-slate-500">
+        <div
+          className="flex h-[74px] w-[74px] items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 text-[0.78em] font-semibold text-slate-500"
+          data-part="logo-lockup"
+        >
           {data.business.showLogoOnInvoice && effectiveLogo ? (
             <img
               src={effectiveLogo}
@@ -56,24 +66,35 @@ const Header = ({ data, theme }: InvoiceSectionProps) => {
           )}
         </div>
 
-        <div className="min-w-0">
+        <div className="min-w-0" data-part="business-overview">
           <p
             className="text-[0.9em] font-semibold"
             style={{ color: theme.primaryColor }}
           >
             {data.business.businessName}
           </p>
-          <p className="mt-1 text-[0.82em] text-slate-600">
-            {data.business.address || "Business address not added"}
-          </p>
+          <div className="mt-1 grid gap-0.5 text-[0.82em] text-slate-600">
+            {businessAddressLines.length > 0 ? (
+              businessAddressLines.map((line) => <p key={line}>{line}</p>)
+            ) : (
+              <p>Business address not added</p>
+            )}
+          </div>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[0.78em] text-slate-500">
-            {data.business.phone ? <span>Phone: {data.business.phone}</span> : null}
-            {data.business.email ? <span>Email: {data.business.email}</span> : null}
+            {data.business.phone ? (
+              <span>Phone: {data.business.phone}</span>
+            ) : null}
+            {data.business.email ? (
+              <span>Email: {data.business.email}</span>
+            ) : null}
           </div>
         </div>
 
-        <div className="grid gap-2 text-right">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+        <div className="grid gap-2 text-right" data-part="header-meta">
+          <div
+            className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3"
+            data-part="invoice-date-card"
+          >
             <p className="text-[0.72em] font-semibold uppercase tracking-[0.18em] text-slate-500">
               Invoice date
             </p>
@@ -84,6 +105,7 @@ const Header = ({ data, theme }: InvoiceSectionProps) => {
           {data.paymentSummary ? (
             <div
               className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-[0.72em] font-semibold uppercase tracking-[0.18em] ${paymentToneClassName}`}
+              data-part="status-pill"
             >
               {data.paymentSummary.statusLabel}
             </div>

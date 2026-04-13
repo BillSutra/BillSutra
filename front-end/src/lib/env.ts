@@ -1,4 +1,4 @@
-const DEFAULT_BACKEND_URL = "http://localhost:8000";
+const DEFAULT_BACKEND_URL = "http://localhost:7000";
 
 const normalizeBackendUrl = (rawValue?: string): string => {
   const trimmed = rawValue?.trim();
@@ -7,7 +7,7 @@ const normalizeBackendUrl = (rawValue?: string): string => {
     return DEFAULT_BACKEND_URL;
   }
 
-  // Accept values like :8000, 8000, localhost:8000, or full http(s) URLs.
+  // Accept values like :7000, 7000, localhost:7000, or full http(s) URLs.
   if (/^:\d+$/.test(trimmed)) {
     return `http://localhost${trimmed}`;
   }

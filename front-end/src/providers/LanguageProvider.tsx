@@ -29,7 +29,10 @@ type LanguageContextValue = {
     currency?: string,
     options?: Intl.NumberFormatOptions,
   ) => string;
-  formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string;
+  formatDate: (
+    value: Date | string | number,
+    options?: Intl.DateTimeFormatOptions,
+  ) => string;
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string;
 };
 

@@ -1,8 +1,18 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { Bot, Mic, SendHorizontal, Square, User2, Volume2, VolumeX } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
+import {
+  Bot,
+  Mic,
+  SendHorizontal,
+  Sparkles,
+  Square,
+  User2,
+  Volume2,
+  VolumeX,
+} from "lucide-react";
 import { translate, type Language } from "@/i18n";
 import {
   askAssistant,
@@ -11,13 +21,17 @@ import {
 } from "@/lib/apiClient";
 import {
   detectAssistantChatLanguage,
+  assistantLanguageToUiLanguage,
   type AssistantChatLanguage,
 } from "@/lib/assistantLanguage";
+import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useProductsQuery } from "@/hooks/useInventoryQueries";
 import { useVoiceAssistant } from "@/hooks/useVoiceAssistant";
 import { useI18n } from "@/providers/LanguageProvider";
+import { toast } from "sonner";
 
 type AssistantChatMessage = {
   id: string;
@@ -25,8 +39,37 @@ type AssistantChatMessage = {
   content: string;
   highlights?: AssistantReply["highlights"];
   examples?: string[];
+  copilot?: AssistantReply["copilot"];
   pending?: boolean;
   language?: AssistantChatLanguage;
+};
+
+const formatInr = (value: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(Number.isFinite(value) ? value : 0);
+
+const uniqueProductsById = <T extends { id: number }>(products: T[]) => {
+  const seenIds = new Set<number>();
+
+  return products.filter((product) => {
+    if (seenIds.has(product.id)) {
+      return false;
+    }
+
+    seenIds.add(product.id);
+    return true;
+  });
+};
+
+const normalizeAssistantRoute = (route: string) => {
+  if (route.startsWith("/dashboard/")) {
+    return route.replace(/^\/dashboard/, "");
+  }
+
+  return route;
 };
 
 type AssistantCopy = {
@@ -63,46 +106,71 @@ type VoiceCopy = {
 };
 
 const buildBaseAssistantCopy = (language: Language): AssistantUiCopy => ({
-  title: translate(language, "assistant.chatTitle"),
-  description: translate(language, "assistant.chatDescription"),
+  title: "Billing Assistant",
+  description:
+    language === "hi"
+      ? "Bill banao, products manage karo, aur invoices/customers kholo."
+      : "Create bills, manage products, and open invoices and customers.",
   placeholder: translate(language, "assistant.placeholder"),
   send: translate(language, "assistant.send"),
   thinking: translate(language, "assistant.thinking"),
   error: translate(language, "assistant.error"),
-  welcome: translate(language, "assistant.welcome"),
+  welcome:
+    language === "hi"
+      ? "Namaste! Main BillSutra ka billing assistant hoon. Main sirf billing aur products mein help karta hoon."
+      : "Namaste! I am BillSutra's billing assistant. I only help with billing and products.",
   examplesTitle: translate(language, "assistant.examplesTitle"),
-  understandsTitle: translate(language, "assistant.understandsTitle"),
+  understandsTitle:
+    language === "hi" ? "Main kya kar sakta hoon" : "What I can do",
   roleUser: translate(language, "assistant.roleUser"),
   roleAssistant: translate(language, "assistant.roleAssistant"),
-  quickPrompts: [
-    translate(language, "assistant.quickPrompts.profit"),
-    translate(language, "assistant.quickPrompts.sales"),
-    translate(language, "assistant.quickPrompts.pending"),
-    translate(language, "assistant.quickPrompts.cashflow"),
-  ],
-  understands: [
-    translate(language, "assistant.understands.profit"),
-    translate(language, "assistant.understands.sales"),
-    translate(language, "assistant.understands.pending"),
-    translate(language, "assistant.understands.cashflow"),
-  ],
+  quickPrompts:
+    language === "hi"
+      ? [
+          "Dhruv Thakur ke liye bill banao",
+          "Add product Bread at Rs 40 with GST 5",
+          "Remove product Bread",
+          "Invoices dikhao",
+          "Customers dikhao",
+          "Products dikhao",
+        ]
+      : [
+          "Create a bill for Dhruv Thakur",
+          "Add product Bread at Rs 40 with GST 5",
+          "Remove product Bread",
+          "Show invoices",
+          "Show customers",
+          "Show products",
+        ],
+  understands:
+    language === "hi"
+      ? [
+          "Create bill",
+          "Add product",
+          "Remove product",
+          "Show invoices",
+          "Show customers",
+          "Show products",
+        ]
+      : [
+          "Create bill",
+          "Add product",
+          "Remove product",
+          "Show invoices",
+          "Show customers",
+          "Show products",
+        ],
 });
 
 const buildMessageCopy = (
   language: AssistantChatLanguage,
   fallbackLanguage: Language,
 ): AssistantCopy => {
-  if (language === "hinglish") {
-    return {
-      thinking: "Soch raha hoon...",
-      error: "Thoda issue aa gaya. Ek baar phir try karo.",
-      examplesTitle: "Try these",
-      roleUser: "You",
-      roleAssistant: "Bill Sutra Buddy",
-    };
-  }
-
-  const baseCopy = buildBaseAssistantCopy(language ?? fallbackLanguage);
+  const baseCopy = buildBaseAssistantCopy(
+    language === "hinglish"
+      ? fallbackLanguage
+      : assistantLanguageToUiLanguage(language),
+  );
   return {
     thinking: baseCopy.thinking,
     error: baseCopy.error,
@@ -112,9 +180,7 @@ const buildMessageCopy = (
   };
 };
 
-const buildVoiceCopy = (
-  language: AssistantChatLanguage,
-): VoiceCopy => {
+const buildVoiceCopy = (language: AssistantChatLanguage): VoiceCopy => {
   if (language === "hi") {
     return {
       start: "बोलें",
@@ -125,24 +191,9 @@ const buildVoiceCopy = (
       thinking: "सोच रहा हूँ...",
       speaking: "बोल रहा हूँ...",
       transcriptTitle: "Live transcript",
-      fallback: "इस browser में voice input available नहीं है. आप text से पूछ सकते हैं.",
-      helper: "Mic दबाकर Hindi, English या Hinglish में सवाल बोलिए.",
-      errorTitle: "Voice issue",
-    };
-  }
-
-  if (language === "hinglish") {
-    return {
-      start: "Bolna start karo",
-      stop: "Rok do",
-      replay: "Reply suno",
-      stopReplay: "Voice roko",
-      listening: "Sun raha hoon...",
-      thinking: "Soch raha hoon...",
-      speaking: "Bol raha hoon...",
-      transcriptTitle: "Live transcript",
-      fallback: "Is browser mein voice input available nahi hai. Aap text se pooch sakte ho.",
-      helper: "Mic dabao aur Hindi, English ya Hinglish mein apna sawaal bolo.",
+      fallback:
+        "इस browser में voice input available नहीं है. आप text से पूछ सकते हैं.",
+      helper: "माइक दबाकर हिंदी या अंग्रेज़ी में सवाल बोलिए।",
       errorTitle: "Voice issue",
     };
   }
@@ -156,16 +207,49 @@ const buildVoiceCopy = (
     thinking: "Thinking...",
     speaking: "Speaking...",
     transcriptTitle: "Live transcript",
-    fallback: "Voice input is not available in this browser. You can still type your question.",
-    helper: "Tap the mic and ask your question in Hindi, English, or Hinglish.",
+    fallback:
+      "Voice input is not available in this browser. You can still type your question.",
+    helper: "Tap the mic and ask your question in Hindi or English.",
     errorTitle: "Voice issue",
   };
 };
 
 const AssistantChat = () => {
   const { language } = useI18n();
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const [input, setInput] = useState("");
+  const { data: products = [] } = useProductsQuery({ limit: 500 });
   const uiCopy = useMemo(() => buildBaseAssistantCopy(language), [language]);
+  const copilotUiCopy = useMemo(
+    () =>
+      language === "hi"
+        ? {
+            typingTitle: "टाइप करते समय प्रोडक्ट सुझाव",
+            useProduct: "उपयोग करें",
+            gstRecommendationTitle: "GST सुझाव",
+            invoiceAutocompleteTitle: "इनवॉइस ऑटो-कम्प्लीट",
+            smartInsightsTitle: "स्मार्ट इनसाइट्स",
+            autoCompletedLabel: "ऑटो-कम्प्लीट",
+            manualLabel: "मैन्युअल",
+            sourceExplicit: "आपके लिखे item",
+            sourceCatalog: "कैटलॉग मैच",
+            sourceTopSeller: "टॉप सेलर",
+          }
+        : {
+            typingTitle: "Product suggestions while typing",
+            useProduct: "Use",
+            gstRecommendationTitle: "GST recommendation",
+            invoiceAutocompleteTitle: "Invoice auto-complete",
+            smartInsightsTitle: "Smart insights",
+            autoCompletedLabel: "Auto-completed",
+            manualLabel: "Manual",
+            sourceExplicit: "From your typed item",
+            sourceCatalog: "From catalog match",
+            sourceTopSeller: "From top seller",
+          },
+    [language],
+  );
   const [messages, setMessages] = useState<AssistantChatMessage[]>(() => [
     {
       id: "welcome-message",
@@ -193,6 +277,147 @@ const AssistantChat = () => {
       ];
     });
   }, [language, uiCopy.quickPrompts, uiCopy.welcome]);
+
+  const typingProductSuggestions = useMemo(() => {
+    const normalizedInput = input.trim().toLowerCase();
+    if (normalizedInput.length < 2) {
+      return [] as typeof products;
+    }
+
+    const typingContext =
+      /bill|invoice|product|item|add|create|sell|price|qty|gst|₹|rs/i.test(
+        normalizedInput,
+      );
+    if (!typingContext) {
+      return [] as typeof products;
+    }
+
+    const tokens = normalizedInput
+      .split(/[^a-z0-9\u0900-\u097f]+/i)
+      .filter((token) => token.length >= 2)
+      .slice(0, 4);
+
+    const scored = products
+      .map((product) => {
+        const name = product.name.toLowerCase();
+        const score = tokens.reduce((sum, token) => {
+          if (name.startsWith(token)) {
+            return sum + 3;
+          }
+
+          if (name.includes(token)) {
+            return sum + 1;
+          }
+
+          return sum;
+        }, 0);
+
+        return { product, score };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .map((entry) => entry.product);
+
+    return uniqueProductsById(scored).slice(0, 5);
+  }, [input, products]);
+
+  const applyTypingSuggestion = (product: (typeof products)[number]) => {
+    const price = Math.max(1, Number(product.price) || 0);
+    const gstRate = Math.max(0, Number(product.gst_rate) || 0);
+    const trimmedInput = input.trim();
+
+    if (/bill|invoice|create/i.test(trimmedInput)) {
+      setInput((current) =>
+        `${current.trim()} ${product.name} @ ₹${price}`.trim(),
+      );
+      return;
+    }
+
+    setInput(`Add product ${product.name} at ₹${price} with GST ${gstRate}`);
+  };
+
+  const syncAssistantAction = async (
+    reply: AssistantReply,
+    replyLanguage: AssistantChatLanguage,
+  ) => {
+    const action = reply.action;
+    if (!action) {
+      return;
+    }
+
+    if (action.status === "failed") {
+      toast.error(action.message);
+      return;
+    }
+
+    if (action.status === "noop") {
+      toast.info(action.message);
+      return;
+    }
+
+    if (action.type === "create_invoice") {
+      const normalizedRoute = action.route
+        ? normalizeAssistantRoute(action.route)
+        : null;
+
+      if (normalizedRoute?.startsWith("/simple-bill")) {
+        toast.success(action.message);
+        router.push(normalizedRoute);
+        return;
+      }
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        invalidateDashboardQueries(queryClient),
+      ]);
+    }
+
+    if (action.type === "create_product") {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        queryClient.invalidateQueries({ queryKey: ["categories"] }),
+        invalidateDashboardQueries(queryClient),
+      ]);
+    }
+
+    if (action.type === "remove_product") {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+        queryClient.invalidateQueries({ queryKey: ["categories"] }),
+        invalidateDashboardQueries(queryClient),
+      ]);
+    }
+
+    if (
+      (action.type === "open_simple_bill" ||
+        action.type === "navigate" ||
+        action.type === "show_products" ||
+        action.type === "show_invoices" ||
+        action.type === "show_customers") &&
+      action.route
+    ) {
+      toast.success(action.message);
+      router.push(normalizeAssistantRoute(action.route));
+      return;
+    }
+
+    toast.success(action.message);
+
+    if (
+      action.type === "create_invoice" &&
+      action.route &&
+      replyLanguage !== "hi"
+    ) {
+      const normalizedRoute = normalizeAssistantRoute(action.route);
+      toast.message("You can open it from history when ready.", {
+        action: {
+          label: "Open",
+          onClick: () => router.push(normalizedRoute),
+        },
+      });
+    }
+  };
 
   const assistantQuery = useMutation({
     mutationFn: ({
@@ -254,20 +479,34 @@ const AssistantChat = () => {
                 content: reply.answer,
                 highlights: reply.highlights,
                 examples: reply.examples,
+                copilot: reply.copilot,
                 language: reply.language,
               }
             : entry,
         ),
       );
+      await syncAssistantAction(reply, replyLanguage);
       return reply;
-    } catch {
+    } catch (error) {
+      const apiErrorMessage =
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message.trim()
+          : replyCopy.error;
+      const followUpHint =
+        replyLanguage === "hi"
+          ? "अगर समझ न आए तो ऐसे लिखें: products dikhao"
+          : "If this was not your intent, try: Show products";
+      const content = `${apiErrorMessage}${
+        apiErrorMessage.endsWith(".") ? "" : "."
+      } ${followUpHint}`;
+
       setMessages((current) =>
         current.map((entry) =>
           entry.id === pendingId
             ? {
                 id: `assistant-error-${requestTime}`,
                 role: "assistant",
-                content: replyCopy.error,
+                content,
                 language: replyLanguage,
               }
             : entry,
@@ -275,7 +514,7 @@ const AssistantChat = () => {
       );
 
       if (options?.source === "voice") {
-        throw new Error(replyCopy.error);
+        throw new Error(content);
       }
 
       return null;
@@ -340,8 +579,12 @@ const AssistantChat = () => {
               <Bot size={18} />
             </div>
             <div>
-              <CardTitle className="text-xl text-foreground">{uiCopy.title}</CardTitle>
-              <p className="mt-2 text-sm text-muted-foreground">{uiCopy.description}</p>
+              <CardTitle className="text-xl text-foreground">
+                {uiCopy.title}
+              </CardTitle>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {uiCopy.description}
+              </p>
             </div>
           </div>
         </CardHeader>
@@ -355,6 +598,10 @@ const AssistantChat = () => {
                     : language),
                 language,
               );
+              const copilotProductSuggestions = message.copilot
+                ?.productSuggestions
+                ? uniqueProductsById(message.copilot.productSuggestions)
+                : [];
 
               return (
                 <div
@@ -369,7 +616,11 @@ const AssistantChat = () => {
                     }`}
                   >
                     <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] opacity-80">
-                      {message.role === "user" ? <User2 size={14} /> : <Bot size={14} />}
+                      {message.role === "user" ? (
+                        <User2 size={14} />
+                      ) : (
+                        <Bot size={14} />
+                      )}
                       <span>
                         {message.role === "user"
                           ? messageCopy.roleUser
@@ -388,6 +639,120 @@ const AssistantChat = () => {
                             {item.label}: {item.value}
                           </span>
                         ))}
+                      </div>
+                    ) : null}
+
+                    {message.copilot?.gstRecommendation ? (
+                      <div className="mt-3 rounded-2xl border border-border bg-background/75 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                          {copilotUiCopy.gstRecommendationTitle}
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-foreground">
+                          {message.copilot.gstRecommendation.rate}% GST
+                        </p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {message.copilot.gstRecommendation.reason}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {message.copilot?.invoiceAutocomplete ? (
+                      <div className="mt-3 rounded-2xl border border-border bg-background/75 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                            {copilotUiCopy.invoiceAutocompleteTitle}
+                          </p>
+                          <span className="rounded-full border border-border bg-card px-2.5 py-1 text-[11px] font-semibold text-foreground">
+                            {message.copilot.invoiceAutocomplete.autoCompleted
+                              ? copilotUiCopy.autoCompletedLabel
+                              : copilotUiCopy.manualLabel}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {message.copilot.invoiceAutocomplete.customerName}
+                        </p>
+                        <div className="mt-2 grid gap-2">
+                          {message.copilot.invoiceAutocomplete.items.map(
+                            (item) => {
+                              const sourceLabel =
+                                item.source === "explicit"
+                                  ? copilotUiCopy.sourceExplicit
+                                  : item.source === "top_seller"
+                                    ? copilotUiCopy.sourceTopSeller
+                                    : copilotUiCopy.sourceCatalog;
+                              return (
+                                <div
+                                  key={`${message.id}-${item.name}-${item.source}`}
+                                  className="rounded-xl border border-border/70 bg-card/80 px-3 py-2"
+                                >
+                                  <p className="text-xs font-semibold text-foreground">
+                                    {item.quantity} x {item.name}
+                                  </p>
+                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                    {formatInr(item.price)} • GST{" "}
+                                    {item.gstRate ?? 18}% • {sourceLabel}
+                                  </p>
+                                </div>
+                              );
+                            },
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {copilotProductSuggestions.length > 0 ? (
+                      <div className="mt-3 rounded-2xl border border-border bg-background/75 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                          {copilotUiCopy.typingTitle}
+                        </p>
+                        <div className="mt-2 grid gap-2">
+                          {copilotProductSuggestions.map((product) => (
+                            <button
+                              key={`${message.id}-${product.id}`}
+                              type="button"
+                              onClick={() =>
+                                setInput(
+                                  `Add product ${product.name} at ₹${Math.max(1, Math.round(product.price))} with GST ${product.gstRate}`,
+                                )
+                              }
+                              className="rounded-xl border border-border bg-card px-3 py-2 text-left text-xs text-foreground transition hover:border-primary/40 hover:text-primary"
+                            >
+                              <span className="font-semibold">
+                                {product.name}
+                              </span>
+                              <span className="ml-2 text-muted-foreground">
+                                {formatInr(product.price)} • GST{" "}
+                                {product.gstRate}%
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {message.copilot?.smartInsights &&
+                    message.copilot.smartInsights.length > 0 ? (
+                      <div className="mt-3 rounded-2xl border border-border bg-background/75 p-3">
+                        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                          {copilotUiCopy.smartInsightsTitle}
+                        </p>
+                        <div className="mt-2 grid gap-2">
+                          {message.copilot.smartInsights.map(
+                            (insight, index) => (
+                              <div
+                                key={`${message.id}-insight-${index}`}
+                                className="rounded-xl border border-border/70 bg-card/80 px-3 py-2"
+                              >
+                                <p className="text-xs font-semibold text-foreground">
+                                  {insight.title}
+                                </p>
+                                <p className="mt-0.5 text-xs text-muted-foreground">
+                                  {insight.detail}
+                                </p>
+                              </div>
+                            ),
+                          )}
+                        </div>
                       </div>
                     ) : null}
 
@@ -443,10 +808,16 @@ const AssistantChat = () => {
 
                 voiceAssistant.startListening();
               }}
-              aria-label={voiceAssistant.isListening ? voiceCopy.stop : voiceCopy.start}
+              aria-label={
+                voiceAssistant.isListening ? voiceCopy.stop : voiceCopy.start
+              }
               className="h-12 w-12 rounded-2xl"
             >
-              {voiceAssistant.isListening ? <Square size={16} /> : <Mic size={16} />}
+              {voiceAssistant.isListening ? (
+                <Square size={16} />
+              ) : (
+                <Mic size={16} />
+              )}
             </Button>
             <Button
               type="button"
@@ -470,11 +841,17 @@ const AssistantChat = () => {
                 );
               }}
               aria-label={
-                voiceAssistant.isSpeaking ? voiceCopy.stopReplay : voiceCopy.replay
+                voiceAssistant.isSpeaking
+                  ? voiceCopy.stopReplay
+                  : voiceCopy.replay
               }
               className="h-12 w-12 rounded-2xl"
             >
-              {voiceAssistant.isSpeaking ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              {voiceAssistant.isSpeaking ? (
+                <VolumeX size={16} />
+              ) : (
+                <Volume2 size={16} />
+              )}
             </Button>
             <Button
               type="submit"
@@ -490,9 +867,35 @@ const AssistantChat = () => {
             </Button>
           </form>
 
+          {typingProductSuggestions.length > 0 ? (
+            <div className="rounded-3xl border border-border/70 bg-background/70 p-4">
+              <div className="flex items-center gap-2">
+                <Sparkles size={14} className="text-primary" />
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  {copilotUiCopy.typingTitle}
+                </p>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {typingProductSuggestions.map((product) => (
+                  <button
+                    key={`typing-product-${product.id}`}
+                    type="button"
+                    onClick={() => applyTypingSuggestion(product)}
+                    className="rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition hover:border-primary/40 hover:text-primary"
+                  >
+                    {product.name} • {formatInr(Number(product.price) || 0)} •
+                    GST {Number(product.gst_rate) || 0}%
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="rounded-3xl border border-border/70 bg-background/70 p-4">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-foreground">{voiceStatusLabel}</p>
+              <p className="text-sm font-semibold text-foreground">
+                {voiceStatusLabel}
+              </p>
               {voiceAssistant.liveTranscript ? (
                 <span className="rounded-full border border-border bg-card px-3 py-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
                   {voiceCopy.transcriptTitle}
@@ -518,7 +921,9 @@ const AssistantChat = () => {
       <div className="grid gap-4">
         <Card className="dashboard-chart-surface rounded-[1.75rem]">
           <CardHeader className="dashboard-chart-content">
-            <CardTitle className="text-lg text-foreground">{uiCopy.examplesTitle}</CardTitle>
+            <CardTitle className="text-lg text-foreground">
+              {uiCopy.examplesTitle}
+            </CardTitle>
           </CardHeader>
           <CardContent className="dashboard-chart-content grid gap-2">
             {uiCopy.quickPrompts.map((prompt) => (

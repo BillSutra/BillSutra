@@ -96,8 +96,8 @@ const buildTranscriptSnapshot = (
   finalTranscript: string,
   interimTranscript: string,
 ): VoiceTranscriptSnapshot => {
-  // We infer the response language from the freshest transcript so Hinglish
-  // queries keep their mixed-language tone end to end.
+  // We infer response language from the freshest transcript so replies stay
+  // aligned with the latest user input.
   const combinedTranscript = `${finalTranscript} ${interimTranscript}`.trim();
 
   return {
@@ -122,7 +122,8 @@ class BrowserSpeechRecognitionProvider implements SpeechToTextProvider {
 
     if (!SpeechRecognitionCtor) {
       return {
-        start: () => options.onError("Voice input is not supported in this browser."),
+        start: () =>
+          options.onError("Voice input is not supported in this browser."),
         stop: () => undefined,
         abort: () => undefined,
       };
@@ -146,7 +147,11 @@ class BrowserSpeechRecognitionProvider implements SpeechToTextProvider {
     recognition.onresult = (event) => {
       interimTranscript = "";
 
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      for (
+        let index = event.resultIndex;
+        index < event.results.length;
+        index += 1
+      ) {
         const result = event.results[index];
         const transcriptChunk = result?.[0]?.transcript?.trim() ?? "";
 
@@ -162,7 +167,11 @@ class BrowserSpeechRecognitionProvider implements SpeechToTextProvider {
       }
 
       options.onTranscript(
-        buildTranscriptSnapshot(options.locale, finalTranscript, interimTranscript),
+        buildTranscriptSnapshot(
+          options.locale,
+          finalTranscript,
+          interimTranscript,
+        ),
       );
     };
 
@@ -172,7 +181,11 @@ class BrowserSpeechRecognitionProvider implements SpeechToTextProvider {
 
     recognition.onend = () => {
       options.onEnd?.(
-        buildTranscriptSnapshot(options.locale, finalTranscript, interimTranscript),
+        buildTranscriptSnapshot(
+          options.locale,
+          finalTranscript,
+          interimTranscript,
+        ),
       );
     };
 
@@ -184,4 +197,5 @@ class BrowserSpeechRecognitionProvider implements SpeechToTextProvider {
   }
 }
 
-export const browserSpeechRecognitionProvider = new BrowserSpeechRecognitionProvider();
+export const browserSpeechRecognitionProvider =
+  new BrowserSpeechRecognitionProvider();

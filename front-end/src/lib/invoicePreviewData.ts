@@ -6,7 +6,13 @@ export const PREVIEW_INVOICE: InvoicePreviewData = {
   dueDate: "Mar 22, 2026",
   business: {
     businessName: "BillSutra Studio",
-    address: "208, Riverwalk Avenue, Pune",
+    address: "208, Riverwalk Avenue, Pune, Maharashtra - 411001",
+    businessAddress: {
+      addressLine1: "208, Riverwalk Avenue",
+      city: "Pune",
+      state: "Maharashtra",
+      pincode: "411001",
+    },
     phone: "+91 98765 43210",
     email: "hello@billsutra.app",
     website: "www.billsutra.app",

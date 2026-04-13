@@ -9,6 +9,9 @@ const parseOwnerUserId = (ownerId: string) => {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
 const createAdminToken = (payload: AdminAuthUser) =>
   `Bearer ${jwt.sign(payload, process.env.JWT_SECRET as string, {
     expiresIn: "30d",
@@ -85,9 +88,7 @@ class AdminController {
         })
       : [];
 
-    const ownerMap = new Map(
-      owners.map((owner) => [String(owner.id), owner]),
-    );
+    const ownerMap = new Map(owners.map((owner) => [String(owner.id), owner]));
 
     return sendResponse(res, 200, {
       data: businesses.map((business) => ({
@@ -141,7 +142,9 @@ class AdminController {
     const workersCreatedLast7Days = workers.filter(
       (worker) => worker.createdAt >= sevenDaysAgo,
     ).length;
-    const adminWorkers = workers.filter((worker) => worker.role === "ADMIN").length;
+    const adminWorkers = workers.filter(
+      (worker) => worker.role === "ADMIN",
+    ).length;
 
     return sendResponse(res, 200, {
       data: {
@@ -173,7 +176,10 @@ class AdminController {
   }
 
   static async showBusiness(req: Request, res: Response) {
-    const businessId = req.params.id;
+    const businessId = readRouteParam(req.params.id);
+    if (!businessId) {
+      return sendResponse(res, 422, { message: "Business id is required" });
+    }
 
     const business = await prisma.business.findUnique({
       where: { id: businessId },
@@ -258,7 +264,10 @@ class AdminController {
   }
 
   static async deleteBusiness(req: Request, res: Response) {
-    const businessId = req.params.id;
+    const businessId = readRouteParam(req.params.id);
+    if (!businessId) {
+      return sendResponse(res, 422, { message: "Business id is required" });
+    }
 
     const business = await prisma.business.findUnique({
       where: { id: businessId },
@@ -277,7 +286,9 @@ class AdminController {
       });
 
       if (ownerUserId) {
-        await tx.passwordResetToken.deleteMany({ where: { user_id: ownerUserId } });
+        await tx.passwordResetToken.deleteMany({
+          where: { user_id: ownerUserId },
+        });
         await tx.recurringInvoiceTemplate.deleteMany({
           where: { user_id: ownerUserId },
         });
@@ -289,9 +300,13 @@ class AdminController {
         await tx.category.deleteMany({ where: { user_id: ownerUserId } });
         await tx.supplier.deleteMany({ where: { user_id: ownerUserId } });
         await tx.customer.deleteMany({ where: { user_id: ownerUserId } });
-        await tx.businessProfile.deleteMany({ where: { user_id: ownerUserId } });
+        await tx.businessProfile.deleteMany({
+          where: { user_id: ownerUserId },
+        });
         await tx.userTemplate.deleteMany({ where: { user_id: ownerUserId } });
-        await tx.userSavedTemplate.deleteMany({ where: { user_id: ownerUserId } });
+        await tx.userSavedTemplate.deleteMany({
+          where: { user_id: ownerUserId },
+        });
         await tx.user.deleteMany({ where: { id: ownerUserId } });
       }
 

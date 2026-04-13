@@ -32,6 +32,9 @@ model User {
   recurring_invoice_templates RecurringInvoiceTemplate[]
   financial_goals             FinancialGoal[]
   payments                    Payment[]
+  access_payments             AccessPayment[]
+  subscription                Subscription?
+  subscription_usage          SubscriptionUsage[]
   resets                      PasswordResetToken[]
   business_profile            BusinessProfile?
   user_templates              UserTemplate[]
@@ -41,8 +44,38 @@ model User {
   auth_challenges             AuthChallenge[]
   otp_codes                   OtpCode[]
   auth_events                 AuthEvent[]
+  preferences                 UserPreference?
+
+  session_version Int @default(0)
 
   @@map("users")
+}
+
+model UserPreference {
+  id Int @id @default(autoincrement())
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int  @unique
+
+  language    String @default("en") @db.VarChar(10)
+  currency    String @default("INR") @db.VarChar(10)
+  date_format String @default("DD/MM/YYYY") @db.VarChar(32)
+
+  notification_payment_reminders  Boolean @default(true)
+  notification_low_stock_alerts   Boolean @default(true)
+  notification_due_invoice_alerts Boolean @default(true)
+
+  backup_auto_enabled Boolean @default(false)
+
+  branding_template_id Int?
+  branding_theme_color String? @db.VarChar(16)
+  branding_terms       String?
+  branding_signature   String? @db.VarChar(191)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("user_preferences")
 }
 
 model Admin {
@@ -90,6 +123,10 @@ model BusinessProfile {
   user_id              Int      @unique
   business_name        String   @db.VarChar(191)
   address              String?
+  address_line1        String?  @db.VarChar(191)
+  city                 String?  @db.VarChar(191)
+  state                String?  @db.VarChar(191)
+  pincode              String?  @db.VarChar(10)
   phone                String?
   email                String?
   website              String?
@@ -197,6 +234,18 @@ model Customer {
   phone   String?
   address String?
 
+  customer_type   String   @default("individual") @db.VarChar(32)
+  business_name   String?  @db.VarChar(191)
+  gstin           String?  @db.VarChar(15)
+  address_line1   String?  @db.VarChar(191)
+  city            String?  @db.VarChar(191)
+  state           String?  @db.VarChar(191)
+  pincode         String?  @db.VarChar(10)
+  notes           String?  @db.VarChar(500)
+  credit_limit    Decimal? @db.Decimal(12, 2)
+  payment_terms   String?  @db.VarChar(32)
+  opening_balance Decimal  @default(0) @db.Decimal(12, 2)
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
@@ -213,10 +262,22 @@ model Supplier {
   user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
   user_id Int
 
-  name    String
-  email   String?
-  phone   String?
-  address String?
+  name       String
+  email      String?
+  phone      String?
+  address    String?
+  categories String[] @default([])
+
+  business_name   String? @db.VarChar(191)
+  gstin           String? @db.VarChar(15)
+  pan             String? @db.VarChar(10)
+  address_line1   String? @db.VarChar(191)
+  city            String? @db.VarChar(191)
+  state           String? @db.VarChar(191)
+  pincode         String? @db.VarChar(10)
+  payment_terms   String? @db.VarChar(32)
+  opening_balance Decimal @default(0) @db.Decimal(12, 2)
+  notes           String? @db.VarChar(500)
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -254,9 +315,9 @@ model Product {
   category    Category? @relation(fields: [category_id], references: [id], onDelete: SetNull)
   category_id Int?
 
-  name        String
-  sku         String
-  barcode     String?
+  name    String
+  sku     String
+  barcode String?
 
   price Decimal  @db.Decimal(12, 2)
   cost  Decimal? @db.Decimal(12, 2)
@@ -545,6 +606,95 @@ model Payment {
   @@map("payments")
 }
 
+model AccessPayment {
+  id String @id @default(cuid()) @db.VarChar(191)
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  plan_id       String              @default("pro") @db.VarChar(32)
+  billing_cycle String              @default("monthly") @db.VarChar(16)
+  method        AccessPaymentMethod
+  amount        Decimal             @db.Decimal(12, 2)
+  status        AccessPaymentStatus @default(PENDING)
+
+  name            String? @db.VarChar(191)
+  utr             String? @unique @db.VarChar(64)
+  screenshot_url  String?
+  screenshot_path String?
+
+  provider            String? @db.VarChar(120)
+  provider_payment_id String? @unique @db.VarChar(191)
+  provider_order_id   String? @unique @db.VarChar(191)
+  provider_signature  String? @db.VarChar(191)
+  provider_reference  String? @db.VarChar(191)
+  metadata            Json?
+
+  reviewed_by_admin_id    String?   @db.VarChar(191)
+  reviewed_by_admin_email String?   @db.VarChar(191)
+  reviewed_at             DateTime?
+  created_at              DateTime  @default(now())
+  updated_at              DateTime  @updatedAt
+
+  @@index([user_id, created_at])
+  @@index([status, method, created_at])
+  @@index([plan_id, billing_cycle])
+  @@map("access_payments")
+}
+
+model Subscription {
+  id String @id @default(cuid()) @db.VarChar(191)
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int  @unique
+
+  plan_id              SubscriptionPlan          @default(FREE)
+  status               SubscriptionStatus        @default(ACTIVE)
+  billing_cycle        SubscriptionBillingCycle?
+  started_at           DateTime                  @default(now())
+  trial_starts_at      DateTime?
+  trial_ends_at        DateTime?
+  current_period_start DateTime?
+  current_period_end   DateTime?
+  cancelled_at         DateTime?
+  expires_at           DateTime?
+  latest_payment_id    String?                   @db.VarChar(191)
+  metadata             Json?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  usage SubscriptionUsage[]
+
+  @@index([plan_id, status])
+  @@map("subscriptions")
+}
+
+model SubscriptionUsage {
+  id Int @id @default(autoincrement())
+
+  subscription    Subscription @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
+  subscription_id String       @db.VarChar(191)
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  period_key   String   @db.VarChar(16)
+  period_start DateTime
+  period_end   DateTime
+
+  invoices_created  Int @default(0)
+  products_created  Int @default(0)
+  customers_created Int @default(0)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([subscription_id, period_key])
+  @@index([user_id, period_start])
+  @@map("subscription_usage")
+}
+
 model StockMovement {
   id Int @id @default(autoincrement())
 
@@ -606,16 +756,16 @@ model PasskeyCredential {
   user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
   user_id Int
 
-  label         String   @db.VarChar(191)
-  credential_id String   @unique @db.VarChar(512)
+  label         String    @db.VarChar(191)
+  credential_id String    @unique @db.VarChar(512)
   public_key    String
-  counter       Int      @default(0)
-  device_type   String   @default("multiDevice") @db.VarChar(32)
-  backed_up     Boolean  @default(false)
+  counter       Int       @default(0)
+  device_type   String    @default("multiDevice") @db.VarChar(32)
+  backed_up     Boolean   @default(false)
   transports    String[]
   last_used_at  DateTime?
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
 
   @@index([user_id, created_at])
   @@map("passkey_credentials")
@@ -628,10 +778,10 @@ model AuthChallenge {
   user_id Int
 
   flow        AuthChallengeFlow
-  challenge   String   @unique @db.VarChar(255)
+  challenge   String            @unique @db.VarChar(255)
   expires_at  DateTime
   consumed_at DateTime?
-  created_at  DateTime @default(now())
+  created_at  DateTime          @default(now())
 
   @@index([user_id, flow, created_at])
   @@map("auth_challenges")
@@ -643,15 +793,15 @@ model OtpCode {
   user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
   user_id Int
 
-  purpose              OtpPurpose @default(LOGIN)
-  channel              OtpChannel @default(EMAIL)
-  code_hash            String     @db.VarChar(191)
-  expires_at           DateTime
-  resend_available_at  DateTime
-  attempts             Int        @default(0)
-  max_attempts         Int        @default(3)
-  consumed_at          DateTime?
-  created_at           DateTime   @default(now())
+  purpose             OtpPurpose @default(LOGIN)
+  channel             OtpChannel @default(EMAIL)
+  code_hash           String     @db.VarChar(191)
+  expires_at          DateTime
+  resend_available_at DateTime
+  attempts            Int        @default(0)
+  max_attempts        Int        @default(3)
+  consumed_at         DateTime?
+  created_at          DateTime   @default(now())
 
   @@index([user_id, purpose, created_at])
   @@map("otp_codes")
@@ -745,4 +895,34 @@ enum AuthMethod {
   OTP
   PASSKEY
   WORKER_PASSWORD
+}
+
+enum AccessPaymentMethod {
+  RAZORPAY
+  UPI
+}
+
+enum AccessPaymentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUCCESS
+}
+
+enum SubscriptionPlan {
+  FREE
+  PRO
+  PRO_PLUS
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum SubscriptionBillingCycle {
+  MONTHLY
+  YEARLY
 }

@@ -18,14 +18,27 @@ export type InvoiceTheme = {
 
 export type TemplateLayout = "stacked" | "split";
 
+export type InvoiceTemplateVariant =
+  | "classic"
+  | "modern"
+  | "indianModern"
+  | "gst"
+  | "headerLeft"
+  | "banner"
+  | "split"
+  | "compact"
+  | "bold";
+
 export type InvoiceTemplateConfig = {
   id: string;
   name: string;
   description: string;
+  bestFor?: string;
   layout: TemplateLayout;
   defaultSections: SectionKey[];
   sectionOrder?: SectionKey[];
   theme: InvoiceTheme;
+  variant?: InvoiceTemplateVariant;
 };
 
 export type BusinessTypeConfig = {
@@ -34,9 +47,17 @@ export type BusinessTypeConfig = {
   defaultSections: SectionKey[];
 };
 
+export type BusinessAddressInput = {
+  addressLine1: string;
+  city: string;
+  state: string;
+  pincode: string;
+};
+
 export type BusinessProfileInput = {
   businessName: string;
   address: string;
+  businessAddress?: BusinessAddressInput;
   phone: string;
   email: string;
   website: string;
@@ -63,6 +84,9 @@ export type InvoicePreviewData = {
   business: BusinessProfileInput;
   client: {
     name: string;
+    type?: "individual" | "business";
+    businessName?: string;
+    gstin?: string;
     email: string;
     phone: string;
     address: string;
@@ -89,6 +113,7 @@ export type InvoicePreviewData = {
     paidAmount: number;
     remainingAmount: number;
     history?: Array<{
+      id?: number | string;
       amount: number;
       paidAt?: string | null;
       method?: string | null;

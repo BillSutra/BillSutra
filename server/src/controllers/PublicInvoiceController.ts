@@ -2,10 +2,20 @@ import type { Request, Response } from "express";
 import { getPublicInvoice } from "../modules/invoice/invoice.service.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
 class PublicInvoiceController {
   static async show(req: Request, res: Response) {
     try {
-      const invoice = await getPublicInvoice(req.params.id);
+      const reference = readRouteParam(req.params.id);
+      if (!reference) {
+        return sendResponse(res, 422, {
+          message: "Invoice reference is required",
+        });
+      }
+
+      const invoice = await getPublicInvoice(reference);
 
       if (!invoice) {
         return sendResponse(res, 404, { message: "Invoice not found" });

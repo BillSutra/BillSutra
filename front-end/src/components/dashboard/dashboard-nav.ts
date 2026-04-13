@@ -15,6 +15,7 @@ import {
   UserCog,
   Users,
   Warehouse,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 
@@ -33,6 +34,8 @@ type DashboardNavItem = {
   icon: LucideIcon;
   section: DashboardNavSection;
   adminOnly?: boolean;
+  badgeKey?: string;
+  highlighted?: boolean;
 };
 
 export const dashboardNavSections: Array<{
@@ -54,6 +57,14 @@ export const dashboardNavItems: DashboardNavItem[] = [
     href: "/dashboard",
     icon: LayoutDashboard,
     section: "main",
+  },
+  {
+    labelKey: "navigation.simpleBill",
+    href: "/simple-bill",
+    icon: Zap,
+    section: "main",
+    badgeKey: "navigation.simpleBillBadge",
+    highlighted: true,
   },
   {
     labelKey: "navigation.insights",

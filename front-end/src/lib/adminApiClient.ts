@@ -96,6 +96,31 @@ export type AdminBusinessDetail = {
   };
 };
 
+export type AdminAccessPaymentRecord = {
+  id: string;
+  userId: number;
+  planId: "pro" | "pro-plus";
+  billingCycle: "monthly" | "yearly";
+  method: "upi";
+  amount: number;
+  status: "pending" | "approved" | "rejected" | "success";
+  name?: string | null;
+  utr?: string | null;
+  screenshotUrl?: string | null;
+  provider?: string | null;
+  providerReference?: string | null;
+  reviewedByAdminId?: string | null;
+  reviewedByAdminEmail?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: number;
+    name: string;
+    email: string;
+  };
+};
+
 const adminApiClient = axios.create({
   baseURL: API_URL,
 });
@@ -143,4 +168,17 @@ export const deleteAdminBusiness = async (businessId: string) => {
 export const fetchAdminWorkers = async () => {
   const response = await adminApiClient.get("/admin/workers");
   return response.data.data as AdminWorkerRecord[];
+};
+
+export const fetchAdminPayments = async () => {
+  const response = await adminApiClient.get("/admin/payments");
+  return response.data.data as AdminAccessPaymentRecord[];
+};
+
+export const verifyAdminPayment = async (payload: {
+  paymentId: string;
+  status: "approved" | "rejected";
+}) => {
+  const response = await adminApiClient.post("/admin/verify", payload);
+  return response.data.data as AdminAccessPaymentRecord;
 };

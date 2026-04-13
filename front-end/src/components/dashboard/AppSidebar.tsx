@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import BrandLogo from "@/components/branding/BrandLogo";
-import { dashboardNavItems, dashboardNavSections } from "./dashboard-nav";
+import {
+  dashboardNavItems,
+  dashboardNavSections,
+  type DashboardNavSection,
+} from "./dashboard-nav";
 import SidebarNavItem from "./SidebarNavItem";
 import { useI18n } from "@/providers/LanguageProvider";
 
@@ -23,6 +26,16 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
   const pathname = usePathname();
   const { language, t } = useI18n();
   const { data: session } = useSession();
+  const [collapsedSections, setCollapsedSections] = useState<
+    Partial<Record<DashboardNavSection, boolean>>
+  >({
+    salesBilling: true,
+    productsInventory: true,
+    contacts: true,
+    purchases: true,
+    customization: true,
+    system: true,
+  });
 
   const translatedNavItems = useMemo(
     () =>
@@ -30,13 +43,18 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
         .filter((item) => {
           const role = session?.user?.role;
           if (role === "WORKER") {
-            return item.href === "/sales" || item.href === "/invoices";
+            return (
+              item.href === "/sales" ||
+              item.href === "/invoices" ||
+              item.href === "/simple-bill"
+            );
           }
 
           return !item.adminOnly || role === "ADMIN";
         })
         .map((item) => ({
           ...item,
+          badge: item.badgeKey ? t(item.badgeKey) : undefined,
           label: t(item.labelKey),
         })),
     [session?.user?.role, t],
@@ -47,7 +65,9 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
       dashboardNavSections
         .map((section) => ({
           ...section,
-          items: translatedNavItems.filter((item) => item.section === section.id),
+          items: translatedNavItems.filter(
+            (item) => item.section === section.id,
+          ),
         }))
         .filter((section) => section.items.length > 0),
     [translatedNavItems],
@@ -104,32 +124,73 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
       </div>
 
       <nav className="space-y-4">
-        {groupedNavItems.map((section) => (
-          <div key={section.id} className="space-y-1.5">
-            {!collapsed ? (
-              <p className="px-3 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-muted-foreground/80">
-                {section.title}
-              </p>
-            ) : null}
-            <div className="grid gap-1">
-              {section.items.map((item) => {
-                const active =
-                  pathname === item.href || pathname.startsWith(`${item.href}/`);
+        {groupedNavItems.map((section) => {
+          const hasActiveItem = section.items.some(
+            (item) =>
+              pathname === item.href || pathname.startsWith(`${item.href}/`),
+          );
+          const canCollapseSection = section.id !== "main" && !collapsed;
+          const sectionCollapsed =
+            canCollapseSection &&
+            collapsedSections[section.id] &&
+            !hasActiveItem;
+          const isExpanded =
+            collapsed || section.id === "main" || !sectionCollapsed;
 
-                return (
-                  <SidebarNavItem
-                    key={item.href + item.labelKey}
-                    active={active}
-                    collapsed={collapsed}
-                    href={item.href}
-                    icon={item.icon}
-                    label={item.label}
-                  />
-                );
-              })}
+          return (
+            <div key={section.id} className="space-y-1.5">
+              {!collapsed ? (
+                canCollapseSection ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-1 text-left text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-muted-foreground/80 transition hover:bg-card/65 hover:text-foreground"
+                    aria-expanded={isExpanded}
+                    onClick={() =>
+                      setCollapsedSections((current) => ({
+                        ...current,
+                        [section.id]: !current[section.id],
+                      }))
+                    }
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0 transition-transform",
+                        isExpanded && "rotate-90",
+                      )}
+                    />
+                    <span className="truncate">{section.title}</span>
+                  </button>
+                ) : (
+                  <p className="px-3 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-muted-foreground/80">
+                    {section.title}
+                  </p>
+                )
+              ) : null}
+              {isExpanded ? (
+                <div className="grid gap-1">
+                  {section.items.map((item) => {
+                    const active =
+                      pathname === item.href ||
+                      pathname.startsWith(`${item.href}/`);
+
+                    return (
+                      <SidebarNavItem
+                        key={item.href + item.labelKey}
+                        active={active}
+                        badge={item.badge}
+                        collapsed={collapsed}
+                        highlighted={item.highlighted}
+                        href={item.href}
+                        icon={item.icon}
+                        label={item.label}
+                      />
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
     </div>
   );
@@ -159,7 +220,9 @@ const AppSidebar = ({
               variant="outline"
               className="rounded-2xl"
               onClick={onToggleCollapsed}
-              aria-label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")}
+              aria-label={
+                collapsed ? t("sidebar.expand") : t("sidebar.collapse")
+              }
             >
               {collapsed ? (
                 <PanelLeftOpen className="h-4 w-4" />
@@ -177,7 +240,7 @@ const AppSidebar = ({
 
       <div
         className={cn(
-          "fixed inset-0 z-40 bg-black/30 backdrop-blur-sm transition-opacity lg:hidden",
+          "fixed inset-0 z-40 bg-background/62 backdrop-blur-sm transition-opacity lg:hidden",
           mobileOpen ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         onClick={onCloseMobile}

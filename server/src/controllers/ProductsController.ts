@@ -19,13 +19,16 @@ class ProductsController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const { page, limit, skip } = parsePagination({
-      page: req.query.page,
-      limit: req.query.limit,
-    }, {
-      defaultLimit: 20,
-      maxLimit: 200,
-    });
+    const { page, limit, skip } = parsePagination(
+      {
+        page: req.query.page,
+        limit: req.query.limit,
+      },
+      {
+        defaultLimit: 20,
+        maxLimit: 200,
+      },
+    );
 
     const search =
       typeof req.query.search === "string" ? req.query.search.trim() : "";
@@ -80,14 +83,6 @@ class ProductsController {
       skip,
       take: limit,
     };
-
-    console.info("[products.index] query params", {
-      page: req.query.page ?? null,
-      limit: req.query.limit ?? null,
-      search: search || null,
-      category: category || null,
-    });
-    console.info("[products.index] db query", dbQuery);
 
     const [items, total] = await prisma.$transaction([
       prisma.product.findMany(dbQuery),
