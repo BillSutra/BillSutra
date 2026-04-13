@@ -16,10 +16,7 @@ type SupplierCategoryTagsInputProps = {
 };
 
 const normalizeCategory = (raw: string) =>
-  raw
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 60);
+  raw.replace(/\s+/g, " ").trim().slice(0, 60);
 
 const dedupeCategories = (categories: string[]) => {
   const unique: string[] = [];
@@ -79,7 +76,9 @@ const SupplierCategoryTagsInput = ({
   const removeCategory = (target: string) => {
     const targetKey = normalizeCategory(target).toLowerCase();
     onChange(
-      value.filter((entry) => normalizeCategory(entry).toLowerCase() !== targetKey),
+      value.filter(
+        (entry) => normalizeCategory(entry).toLowerCase() !== targetKey,
+      ),
     );
   };
 

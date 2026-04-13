@@ -77,10 +77,12 @@ const parsePeriod = (value: unknown) => {
 
 const missingWorkerExtensionError = (error: unknown) => {
   const message =
-    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    error instanceof Error
+      ? error.message.toLowerCase()
+      : String(error).toLowerCase();
   return (
     message.includes("worker_profiles") ||
-    message.includes("column") && message.includes("worker_id")
+    (message.includes("column") && message.includes("worker_id"))
   );
 };
 
@@ -109,8 +111,10 @@ const upsertWorkerProfile = async (
   const accessRole = payload.accessRole ?? DEFAULT_WORKER_PROFILE.accessRole;
   const status = payload.status ?? DEFAULT_WORKER_PROFILE.status;
   const joiningDate = payload.joiningDate ?? null;
-  const incentiveType = payload.incentiveType ?? DEFAULT_WORKER_PROFILE.incentiveType;
-  const incentiveValue = payload.incentiveValue ?? DEFAULT_WORKER_PROFILE.incentiveValue;
+  const incentiveType =
+    payload.incentiveType ?? DEFAULT_WORKER_PROFILE.incentiveType;
+  const incentiveValue =
+    payload.incentiveValue ?? DEFAULT_WORKER_PROFILE.incentiveValue;
   const lastActiveAt = payload.lastActiveAt ?? null;
 
   await prisma.$executeRaw`
@@ -213,8 +217,12 @@ const calculateIncentive = (
   return 0;
 };
 
-const listWorkerSalesAgg = async (workerIds: string[], startDate: Date | null) => {
-  if (!workerIds.length) return new Map<string, { total: number; count: number }>();
+const listWorkerSalesAgg = async (
+  workerIds: string[],
+  startDate: Date | null,
+) => {
+  if (!workerIds.length)
+    return new Map<string, { total: number; count: number }>();
 
   const dateFilter = startDate
     ? Prisma.sql`AND s."created_at" >= ${startDate}`
@@ -232,7 +240,7 @@ const listWorkerSalesAgg = async (workerIds: string[], startDate: Date | null) =
       COALESCE(SUM(s."total_amount"), 0) AS total_amount,
       COUNT(*) AS order_count
     FROM "sales" s
-    WHERE s."worker_id" IN (${Prisma.join(workerIds.map((id) => Prisma.sql`${id}`) )})
+    WHERE s."worker_id" IN (${Prisma.join(workerIds.map((id) => Prisma.sql`${id}`))})
       ${dateFilter}
     GROUP BY s."worker_id"
   `);
@@ -248,8 +256,12 @@ const listWorkerSalesAgg = async (workerIds: string[], startDate: Date | null) =
   );
 };
 
-const listWorkerInvoicesAgg = async (workerIds: string[], startDate: Date | null) => {
-  if (!workerIds.length) return new Map<string, { total: number; count: number }>();
+const listWorkerInvoicesAgg = async (
+  workerIds: string[],
+  startDate: Date | null,
+) => {
+  if (!workerIds.length)
+    return new Map<string, { total: number; count: number }>();
 
   const dateFilter = startDate
     ? Prisma.sql`AND i."created_at" >= ${startDate}`
@@ -267,7 +279,7 @@ const listWorkerInvoicesAgg = async (workerIds: string[], startDate: Date | null
       COALESCE(SUM(i."total"), 0) AS total_amount,
       COUNT(*) AS order_count
     FROM "invoices" i
-    WHERE i."worker_id" IN (${Prisma.join(workerIds.map((id) => Prisma.sql`${id}`) )})
+    WHERE i."worker_id" IN (${Prisma.join(workerIds.map((id) => Prisma.sql`${id}`))})
       ${dateFilter}
     GROUP BY i."worker_id"
   `);
@@ -300,12 +312,13 @@ const buildWorkerPerformance = async (
   const thisMonthStart = getFilterStartDate("this_month");
 
   try {
-    const [profiles, salesMap, invoicesMap, monthlySalesMap] = await Promise.all([
-      loadWorkerProfiles(workerIds),
-      listWorkerSalesAgg(workerIds, startDate),
-      listWorkerInvoicesAgg(workerIds, startDate),
-      listWorkerSalesAgg(workerIds, thisMonthStart),
-    ]);
+    const [profiles, salesMap, invoicesMap, monthlySalesMap] =
+      await Promise.all([
+        loadWorkerProfiles(workerIds),
+        listWorkerSalesAgg(workerIds, startDate),
+        listWorkerInvoicesAgg(workerIds, startDate),
+        listWorkerSalesAgg(workerIds, thisMonthStart),
+      ]);
 
     const workerCards = workers.map((worker) => {
       const profile = profiles.get(worker.id) ?? {
@@ -411,7 +424,7 @@ const loadRecentWorkerActivity = async (workerIds: string[]) => {
         s."total_amount" AS amount,
         s."created_at" AS created_at
       FROM "sales" s
-      WHERE s."worker_id" IN (${Prisma.join(workerIds.map((id) => Prisma.sql`${id}`) )})
+      WHERE s."worker_id" IN (${Prisma.join(workerIds.map((id) => Prisma.sql`${id}`))})
 
       UNION ALL
 
@@ -422,7 +435,7 @@ const loadRecentWorkerActivity = async (workerIds: string[]) => {
         i."total" AS amount,
         i."created_at" AS created_at
       FROM "invoices" i
-      WHERE i."worker_id" IN (${Prisma.join(workerIds.map((id) => Prisma.sql`${id}`) )})
+      WHERE i."worker_id" IN (${Prisma.join(workerIds.map((id) => Prisma.sql`${id}`))})
 
       ORDER BY created_at DESC
       LIMIT 12
@@ -535,11 +548,16 @@ class WorkersController {
       },
     });
 
-    const { workerCards, summary } = await buildWorkerPerformance(workers, period);
+    const { workerCards, summary } = await buildWorkerPerformance(
+      workers,
+      period,
+    );
     const recentActivity = await loadRecentWorkerActivity(
       workerCards.map((worker) => worker.id),
     );
-    const workerMap = new Map(workerCards.map((worker) => [worker.id, worker.name]));
+    const workerMap = new Map(
+      workerCards.map((worker) => [worker.id, worker.name]),
+    );
 
     const leaderboard = [...workerCards]
       .sort((left, right) => right.metrics.totalSales - left.metrics.totalSales)

@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
   ArrowRight,
   BarChart3,
@@ -24,6 +26,11 @@ import {
   getMonthlyEquivalent,
   pricingPlans,
 } from "@/lib/pricingPlans";
+import {
+  fetchSubscriptionStatus,
+  switchToFreePlan,
+  type SubscriptionSnapshot,
+} from "@/lib/apiClient";
 
 type PricingProps = {
   isAuthenticated?: boolean;
@@ -66,7 +73,24 @@ const comparisonRows = [
   },
 ];
 
-const planAction = (planId: string, isAuthenticated: boolean) => {
+type PlanAction = {
+  href?: string;
+  label: string;
+  disabled?: boolean;
+  onClick?: () => void;
+};
+
+const planAction = ({
+  planId,
+  isAuthenticated,
+  subscription,
+  onSwitchToFree,
+}: {
+  planId: string;
+  isAuthenticated: boolean;
+  subscription: SubscriptionSnapshot | undefined;
+  onSwitchToFree: () => void;
+}): PlanAction => {
   if (!isAuthenticated) {
     return {
       href: `/register?plan=${planId}`,
@@ -79,10 +103,18 @@ const planAction = (planId: string, isAuthenticated: boolean) => {
     };
   }
 
+  const currentPlan = subscription?.planId;
+  if (currentPlan === planId) {
+    return {
+      label: "Current plan",
+      disabled: true,
+    };
+  }
+
   if (planId === "free") {
     return {
-      href: "/dashboard",
-      label: "Continue on Free",
+      label: "Switch to Free",
+      onClick: onSwitchToFree,
     };
   }
 
@@ -94,6 +126,41 @@ const planAction = (planId: string, isAuthenticated: boolean) => {
 
 const Pricing = ({ isAuthenticated = false }: PricingProps) => {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
+  const queryClient = useQueryClient();
+
+  const { data: subscription } = useQuery({
+    queryKey: ["subscription-status"],
+    queryFn: fetchSubscriptionStatus,
+    enabled: isAuthenticated,
+    staleTime: 30_000,
+  });
+
+  const switchToFreeMutation = useMutation({
+    mutationFn: switchToFreePlan,
+    onSuccess: () => {
+      toast.success("Switched to Free plan.");
+      void queryClient.invalidateQueries({ queryKey: ["subscription-status"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["payment-access-status"],
+      });
+    },
+    onError: () => {
+      toast.error("Could not switch plan right now. Please try again.");
+    },
+  });
+
+  const currentUsageCopy = useMemo(() => {
+    if (!subscription) {
+      return null;
+    }
+
+    const limit = subscription.limits.invoicesPerMonth;
+    if (limit === null) {
+      return `${subscription.usage.invoicesCreated} invoices created this month (unlimited plan).`;
+    }
+
+    return `${subscription.usage.invoicesCreated} / ${limit} invoices used this month.`;
+  }, [subscription]);
 
   return (
     <section id="pricing" className="bg-background py-16 sm:py-20">
@@ -147,9 +214,30 @@ const Pricing = ({ isAuthenticated = false }: PricingProps) => {
           </div>
         </div>
 
+        {isAuthenticated && subscription ? (
+          <div className="rounded-3xl border border-amber-200 bg-amber-50/70 p-5 text-sm text-amber-900">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">
+              Current subscription
+            </p>
+            <p className="mt-2 text-lg font-semibold text-foreground">
+              {subscription.planName} • {subscription.status}
+            </p>
+            <p className="mt-1 text-sm text-[#6a635b]">{currentUsageCopy}</p>
+          </div>
+        ) : null}
+
         <div className="grid gap-5 xl:grid-cols-3">
           {pricingPlans.map((plan) => {
-            const action = planAction(plan.id, isAuthenticated);
+            const action = planAction({
+              planId: plan.id,
+              isAuthenticated,
+              subscription,
+              onSwitchToFree: () => {
+                if (!switchToFreeMutation.isPending) {
+                  switchToFreeMutation.mutate();
+                }
+              },
+            });
             const savings = getAnnualSavings(plan);
             const monthlyEquivalent = getMonthlyEquivalent(plan);
 
@@ -249,17 +337,33 @@ const Pricing = ({ isAuthenticated = false }: PricingProps) => {
                   </div>
 
                   <div className="mt-6">
-                    <Button
-                      asChild
-                      size="lg"
-                      variant={plan.highlight ? "default" : "outline"}
-                      className="w-full"
-                    >
-                      <Link href={action.href}>
+                    {action.href ? (
+                      <Button
+                        asChild
+                        size="lg"
+                        variant={plan.highlight ? "default" : "outline"}
+                        className="w-full"
+                        disabled={action.disabled}
+                      >
+                        <Link href={action.href}>
+                          {action.label}
+                          <ArrowRight size={16} />
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button
+                        size="lg"
+                        variant={plan.highlight ? "default" : "outline"}
+                        className="w-full"
+                        disabled={
+                          action.disabled || switchToFreeMutation.isPending
+                        }
+                        onClick={action.onClick}
+                      >
                         {action.label}
                         <ArrowRight size={16} />
-                      </Link>
-                    </Button>
+                      </Button>
+                    )}
                   </div>
                 </div>
               </article>

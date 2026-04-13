@@ -11,6 +11,8 @@
     "test:assistant-parser": "tsx --test src/modules/assistant/assistant.parser.test.ts",
     "test:assistant-integration": "tsx --test src/modules/assistant/assistant.integration.test.ts",
     "test:assistant-chatflow": "tsx --test src/modules/assistant/assistant.chatflow.e2e.test.ts",
+    "test:subscription-access": "tsx --test src/config/subscriptionPlans.matrix.test.ts src/routes/subscriptionAccess.contract.test.ts",
+    "test:settings-security": "tsx --test src/routes/settingsSecurity.contract.test.ts",
     "seed": "prisma db seed"
   },
   "prisma": {

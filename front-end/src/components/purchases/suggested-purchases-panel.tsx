@@ -164,13 +164,16 @@ const SuggestedPurchasesPanel = ({
                             size="sm"
                             variant="outline"
                             onClick={() => {
-                              captureAnalyticsEvent("purchase_suggestions_loaded", {
-                                source: "append_single_suggestion",
-                                itemCount: 1,
-                                warehouseName: group.warehouseName,
-                                supplierName: group.supplierName,
-                                productId: item.product_id,
-                              });
+                              captureAnalyticsEvent(
+                                "purchase_suggestions_loaded",
+                                {
+                                  source: "append_single_suggestion",
+                                  itemCount: 1,
+                                  warehouseName: group.warehouseName,
+                                  supplierName: group.supplierName,
+                                  productId: item.product_id,
+                                },
+                              );
                               onAppendItem(item);
                             }}
                           >
@@ -213,7 +216,8 @@ const SuggestedPurchasesPanel = ({
                           </p>
                           <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
                             {currency(
-                              item.recommended_reorder_quantity * item.unit_cost,
+                              item.recommended_reorder_quantity *
+                                item.unit_cost,
                             )}
                           </p>
                         </div>

@@ -8,6 +8,7 @@ declare global {
     ownerUserId: number;
     actorId: string;
     businessId: string;
+    sessionVersion: number;
     role: "ADMIN" | "WORKER";
     accountType: "OWNER" | "WORKER";
     name: string;

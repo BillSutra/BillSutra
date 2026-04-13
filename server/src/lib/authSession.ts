@@ -64,9 +64,7 @@ export const isBusinessTableMissingError = (error: unknown) => {
     return false;
   }
 
-  const meta = error.meta as
-    | { modelName?: string; table?: string }
-    | undefined;
+  const meta = error.meta as { modelName?: string; table?: string } | undefined;
 
   return (
     meta?.modelName === "Business" ||
@@ -109,6 +107,62 @@ const isTableAvailable = async (tableName: string) => {
 export const isBusinessTableAvailable = () => isTableAvailable("businesses");
 
 export const isWorkersTableAvailable = () => isTableAvailable("workers");
+
+export const isUserSessionVersionColumnAvailable = () =>
+  isTableAvailable("users").then(async (usersTableAvailable) => {
+    if (!usersTableAvailable) {
+      return false;
+    }
+
+    const cached = tableAvailabilityCache.get("users.session_version");
+    if (cached && Date.now() - cached.checkedAt < BUSINESS_TABLE_CACHE_TTL_MS) {
+      return cached.value;
+    }
+
+    const result = await prisma.$queryRaw<Array<{ exists: boolean }>>(Prisma.sql`
+      SELECT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'users'
+          AND column_name = 'session_version'
+      ) AS "exists"
+    `);
+
+    const exists = result[0]?.exists === true;
+    setTableAvailability("users.session_version", exists);
+    return exists;
+  });
+
+export const getUserSessionVersionIfAvailable = async (userId: number) => {
+  if (!(await isUserSessionVersionColumnAvailable())) {
+    return null;
+  }
+
+  try {
+    const rows = await prisma.$queryRaw<Array<{ session_version: number | null }>>(
+      Prisma.sql`
+        SELECT "session_version"
+        FROM "users"
+        WHERE "id" = ${userId}
+        LIMIT 1
+      `,
+    );
+
+    const value = rows[0]?.session_version;
+    return typeof value === "number" ? value : 0;
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      (error.code === "P2021" || error.code === "P2022")
+    ) {
+      setTableAvailability("users.session_version", false);
+      return null;
+    }
+
+    throw error;
+  }
+};
 
 export const findBusinessByOwnerIdIfAvailable = async (userId: number) => {
   if (!(await isBusinessTableAvailable())) {
@@ -162,13 +216,17 @@ export const ensureBusinessForUser = async (
 export const buildOwnerAuthUser = async (
   user: Pick<User, "id" | "email" | "name">,
 ): Promise<AuthUser> => {
-  const business = await ensureBusinessForUser(user.id, user.name);
+  const [business, sessionVersion] = await Promise.all([
+    ensureBusinessForUser(user.id, user.name),
+    getUserSessionVersionIfAvailable(user.id),
+  ]);
 
   return {
     id: user.id,
     ownerUserId: user.id,
     actorId: `owner:${user.id}`,
     businessId: business.id,
+    sessionVersion: sessionVersion ?? 0,
     role: "ADMIN",
     accountType: "OWNER",
     name: user.name,
@@ -209,11 +267,16 @@ export const buildWorkerAuthUser = async (
 
   const ownerUserId = parseOwnerUserId(business.ownerId);
 
+  const ownerSessionVersion = await getUserSessionVersionIfAvailable(
+    ownerUserId,
+  );
+
   return {
     id: ownerUserId,
     ownerUserId,
     actorId: `worker:${worker.id}`,
     businessId: worker.businessId,
+    sessionVersion: ownerSessionVersion ?? 0,
     role: worker.role === "ADMIN" ? "ADMIN" : "WORKER",
     accountType: "WORKER",
     name: worker.name,
@@ -250,7 +313,11 @@ export const resolveAuthUserFromDecoded = async (
   const businessId = normalizeString(
     (decoded as Record<string, unknown>).businessId,
   );
-  const workerId = normalizeString((decoded as Record<string, unknown>).workerId);
+  const sessionVersion =
+    normalizeNumber((decoded as Record<string, unknown>).sessionVersion) ?? 0;
+  const workerId = normalizeString(
+    (decoded as Record<string, unknown>).workerId,
+  );
   const role =
     normalizeString((decoded as Record<string, unknown>).role) === "WORKER"
       ? "WORKER"
@@ -261,7 +328,10 @@ export const resolveAuthUserFromDecoded = async (
       ? "WORKER"
       : "OWNER";
 
-  if (!businessId || (accountType === "OWNER" && isLegacyBusinessId(businessId))) {
+  if (
+    !businessId ||
+    (accountType === "OWNER" && isLegacyBusinessId(businessId))
+  ) {
     return buildOwnerAuthUser({ id: ownerUserId, email, name });
   }
 
@@ -272,6 +342,7 @@ export const resolveAuthUserFromDecoded = async (
       normalizeString((decoded as Record<string, unknown>).actorId) ??
       (workerId ? `worker:${workerId}` : `owner:${ownerUserId}`),
     businessId,
+    sessionVersion,
     role,
     accountType,
     name,

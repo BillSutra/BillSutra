@@ -1015,3 +1015,36 @@ export const exportPreviewRequestSchema = z.object({
   selected_ids: z.array(z.coerce.number().int().positive()).optional(),
   filters: exportFilterSchema.optional(),
 });
+
+export const settingsPreferencesUpsertSchema = z.object({
+  appPreferences: z
+    .object({
+      language: z.enum(["en", "hi"]),
+      currency: z.enum(["INR", "USD"]),
+      dateFormat: z.enum(["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]),
+    })
+    .optional(),
+  notifications: z
+    .object({
+      paymentReminders: z.boolean(),
+      lowStockAlerts: z.boolean(),
+      dueInvoiceAlerts: z.boolean(),
+    })
+    .optional(),
+  backup: z
+    .object({
+      autoBackupEnabled: z.boolean(),
+    })
+    .optional(),
+  branding: z
+    .object({
+      templateId: z.string().optional(),
+      themeColor: z
+        .string()
+        .regex(/^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})$/)
+        .optional(),
+      terms: z.string().max(4000).optional(),
+      signature: z.string().max(191).optional(),
+    })
+    .optional(),
+});

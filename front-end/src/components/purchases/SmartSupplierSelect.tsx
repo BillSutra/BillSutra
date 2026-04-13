@@ -81,7 +81,8 @@ const SmartSupplierSelect = ({
         const matchesCategory =
           resolvedCategory === "ALL" ||
           entry.categories.some(
-            (category) => category.toLowerCase() === resolvedCategory.toLowerCase(),
+            (category) =>
+              category.toLowerCase() === resolvedCategory.toLowerCase(),
           );
 
         if (!matchesCategory) {
@@ -192,10 +193,14 @@ const SmartSupplierSelect = ({
                 </p>
                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[#7b6655]">
                   <span>
-                    {lastPurchaseLabel}: {entry.lastPurchaseDate ? formatDate(entry.lastPurchaseDate) : "-"}
+                    {lastPurchaseLabel}:{" "}
+                    {entry.lastPurchaseDate
+                      ? formatDate(entry.lastPurchaseDate)
+                      : "-"}
                   </span>
                   <span>
-                    {outstandingLabel}: {formatCurrency(entry.outstandingBalance)}
+                    {outstandingLabel}:{" "}
+                    {formatCurrency(entry.outstandingBalance)}
                   </span>
                 </div>
               </button>
@@ -206,7 +211,9 @@ const SmartSupplierSelect = ({
 
       {selectedSupplier ? (
         <p className="text-xs text-[#8a6d56]">
-          {selectedSummaryLabel}: {selectedSupplier.supplier.name} | {outstandingLabel.toLowerCase()} {formatCurrency(selectedSupplier.outstandingBalance)}
+          {selectedSummaryLabel}: {selectedSupplier.supplier.name} |{" "}
+          {outstandingLabel.toLowerCase()}{" "}
+          {formatCurrency(selectedSupplier.outstandingBalance)}
         </p>
       ) : null}
     </div>

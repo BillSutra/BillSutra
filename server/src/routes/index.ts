@@ -23,11 +23,14 @@ import UserSavedTemplateController from "../controllers/UserSavedTemplateControl
 import PublicInvoiceController from "../controllers/PublicInvoiceController.js";
 import LogoController from "../controllers/LogoController.js";
 import WorkersController from "../controllers/WorkersController.js";
+import SubscriptionController from "../controllers/SubscriptionController.js";
+import SettingsController from "../controllers/SettingsController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
 import AdminAuthMiddleware from "../middlewares/AdminAuthMiddleware.js";
 import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
 import RequireAdminMiddleware from "../middlewares/RequireAdminMiddleware.js";
 import RequirePaymentAccessMiddleware from "../middlewares/RequirePaymentAccessMiddleware.js";
+import RequireFeatureAccessMiddleware from "../middlewares/RequireFeatureAccessMiddleware.js";
 import { logoUploadMiddleware } from "../middlewares/logo.upload.js";
 import { paymentProofUploadMiddleware } from "../middlewares/paymentProof.upload.js";
 import {
@@ -89,6 +92,7 @@ import {
   exportPreviewRequestSchema,
   exportRequestSchema,
   exportResourceParamSchema,
+  settingsPreferencesUpsertSchema,
 } from "../validations/apiValidations.js";
 import invoiceRoutes from "../modules/invoice/invoice.routes.js";
 import importRoutes from "../modules/import/import.routes.js";
@@ -356,18 +360,21 @@ router.get(
   "/workers",
   AuthMiddleware,
   RequireAdminMiddleware,
+  RequireFeatureAccessMiddleware("WORKERS_MANAGEMENT"),
   WorkersController.index,
 );
 router.get(
   "/workers/overview",
   AuthMiddleware,
   RequireAdminMiddleware,
+  RequireFeatureAccessMiddleware("WORKERS_MANAGEMENT"),
   WorkersController.overview,
 );
 router.post(
   "/workers/create",
   AuthMiddleware,
   RequireAdminMiddleware,
+  RequireFeatureAccessMiddleware("WORKERS_MANAGEMENT"),
   validate({ body: workerCreateSchema }),
   WorkersController.store,
 );
@@ -375,6 +382,7 @@ router.put(
   "/workers/:id",
   AuthMiddleware,
   RequireAdminMiddleware,
+  RequireFeatureAccessMiddleware("WORKERS_MANAGEMENT"),
   validate({ params: workerIdParamSchema, body: workerUpdateSchema }),
   WorkersController.update,
 );
@@ -382,6 +390,7 @@ router.delete(
   "/workers/:id",
   AuthMiddleware,
   RequireAdminMiddleware,
+  RequireFeatureAccessMiddleware("WORKERS_MANAGEMENT"),
   validate({ params: workerIdParamSchema }),
   WorkersController.destroy,
 );
@@ -405,6 +414,7 @@ router.delete("/logo", AuthMiddleware, LogoController.remove);
 router.post(
   "/exports/:resource/preview",
   AuthMiddleware,
+  RequireFeatureAccessMiddleware("DATA_EXPORT"),
   validate({
     params: exportResourceParamSchema,
     body: exportPreviewRequestSchema,
@@ -415,6 +425,7 @@ router.post(
 router.post(
   "/exports/:resource",
   AuthMiddleware,
+  RequireFeatureAccessMiddleware("DATA_EXPORT"),
   validate({ params: exportResourceParamSchema, body: exportRequestSchema }),
   ExportController.run,
 );
@@ -619,13 +630,28 @@ router.use("/forecast", forecastRoutes);
 router.use("/inventory-demand", inventoryDemandRoutes);
 
 // Assistant
-router.use("/assistant", assistantRoutes);
+router.use(
+  "/assistant",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("SMART_SUGGESTIONS"),
+  assistantRoutes,
+);
 
 // Financial copilot
-router.use("/copilot", copilotRoutes);
+router.use(
+  "/copilot",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("SMART_SUGGESTIONS"),
+  copilotRoutes,
+);
 
 // Payments
-router.get("/payments", AuthMiddleware, PaymentsController.index);
+router.get(
+  "/payments",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
+  PaymentsController.index,
+);
 router.get(
   "/payments/access/status",
   AuthMiddleware,
@@ -634,12 +660,14 @@ router.get(
 router.get(
   "/payments/:invoiceId",
   AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
   validate({ params: invoiceIdParamSchema }),
   PaymentsController.showByInvoice,
 );
 router.post(
   "/payments",
   AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
   validate({ body: paymentCreateSchema }),
   PaymentsController.store,
 );
@@ -676,11 +704,55 @@ router.get(
   AccessPaymentsController.protectedContent,
 );
 
+router.get("/subscriptions/me", AuthMiddleware, SubscriptionController.me);
+router.post(
+  "/subscriptions/cancel",
+  AuthMiddleware,
+  SubscriptionController.cancel,
+);
+router.post(
+  "/subscriptions/free",
+  AuthMiddleware,
+  SubscriptionController.switchToFree,
+);
+
+router.get(
+  "/settings/preferences",
+  AuthMiddleware,
+  SettingsController.preferences,
+);
+router.put(
+  "/settings/preferences",
+  AuthMiddleware,
+  validate({ body: settingsPreferencesUpsertSchema }),
+  SettingsController.savePreferences,
+);
+router.get(
+  "/security/activity",
+  AuthMiddleware,
+  SettingsController.securityActivity,
+);
+router.post(
+  "/security/logout-all",
+  AuthMiddleware,
+  SettingsController.logoutAll,
+);
+
 // Reports
-router.get("/reports/summary", AuthMiddleware, ReportsController.summary);
+router.get(
+  "/reports/summary",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("REPORTS_BASIC"),
+  ReportsController.summary,
+);
 
 // Analytics
-router.get("/analytics/overview", AuthMiddleware, AnalyticsController.overview);
+router.get(
+  "/analytics/overview",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("ANALYTICS_ADVANCED"),
+  AnalyticsController.overview,
+);
 
 // Dashboard
 router.get("/dashboard/stream", AuthSseMiddleware, DashboardController.stream);

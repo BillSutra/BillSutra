@@ -112,30 +112,54 @@ const getCredentialNotFoundMessage = () =>
 const readRouteParam = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
 
+const authUserSelect = {
+  id: true,
+  name: true,
+  email: true,
+  provider: true,
+  image: true,
+  is_email_verified: true,
+} as const;
+
+const authUserWithPasswordSelect = {
+  ...authUserSelect,
+  password_hash: true,
+} as const;
+
 class AuthController {
   static async oauthLogin(req: Request, res: Response) {
     try {
       const body: OAuthLoginPayload = req.body;
 
       const provider = body.provider || "google";
-      const findUser = await prisma.user.upsert({
+      const existingUser = await prisma.user.findUnique({
         where: { email: body.email },
-        update: {
-          name: body.name || "",
-          provider,
-          oauth_id: body.oauth_id,
-          image: body.image,
-          is_email_verified: true,
-        },
-        create: {
-          name: body.name || "",
-          email: body.email,
-          provider,
-          oauth_id: body.oauth_id,
-          image: body.image,
-          is_email_verified: true,
-        },
+        select: { id: true },
       });
+
+      const findUser = existingUser
+        ? await prisma.user.update({
+            where: { id: existingUser.id },
+            data: {
+              name: body.name || "",
+              provider,
+              oauth_id: body.oauth_id,
+              image: body.image,
+              is_email_verified: true,
+            },
+            select: authUserSelect,
+          })
+        : await prisma.user.create({
+            data: {
+              name: body.name || "",
+              email: body.email,
+              provider,
+              oauth_id: body.oauth_id,
+              image: body.image,
+              is_email_verified: true,
+            },
+            select: authUserSelect,
+          });
 
       await recordAuthEvent({
         req,
@@ -161,6 +185,7 @@ class AuthController {
 
       const existing = await prisma.user.findUnique({
         where: { email: body.email },
+        select: { id: true },
       });
       if (existing) {
         return sendResponse(res, 422, {
@@ -177,6 +202,7 @@ class AuthController {
           password_hash,
           provider: "credentials",
         },
+        select: authUserSelect,
       });
 
       await ensureBusinessForUser(user.id, body.name);
@@ -215,6 +241,7 @@ class AuthController {
 
       const user = await prisma.user.findUnique({
         where: { email: body.email },
+        select: authUserWithPasswordSelect,
       });
 
       if (!user || !user.password_hash) {
@@ -308,9 +335,7 @@ class AuthController {
       }
 
       try {
-        const profileRows = await prisma.$queryRaw<
-          Array<{ status: string }>
-        >`
+        const profileRows = await prisma.$queryRaw<Array<{ status: string }>>`
           SELECT "status"
           FROM "worker_profiles"
           WHERE "worker_id" = ${worker.id}
@@ -371,7 +396,14 @@ class AuthController {
       const body: ForgotPasswordPayload = req.body;
       const { email } = body;
 
-      const user = await prisma.user.findUnique({ where: { email } });
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      });
       if (!user) {
         return sendResponse(res, 422, {
           message: "No account found for this email",
@@ -422,7 +454,12 @@ class AuthController {
     try {
       const { email, password, token } = req.body as ResetPasswordPayload;
 
-      const user = await prisma.user.findUnique({ where: { email } });
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: {
+          id: true,
+        },
+      });
       if (!user) {
         return sendResponse(res, 422, {
           message: "Invalid reset request",
@@ -450,6 +487,7 @@ class AuthController {
       await prisma.user.update({
         where: { id: user.id },
         data: { password_hash },
+        select: { id: true },
       });
       await prisma.passwordResetToken.update({
         where: { id: reset.id },
@@ -663,6 +701,7 @@ class AuthController {
         prisma.user.update({
           where: { id: user.id },
           data: { is_email_verified: true },
+          select: { id: true },
         }),
       ]);
 

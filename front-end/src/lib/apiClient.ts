@@ -57,6 +57,39 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     captureApiFailure(error);
+
+    if (typeof window !== "undefined") {
+      const status = Number(error?.response?.status ?? 0);
+      const payload = error?.response?.data;
+      const code =
+        typeof payload?.code === "string"
+          ? payload.code
+          : typeof payload?.error?.code === "string"
+            ? payload.error.code
+            : null;
+
+      if (
+        status === 402 &&
+        (code === "SUBSCRIPTION_REQUIRED" || code === "PLAN_LIMIT_REACHED")
+      ) {
+        window.dispatchEvent(
+          new CustomEvent("billsutra:subscription-required", {
+            detail: {
+              code,
+              message:
+                typeof payload?.message === "string"
+                  ? payload.message
+                  : "This feature requires a higher plan.",
+              requiredPlan:
+                typeof payload?.requiredPlan === "string"
+                  ? payload.requiredPlan
+                  : null,
+            },
+          }),
+        );
+      }
+    }
+
     return Promise.reject(error);
   },
 );
@@ -903,9 +936,65 @@ export type AccessPlanOption = {
   };
 };
 
+export type SubscriptionSnapshot = {
+  planId: "free" | "pro" | "pro-plus";
+  planName: string;
+  status: "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED";
+  billingCycle: "monthly" | "yearly" | null;
+  startedAt: string;
+  trialEndsAt: string | null;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  cancelledAt: string | null;
+  expiresAt: string | null;
+  usage: {
+    periodKey: string;
+    periodStart: string;
+    periodEnd: string;
+    invoicesCreated: number;
+    productsCreated: number;
+    customersCreated: number;
+  };
+  limits: {
+    invoicesPerMonth: number | null;
+  };
+};
+
+export type UserSettingsPreferences = {
+  appPreferences: {
+    language: "en" | "hi";
+    currency: "INR" | "USD";
+    dateFormat: "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
+  };
+  notifications: {
+    paymentReminders: boolean;
+    lowStockAlerts: boolean;
+    dueInvoiceAlerts: boolean;
+  };
+  backup: {
+    autoBackupEnabled: boolean;
+  };
+  branding: {
+    templateId: string;
+    themeColor: string;
+    terms: string;
+    signature: string;
+  };
+};
+
+export type SecurityActivityEvent = {
+  id: number;
+  method: string;
+  success: boolean;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+};
+
 export type AccessPaymentStatusResponse = {
   hasAccess: boolean;
   activePayment: AccessPaymentRecord | null;
+  subscription: SubscriptionSnapshot;
   payments: AccessPaymentRecord[];
   upi: {
     upiId: string;
@@ -2192,6 +2281,22 @@ export const submitAccessUpiPayment = async (
   return response.data.data as AccessPaymentRecord;
 };
 
+export const fetchSubscriptionStatus =
+  async (): Promise<SubscriptionSnapshot> => {
+    const response = await apiClient.get("/subscriptions/me");
+    return response.data.data as SubscriptionSnapshot;
+  };
+
+export const cancelSubscription = async (): Promise<SubscriptionSnapshot> => {
+  const response = await apiClient.post("/subscriptions/cancel");
+  return response.data.data as SubscriptionSnapshot;
+};
+
+export const switchToFreePlan = async (): Promise<SubscriptionSnapshot> => {
+  const response = await apiClient.post("/subscriptions/free");
+  return response.data.data as SubscriptionSnapshot;
+};
+
 export const sendInvoiceEmail = async (
   invoiceId: number,
   payload: { email?: string } = {},
@@ -2652,6 +2757,30 @@ export const deleteUserData = async (): Promise<void> => {
 
 export const deleteUserAccount = async (): Promise<void> => {
   await apiClient.delete("/user/account");
+};
+
+export const fetchUserSettingsPreferences =
+  async (): Promise<UserSettingsPreferences> => {
+    const response = await apiClient.get("/settings/preferences");
+    return response.data.data as UserSettingsPreferences;
+  };
+
+export const saveUserSettingsPreferences = async (
+  payload: Partial<UserSettingsPreferences>,
+): Promise<UserSettingsPreferences> => {
+  const response = await apiClient.put("/settings/preferences", payload);
+  return response.data.data as UserSettingsPreferences;
+};
+
+export const fetchSecurityActivity = async (): Promise<
+  SecurityActivityEvent[]
+> => {
+  const response = await apiClient.get("/security/activity");
+  return response.data.data as SecurityActivityEvent[];
+};
+
+export const logoutAllDevices = async (): Promise<void> => {
+  await apiClient.post("/security/logout-all");
 };
 
 export const fetchTemplates = async (): Promise<TemplateRecord[]> => {

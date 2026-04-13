@@ -15,6 +15,11 @@ import AppError from "../utils/AppError.js";
 import { paymentProofStorage } from "./storage/paymentProofStorage.js";
 import { getBackendAppUrl, getFrontendAppUrl } from "../lib/appUrls.js";
 import { sendEmail } from "../emails/index.js";
+import {
+  applySubscriptionGrant,
+  getSubscriptionSnapshot,
+  hasPaidAccess,
+} from "./subscription.service.js";
 
 const UTR_REGEX = /^[A-Z0-9]{8,22}$/i;
 const RAZORPAY_API_BASE = "https://api.razorpay.com/v1";
@@ -169,9 +174,9 @@ const requestRazorpay = async <T>(
     headers,
   });
 
-  const payload = (await response.json().catch(() => null)) as
-    | { error?: { description?: string } }
-    | null;
+  const payload = (await response.json().catch(() => null)) as {
+    error?: { description?: string };
+  } | null;
 
   if (!response.ok) {
     throw new AppError(
@@ -201,13 +206,14 @@ const getPaymentHistory = async (userId: number) =>
     take: 10,
   });
 
-export const hasPaymentAccess = async (userId: number) =>
-  Boolean(await findAccessGrant(userId));
+export const hasPaymentAccess = async (userId: number) => hasPaidAccess(userId);
 
 export const getAccessPaymentStatus = async (userId: number) => {
-  const [activePayment, payments] = await Promise.all([
+  const [activePayment, payments, hasAccess, subscription] = await Promise.all([
     findAccessGrant(userId),
     getPaymentHistory(userId),
+    hasPaidAccess(userId),
+    getSubscriptionSnapshot(userId),
   ]);
   const { upiId, payeeName } = buildUpiConfig();
   const plans = listAccessPlans().map((plan) => ({
@@ -231,8 +237,9 @@ export const getAccessPaymentStatus = async (userId: number) => {
   }));
 
   return {
-    hasAccess: Boolean(activePayment),
+    hasAccess,
     activePayment: activePayment ? serializePayment(activePayment) : null,
+    subscription,
     payments: payments.map(serializePayment),
     upi: {
       upiId,
@@ -242,7 +249,7 @@ export const getAccessPaymentStatus = async (userId: number) => {
       keyId: process.env.RAZORPAY_KEY_ID?.trim() ?? null,
       enabled: Boolean(
         process.env.RAZORPAY_KEY_ID?.trim() &&
-          process.env.RAZORPAY_KEY_SECRET?.trim(),
+        process.env.RAZORPAY_KEY_SECRET?.trim(),
       ),
     },
     plans,
@@ -321,7 +328,11 @@ export const verifyAccessRazorpayPayment = async ({
   signature: string;
 }) => {
   const { keySecret } = getRazorpayCredentials();
-  const expectedSignature = createRazorpaySignature(orderId, paymentId, keySecret);
+  const expectedSignature = createRazorpaySignature(
+    orderId,
+    paymentId,
+    keySecret,
+  );
 
   if (!safeCompareSignature(expectedSignature, signature)) {
     throw new AppError("Invalid Razorpay payment signature.", 400);
@@ -352,6 +363,18 @@ export const verifyAccessRazorpayPayment = async ({
         verifiedAt: new Date().toISOString(),
         verifiedVia: "frontend_callback",
       },
+    },
+  });
+
+  await applySubscriptionGrant({
+    userId,
+    planId: updated.plan_id === "pro-plus" ? "pro-plus" : "pro",
+    billingCycle: updated.billing_cycle === "yearly" ? "yearly" : "monthly",
+    paymentId: updated.id,
+    metadata: {
+      source: "razorpay_verify",
+      accessPaymentId: updated.id,
+      providerPaymentId: updated.provider_payment_id,
     },
   });
 
@@ -481,6 +504,19 @@ export const reviewAdminUpiPayment = async ({
     },
   });
 
+  if (nextStatus === AccessPaymentStatus.APPROVED) {
+    await applySubscriptionGrant({
+      userId: payment.user.id,
+      planId: updated.plan_id === "pro-plus" ? "pro-plus" : "pro",
+      billingCycle: updated.billing_cycle === "yearly" ? "yearly" : "monthly",
+      paymentId: updated.id,
+      metadata: {
+        source: "admin_upi_review",
+        reviewer: admin.email,
+      },
+    });
+  }
+
   if (nextStatus === AccessPaymentStatus.APPROVED && payment.user.email) {
     try {
       await sendEmail("payment_access_approved", {
@@ -536,8 +572,7 @@ export const handleRazorpayWebhook = async (
 
   const orderId = entity.order_id?.trim() || null;
   const userId = Number(entity.notes?.userId ?? 0);
-  const planId =
-    entity.notes?.planId === "pro-plus" ? "pro-plus" : "pro";
+  const planId = entity.notes?.planId === "pro-plus" ? "pro-plus" : "pro";
   const billingCycle =
     entity.notes?.billingCycle === "yearly" ? "yearly" : "monthly";
 
@@ -551,7 +586,7 @@ export const handleRazorpayWebhook = async (
   });
 
   if (existing) {
-    await prisma.accessPayment.update({
+    const updated = await prisma.accessPayment.update({
       where: { id: existing.id },
       data: {
         status: AccessPaymentStatus.SUCCESS,
@@ -564,6 +599,17 @@ export const handleRazorpayWebhook = async (
           currency: entity.currency ?? "INR",
           rawStatus: entity.status ?? null,
         },
+      },
+    });
+
+    await applySubscriptionGrant({
+      userId: updated.user_id,
+      planId: updated.plan_id === "pro-plus" ? "pro-plus" : "pro",
+      billingCycle: updated.billing_cycle === "yearly" ? "yearly" : "monthly",
+      paymentId: updated.id,
+      metadata: {
+        source: "razorpay_webhook_existing",
+        webhookEvent: event,
       },
     });
 
@@ -596,6 +642,17 @@ export const handleRazorpayWebhook = async (
         currency: entity.currency ?? "INR",
         rawStatus: entity.status ?? null,
       },
+    },
+  });
+
+  await applySubscriptionGrant({
+    userId,
+    planId,
+    billingCycle,
+    paymentId: created.id,
+    metadata: {
+      source: "razorpay_webhook_create",
+      webhookEvent: event,
     },
   });
 

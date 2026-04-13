@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { hasPaymentAccess } from "../services/accessPayments.service.js";
+import { hasPaidAccess } from "../services/subscription.service.js";
 
 const RequirePaymentAccessMiddleware = async (
   req: Request,
@@ -13,7 +13,7 @@ const RequirePaymentAccessMiddleware = async (
     return;
   }
 
-  const allowed = await hasPaymentAccess(userId);
+  const allowed = await hasPaidAccess(userId);
 
   if (!allowed) {
     res.status(403).json({

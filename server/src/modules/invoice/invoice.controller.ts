@@ -20,6 +20,7 @@ import {
 import { emitDashboardUpdate } from "../../services/dashboardRealtime.js";
 import { sendEmail } from "../../emails/index.js";
 import { buildPublicInvoiceUrl } from "../../lib/appUrls.js";
+import { incrementInvoiceUsage } from "../../services/subscription.service.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
@@ -147,6 +148,7 @@ export const store = async (req: Request, res: Response) => {
   try {
     const body = req.body as InvoiceCreateInput;
     const invoice = await createInvoice(userId, body);
+    await incrementInvoiceUsage(userId);
     emitDashboardUpdate({ userId, source: "invoice.create" });
 
     return res.status(201).json({

@@ -131,13 +131,16 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
         joiningDate: form.joiningDate || undefined,
         incentiveType: form.incentiveType,
         incentiveValue:
-          form.incentiveType === "NONE" ? 0 : Number(form.incentiveValue || "0"),
+          form.incentiveType === "NONE"
+            ? 0
+            : Number(form.incentiveValue || "0"),
       });
       setForm(DEFAULT_FORM);
     } catch (error) {
       if (isAxiosError<{ message?: string }>(error)) {
         setCreateError(
-          error.response?.data?.message || t("workersPage.messages.createError"),
+          error.response?.data?.message ||
+            t("workersPage.messages.createError"),
         );
         return;
       }
@@ -193,7 +196,8 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
     } catch (error) {
       if (isAxiosError<{ message?: string }>(error)) {
         setUpdateError(
-          error.response?.data?.message || t("workersPage.messages.updateError"),
+          error.response?.data?.message ||
+            t("workersPage.messages.updateError"),
         );
         return;
       }
@@ -202,7 +206,10 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
     }
   };
 
-  const handleDisableWorker = async (workerId: string, status: "ACTIVE" | "INACTIVE") => {
+  const handleDisableWorker = async (
+    workerId: string,
+    status: "ACTIVE" | "INACTIVE",
+  ) => {
     setUpdateError("");
     try {
       await updateWorker.mutateAsync({
@@ -236,16 +243,24 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
         <section className="mt-6 grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <div className="grid gap-6">
             <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
-              <h2 className="text-lg font-semibold">{t("workersPage.addTitle")}</h2>
+              <h2 className="text-lg font-semibold">
+                {t("workersPage.addTitle")}
+              </h2>
               <p className="text-sm text-[#8a6d56]">
                 {t("workersPage.addDescription")}
               </p>
-              <form className="mt-4 grid gap-4" onSubmit={handleCreate} noValidate>
+              <form
+                className="mt-4 grid gap-4"
+                onSubmit={handleCreate}
+                noValidate
+              >
                 <ValidationField
                   id="worker-name"
                   label={t("workersPage.fields.name")}
                   value={form.name}
-                  onChange={(value) => setForm((prev) => ({ ...prev, name: value }))}
+                  onChange={(value) =>
+                    setForm((prev) => ({ ...prev, name: value }))
+                  }
                   validate={(value) => localizeValidation(validateName(value))}
                   required
                   placeholder={t("workersPage.placeholders.name")}
@@ -271,11 +286,12 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                   label={t("workersPage.fields.phone")}
                   value={form.phone}
                   onChange={(value) =>
-                    setForm((prev) => ({ ...prev, phone: value.replace(/\D/g, "") }))
+                    setForm((prev) => ({
+                      ...prev,
+                      phone: value.replace(/\D/g, ""),
+                    }))
                   }
-                  validate={(value) =>
-                    localizeValidation(validatePhone(value))
-                  }
+                  validate={(value) => localizeValidation(validatePhone(value))}
                   required
                   placeholder={t("workersPage.placeholders.phone")}
                   success
@@ -289,14 +305,23 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                       onChange={(event) =>
                         setForm((prev) => ({
                           ...prev,
-                          accessRole: event.target.value as WorkerFormState["accessRole"],
+                          accessRole: event.target
+                            .value as WorkerFormState["accessRole"],
                         }))
                       }
                     >
-                      <option value="ADMIN">{t("workersPage.roles.admin")}</option>
-                      <option value="SALESPERSON">{t("workersPage.roles.sales")}</option>
-                      <option value="STAFF">{t("workersPage.roles.staff")}</option>
-                      <option value="VIEWER">{t("workersPage.roles.viewer")}</option>
+                      <option value="ADMIN">
+                        {t("workersPage.roles.admin")}
+                      </option>
+                      <option value="SALESPERSON">
+                        {t("workersPage.roles.sales")}
+                      </option>
+                      <option value="STAFF">
+                        {t("workersPage.roles.staff")}
+                      </option>
+                      <option value="VIEWER">
+                        {t("workersPage.roles.viewer")}
+                      </option>
                     </select>
                   </label>
                   <label className="grid gap-1 text-sm font-medium text-[#1f1b16]">
@@ -307,12 +332,17 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                       onChange={(event) =>
                         setForm((prev) => ({
                           ...prev,
-                          status: event.target.value as WorkerFormState["status"],
+                          status: event.target
+                            .value as WorkerFormState["status"],
                         }))
                       }
                     >
-                      <option value="ACTIVE">{t("workersPage.statuses.active")}</option>
-                      <option value="INACTIVE">{t("workersPage.statuses.inactive")}</option>
+                      <option value="ACTIVE">
+                        {t("workersPage.statuses.active")}
+                      </option>
+                      <option value="INACTIVE">
+                        {t("workersPage.statuses.inactive")}
+                      </option>
                     </select>
                   </label>
                 </div>
@@ -323,7 +353,10 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                     className="h-10 rounded-md border border-[#e6d5c6] bg-white px-3 text-sm"
                     value={form.joiningDate}
                     onChange={(event) =>
-                      setForm((prev) => ({ ...prev, joiningDate: event.target.value }))
+                      setForm((prev) => ({
+                        ...prev,
+                        joiningDate: event.target.value,
+                      }))
                     }
                   />
                 </label>
@@ -336,17 +369,24 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                       onChange={(event) =>
                         setForm((prev) => ({
                           ...prev,
-                          incentiveType: event.target.value as WorkerFormState["incentiveType"],
+                          incentiveType: event.target
+                            .value as WorkerFormState["incentiveType"],
                           incentiveValue:
-                            event.target.value === "NONE" ? "" : prev.incentiveValue,
+                            event.target.value === "NONE"
+                              ? ""
+                              : prev.incentiveValue,
                         }))
                       }
                     >
-                      <option value="NONE">{t("workersPage.incentive.none")}</option>
+                      <option value="NONE">
+                        {t("workersPage.incentive.none")}
+                      </option>
                       <option value="PERCENTAGE">
                         {t("workersPage.incentive.percentage")}
                       </option>
-                      <option value="PER_SALE">{t("workersPage.incentive.perSale")}</option>
+                      <option value="PER_SALE">
+                        {t("workersPage.incentive.perSale")}
+                      </option>
                     </select>
                   </label>
                   {form.incentiveType !== "NONE" ? (
@@ -396,23 +436,25 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                     : t("workersPage.actions.create")}
                 </Button>
                 {createError ? (
-                  <p className="text-sm text-[#b45309]">
-                    {createError}
-                  </p>
+                  <p className="text-sm text-[#b45309]">{createError}</p>
                 ) : null}
               </form>
             </div>
 
             <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">{t("workersPage.leaderboard.title")}</h2>
+                <h2 className="text-lg font-semibold">
+                  {t("workersPage.leaderboard.title")}
+                </h2>
                 <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
                   {t("workersPage.leaderboard.kicker")}
                 </p>
               </div>
               <div className="mt-4 grid gap-2">
                 {leaderboard.length === 0 ? (
-                  <p className="text-sm text-[#8a6d56]">{t("workersPage.empty")}</p>
+                  <p className="text-sm text-[#8a6d56]">
+                    {t("workersPage.empty")}
+                  </p>
                 ) : (
                   leaderboard.map((entry) => (
                     <div
@@ -424,7 +466,10 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                       </p>
                       <div className="text-right text-xs text-[#5c4b3b]">
                         <p>{formatCurrency(entry.totalSales)}</p>
-                        <p>{t("workersPage.cards.totalOrders")}: {entry.totalOrders}</p>
+                        <p>
+                          {t("workersPage.cards.totalOrders")}:{" "}
+                          {entry.totalOrders}
+                        </p>
                       </div>
                     </div>
                   ))
@@ -436,14 +481,20 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
           <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold">{t("workersPage.listTitle")}</h2>
-                <p className="text-sm text-[#8a6d56]">{t("workersPage.listDescription")}</p>
+                <h2 className="text-lg font-semibold">
+                  {t("workersPage.listTitle")}
+                </h2>
+                <p className="text-sm text-[#8a6d56]">
+                  {t("workersPage.listDescription")}
+                </p>
               </div>
               <div className="inline-flex rounded-lg border border-[#e6d5c6] bg-white p-1 text-xs font-medium">
                 <button
                   type="button"
                   className={`rounded-md px-3 py-1 ${
-                    period === "today" ? "bg-[#1f1b16] text-white" : "text-[#5c4b3b]"
+                    period === "today"
+                      ? "bg-[#1f1b16] text-white"
+                      : "text-[#5c4b3b]"
                   }`}
                   onClick={() => setPeriod("today")}
                 >
@@ -487,7 +538,9 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                 <p className="text-xs uppercase tracking-[0.18em] text-[#8a6d56]">
                   {t("workersPage.cards.totalOrders")}
                 </p>
-                <p className="mt-2 text-xl font-semibold">{summary?.totalOrders ?? 0}</p>
+                <p className="mt-2 text-xl font-semibold">
+                  {summary?.totalOrders ?? 0}
+                </p>
               </div>
               <div className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4">
                 <p className="text-xs uppercase tracking-[0.18em] text-[#8a6d56]">
@@ -508,10 +561,14 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
             </div>
 
             <div className="mt-4 rounded-xl border border-[#f2e6dc] p-4">
-              <h3 className="text-sm font-semibold">{t("workersPage.activity.title")}</h3>
+              <h3 className="text-sm font-semibold">
+                {t("workersPage.activity.title")}
+              </h3>
               <div className="mt-3 grid gap-2">
                 {recentActivity.length === 0 ? (
-                  <p className="text-sm text-[#8a6d56]">{t("workersPage.activity.empty")}</p>
+                  <p className="text-sm text-[#8a6d56]">
+                    {t("workersPage.activity.empty")}
+                  </p>
                 ) : (
                   recentActivity.map((activity, index) => (
                     <div
@@ -525,7 +582,9 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-medium">{formatCurrency(activity.amount)}</p>
+                        <p className="font-medium">
+                          {formatCurrency(activity.amount)}
+                        </p>
                         <p className="text-xs text-[#5c4b3b]">
                           {formatCreatedAt(activity.createdAt)}
                         </p>
@@ -538,7 +597,9 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
 
             <div className="mt-4">
               {isLoading ? (
-                <p className="text-sm text-[#8a6d56]">{t("workersPage.loading")}</p>
+                <p className="text-sm text-[#8a6d56]">
+                  {t("workersPage.loading")}
+                </p>
               ) : null}
               {isError ? (
                 <p className="text-sm text-[#b45309]">
@@ -558,13 +619,20 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                       className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] px-4 py-4"
                     >
                       {editingId === worker.id ? (
-                        <form className="grid gap-3" onSubmit={handleUpdate} noValidate>
+                        <form
+                          className="grid gap-3"
+                          onSubmit={handleUpdate}
+                          noValidate
+                        >
                           <ValidationField
                             id={`edit-worker-name-${worker.id}`}
                             label={t("workersPage.fields.name")}
                             value={editingForm.name}
                             onChange={(value) =>
-                              setEditingForm((prev) => ({ ...prev, name: value }))
+                              setEditingForm((prev) => ({
+                                ...prev,
+                                name: value,
+                              }))
                             }
                             validate={(value) =>
                               localizeValidation(validateName(value))
@@ -578,9 +646,14 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                             type="email"
                             value={editingForm.email}
                             onChange={(value) =>
-                              setEditingForm((prev) => ({ ...prev, email: value }))
+                              setEditingForm((prev) => ({
+                                ...prev,
+                                email: value,
+                              }))
                             }
-                            validate={(value) => localizeValidation(validateEmail(value))}
+                            validate={(value) =>
+                              localizeValidation(validateEmail(value))
+                            }
                             required
                             success
                           />
@@ -610,17 +683,23 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                                 onChange={(event) =>
                                   setEditingForm((prev) => ({
                                     ...prev,
-                                    accessRole:
-                                      event.target.value as WorkerFormState["accessRole"],
+                                    accessRole: event.target
+                                      .value as WorkerFormState["accessRole"],
                                   }))
                                 }
                               >
-                                <option value="ADMIN">{t("workersPage.roles.admin")}</option>
+                                <option value="ADMIN">
+                                  {t("workersPage.roles.admin")}
+                                </option>
                                 <option value="SALESPERSON">
                                   {t("workersPage.roles.sales")}
                                 </option>
-                                <option value="STAFF">{t("workersPage.roles.staff")}</option>
-                                <option value="VIEWER">{t("workersPage.roles.viewer")}</option>
+                                <option value="STAFF">
+                                  {t("workersPage.roles.staff")}
+                                </option>
+                                <option value="VIEWER">
+                                  {t("workersPage.roles.viewer")}
+                                </option>
                               </select>
                             </label>
                             <label className="grid gap-1 text-sm font-medium text-[#1f1b16]">
@@ -631,7 +710,8 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                                 onChange={(event) =>
                                   setEditingForm((prev) => ({
                                     ...prev,
-                                    status: event.target.value as WorkerFormState["status"],
+                                    status: event.target
+                                      .value as WorkerFormState["status"],
                                   }))
                                 }
                               >
@@ -667,8 +747,8 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                                 onChange={(event) =>
                                   setEditingForm((prev) => ({
                                     ...prev,
-                                    incentiveType:
-                                      event.target.value as WorkerFormState["incentiveType"],
+                                    incentiveType: event.target
+                                      .value as WorkerFormState["incentiveType"],
                                     incentiveValue:
                                       event.target.value === "NONE"
                                         ? ""
@@ -676,7 +756,9 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                                   }))
                                 }
                               >
-                                <option value="NONE">{t("workersPage.incentive.none")}</option>
+                                <option value="NONE">
+                                  {t("workersPage.incentive.none")}
+                                </option>
                                 <option value="PERCENTAGE">
                                   {t("workersPage.incentive.percentage")}
                                 </option>
@@ -697,13 +779,20 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                                   }))
                                 }
                                 validate={(value) =>
-                                  validateIncentiveValue(editingForm.incentiveType, value)
+                                  validateIncentiveValue(
+                                    editingForm.incentiveType,
+                                    value,
+                                  )
                                 }
                                 required
                                 placeholder={
                                   editingForm.incentiveType === "PERCENTAGE"
-                                    ? t("workersPage.placeholders.incentivePercent")
-                                    : t("workersPage.placeholders.incentiveAmount")
+                                    ? t(
+                                        "workersPage.placeholders.incentivePercent",
+                                      )
+                                    : t(
+                                        "workersPage.placeholders.incentiveAmount",
+                                      )
                                 }
                               />
                             ) : null}
@@ -714,18 +803,26 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                             type="password"
                             value={editingForm.password}
                             onChange={(value) =>
-                              setEditingForm((prev) => ({ ...prev, password: value }))
+                              setEditingForm((prev) => ({
+                                ...prev,
+                                password: value,
+                              }))
                             }
                             validate={(value) =>
                               value
                                 ? localizeValidation(validatePassword(value))
                                 : ""
                             }
-                            placeholder={t("workersPage.placeholders.keepPassword")}
+                            placeholder={t(
+                              "workersPage.placeholders.keepPassword",
+                            )}
                             success
                           />
                           <div className="flex flex-wrap gap-2">
-                            <Button type="submit" disabled={updateWorker.isPending}>
+                            <Button
+                              type="submit"
+                              disabled={updateWorker.isPending}
+                            >
                               {updateWorker.isPending
                                 ? t("workersPage.actions.saving")
                                 : t("workersPage.actions.save")}
@@ -742,16 +839,23 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                             </Button>
                           </div>
                           {updateError ? (
-                            <p className="text-sm text-[#b45309]">{updateError}</p>
+                            <p className="text-sm text-[#b45309]">
+                              {updateError}
+                            </p>
                           ) : null}
                         </form>
                       ) : (
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <p className="text-base font-semibold">{worker.name}</p>
-                            <p className="text-sm text-[#5c4b3b]">{worker.email}</p>
+                            <p className="text-base font-semibold">
+                              {worker.name}
+                            </p>
                             <p className="text-sm text-[#5c4b3b]">
-                              {worker.phone || t("workersPage.messages.noPhone")}
+                              {worker.email}
+                            </p>
+                            <p className="text-sm text-[#5c4b3b]">
+                              {worker.phone ||
+                                t("workersPage.messages.noPhone")}
                             </p>
                             <div className="mt-2 flex flex-wrap gap-2 text-xs">
                               <span className="rounded-full bg-[#f2e6dc] px-2 py-1">
@@ -763,16 +867,26 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                             </div>
                             <div className="mt-2 grid gap-1 text-xs text-[#5c4b3b] sm:grid-cols-2">
                               <p>
-                                {t("workersPage.cards.totalSales")}: {formatCurrency(worker.metrics?.totalSales ?? 0)}
+                                {t("workersPage.cards.totalSales")}:{" "}
+                                {formatCurrency(
+                                  worker.metrics?.totalSales ?? 0,
+                                )}
                               </p>
                               <p>
-                                {t("workersPage.cards.totalOrders")}: {worker.metrics?.totalOrders ?? 0}
+                                {t("workersPage.cards.totalOrders")}:{" "}
+                                {worker.metrics?.totalOrders ?? 0}
                               </p>
                               <p>
-                                {t("workersPage.cards.incentiveEarned")}: {formatCurrency(worker.metrics?.incentiveEarned ?? 0)}
+                                {t("workersPage.cards.incentiveEarned")}:{" "}
+                                {formatCurrency(
+                                  worker.metrics?.incentiveEarned ?? 0,
+                                )}
                               </p>
                               <p>
-                                {t("workersPage.fields.lastActive")}: {worker.lastActiveAt ? formatCreatedAt(worker.lastActiveAt) : t("workersPage.messages.neverActive")}
+                                {t("workersPage.fields.lastActive")}:{" "}
+                                {worker.lastActiveAt
+                                  ? formatCreatedAt(worker.lastActiveAt)
+                                  : t("workersPage.messages.neverActive")}
                               </p>
                             </div>
                             <p className="mt-2 text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
@@ -802,7 +916,10 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                               type="button"
                               variant="outline"
                               onClick={() =>
-                                handleDisableWorker(worker.id, worker.status ?? "ACTIVE")
+                                handleDisableWorker(
+                                  worker.id,
+                                  worker.status ?? "ACTIVE",
+                                )
                               }
                               disabled={updateWorker.isPending}
                             >

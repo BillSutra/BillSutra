@@ -212,7 +212,9 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
   const supplierPurchaseHistory = useMemo(
     () =>
       selectedSupplierId
-        ? purchases.filter((purchase) => purchase.supplier?.id === selectedSupplierId)
+        ? purchases.filter(
+            (purchase) => purchase.supplier?.id === selectedSupplierId,
+          )
         : [],
     [purchases, selectedSupplierId],
   );
@@ -467,7 +469,10 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
   const appendSuggestedItem = (
     suggestion: Pick<
       PurchaseSuggestionItem,
-      "product_id" | "product_name" | "recommended_reorder_quantity" | "unit_cost"
+      | "product_id"
+      | "product_name"
+      | "recommended_reorder_quantity"
+      | "unit_cost"
     >,
     taxRate?: number,
   ) => {
@@ -852,7 +857,8 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
       setForm((prev) => ({
         ...prev,
         warehouse_id: warehouseId ?? prev.warehouse_id,
-        notes: prev.notes.trim() || "Loaded from inventory purchase suggestion.",
+        notes:
+          prev.notes.trim() || "Loaded from inventory purchase suggestion.",
       }));
       setItems([
         {
@@ -958,16 +964,24 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                           {t("purchasesPage.supplierForm.description")}
                         </DialogDescription>
                       </DialogHeader>
-                      <form className="grid gap-3" onSubmit={handleCreateSupplier}>
+                      <form
+                        className="grid gap-3"
+                        onSubmit={handleCreateSupplier}
+                      >
                         <ValidationField
                           id="new-supplier-name"
                           label={t("purchasesPage.supplierForm.fields.name")}
                           value={supplierForm.name}
                           onChange={(value) =>
-                            setSupplierForm((prev) => ({ ...prev, name: value }))
+                            setSupplierForm((prev) => ({
+                              ...prev,
+                              name: value,
+                            }))
                           }
                           validate={(value) =>
-                            value ? withTranslatedValidation(validateName)(value) : ""
+                            value
+                              ? withTranslatedValidation(validateName)(value)
+                              : ""
                           }
                           required
                           success
@@ -983,7 +997,9 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                             }))
                           }
                           validate={(value) =>
-                            value ? withTranslatedValidation(validatePhone)(value) : ""
+                            value
+                              ? withTranslatedValidation(validatePhone)(value)
+                              : ""
                           }
                           inputMode="numeric"
                           maxLength={10}
@@ -995,7 +1011,10 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                           label={t("purchasesPage.supplierForm.fields.email")}
                           value={supplierForm.email}
                           onChange={(value) =>
-                            setSupplierForm((prev) => ({ ...prev, email: value }))
+                            setSupplierForm((prev) => ({
+                              ...prev,
+                              email: value,
+                            }))
                           }
                           validate={(value) =>
                             value
@@ -1009,15 +1028,23 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                           label={t("purchasesPage.supplierForm.fields.address")}
                           value={supplierForm.address}
                           onChange={(value) =>
-                            setSupplierForm((prev) => ({ ...prev, address: value }))
+                            setSupplierForm((prev) => ({
+                              ...prev,
+                              address: value,
+                            }))
                           }
                           validate={() => ""}
                           success
                         />
                         {supplierError ? (
-                          <p className="text-sm text-[#b45309]">{supplierError}</p>
+                          <p className="text-sm text-[#b45309]">
+                            {supplierError}
+                          </p>
                         ) : null}
-                        <Button type="submit" disabled={createSupplier.isPending}>
+                        <Button
+                          type="submit"
+                          disabled={createSupplier.isPending}
+                        >
                           {t("purchasesPage.supplierForm.save")}
                         </Button>
                       </form>
@@ -1237,16 +1264,22 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                     success
                   >
                     <option value="">{t("purchasesPage.selectMethod")}</option>
-                    <option value="CASH">{translatePaymentMethod("CASH")}</option>
+                    <option value="CASH">
+                      {translatePaymentMethod("CASH")}
+                    </option>
                     <option value="UPI">{translatePaymentMethod("UPI")}</option>
                     <option value="BANK_TRANSFER">
                       {translatePaymentMethod("BANK_TRANSFER")}
                     </option>
-                    <option value="CARD">{translatePaymentMethod("CARD")}</option>
+                    <option value="CARD">
+                      {translatePaymentMethod("CARD")}
+                    </option>
                     <option value="CHEQUE">
                       {translatePaymentMethod("CHEQUE")}
                     </option>
-                    <option value="OTHER">{translatePaymentMethod("OTHER")}</option>
+                    <option value="OTHER">
+                      {translatePaymentMethod("OTHER")}
+                    </option>
                   </ValidationField>
                 )}
 
@@ -1261,15 +1294,21 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                 </p>
                 <div className="flex items-center justify-between">
                   <span>{t("purchasesPage.summary.subtotal")}</span>
-                  <span className="font-semibold">{formatAmount(totals.subtotal)}</span>
+                  <span className="font-semibold">
+                    {formatAmount(totals.subtotal)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>{t("purchasesPage.summary.tax")}</span>
-                  <span className="font-semibold">{formatAmount(totals.tax)}</span>
+                  <span className="font-semibold">
+                    {formatAmount(totals.tax)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between border-t border-[#ead8c7] pt-2 text-base text-[#1f1b16]">
                   <span>{t("purchasesPage.summary.total")}</span>
-                  <span className="font-semibold">{formatAmount(totals.total)}</span>
+                  <span className="font-semibold">
+                    {formatAmount(totals.total)}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span>{t("purchasesPage.summary.paid")}</span>
@@ -1452,7 +1491,9 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                 <Button
                   type="submit"
                   className="bg-[#1f1b16] text-white hover:bg-[#2c2520]"
-                  disabled={createPurchase.isPending || updatePurchase.isPending}
+                  disabled={
+                    createPurchase.isPending || updatePurchase.isPending
+                  }
                 >
                   {editingId
                     ? t("purchasesPage.updatePurchase")

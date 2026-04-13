@@ -622,7 +622,8 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                       return {
                         ...previous,
                         gstin: normalizedGstin,
-                        state: previous.state || extractedState || previous.state,
+                        state:
+                          previous.state || extractedState || previous.state,
                       };
                     })
                   }
@@ -752,16 +753,14 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                   id="supplier-pincode"
                   label={t("suppliersPage.fields.pincode")}
                   value={form.pincode}
-                  onChange={(value) =>
-                    {
-                      setPincodeLookupPending(false);
-                      setPincodeHint("");
-                      setForm((previous) => ({
-                        ...previous,
-                        pincode: normalizeIndianPincode(value),
-                      }));
-                    }
-                  }
+                  onChange={(value) => {
+                    setPincodeLookupPending(false);
+                    setPincodeHint("");
+                    setForm((previous) => ({
+                      ...previous,
+                      pincode: normalizeIndianPincode(value),
+                    }));
+                  }}
                   validate={(value) =>
                     hasAnyAddressValue(form)
                       ? withTranslatedValidation(validateIndianPincode)(value)
@@ -929,7 +928,9 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                 <select
                   id="supplier-category-filter"
                   value={resolvedCategoryFilter}
-                  onChange={(event) => setActiveCategoryFilter(event.target.value)}
+                  onChange={(event) =>
+                    setActiveCategoryFilter(event.target.value)
+                  }
                   className="app-field h-9 w-full max-w-xs rounded-xl px-3 text-sm"
                 >
                   <option value="ALL">

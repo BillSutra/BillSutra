@@ -165,7 +165,9 @@ const loadExtendedSupplierFields = async (
   } catch (error) {
     if (isSupplierSchemaMismatchError(error)) {
       try {
-        const fallbackRows = await prisma.$queryRaw<SupplierExtendedFieldsLegacy[]>(Prisma.sql`
+        const fallbackRows = await prisma.$queryRaw<
+          SupplierExtendedFieldsLegacy[]
+        >(Prisma.sql`
           SELECT
             id,
             business_name,

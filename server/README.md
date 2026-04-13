@@ -240,6 +240,17 @@ PORT=5000
 RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxx
 ```
 
+### Required At Startup
+
+- `JWT_SECRET` (required): used for signing/verifying auth tokens. The server now fails fast on boot if missing.
+- `DATABASE_URL` (required): Prisma database connection.
+
+### Optional / Feature-Specific
+
+- `PORT`: API port (defaults to `7000` if not provided).
+- `FRONTEND_URL`, `CORS_ORIGIN`, `CORS_ORIGINS`: CORS allowlist configuration.
+- `RESEND_API_KEY`: required only for email features (OTP, reset, transactional emails).
+
 ---
 
 ## 🚀 Setup & Running
@@ -266,6 +277,9 @@ npm run seed
 
 # 5. Start development server
 npm run dev
+
+# (Alternative) If running from monorepo root
+npm run dev --prefix server
 ```
 
 The server starts at **http://localhost:5000**.

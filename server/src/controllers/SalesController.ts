@@ -253,23 +253,23 @@ class SalesController {
       return created;
     });
 
-      if (req.user?.workerId) {
-        try {
-          await prisma.$executeRaw`
+    if (req.user?.workerId) {
+      try {
+        await prisma.$executeRaw`
             UPDATE "sales"
             SET "worker_id" = ${req.user.workerId}
             WHERE "id" = ${sale.id}
           `;
-          await prisma.$executeRaw`
+        await prisma.$executeRaw`
             UPDATE "worker_profiles"
             SET "last_active_at" = CURRENT_TIMESTAMP,
                 "updated_at" = CURRENT_TIMESTAMP
             WHERE "worker_id" = ${req.user.workerId}
           `;
-        } catch {
-          // Migration-safe fallback: sale creation should still succeed.
-        }
+      } catch {
+        // Migration-safe fallback: sale creation should still succeed.
       }
+    }
 
     emitDashboardUpdate({ userId, source: "sale.create" });
     return sendResponse(res, 201, {

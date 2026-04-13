@@ -1,5 +1,6 @@
 import { Router } from "express";
 import AuthMiddleware from "../../middlewares/AuthMIddleware.js";
+import RequireFeatureAccessMiddleware from "../../middlewares/RequireFeatureAccessMiddleware.js";
 import validate from "../../middlewares/validate.js";
 import {
   idParamSchema,
@@ -27,6 +28,7 @@ router.get("/bootstrap", AuthMiddleware, bootstrap);
 router.post(
   "/",
   AuthMiddleware,
+  RequireFeatureAccessMiddleware("INVOICE_CREATE"),
   validate({ body: invoiceCreateSchema }),
   store,
 );

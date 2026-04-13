@@ -223,7 +223,7 @@ export const authOptions: AuthOptions = {
           );
 
           if (!mappedUser) {
-            return false;
+            return "/login?error=BackendProfileMapping";
           }
 
           user.id = mappedUser.id;
@@ -250,7 +250,7 @@ export const authOptions: AuthOptions = {
           console.error("Unknown error:", error);
         }
 
-        return false;
+        return "/login?error=BackendAuth";
       }
     },
 
