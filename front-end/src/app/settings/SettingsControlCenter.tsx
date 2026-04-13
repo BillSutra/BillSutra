@@ -45,6 +45,7 @@ import {
   fetchBusinessProfile,
   fetchLogoUrl,
   fetchSecurityActivity,
+  fetchUserPermissions,
   fetchUserSettingsPreferences,
   fetchSubscriptionStatus,
   fetchTemplates,
@@ -288,6 +289,11 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     queryFn: fetchSubscriptionStatus,
   });
 
+  const { data: permissions } = useQuery({
+    queryKey: ["subscription-permissions"],
+    queryFn: fetchUserPermissions,
+  });
+
   const { data: workers = [] } = useQuery({
     queryKey: ["workers"],
     queryFn: fetchWorkers,
@@ -429,6 +435,9 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     onSuccess: () => {
       toast.success("Subscription cancelled.");
       void queryClient.invalidateQueries({ queryKey: ["subscription-status"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["subscription-permissions"],
+      });
     },
     onError: (error) => {
       toast.error(
@@ -444,6 +453,9 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     onSuccess: () => {
       toast.success("Switched to Free plan.");
       void queryClient.invalidateQueries({ queryKey: ["subscription-status"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["subscription-permissions"],
+      });
     },
     onError: (error) => {
       toast.error(
@@ -611,7 +623,14 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     return formatDate(subscription.currentPeriodEnd);
   }, [subscription]);
 
+  const exportEnabled = permissions?.features.export ?? true;
+
   const runExport = async (resource: "invoices" | "customers" | "products") => {
+    if (permissions && !permissions.features.export) {
+      toast.error("Upgrade to Pro to export data.");
+      return;
+    }
+
     const resourceFields: Record<typeof resource, string[]> = {
       invoices: ["invoice_number", "customer_name", "status", "date", "total"],
       customers: ["name", "email", "phone", "invoice_count"],
@@ -1023,22 +1042,37 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
             <Button
               variant="outline"
               onClick={() => void runExport("invoices")}
+              disabled={!exportEnabled}
             >
               <Download className="size-4" /> Export invoices
             </Button>
             <Button
               variant="outline"
               onClick={() => void runExport("customers")}
+              disabled={!exportEnabled}
             >
               <Download className="size-4" /> Export customers
             </Button>
             <Button
               variant="outline"
               onClick={() => void runExport("products")}
+              disabled={!exportEnabled}
             >
               <Download className="size-4" /> Export products
             </Button>
           </div>
+
+          {!exportEnabled ? (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              <p>
+                Export is not available on your current plan. Upgrade to Pro to
+                unlock CSV exports.
+              </p>
+              <Button asChild size="sm" className="mt-2">
+                <Link href="/pricing">Upgrade Now</Link>
+              </Button>
+            </div>
+          ) : null}
 
           <div className="mt-4 grid gap-3">
             <ToggleRow

@@ -6,24 +6,24 @@ This is the **Express.js REST API** that powers BillSutra. It handles all busine
 
 ## 🛠 Tech Stack
 
-| Tool | Purpose |
-|---|---|
-| **Node.js** + **Express 5** | HTTP server and routing |
-| **TypeScript** (ESM) | Static typing, compiled with `tsc` / run with `tsx` |
-| **Prisma ORM 6** | Type-safe database access and migrations |
-| **PostgreSQL** | Relational database |
-| **JWT** (jsonwebtoken) | Stateless API authentication (365-day tokens) |
-| **bcryptjs** | Password hashing (cost factor 12) |
-| **Puppeteer** | Headless Chromium for server-side PDF generation |
-| **Resend** | Sending transactional emails |
-| **node-cron** | Daily cron job for recurring invoices (runs at midnight) |
-| **Multer** | Multipart file upload handling for bulk imports |
-| **csv-parser** | Parsing CSV files during import |
-| **xlsx** | Parsing Excel/XLSX files during import |
-| **Zod** | Request body/query/params schema validation |
-| **express-rate-limit** | Rate limiting on auth endpoints |
-| **Morgan** | HTTP request logging |
-| **CORS** | Cross-origin resource sharing |
+| Tool                        | Purpose                                                  |
+| --------------------------- | -------------------------------------------------------- |
+| **Node.js** + **Express 5** | HTTP server and routing                                  |
+| **TypeScript** (ESM)        | Static typing, compiled with `tsc` / run with `tsx`      |
+| **Prisma ORM 6**            | Type-safe database access and migrations                 |
+| **PostgreSQL**              | Relational database                                      |
+| **JWT** (jsonwebtoken)      | Stateless API authentication (365-day tokens)            |
+| **bcryptjs**                | Password hashing (cost factor 12)                        |
+| **Puppeteer**               | Headless Chromium for server-side PDF generation         |
+| **Resend**                  | Sending transactional emails                             |
+| **node-cron**               | Daily cron job for recurring invoices (runs at midnight) |
+| **Multer**                  | Multipart file upload handling for bulk imports          |
+| **csv-parser**              | Parsing CSV files during import                          |
+| **xlsx**                    | Parsing Excel/XLSX files during import                   |
+| **Zod**                     | Request body/query/params schema validation              |
+| **express-rate-limit**      | Rate limiting on auth endpoints                          |
+| **Morgan**                  | HTTP request logging                                     |
+| **CORS**                    | Cross-origin resource sharing                            |
 
 ---
 
@@ -98,30 +98,30 @@ server/
 
 All tables belong to a single PostgreSQL database managed by Prisma.
 
-| Model | Description |
-|---|---|
-| `User` | Registered users (credentials or OAuth) |
-| `BusinessProfile` | Company details per user (one-to-one) |
-| `Customer` | Customer contacts per user |
-| `Supplier` | Supplier contacts per user |
-| `Category` | Product categories per user |
-| `Product` | Products with SKU, barcode, pricing, GST, stock |
-| `Warehouse` | Physical warehouse locations per user |
-| `Inventory` | Stock quantity of a product in a warehouse |
-| `Purchase` | Purchase orders with items and payment status |
-| `PurchaseItem` | Line items of a purchase |
-| `Sale` | Sales records with items and payment status |
-| `SaleItem` | Line items of a sale |
-| `Invoice` | Customer invoices with status lifecycle |
-| `InvoiceItem` | Line items of an invoice |
+| Model                      | Description                                     |
+| -------------------------- | ----------------------------------------------- |
+| `User`                     | Registered users (credentials or OAuth)         |
+| `BusinessProfile`          | Company details per user (one-to-one)           |
+| `Customer`                 | Customer contacts per user                      |
+| `Supplier`                 | Supplier contacts per user                      |
+| `Category`                 | Product categories per user                     |
+| `Product`                  | Products with SKU, barcode, pricing, GST, stock |
+| `Warehouse`                | Physical warehouse locations per user           |
+| `Inventory`                | Stock quantity of a product in a warehouse      |
+| `Purchase`                 | Purchase orders with items and payment status   |
+| `PurchaseItem`             | Line items of a purchase                        |
+| `Sale`                     | Sales records with items and payment status     |
+| `SaleItem`                 | Line items of a sale                            |
+| `Invoice`                  | Customer invoices with status lifecycle         |
+| `InvoiceItem`              | Line items of an invoice                        |
 | `RecurringInvoiceTemplate` | Templates for auto-generated recurring invoices |
-| `Payment` | Payments recorded against invoices |
-| `StockMovement` | Audit trail for inventory changes |
-| `Template` | System invoice layout templates |
-| `TemplateSection` | Sections within a template |
-| `UserTemplate` | User's active template configuration |
-| `UserSavedTemplate` | Named saved template presets per user |
-| `PasswordResetToken` | Time-limited tokens for password reset |
+| `Payment`                  | Payments recorded against invoices              |
+| `StockMovement`            | Audit trail for inventory changes               |
+| `Template`                 | System invoice layout templates                 |
+| `TemplateSection`          | Sections within a template                      |
+| `UserTemplate`             | User's active template configuration            |
+| `UserSavedTemplate`        | Named saved template presets per user           |
+| `PasswordResetToken`       | Time-limited tokens for password reset          |
 
 ---
 
@@ -130,25 +130,29 @@ All tables belong to a single PostgreSQL database managed by Prisma.
 All endpoints are prefixed with `/api`. Protected routes require `Authorization: Bearer <token>`.
 
 ### Auth (`/api/auth`)
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/auth/login` | ❌ | OAuth login / upsert |
-| POST | `/auth/logincheck` | ❌ | Credentials login |
-| POST | `/auth/register` | ❌ | Register new user |
-| POST | `/auth/forgot-password` | ❌ | Generate and email reset link |
-| POST | `/auth/reset-password` | ❌ | Reset password with token |
+
+| Method | Endpoint                | Auth | Description                   |
+| ------ | ----------------------- | ---- | ----------------------------- |
+| POST   | `/auth/login`           | ❌   | OAuth login / upsert          |
+| POST   | `/auth/logincheck`      | ❌   | Credentials login             |
+| POST   | `/auth/register`        | ❌   | Register new user             |
+| POST   | `/auth/forgot-password` | ❌   | Generate and email reset link |
+| POST   | `/auth/reset-password`  | ❌   | Reset password with token     |
 
 ### User & Profile
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/users/me` | ✅ | Get current user |
-| PUT | `/users/me` | ✅ | Update profile info |
-| PUT | `/users/password` | ✅ | Change password |
-| GET | `/business-profile` | ✅ | Get business profile |
-| POST | `/business-profile` | ✅ | Create/update business profile |
+
+| Method | Endpoint            | Auth | Description                    |
+| ------ | ------------------- | ---- | ------------------------------ |
+| GET    | `/users/me`         | ✅   | Get current user               |
+| PUT    | `/users/me`         | ✅   | Update profile info            |
+| PUT    | `/users/password`   | ✅   | Change password                |
+| GET    | `/business-profile` | ✅   | Get business profile           |
+| POST   | `/business-profile` | ✅   | Create/update business profile |
 
 ### Customers, Suppliers, Categories, Products, Warehouses
+
 All follow the same RESTful CRUD pattern:
+
 ```
 GET     /resource          → list all
 POST    /resource          → create
@@ -158,69 +162,76 @@ DELETE  /resource/:id      → delete
 ```
 
 ### Inventory
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/inventories` | ✅ | List stock (filter by warehouse) |
-| POST | `/inventories/adjust` | ✅ | Manual stock adjustment |
+
+| Method | Endpoint              | Auth | Description                      |
+| ------ | --------------------- | ---- | -------------------------------- |
+| GET    | `/inventories`        | ✅   | List stock (filter by warehouse) |
+| POST   | `/inventories/adjust` | ✅   | Manual stock adjustment          |
 
 ### Purchases & Sales
+
 Both support: `GET /list`, `POST /create`, `GET /:id`, `PUT /:id`  
 Sales additionally: `DELETE /:id`
 
 ### Invoices (`/api/invoices`)
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/invoices` | ✅ | List (filter by status, client, date) |
-| POST | `/invoices` | ✅ | Create invoice (optional sales + inventory sync) |
-| GET | `/invoices/:id` | ✅ | Get invoice details |
-| PUT | `/invoices/:id` | ✅ | Update invoice |
-| DELETE | `/invoices/:id` | ✅ | Delete invoice |
-| POST | `/invoices/:id/send` | ✅ | Mark as sent (status → SENT) |
-| POST | `/invoices/:id/duplicate` | ✅ | Duplicate invoice |
-| GET | `/invoices/:id/pdf` | ✅ | Download invoice as PDF |
-| POST | `/invoices/:id/reminder` | ✅ | Send invoice reminder email |
-| GET | `/public/invoice/:id` | ❌ | Public invoice view (no auth) |
+
+| Method | Endpoint                  | Auth | Description                                      |
+| ------ | ------------------------- | ---- | ------------------------------------------------ |
+| GET    | `/invoices`               | ✅   | List (filter by status, client, date)            |
+| POST   | `/invoices`               | ✅   | Create invoice (optional sales + inventory sync) |
+| GET    | `/invoices/:id`           | ✅   | Get invoice details                              |
+| PUT    | `/invoices/:id`           | ✅   | Update invoice                                   |
+| DELETE | `/invoices/:id`           | ✅   | Delete invoice                                   |
+| POST   | `/invoices/:id/send`      | ✅   | Mark as sent (status → SENT)                     |
+| POST   | `/invoices/:id/duplicate` | ✅   | Duplicate invoice                                |
+| GET    | `/invoices/:id/pdf`       | ✅   | Download invoice as PDF                          |
+| POST   | `/invoices/:id/reminder`  | ✅   | Send invoice reminder email                      |
+| GET    | `/public/invoice/:id`     | ❌   | Public invoice view (no auth)                    |
 
 ### Payments
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/payments` | ✅ | List all payments |
-| GET | `/payments/:invoiceId` | ✅ | Payments for specific invoice |
-| POST | `/payments` | ✅ | Record a payment |
+
+| Method | Endpoint               | Auth | Description                   |
+| ------ | ---------------------- | ---- | ----------------------------- |
+| GET    | `/payments`            | ✅   | List all payments             |
+| GET    | `/payments/:invoiceId` | ✅   | Payments for specific invoice |
+| POST   | `/payments`            | ✅   | Record a payment              |
 
 ### Templates
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| GET | `/templates` | ✅ | List system templates |
-| GET | `/user-template` | ✅ | Get user's active template config |
-| POST | `/user-template` | ✅ | Save user template settings |
-| GET | `/user-saved-templates` | ✅ | List saved templates |
-| POST | `/user-saved-templates` | ✅ | Create saved template |
-| PUT | `/user-saved-templates/:id` | ✅ | Update saved template |
-| DELETE | `/user-saved-templates/:id` | ✅ | Delete saved template |
+
+| Method | Endpoint                    | Auth | Description                       |
+| ------ | --------------------------- | ---- | --------------------------------- |
+| GET    | `/templates`                | ✅   | List system templates             |
+| GET    | `/user-template`            | ✅   | Get user's active template config |
+| POST   | `/user-template`            | ✅   | Save user template settings       |
+| GET    | `/user-saved-templates`     | ✅   | List saved templates              |
+| POST   | `/user-saved-templates`     | ✅   | Create saved template             |
+| PUT    | `/user-saved-templates/:id` | ✅   | Update saved template             |
+| DELETE | `/user-saved-templates/:id` | ✅   | Delete saved template             |
 
 ### Import
-| Method | Endpoint | Auth | Description |
-|---|---|---|---|
-| POST | `/import/customers` | ✅ | Bulk import customers (CSV/XLSX) |
-| POST | `/import/suppliers` | ✅ | Bulk import suppliers |
-| POST | `/import/products` | ✅ | Bulk import products |
-| POST | `/import/categories` | ✅ | Bulk import categories |
-| POST | `/import/warehouses` | ✅ | Bulk import warehouses |
+
+| Method | Endpoint             | Auth | Description                      |
+| ------ | -------------------- | ---- | -------------------------------- |
+| POST   | `/import/customers`  | ✅   | Bulk import customers (CSV/XLSX) |
+| POST   | `/import/suppliers`  | ✅   | Bulk import suppliers            |
+| POST   | `/import/products`   | ✅   | Bulk import products             |
+| POST   | `/import/categories` | ✅   | Bulk import categories           |
+| POST   | `/import/warehouses` | ✅   | Bulk import warehouses           |
 
 ### Dashboard & Analytics
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/dashboard/overview` | KPIs, profits, alerts, activity |
-| GET | `/dashboard/sales` | Sales charts (7d, 30d, 6mo, by category) |
-| GET | `/dashboard/inventory` | Stock metrics and low stock list |
-| GET | `/dashboard/transactions` | Last 10 transactions |
-| GET | `/dashboard/customers` | Customer analytics and top buyers |
-| GET | `/dashboard/suppliers` | Supplier payables |
-| GET | `/dashboard/cashflow` | Inflow/outflow analysis |
-| GET | `/dashboard/forecast` | Sales forecast |
-| GET | `/analytics/overview` | Aggregated analytics |
-| GET | `/reports/summary` | Profit/loss summary report |
+
+| Method | Endpoint                  | Description                              |
+| ------ | ------------------------- | ---------------------------------------- |
+| GET    | `/dashboard/overview`     | KPIs, profits, alerts, activity          |
+| GET    | `/dashboard/sales`        | Sales charts (7d, 30d, 6mo, by category) |
+| GET    | `/dashboard/inventory`    | Stock metrics and low stock list         |
+| GET    | `/dashboard/transactions` | Last 10 transactions                     |
+| GET    | `/dashboard/customers`    | Customer analytics and top buyers        |
+| GET    | `/dashboard/suppliers`    | Supplier payables                        |
+| GET    | `/dashboard/cashflow`     | Inflow/outflow analysis                  |
+| GET    | `/dashboard/forecast`     | Sales forecast                           |
+| GET    | `/analytics/overview`     | Aggregated analytics                     |
+| GET    | `/reports/summary`        | Profit/loss summary report               |
 
 ---
 
@@ -256,6 +267,7 @@ RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxx
 ## 🚀 Setup & Running
 
 ### Requirements
+
 - Node.js 18+
 - PostgreSQL 14+
 
@@ -288,13 +300,13 @@ The server starts at **http://localhost:5000**.
 
 ## 📦 Available Scripts
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Start with hot reload via `tsx watch` |
-| `npm run build` | Compile TypeScript to `dist/` |
+| Command         | Description                               |
+| --------------- | ----------------------------------------- |
+| `npm run dev`   | Start with hot reload via `tsx watch`     |
+| `npm run build` | Compile TypeScript to `dist/`             |
 | `npm run start` | Run compiled build (`node dist/index.js`) |
-| `npm run watch` | Watch TypeScript files (`tsc -w`) |
-| `npm run seed` | Run Prisma seed script |
+| `npm run watch` | Watch TypeScript files (`tsc -w`)         |
+| `npm run seed`  | Run Prisma seed script                    |
 
 ---
 

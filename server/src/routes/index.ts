@@ -705,6 +705,11 @@ router.get(
 );
 
 router.get("/subscriptions/me", AuthMiddleware, SubscriptionController.me);
+router.get(
+  "/subscriptions/permissions",
+  AuthMiddleware,
+  SubscriptionController.permissions,
+);
 router.post(
   "/subscriptions/cancel",
   AuthMiddleware,

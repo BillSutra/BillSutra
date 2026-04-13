@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { sendResponse } from "../utils/sendResponse.js";
 import {
   cancelCurrentSubscription,
+  getUserPermissions,
   getSubscriptionSnapshot,
   switchToFreePlan,
 } from "../services/subscription.service.js";
@@ -43,6 +44,16 @@ class SubscriptionController {
       message: "Plan switched to Free",
       data,
     });
+  }
+
+  static async permissions(req: Request, res: Response) {
+    const businessId = req.user?.businessId?.trim();
+    if (!businessId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    const data = await getUserPermissions(businessId);
+    return sendResponse(res, 200, { data });
   }
 }
 

@@ -9,6 +9,7 @@ import React, {
 } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowRight,
@@ -26,6 +27,7 @@ import {
 } from "@/components/dashboard/dashboard-section-shared";
 import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
 import { useHydrated } from "@/hooks/useHydrated";
+import { fetchUserPermissions } from "@/lib/apiClient";
 import {
   DASHBOARD_REALTIME_ENABLED,
   DASHBOARD_REFRESH_INTERVAL_MS,
@@ -141,6 +143,13 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
 
   const { data, isLoading, isError, dataUpdatedAt, isFetching } =
     useDashboardForecast();
+
+  const { data: permissions } = useQuery({
+    queryKey: ["subscription-permissions"],
+    queryFn: fetchUserPermissions,
+    staleTime: 30_000,
+  });
+
   const showLoadingState = !hydrated || (hasValidSessionToken && isLoading);
 
   const sectionLinks = [
@@ -197,6 +206,49 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
       },
     ];
   }, [currency, data, number, t]);
+
+  if (permissions && permissions.features.analytics === false) {
+    return (
+      <DashboardLayout
+        name={displayName}
+        image={image}
+        title={t("insights.title")}
+        subtitle={t("insights.subtitle")}
+      >
+        <div className="mx-auto grid w-full max-w-4xl gap-4">
+          <section className="dashboard-chart-surface rounded-[1.75rem] border border-amber-200 bg-amber-50 p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-700">
+              Upgrade required
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold text-foreground">
+              Analytics is locked on your current plan
+            </h2>
+            <p className="mt-3 text-sm text-muted-foreground">
+              You have used {permissions.usage.invoicesUsed}
+              {typeof permissions.features.maxInvoices === "number"
+                ? ` / ${permissions.features.maxInvoices}`
+                : " invoices"}
+              {typeof permissions.features.maxInvoices === "number"
+                ? " invoices this month"
+                : " this month"}
+              . Upgrade to Pro for analytics or Pro Plus for advanced analytics.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Button asChild>
+                <Link href="/pricing">
+                  Upgrade Now
+                  <ArrowRight size={16} />
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/dashboard">Back to dashboard</Link>
+              </Button>
+            </div>
+          </section>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout

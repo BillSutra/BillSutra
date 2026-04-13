@@ -85,6 +85,10 @@ const NotificationsPanel = dynamic(
   () => import("@/components/dashboard/notifications-panel"),
   { loading: () => dashboardSectionFallback("h-[260px]") },
 );
+const DashboardSalesAnalyticsPanel = dynamic(
+  () => import("@/components/dashboard/dashboard-sales-analytics-panel"),
+  { loading: () => dashboardSectionFallback("h-[520px]") },
+);
 
 type DashboardClientProps = {
   name: string;
@@ -501,6 +505,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
 
   const sectionLinks = [
     { label: t("dashboard.sectionLinks.overview"), href: "#overview" },
+    { label: t("dashboard.sectionLinks.performance"), href: "#analytics" },
     { label: t("dashboard.sections.profit.title"), href: "#profit" },
     { label: t("dashboard.sectionLinks.operations"), href: "#operations" },
     { label: t("dashboard.sectionLinks.records"), href: "#records" },
@@ -1066,6 +1071,30 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     </section>
   );
 
+  const analyticsSection = (
+    <section
+      id="analytics"
+      aria-labelledby="analytics-heading"
+      className="grid gap-4"
+    >
+      <DashboardSectionIntro
+        headingId="analytics-heading"
+        kicker={t("dashboard.sections.performance.kicker")}
+        title={t("dashboard.sections.performance.title")}
+        description={t("dashboard.sections.performance.description")}
+      />
+
+      <DashboardSalesAnalyticsPanel
+        filters={deferredFilters}
+        lowStockCount={data?.alerts?.lowStock?.length ?? 0}
+        overdueInvoiceCount={invoiceStats?.overdue ?? 0}
+        pendingCustomerDue={metrics?.pendingSalesPayments ?? 0}
+        pendingSupplierDue={metrics?.pendingPurchasePayments ?? 0}
+        supplierPayablesCount={data?.alerts?.supplierPayables?.length ?? 0}
+      />
+    </section>
+  );
+
   const recordsSection = (
     <section
       id="records"
@@ -1133,10 +1162,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                         {currency(Number(invoice.total))}
                       </span>
                       <span className="rounded-full border border-border bg-background px-2.5 py-1 font-medium text-muted-foreground">
-                        {translateEnum(
-                          "invoiceHistory.status",
-                          invoice.status,
-                        )}
+                        {translateEnum("invoiceHistory.status", invoice.status)}
                       </span>
                     </div>
                   </div>
@@ -1311,6 +1337,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
             {heroSection}
             <InventoryRiskSummaryBanner />
             {performanceSection}
+            {analyticsSection}
             {operationsSection}
             {recordsSection}
           </>

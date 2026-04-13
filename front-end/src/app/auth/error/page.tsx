@@ -23,7 +23,9 @@ export default function AuthErrorPage({ searchParams }: AuthErrorPageProps) {
     <main className="mx-auto flex min-h-[70vh] w-full max-w-md flex-col items-center justify-center px-6 text-center">
       <h1 className="text-2xl font-semibold">Unable to sign in</h1>
       <p className="mt-3 text-sm text-muted-foreground">{message}</p>
-      <p className="mt-2 text-xs text-muted-foreground">Error code: {errorCode}</p>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Error code: {errorCode}
+      </p>
       <div className="mt-6 flex gap-3">
         <Link
           href="/login"

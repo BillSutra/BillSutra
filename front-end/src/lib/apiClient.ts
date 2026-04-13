@@ -960,6 +960,23 @@ export type SubscriptionSnapshot = {
   };
 };
 
+export type UserPermissions = {
+  plan: "free" | "pro" | "pro_plus";
+  isSubscribed: boolean;
+  features: {
+    maxInvoices: number | "unlimited";
+    analytics: boolean | "advanced";
+    teamAccess: boolean;
+    export: boolean;
+  };
+  usage: {
+    invoicesUsed: number;
+  };
+  limitsReached: {
+    invoicesLimitReached: boolean;
+  };
+};
+
 export type UserSettingsPreferences = {
   appPreferences: {
     language: "en" | "hi";
@@ -2286,6 +2303,11 @@ export const fetchSubscriptionStatus =
     const response = await apiClient.get("/subscriptions/me");
     return response.data.data as SubscriptionSnapshot;
   };
+
+export const fetchUserPermissions = async (): Promise<UserPermissions> => {
+  const response = await apiClient.get("/subscriptions/permissions");
+  return response.data.data as UserPermissions;
+};
 
 export const cancelSubscription = async (): Promise<SubscriptionSnapshot> => {
   const response = await apiClient.post("/subscriptions/cancel");

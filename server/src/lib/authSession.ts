@@ -119,7 +119,9 @@ export const isUserSessionVersionColumnAvailable = () =>
       return cached.value;
     }
 
-    const result = await prisma.$queryRaw<Array<{ exists: boolean }>>(Prisma.sql`
+    const result = await prisma.$queryRaw<
+      Array<{ exists: boolean }>
+    >(Prisma.sql`
       SELECT EXISTS (
         SELECT 1
         FROM information_schema.columns
@@ -140,7 +142,9 @@ export const getUserSessionVersionIfAvailable = async (userId: number) => {
   }
 
   try {
-    const rows = await prisma.$queryRaw<Array<{ session_version: number | null }>>(
+    const rows = await prisma.$queryRaw<
+      Array<{ session_version: number | null }>
+    >(
       Prisma.sql`
         SELECT "session_version"
         FROM "users"
@@ -267,9 +271,8 @@ export const buildWorkerAuthUser = async (
 
   const ownerUserId = parseOwnerUserId(business.ownerId);
 
-  const ownerSessionVersion = await getUserSessionVersionIfAvailable(
-    ownerUserId,
-  );
+  const ownerSessionVersion =
+    await getUserSessionVersionIfAvailable(ownerUserId);
 
   return {
     id: ownerUserId,
