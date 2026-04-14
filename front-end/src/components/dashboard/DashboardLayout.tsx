@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -15,6 +16,11 @@ import {
   resetBeginnerExperience,
   seedDemoWorkspace,
 } from "@/lib/firstRun";
+
+const BillSutraAssistant = dynamic(
+  () => import("@/components/assistant/BillSutraAssistant"),
+  { ssr: false },
+);
 
 type DashboardLayoutProps = {
   name: string;
@@ -144,6 +150,8 @@ const DashboardLayout = ({
         isSeedingDemo={isSeedingDemo}
         demoSeeded={demoSeeded}
       />
+
+      <BillSutraAssistant />
     </div>
   );
 };

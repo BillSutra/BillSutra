@@ -843,8 +843,9 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
   useEffect(() => {
     if (hasAppliedSearchPrefill) return;
 
+    const restockItemsParam = searchParams.get("restockItems");
     const productId = searchParams.get("productId");
-    if (!productId) return;
+    if (!restockItemsParam && !productId) return;
 
     const warehouseId = searchParams.get("warehouseId");
     const quantity = searchParams.get("quantity");
@@ -856,35 +857,99 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
       searchParams.get("productLabel") ?? "Suggested product";
 
     const timeoutId = window.setTimeout(() => {
+      let parsedRestockItems:
+        | Array<{
+            productId: string;
+            productLabel: string;
+            quantity?: string;
+            unitCost?: string;
+            warehouseId?: string;
+          }>
+        | null = null;
+
+      if (restockItemsParam) {
+        try {
+          const parsed = JSON.parse(restockItemsParam) as Array<{
+            productId: string;
+            productLabel: string;
+            quantity?: string;
+            unitCost?: string;
+            warehouseId?: string;
+          }>;
+
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            parsedRestockItems = parsed.filter(
+              (item) =>
+                typeof item?.productId === "string" &&
+                typeof item?.productLabel === "string",
+            );
+          }
+        } catch {
+          parsedRestockItems = null;
+        }
+      }
+
+      const prefilledWarehouseId =
+        warehouseId ??
+        (() => {
+          if (!parsedRestockItems?.length) return null;
+          const uniqueWarehouseIds = Array.from(
+            new Set(
+              parsedRestockItems
+                .map((item) => item.warehouseId)
+                .filter((value): value is string => Boolean(value)),
+            ),
+          );
+
+          return uniqueWarehouseIds.length === 1 ? uniqueWarehouseIds[0] : null;
+        })();
+
       setEditingId(null);
       setForm((prev) => ({
         ...prev,
         supplier_id: supplierId ?? prev.supplier_id,
-        warehouse_id: warehouseId ?? prev.warehouse_id,
+        warehouse_id: prefilledWarehouseId ?? prev.warehouse_id,
         notes:
           prev.notes.trim() ||
-          `Loaded from ${source === "smart_inventory_insights" ? "smart inventory insights" : "inventory purchase suggestion"}${supplierName ? ` with ${supplierName}` : ""}.`,
+          `Loaded from ${
+            source === "smart_inventory_insights"
+              ? "smart inventory insights"
+              : source === "inventory_bulk_restock"
+                ? "inventory restock list"
+                : "inventory purchase suggestion"
+          }${supplierName ? ` with ${supplierName}` : ""}.`,
       }));
-      setItems([
-        {
-          product_id: productId,
-          product_label: productLabel,
-          quantity: quantity ?? "1",
-          unit_cost: unitCost ?? "",
-          tax_rate: "",
-        },
-      ]);
+      setItems(
+        parsedRestockItems?.length
+          ? parsedRestockItems.map((item) => ({
+              product_id: item.productId,
+              product_label: item.productLabel,
+              quantity: item.quantity ?? "1",
+              unit_cost: item.unitCost ?? "",
+              tax_rate: "",
+            }))
+          : [
+              {
+                product_id: productId ?? "",
+                product_label: productLabel,
+                quantity: quantity ?? "1",
+                unit_cost: unitCost ?? "",
+                tax_rate: "",
+              },
+            ],
+      );
       setLineItemErrors([]);
       setLineItemSummary([]);
       setPaymentError(null);
       setServerError(null);
       setHasAppliedSearchPrefill(true);
       captureAnalyticsEvent("purchase_suggestion_prefilled", {
-        source: "inventory_page",
+        source: source ?? "inventory_page",
         productId,
-        warehouseId,
+        warehouseId: prefilledWarehouseId ?? warehouseId,
         quantity,
         supplierId,
+        itemCount: parsedRestockItems?.length ?? 1,
       });
     }, 0);
 

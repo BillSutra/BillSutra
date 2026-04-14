@@ -1,25 +1,24 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import axios from "axios";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ValidationField } from "@/components/ui/ValidationField";
-import { Input } from "@/components/ui/input";
 import { validateNumber } from "@/lib/validation";
 import {
   useAdjustInventoryMutation,
+  useCategoriesQuery,
   useInventoriesQuery,
   useProductsQuery,
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
 import { useInventoryDemandPredictions } from "@/hooks/usePredictionQueries";
-import { useInventoryInsights } from "@/hooks/usePredictionQueries";
-import InventoryPredictionDrawer from "@/components/inventory/inventory-prediction-drawer";
-import SmartInventoryInsights from "@/components/inventory/SmartInventoryInsights";
 import { useI18n } from "@/providers/LanguageProvider";
 import type { Inventory, InventoryDemandPrediction } from "@/lib/apiClient";
 
@@ -28,23 +27,146 @@ type InventoryClientProps = {
   image?: string;
 };
 
-type InventoryRow = Inventory & {
+type StockStatus = "out" | "low" | "in";
+type SortOption = "stock_asc" | "stock_desc" | "name_asc";
+type PageSizeOption = 10 | 25 | 50;
+
+type InventoryTableRow = Inventory & {
   prediction: InventoryDemandPrediction | null;
+  stockStatus: StockStatus;
+  effectiveStock: number;
+  dailySalesText: string;
+  searchText: string;
+};
+
+const STOCK_STATUS_META: Record<
+  StockStatus,
+  {
+    label: string;
+    badgeClass: string;
+    emphasisClass: string;
+  }
+> = {
+  out: {
+    label: "Out of Stock",
+    badgeClass: "border border-red-200 bg-red-50 text-red-700",
+    emphasisClass: "text-red-700",
+  },
+  low: {
+    label: "Low Stock",
+    badgeClass: "border border-amber-200 bg-amber-50 text-amber-700",
+    emphasisClass: "text-amber-700",
+  },
+  in: {
+    label: "In Stock",
+    badgeClass: "border border-emerald-200 bg-emerald-50 text-emerald-700",
+    emphasisClass: "text-emerald-700",
+  },
+};
+
+const formatNumber = (value: number, locale: string, digits = 0) =>
+  new Intl.NumberFormat(locale || "en-IN", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
+
+const getPredictionKey = (productId: number, warehouseId?: number | null) =>
+  `${productId}:${warehouseId ?? "all"}`;
+
+const getStockStatus = (
+  item: Inventory,
+  prediction: InventoryDemandPrediction | null,
+): StockStatus => {
+  const stock = prediction?.stock_left ?? item.quantity;
+  const reorderLevel = item.product.reorder_level ?? 0;
+
+  if (stock <= 0 || prediction?.alert_level === "critical") {
+    return "out";
+  }
+
+  if (stock <= reorderLevel || prediction?.alert_level === "warning") {
+    return "low";
+  }
+
+  return "in";
+};
+
+const buildPurchaseHref = (row: InventoryTableRow) => {
+  const params = new URLSearchParams();
+  params.set("productId", String(row.product.id));
+  params.set("warehouseId", String(row.warehouse.id));
+  params.set(
+    "productLabel",
+    row.product.sku ? `${row.product.name} - ${row.product.sku}` : row.product.name,
+  );
+  params.set(
+    "quantity",
+    String(row.prediction?.recommended_reorder_quantity ?? row.product.reorder_level ?? 1),
+  );
+
+  if (row.prediction?.unit_cost !== undefined) {
+    params.set("unitCost", String(row.prediction.unit_cost));
+  }
+
+  params.set("source", "inventory_page");
+  return `/purchases?${params.toString()}`;
+};
+
+const buildBulkPurchaseHref = (rows: InventoryTableRow[]) => {
+  const params = new URLSearchParams();
+  const uniqueWarehouseIds = Array.from(
+    new Set(rows.map((row) => String(row.warehouse.id))),
+  );
+
+  if (uniqueWarehouseIds.length === 1) {
+    params.set("warehouseId", uniqueWarehouseIds[0] ?? "");
+  }
+
+  params.set("source", "inventory_bulk_restock");
+  params.set(
+    "restockItems",
+    JSON.stringify(
+      rows.map((row) => ({
+        productId: String(row.product.id),
+        productLabel: row.product.sku
+          ? `${row.product.name} - ${row.product.sku}`
+          : row.product.name,
+        quantity: String(
+          row.prediction?.recommended_reorder_quantity ?? row.product.reorder_level ?? 1,
+        ),
+        unitCost:
+          row.prediction?.unit_cost !== undefined
+            ? String(row.prediction.unit_cost)
+            : "",
+        warehouseId: String(row.warehouse.id),
+      })),
+    ),
+  );
+
+  return `/purchases?${params.toString()}`;
 };
 
 const InventoryClient = ({ name, image }: InventoryClientProps) => {
   const { locale, t } = useI18n();
-  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string>("");
-  const [alertFilter, setAlertFilter] = useState<"all" | "critical" | "warning" | "normal">("all");
-  const [selectedInventoryId, setSelectedInventoryId] = useState<number | null>(null);
-  const scopedWarehouseId = selectedWarehouseId ? Number(selectedWarehouseId) : undefined;
-  const { data, isLoading, isError } = useInventoriesQuery(scopedWarehouseId);
+  const searchParams = useSearchParams();
+  const initialWarehouseId = searchParams.get("warehouseId") ?? "";
+  const [warehouseFilter, setWarehouseFilter] = useState(initialWarehouseId);
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [stockFilter, setStockFilter] = useState<"all" | StockStatus>("all");
+  const [sortBy, setSortBy] = useState<SortOption>("stock_asc");
+  const [pageSize, setPageSize] = useState<PageSizeOption>(10);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [selectedRowIds, setSelectedRowIds] = useState<number[]>([]);
+  const scopedWarehouseId = warehouseFilter ? Number(warehouseFilter) : undefined;
+  const { data, isLoading, isError } = useInventoriesQuery();
   const { data: products } = useProductsQuery();
+  const { data: categories } = useCategoriesQuery();
   const { data: warehouses } = useWarehousesQuery();
   const predictionsQuery = useInventoryDemandPredictions(
     scopedWarehouseId ? { warehouseId: scopedWarehouseId } : undefined,
   );
-  const insightsQuery = useInventoryInsights(scopedWarehouseId);
   const adjustInventory = useAdjustInventoryMutation();
   const [form, setForm] = useState({
     warehouse_id: "",
@@ -56,55 +178,136 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
   const [serverError, setServerError] = useState<string | null>(null);
   const [formTouched, setFormTouched] = useState(false);
 
-  const predictionByProductId = useMemo(
-    () =>
-      new Map(
-        (predictionsQuery.data?.predictions ?? []).map((prediction) => [
-          prediction.product_id,
-          prediction,
-        ]),
-      ),
-    [predictionsQuery.data?.predictions],
-  );
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(searchInput.trim().toLowerCase());
+    }, 300);
 
-  const grouped = useMemo(() => {
-    if (!data) {
-      return [] as Array<{ name: string; items: InventoryRow[] }>;
-    }
+    return () => window.clearTimeout(timeoutId);
+  }, [searchInput]);
 
-    const map = new Map<string, InventoryRow[]>();
-    data.forEach((item) => {
-      const key = item.warehouse.name;
-      const existing = map.get(key) ?? [];
-      const prediction = predictionByProductId.get(item.product.id) ?? null;
-      if (alertFilter !== "all" && prediction?.alert_level !== alertFilter) {
-        return;
+  useEffect(() => {
+    setWarehouseFilter(initialWarehouseId);
+  }, [initialWarehouseId]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [categoryFilter, debouncedSearch, pageSize, sortBy, stockFilter, warehouseFilter]);
+
+  const predictionByKey = useMemo(() => {
+    const map = new Map<string, InventoryDemandPrediction>();
+
+    (predictionsQuery.data?.predictions ?? []).forEach((prediction) => {
+      map.set(
+        getPredictionKey(prediction.product_id, prediction.warehouse_id ?? scopedWarehouseId),
+        prediction,
+      );
+
+      if (prediction.warehouse_id == null) {
+        map.set(getPredictionKey(prediction.product_id), prediction);
       }
-      existing.push({
+    });
+
+    return map;
+  }, [predictionsQuery.data?.predictions, scopedWarehouseId]);
+
+  const allRows = useMemo(() => {
+    if (!data) return [] as InventoryTableRow[];
+
+    return data.map((item) => {
+      const prediction =
+        predictionByKey.get(getPredictionKey(item.product.id, item.warehouse.id)) ??
+        predictionByKey.get(getPredictionKey(item.product.id)) ??
+        null;
+      const effectiveStock = prediction?.stock_left ?? item.quantity;
+      const stockStatus = getStockStatus(item, prediction);
+      const categoryName = item.product.category?.name ?? "Uncategorized";
+      const dailySalesText = prediction
+        ? formatNumber(prediction.predicted_daily_sales, locale, 1)
+        : "Not available";
+
+      return {
         ...item,
         prediction,
-      });
-      map.set(key, existing);
+        effectiveStock,
+        stockStatus,
+        dailySalesText,
+        searchText: `${item.product.name} ${item.product.sku} ${categoryName} ${item.warehouse.name}`.toLowerCase(),
+      };
     });
-    return Array.from(map.entries()).map(([warehouseName, items]) => ({
-      name: warehouseName,
-      items: items.sort((left, right) => {
-        const leftDays = left.prediction?.days_until_stockout ?? 9999;
-        const rightDays = right.prediction?.days_until_stockout ?? 9999;
-        return leftDays - rightDays;
-      }),
-    }));
-  }, [alertFilter, data, predictionByProductId]);
+  }, [data, locale, predictionByKey]);
 
-  const selectedInventoryItem = useMemo(
-    () => data?.find((item) => item.id === selectedInventoryId) ?? null,
-    [data, selectedInventoryId],
+  const summary = useMemo(
+    () => ({
+      urgent: allRows.filter((row) => row.stockStatus === "out").length,
+      low: allRows.filter((row) => row.stockStatus === "low").length,
+      healthy: allRows.filter((row) => row.stockStatus === "in").length,
+    }),
+    [allRows],
   );
 
-  const selectedPrediction =
-    selectedInventoryItem?.product.id
-      ? predictionByProductId.get(selectedInventoryItem.product.id) ?? null
-      : null;
+  const filteredRows = useMemo(() => {
+    const searched = allRows.filter((row) => {
+      if (warehouseFilter && String(row.warehouse.id) !== warehouseFilter) {
+        return false;
+      }
+
+      if (
+        categoryFilter &&
+        String(row.product.category?.id ?? "") !== categoryFilter
+      ) {
+        return false;
+      }
+
+      if (stockFilter !== "all" && row.stockStatus !== stockFilter) {
+        return false;
+      }
+
+      if (debouncedSearch && !row.searchText.includes(debouncedSearch)) {
+        return false;
+      }
+
+      return true;
+    });
+
+    return searched.sort((left, right) => {
+      if (sortBy === "stock_asc" && left.effectiveStock !== right.effectiveStock) {
+        return left.effectiveStock - right.effectiveStock;
+      }
+
+      if (sortBy === "stock_desc" && left.effectiveStock !== right.effectiveStock) {
+        return right.effectiveStock - left.effectiveStock;
+      }
+
+      return left.product.name.localeCompare(right.product.name);
+    });
+  }, [allRows, categoryFilter, debouncedSearch, sortBy, stockFilter, warehouseFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
+  const paginatedRows = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, pageSize, safeCurrentPage]);
+
+  const selectedRows = useMemo(
+    () => filteredRows.filter((row) => selectedRowIds.includes(row.id)),
+    [filteredRows, selectedRowIds],
+  );
+
+  const allVisibleSelected =
+    paginatedRows.length > 0 &&
+    paginatedRows.every((row) => selectedRowIds.includes(row.id));
+
+  const showingFrom = filteredRows.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1;
+  const showingTo = Math.min(safeCurrentPage * pageSize, filteredRows.length);
 
   const parseServerErrors = (error: unknown, fallback: string) => {
     if (axios.isAxiosError(error)) {
@@ -123,14 +326,31 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
     return fallback;
   };
 
-  const validateAll = () => {
-    return (
-      form.warehouse_id &&
-      form.product_id &&
-      !validateNumber(form.change, true) &&
-      form.change.trim() &&
-      Number(form.change) !== 0
+  const validateAll = () =>
+    form.warehouse_id &&
+    form.product_id &&
+    !validateNumber(form.change, true) &&
+    form.change.trim() &&
+    Number(form.change) !== 0;
+
+  const toggleRowSelection = (inventoryId: number) => {
+    setSelectedRowIds((current) =>
+      current.includes(inventoryId)
+        ? current.filter((id) => id !== inventoryId)
+        : [...current, inventoryId],
     );
+  };
+
+  const toggleSelectVisible = () => {
+    setSelectedRowIds((current) => {
+      if (allVisibleSelected) {
+        return current.filter((id) => !paginatedRows.some((row) => row.id === id));
+      }
+
+      const next = new Set(current);
+      paginatedRows.forEach((row) => next.add(row.id));
+      return Array.from(next);
+    });
   };
 
   const handleAdjust = async (event: React.FormEvent) => {
@@ -181,386 +401,518 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
     >
       <div className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-2">
-          <p className="text-sm uppercase tracking-[0.2em] text-gray-500">
+          <p className="text-sm font-medium uppercase tracking-[0.16em] text-gray-500">
             {t("inventory.kicker")}
           </p>
-          <p className="max-w-2xl text-base text-gray-500">
-            {t("inventory.lead")}
-          </p>
+          <p className="max-w-3xl text-sm text-gray-600">{t("inventory.lead")}</p>
         </div>
 
-        <section className="mt-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                {t("inventory.predictions.title")}
-              </p>
-              <p className="mt-1 text-sm text-gray-500">
-                {t("inventory.predictions.description")}
-              </p>
-              <p className="mt-2 text-xs text-gray-500">
-                {predictionsQuery.data?.metadata
-                  ? t("inventory.predictions.metadata", {
-                      date: new Date(
-                        predictionsQuery.data.metadata.generatedAt,
-                      ).toLocaleDateString(locale),
-                      basisDays: predictionsQuery.data.metadata.basisWindowDays,
-                      scope:
-                        predictionsQuery.data.metadata.warehouseScope.mode ===
-                        "warehouse"
-                          ? t("inventory.predictions.warehouseSpecific")
-                          : t("inventory.predictions.allInventory"),
-                    })
-                  : t("inventory.predictions.metadataPending")}
+        <section className="mt-5 rounded-xl border border-gray-200 bg-white">
+          <div className="border-b border-gray-200 px-4 py-4 sm:px-5">
+            <h2 className="text-lg font-semibold text-gray-900">Stock status</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              See what needs restocking first across all products.
+            </p>
+          </div>
+
+          <div className="grid gap-3 px-4 py-4 sm:grid-cols-3 sm:px-5">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-4 text-red-700">
+              <p className="text-sm font-semibold">
+                {summary.urgent} items need urgent restock
               </p>
             </div>
-            <div className="grid gap-3 sm:grid-cols-[minmax(220px,1fr)_auto]">
-              <div className="grid gap-2">
-                <Label htmlFor="inventory-warehouse-scope" className="text-xs text-gray-500">
-                  {t("inventory.predictions.warehouseScope")}
-                </Label>
-                <select
-                  id="inventory-warehouse-scope"
-                  className="h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800"
-                  value={selectedWarehouseId}
-                  onChange={(event) => setSelectedWarehouseId(event.target.value)}
-                >
-                  <option value="">{t("inventory.predictions.allWarehouses")}</option>
-                  {(warehouses ?? []).map((warehouse) => (
-                    <option key={warehouse.id} value={warehouse.id}>
-                      {warehouse.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex flex-wrap items-end gap-2">
-                {([
-                  ["all", t("inventory.predictions.filters.all")],
-                  ["critical", t("inventory.predictions.filters.critical")],
-                  ["warning", t("inventory.predictions.filters.warning")],
-                  ["normal", t("inventory.predictions.filters.normal")],
-                ] as const).map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => setAlertFilter(value)}
-                    className={`rounded-full border px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] transition ${
-                      alertFilter === value
-                        ? "border-indigo-300 bg-indigo-50 text-indigo-700 dark:border-indigo-500/70 dark:bg-indigo-500/10 dark:text-indigo-100"
-                        : "border-gray-200 bg-white text-gray-500 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-amber-700">
+              <p className="text-sm font-semibold">{summary.low} items low stock</p>
+            </div>
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-700">
+              <p className="text-sm font-semibold">{summary.healthy} items healthy</p>
             </div>
           </div>
         </section>
 
-        <SmartInventoryInsights
-          data={insightsQuery.data}
-          isLoading={insightsQuery.isLoading}
-          isError={insightsQuery.isError}
-        />
+        <section className="mt-5 rounded-xl border border-gray-200 bg-white">
+          <div className="border-b border-gray-200 px-4 py-4 sm:px-5">
+            <div className="flex flex-col gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">All Inventory</h2>
+                <p className="mt-1 text-sm text-gray-600">
+                  Search products, check stock status, and restock quickly.
+                </p>
+              </div>
 
-        <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">
-            <h2 className="text-lg font-semibold">{t("inventory.adjustTitle")}</h2>
-            <p className="text-sm text-gray-500">
-              {t("inventory.adjustDescription")}
-            </p>
-            <form
-              className="mt-4 grid gap-4"
-              onSubmit={handleAdjust}
-              noValidate
-            >
-              <div className="grid gap-2">
-                <Label
-                  htmlFor="warehouse_select"
-                  className="text-xs text-gray-500"
-                >
-                  {t("inventory.fields.warehouse")}
-                </Label>
+              <div className="grid gap-3 lg:grid-cols-[minmax(240px,1.2fr)_repeat(4,minmax(0,0.7fr))]">
+                <Input
+                  value={searchInput}
+                  onChange={(event) => setSearchInput(event.target.value)}
+                  placeholder="Search product or SKU"
+                  className="h-10 rounded-md border-gray-300"
+                />
+
                 <select
-                  id="warehouse_select"
-                  className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800"
-                  value={form.warehouse_id}
-                  onChange={(event) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      warehouse_id: event.target.value,
-                    }));
-                    setServerError(null);
-                  }}
-                  aria-invalid={formTouched && !form.warehouse_id}
-                  aria-describedby={
-                    formTouched && !form.warehouse_id
-                      ? "warehouse_select-error"
-                      : undefined
-                  }
+                  value={categoryFilter}
+                  onChange={(event) => setCategoryFilter(event.target.value)}
+                  className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
                 >
-                  <option value="">{t("inventory.selectWarehouse")}</option>
+                  <option value="">All categories</option>
+                  {(categories ?? []).map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={warehouseFilter}
+                  onChange={(event) => setWarehouseFilter(event.target.value)}
+                  className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                >
+                  <option value="">All warehouses</option>
                   {(warehouses ?? []).map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name}
                     </option>
                   ))}
                 </select>
-                {formTouched && !form.warehouse_id && (
-                  <span
-                    id="warehouse_select-error"
-                    className="text-xs text-destructive block"
-                    role="alert"
-                  >
-                    {t("common.selectOption")}
-                  </span>
-                )}
-              </div>
-              <div className="grid gap-2">
-                <Label
-                  htmlFor="product_select"
-                  className="text-xs text-gray-500"
-                >
-                  {t("inventory.fields.product")}
-                </Label>
+
                 <select
-                  id="product_select"
-                  className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800"
-                  value={form.product_id}
-                  onChange={(event) => {
-                    setForm((prev) => ({
-                      ...prev,
-                      product_id: event.target.value,
-                    }));
-                    setServerError(null);
-                  }}
-                  aria-invalid={formTouched && !form.product_id}
-                  aria-describedby={
-                    formTouched && !form.product_id
-                      ? "product_select-error"
-                      : undefined
-                  }
-                >
-                  <option value="">{t("inventory.selectProduct")}</option>
-                  {(products ?? []).map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.name} - {product.sku}
-                    </option>
-                  ))}
-                </select>
-                {formTouched && !form.product_id && (
-                  <span
-                    id="product_select-error"
-                    className="text-xs text-destructive block"
-                    role="alert"
-                  >
-                    {t("common.selectOption")}
-                  </span>
-                )}
-              </div>
-              <ValidationField
-                id="change"
-                label={t("inventory.fields.quantityChange")}
-                type="number"
-                value={form.change}
-                onChange={(value) => {
-                  setForm((prev) => ({ ...prev, change: value }));
-                  setServerError(null);
-                }}
-                validate={(value) => {
-                  if (!value.trim()) return t("validation.required");
-                  if (isNaN(Number(value))) return t("validation.validNumber");
-                  if (Number(value) === 0) {
-                    return t("inventory.nonZeroQuantity");
-                  }
-                  return "";
-                }}
-                required
-                placeholder={t("inventory.placeholders.quantityChange")}
-                success
-              />
-              <div className="grid gap-2">
-                <Label htmlFor="reason" className="text-xs text-gray-500">
-                  {t("inventory.fields.reason")}
-                </Label>
-                <select
-                  id="reason"
-                  className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm shadow-sm dark:border-gray-700 dark:bg-gray-800"
-                  value={form.reason}
+                  value={stockFilter}
                   onChange={(event) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      reason: event.target.value,
-                    }))
+                    setStockFilter(event.target.value as "all" | StockStatus)
                   }
+                  className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
                 >
-                  <option value="ADJUSTMENT">
-                    {t("inventory.reasons.ADJUSTMENT")}
-                  </option>
-                  <option value="PURCHASE">
-                    {t("inventory.reasons.PURCHASE")}
-                  </option>
-                  <option value="SALE">{t("inventory.reasons.SALE")}</option>
-                  <option value="RETURN">
-                    {t("inventory.reasons.RETURN")}
-                  </option>
-                  <option value="DAMAGE">
-                    {t("inventory.reasons.DAMAGE")}
-                  </option>
+                  <option value="all">All status</option>
+                  <option value="in">In Stock</option>
+                  <option value="low">Low Stock</option>
+                  <option value="out">Out of Stock</option>
+                </select>
+
+                <select
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as SortOption)}
+                  className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                >
+                  <option value="stock_asc">Stock: Low to High</option>
+                  <option value="stock_desc">Stock: High to Low</option>
+                  <option value="name_asc">Name: A to Z</option>
                 </select>
               </div>
-              <div className="grid gap-2">
-                <Label htmlFor="note" className="text-xs text-gray-500">
-                  {t("inventory.fields.note")}
-                </Label>
-                <Input
-                  id="note"
-                  value={form.note}
-                  onChange={(event) =>
-                    setForm((prev) => ({ ...prev, note: event.target.value }))
-                  }
-                  placeholder={t("inventory.placeholders.note")}
-                  className="h-10 rounded-xl border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
-                />
-              </div>
-              <Button
-                type="submit"
-                variant="primary"
-                disabled={
-                  adjustInventory.isPending || (formTouched && !validateAll())
-                }
-                aria-disabled={
-                  adjustInventory.isPending || (formTouched && !validateAll())
-                }
-              >
-                {t("inventory.applyAdjustment")}
-              </Button>
-              {(adjustInventory.isError || serverError) && (
-                <p className="text-sm text-destructive">
-                  {serverError ?? t("inventory.updateError")}
-                </p>
-              )}
-            </form>
+            </div>
           </div>
 
-          <div className="grid gap-4">
-            {isLoading && (
-              <p className="text-sm text-gray-500">{t("inventory.loading")}</p>
-            )}
-            {predictionsQuery.isLoading && !isLoading && (
-              <p className="text-sm text-gray-500">
-                {t("inventory.predictions.loading")}
-              </p>
-            )}
-            {isError && (
-              <p className="text-sm text-destructive">
-                {t("inventory.loadError")}
-              </p>
-            )}
-            {predictionsQuery.isError && (
-              <p className="text-sm text-destructive">
-                {t("inventory.predictions.loadError")}
-              </p>
-            )}
-            {!isLoading && !isError && grouped.length === 0 && (
-              <p className="text-sm text-gray-500">{t("inventory.empty")}</p>
-            )}
-            {!isLoading && !isError && grouped.length > 0 && (
-              <div className="grid gap-4">
-                {grouped.map((group) => (
-                  <div
-                    key={group.name}
-                    className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800"
-                  >
-                    <h2 className="text-lg font-semibold">{group.name}</h2>
-                    <div className="mt-4 hidden grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,0.9fr))_auto] gap-3 px-4 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-500 lg:grid">
-                      <span>{t("inventory.predictions.columns.product")}</span>
-                      <span>{t("inventory.predictions.columns.stockLeft")}</span>
-                      <span>{t("inventory.predictions.columns.dailySales")}</span>
-                      <span>{t("inventory.predictions.columns.daysToStockout")}</span>
-                      <span>{t("inventory.predictions.columns.reorderQty")}</span>
-                      <span>{t("inventory.predictions.columns.action")}</span>
-                    </div>
-                    <div className="mt-4 grid gap-3">
-                      {group.items?.map((item) => (
-                        <div
-                          key={item.id}
-                          className="grid gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-4 transition-colors hover:bg-indigo-50/60 dark:border-gray-700 dark:bg-gray-900 dark:hover:bg-indigo-500/10 lg:grid-cols-[minmax(0,1.5fr)_repeat(4,minmax(0,0.9fr))_auto]"
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setSelectedInventoryId(item.id)}
-                            className="text-left"
-                          >
-                            <p className="text-base font-semibold">
-                              {item.product.name} - {item.product.sku}
+          <div className="flex flex-col gap-3 border-b border-gray-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-gray-300"
+                  checked={allVisibleSelected}
+                  onChange={toggleSelectVisible}
+                  aria-label="Select visible products"
+                />
+                <span>Select page</span>
+              </label>
+              <span>
+                Showing {showingFrom}-{showingTo} of {filteredRows.length}
+              </span>
+              {selectedRows.length > 0 ? <span>{selectedRows.length} selected</span> : null}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                value={pageSize}
+                onChange={(event) => setPageSize(Number(event.target.value) as PageSizeOption)}
+                className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+              >
+                <option value={10}>10 / page</option>
+                <option value={25}>25 / page</option>
+                <option value={50}>50 / page</option>
+              </select>
+
+              {selectedRows.length > 0 ? (
+                <Button asChild type="button" className="h-10 rounded-md px-4">
+                  <Link href={buildBulkPurchaseHref(selectedRows)}>Restock Selected</Link>
+                </Button>
+              ) : (
+                <Button type="button" className="h-10 rounded-md px-4" disabled>
+                  Restock Selected
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="px-4 py-5 text-sm text-gray-600 sm:px-5">
+              {t("inventory.loading")}
+            </div>
+          ) : null}
+
+          {predictionsQuery.isLoading && !isLoading ? (
+            <div className="px-4 py-5 text-sm text-gray-600 sm:px-5">
+              {t("inventory.predictions.loading")}
+            </div>
+          ) : null}
+
+          {isError ? (
+            <div className="px-4 py-5 text-sm text-destructive sm:px-5">
+              {t("inventory.loadError")}
+            </div>
+          ) : null}
+
+          {predictionsQuery.isError ? (
+            <div className="px-4 py-5 text-sm text-destructive sm:px-5">
+              {t("inventory.predictions.loadError")}
+            </div>
+          ) : null}
+
+          {!isLoading && !isError && filteredRows.length === 0 ? (
+            <div className="px-4 py-8 text-sm text-gray-600 sm:px-5">
+              {allRows.length === 0
+                ? t("inventory.empty")
+                : "No products match your filters."}
+            </div>
+          ) : null}
+
+          {!isLoading && !isError && filteredRows.length > 0 && summary.urgent + summary.low === 0 ? (
+            <div className="border-b border-gray-200 px-4 py-4 sm:px-5">
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
+                All stock levels are healthy
+              </div>
+            </div>
+          ) : null}
+
+          {!isLoading && !isError && paginatedRows.length > 0 ? (
+            <>
+              <div className="hidden md:block">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full table-fixed">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50 text-left">
+                        <th className="w-12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          <span className="sr-only">Select</span>
+                        </th>
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          Product Name
+                        </th>
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          SKU
+                        </th>
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          Category
+                        </th>
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          Warehouse
+                        </th>
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          Stock
+                        </th>
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          Daily Sales
+                        </th>
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          Status
+                        </th>
+                        <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
+                          Action
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paginatedRows.map((row) => (
+                        <tr key={row.id} className="border-b border-gray-200 align-top">
+                          <td className="px-5 py-4">
+                            <input
+                              type="checkbox"
+                              className="mt-1 h-4 w-4 rounded border-gray-300"
+                              checked={selectedRowIds.includes(row.id)}
+                              onChange={() => toggleRowSelection(row.id)}
+                              aria-label={`Select ${row.product.name}`}
+                            />
+                          </td>
+                          <td className="px-5 py-4">
+                            <p className="line-clamp-2 max-w-[18rem] text-sm font-semibold text-gray-900">
+                              {row.product.name}
                             </p>
-                            <p className="text-xs text-gray-500">
-                              {t("inventory.reorderAt", {
-                                level: item.product.reorder_level,
-                              })}
-                            </p>
-                          </button>
-                          <div className="text-sm text-gray-500">
-                            {item.prediction?.stock_left ?? item.quantity}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {item.prediction
-                              ? item.prediction.predicted_daily_sales.toFixed(1)
-                              : t("inventory.predictions.notAvailable")}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {item.prediction
-                              ? item.prediction.days_until_stockout >= 999
-                                ? t("inventory.predictions.notProjected")
-                                : item.prediction.days_until_stockout
-                              : t("inventory.predictions.notAvailable")}
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {item.prediction
-                              ? item.prediction.recommended_reorder_quantity
-                              : t("inventory.predictions.notAvailable")}
-                          </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => setSelectedInventoryId(item.id)}
+                          </td>
+                          <td className="px-5 py-4 text-sm text-gray-700">
+                            {row.product.sku || "Not assigned"}
+                          </td>
+                          <td className="px-5 py-4 text-sm text-gray-700">
+                            {row.product.category?.name ?? "Uncategorized"}
+                          </td>
+                          <td className="px-5 py-4 text-sm text-gray-700">
+                            {row.warehouse.name}
+                          </td>
+                          <td className="px-5 py-4 text-sm text-gray-700">
+                            <span className={`font-semibold ${STOCK_STATUS_META[row.stockStatus].emphasisClass}`}>
+                              {formatNumber(row.effectiveStock, locale)}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4 text-sm text-gray-700">
+                            {row.dailySalesText}
+                          </td>
+                          <td className="px-5 py-4">
+                            <span
+                              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STOCK_STATUS_META[row.stockStatus].badgeClass}`}
                             >
-                              {t("inventory.predictions.viewInsight")}
+                              {STOCK_STATUS_META[row.stockStatus].label}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <Button asChild type="button" className="h-10 rounded-md px-4">
+                              <Link href={buildPurchaseHref(row)}>Restock Now</Link>
                             </Button>
-                            {item.prediction ? (
-                              <Button asChild type="button" variant="outline">
-                                <Link
-                                  href={`/purchases?productId=${item.product.id}&warehouseId=${item.warehouse.id}&quantity=${item.prediction.recommended_reorder_quantity}&unitCost=${item.prediction.unit_cost}&productLabel=${encodeURIComponent(`${item.product.name} - ${item.product.sku}`)}`}
-                                >
-                                  {t("inventory.predictions.createPurchaseSuggestion")}
-                                </Link>
-                              </Button>
-                            ) : null}
-                          </div>
-                        </div>
+                          </td>
+                        </tr>
                       ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="grid gap-3 p-4 md:hidden">
+                {paginatedRows.map((row) => (
+                  <div key={row.id} className="rounded-lg border border-gray-200 bg-white p-4">
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-gray-300"
+                        checked={selectedRowIds.includes(row.id)}
+                        onChange={() => toggleRowSelection(row.id)}
+                        aria-label={`Select ${row.product.name}`}
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <p className="line-clamp-2 text-sm font-semibold text-gray-900">
+                          {row.product.name}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          SKU: {row.product.sku || "Not assigned"}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {row.product.category?.name ?? "Uncategorized"} | {row.warehouse.name}
+                        </p>
+
+                        <div className="mt-4 grid gap-2 text-sm text-gray-700">
+                          <p>
+                            <span className="font-medium">Stock:</span>{" "}
+                            <span className={STOCK_STATUS_META[row.stockStatus].emphasisClass}>
+                              {formatNumber(row.effectiveStock, locale)}
+                            </span>
+                          </p>
+                          <p>
+                            <span className="font-medium">Daily sales:</span>{" "}
+                            {row.dailySalesText}
+                          </p>
+                          <p>
+                            <span className="font-medium">Status:</span>{" "}
+                            {STOCK_STATUS_META[row.stockStatus].label}
+                          </p>
+                        </div>
+
+                        <div className="mt-4">
+                          <Button asChild type="button" className="h-10 rounded-md px-4">
+                            <Link href={buildPurchaseHref(row)}>Restock Now</Link>
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
+
+              <div className="flex flex-col gap-3 border-t border-gray-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                <p className="text-sm text-gray-600">
+                  Page {safeCurrentPage} of {totalPages}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-md"
+                    onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                    disabled={safeCurrentPage <= 1}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-md"
+                    onClick={() =>
+                      setCurrentPage((page) => Math.min(totalPages, page + 1))
+                    }
+                    disabled={safeCurrentPage >= totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : null}
+        </section>
+
+        <section className="mt-5 rounded-xl border border-gray-200 bg-white p-5 sm:p-6">
+          <h2 className="text-lg font-semibold text-gray-900">
+            {t("inventory.adjustTitle")}
+          </h2>
+          <p className="mt-1 text-sm text-gray-600">{t("inventory.adjustDescription")}</p>
+          <form className="mt-5 grid gap-4 lg:grid-cols-2" onSubmit={handleAdjust} noValidate>
+            <div className="grid gap-2">
+              <Label htmlFor="warehouse_select" className="text-xs font-medium text-gray-500">
+                {t("inventory.fields.warehouse")}
+              </Label>
+              <select
+                id="warehouse_select"
+                className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                value={form.warehouse_id}
+                onChange={(event) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    warehouse_id: event.target.value,
+                  }));
+                  setServerError(null);
+                }}
+                aria-invalid={formTouched && !form.warehouse_id}
+                aria-describedby={
+                  formTouched && !form.warehouse_id ? "warehouse_select-error" : undefined
+                }
+              >
+                <option value="">{t("inventory.selectWarehouse")}</option>
+                {(warehouses ?? []).map((warehouse) => (
+                  <option key={warehouse.id} value={warehouse.id}>
+                    {warehouse.name}
+                  </option>
+                ))}
+              </select>
+              {formTouched && !form.warehouse_id ? (
+                <span
+                  id="warehouse_select-error"
+                  className="block text-xs text-destructive"
+                  role="alert"
+                >
+                  {t("common.selectOption")}
+                </span>
+              ) : null}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="product_select" className="text-xs font-medium text-gray-500">
+                {t("inventory.fields.product")}
+              </Label>
+              <select
+                id="product_select"
+                className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                value={form.product_id}
+                onChange={(event) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    product_id: event.target.value,
+                  }));
+                  setServerError(null);
+                }}
+                aria-invalid={formTouched && !form.product_id}
+                aria-describedby={
+                  formTouched && !form.product_id ? "product_select-error" : undefined
+                }
+              >
+                <option value="">{t("inventory.selectProduct")}</option>
+                {(products ?? []).map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name} - {product.sku}
+                  </option>
+                ))}
+              </select>
+              {formTouched && !form.product_id ? (
+                <span
+                  id="product_select-error"
+                  className="block text-xs text-destructive"
+                  role="alert"
+                >
+                  {t("common.selectOption")}
+                </span>
+              ) : null}
+            </div>
+
+            <ValidationField
+              id="change"
+              label={t("inventory.fields.quantityChange")}
+              type="number"
+              value={form.change}
+              onChange={(value) => {
+                setForm((prev) => ({ ...prev, change: value }));
+                setServerError(null);
+              }}
+              validate={(value) => {
+                if (!value.trim()) return t("validation.required");
+                if (Number.isNaN(Number(value))) return t("validation.validNumber");
+                if (Number(value) === 0) return t("inventory.nonZeroQuantity");
+                return "";
+              }}
+              required
+              placeholder={t("inventory.placeholders.quantityChange")}
+              success
+            />
+
+            <div className="grid gap-2">
+              <Label htmlFor="reason" className="text-xs font-medium text-gray-500">
+                {t("inventory.fields.reason")}
+              </Label>
+              <select
+                id="reason"
+                className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
+                value={form.reason}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    reason: event.target.value,
+                  }))
+                }
+              >
+                <option value="ADJUSTMENT">{t("inventory.reasons.ADJUSTMENT")}</option>
+                <option value="PURCHASE">{t("inventory.reasons.PURCHASE")}</option>
+                <option value="SALE">{t("inventory.reasons.SALE")}</option>
+                <option value="RETURN">{t("inventory.reasons.RETURN")}</option>
+                <option value="DAMAGE">{t("inventory.reasons.DAMAGE")}</option>
+              </select>
+            </div>
+
+            <div className="grid gap-2 lg:col-span-2">
+              <Label htmlFor="note" className="text-xs font-medium text-gray-500">
+                {t("inventory.fields.note")}
+              </Label>
+              <Input
+                id="note"
+                value={form.note}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, note: event.target.value }))
+                }
+                placeholder={t("inventory.placeholders.note")}
+                className="h-10 rounded-md border-gray-300 bg-white"
+              />
+            </div>
+
+            <div className="lg:col-span-2">
+              <Button
+                type="submit"
+                variant="primary"
+                disabled={adjustInventory.isPending || (formTouched && !validateAll())}
+                aria-disabled={
+                  adjustInventory.isPending || (formTouched && !validateAll())
+                }
+                className="h-10 rounded-md px-5"
+              >
+                {t("inventory.applyAdjustment")}
+              </Button>
+              {(adjustInventory.isError || serverError) && (
+                <p className="mt-3 text-sm text-destructive">
+                  {serverError ?? t("inventory.updateError")}
+                </p>
+              )}
+            </div>
+          </form>
         </section>
       </div>
-      <InventoryPredictionDrawer
-        open={selectedInventoryId !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedInventoryId(null);
-          }
-        }}
-        inventoryItem={selectedInventoryItem}
-        prediction={selectedPrediction}
-        metadata={predictionsQuery.data?.metadata ?? null}
-      />
     </DashboardLayout>
   );
 };
