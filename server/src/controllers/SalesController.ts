@@ -14,6 +14,11 @@ import {
 } from "../validations/apiValidations.js";
 import { computePaymentState } from "../utils/paymentCalculations.js";
 import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
+import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
+import {
+  applyBillingSaleInventoryAdjustments,
+  resolveBillingWarehouse,
+} from "../services/billingInventorySync.service.js";
 import {
   canWorkerPerformBillingAction,
   getWorkerAccessRole,
@@ -97,65 +102,17 @@ class SalesController {
       }
     }
 
-    if (body.warehouse_id) {
-      const warehouse = await prisma.warehouse.findFirst({
-        where: { id: body.warehouse_id, user_id: userId },
-      });
-
-      if (!warehouse) {
-        return sendResponse(res, 404, { message: "Warehouse not found" });
-      }
-    }
-
     const productIds = body.items.map((item: SaleItemInput) => item.product_id);
 
     const products = await prisma.product.findMany({
       where: { id: { in: productIds }, user_id: userId },
     });
 
-    const inventories = body.warehouse_id
-      ? await prisma.inventory.findMany({
-          where: {
-            warehouse_id: body.warehouse_id,
-            product_id: { in: productIds },
-          },
-        })
-      : [];
-
-    const inventoryMap = new Map(
-      inventories.map((inventory) => [inventory.product_id, inventory]),
-    );
-
     if (products.length !== productIds.length) {
       return sendResponse(res, 404, { message: "Product not found" });
     }
 
     const productMap = new Map(products.map((p) => [p.id, p]));
-
-    for (const item of body.items) {
-      const product = productMap.get(item.product_id);
-      if (!product) {
-        return sendResponse(res, 404, { message: "Product not found" });
-      }
-
-      if (body.warehouse_id) {
-        const inventory = inventoryMap.get(item.product_id);
-        if (!inventory || inventory.quantity < item.quantity) {
-          return sendResponse(res, 409, {
-            message: "Insufficient stock",
-            errors: { product_id: item.product_id },
-          });
-        }
-        continue;
-      }
-
-      if (product.stock_on_hand < item.quantity) {
-        return sendResponse(res, 409, {
-          message: "Insufficient stock",
-          errors: { product_id: item.product_id },
-        });
-      }
-    }
 
     let subtotal = 0;
     let tax = 0;
@@ -199,6 +156,7 @@ class SalesController {
     });
 
     const sale = await prisma.$transaction(async (tx) => {
+      const warehouse = await resolveBillingWarehouse(tx, userId, body.warehouse_id);
       const created = await tx.sale.create({
         data: {
           user_id: userId,
@@ -214,41 +172,27 @@ class SalesController {
           paymentStatus: paymentState.paymentStatus,
           paymentDate: paymentState.paymentDate,
           paymentMethod: paymentState.paymentMethod,
-          notes: body.notes,
+          notes: body.notes
+            ? `${body.notes} (Warehouse ${warehouse.id})`
+            : `Warehouse ${warehouse.id}`,
           items: { create: items },
         },
         include: { items: true, customer: true },
       });
 
-      for (const item of items) {
-        await tx.product.update({
-          where: { id: item.product_id },
-          data: { stock_on_hand: { decrement: item.quantity } },
-        });
-
-        if (body.warehouse_id) {
-          await tx.inventory.update({
-            where: {
-              warehouse_id_product_id: {
-                warehouse_id: body.warehouse_id,
-                product_id: item.product_id,
-              },
-            },
-            data: { quantity: { decrement: item.quantity } },
-          });
-        }
-
-        await tx.stockMovement.create({
-          data: {
-            product_id: item.product_id,
-            change: -item.quantity,
-            reason: StockReason.SALE,
-            note: body.warehouse_id
-              ? `Sale ${created.id} (Warehouse ${body.warehouse_id})`
-              : `Sale ${created.id}`,
-          },
-        });
-      }
+      await applyBillingSaleInventoryAdjustments({
+        tx,
+        warehouseId: warehouse.id,
+        items: items.map((item) => ({
+          product_id: item.product_id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.unit_price,
+          tax_rate: item.tax_rate ?? undefined,
+        })),
+        referenceId: created.id,
+        referenceType: "sale",
+      });
 
       return created;
     });
@@ -271,6 +215,7 @@ class SalesController {
       }
     }
 
+    invalidateInventoryInsightsCacheByUser(userId);
     emitDashboardUpdate({ userId, source: "sale.create" });
     return sendResponse(res, 201, {
       message: "Sale recorded",
@@ -351,6 +296,7 @@ class SalesController {
       },
     });
 
+    invalidateInventoryInsightsCacheByUser(userId);
     emitDashboardUpdate({ userId, source: "sale.update" });
     return sendResponse(res, 200, { message: "Sale updated" });
   }
@@ -399,6 +345,7 @@ class SalesController {
       await tx.sale.delete({ where: { id: sale.id } });
     });
 
+    invalidateInventoryInsightsCacheByUser(userId);
     emitDashboardUpdate({ userId, source: "sale.delete" });
     return sendResponse(res, 200, { message: "Sale deleted" });
   }

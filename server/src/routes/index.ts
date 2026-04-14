@@ -25,6 +25,8 @@ import LogoController from "../controllers/LogoController.js";
 import WorkersController from "../controllers/WorkersController.js";
 import SubscriptionController from "../controllers/SubscriptionController.js";
 import SettingsController from "../controllers/SettingsController.js";
+import NotificationsController from "../controllers/NotificationsController.js";
+import InventoryInsightsController from "../controllers/InventoryInsightsController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
 import AdminAuthMiddleware from "../middlewares/AdminAuthMiddleware.js";
 import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
@@ -45,6 +47,7 @@ import {
   accessUpiSubmitSchema,
   adminAccessPaymentVerifySchema,
   idParamSchema,
+  stringIdParamSchema,
   invoiceIdParamSchema,
   pincodeLookupParamSchema,
   publicInvoiceParamSchema,
@@ -616,6 +619,11 @@ router.post(
   validate({ body: inventoryAdjustSchema }),
   InventoriesController.adjust,
 );
+router.get(
+  "/inventories/insights",
+  AuthMiddleware,
+  InventoryInsightsController.index,
+);
 
 // Invoices
 router.use("/invoices", invoiceRoutes);
@@ -731,6 +739,18 @@ router.put(
   AuthMiddleware,
   validate({ body: settingsPreferencesUpsertSchema }),
   SettingsController.savePreferences,
+);
+router.get("/notifications", AuthMiddleware, NotificationsController.index);
+router.post(
+  "/notifications/read-all",
+  AuthMiddleware,
+  NotificationsController.markAllRead,
+);
+router.post(
+  "/notifications/:id/read",
+  AuthMiddleware,
+  validate({ params: stringIdParamSchema }),
+  NotificationsController.markRead,
 );
 router.get(
   "/security/activity",

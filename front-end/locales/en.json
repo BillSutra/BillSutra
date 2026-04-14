@@ -19,6 +19,7 @@
     "typeToSearchProducts": "Type to search products",
     "noProductsFound": "No matching products found",
     "language": "Language",
+    "switchLanguage": "Switch Language",
     "english": "English",
     "hindi": "Hindi",
     "looksGood": "Looks good",
@@ -603,6 +604,16 @@
     "openSidebar": "Open sidebar",
     "searchPlaceholder": "Search invoices, customers, products...",
     "notifications": "Notifications"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "unreadCount": "{count} unread",
+    "allCaughtUp": "You are all caught up.",
+    "markAllRead": "Mark all as read",
+    "viewAll": "View all notifications",
+    "empty": "No notifications yet.",
+    "pageTitle": "Notifications",
+    "pageSubtitle": "Recent business alerts, reminders, and team activity in one place."
   },
   "themeToggle": {
     "toggleTheme": "Toggle theme",

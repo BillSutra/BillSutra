@@ -14,6 +14,7 @@ export type InvoiceValidationResult = {
 export const useInvoiceValidation = (
   form: InvoiceFormState,
   items: InvoiceItemForm[],
+  totalAmount: number,
 ) => {
   const { language, t } = useI18n();
 
@@ -29,6 +30,14 @@ export const useInvoiceValidation = (
             quantitySummary: "हर प्रोडक्ट की मात्रा सही रखें।",
             priceSummary: "हर प्रोडक्ट की सही कीमत भरें।",
             taxSummary: "जहां टैक्स हो, वहां सही टैक्स रेट भरें।",
+            paymentMethodRequired:
+              "Paid या आंशिक भुगतान के लिए भुगतान तरीका चुनें।",
+            partialPaidRequired:
+              "आंशिक भुगतान के लिए 0 से अधिक भुगतान राशि दर्ज करें।",
+            partialPaidTooHigh:
+              "आंशिक भुगतान राशि कुल से कम होनी चाहिए।",
+            totalRequired:
+              "भुगतान स्थिति चुनने से पहले कम से कम एक सही आइटम जोड़ें।",
           }
         : {
             chooseCustomer:
@@ -41,24 +50,35 @@ export const useInvoiceValidation = (
             quantitySummary: "Please check the quantity for each product.",
             priceSummary: "Please enter a valid price for each product.",
             taxSummary: "Please enter a valid tax rate wherever tax is used.",
+            paymentMethodRequired:
+              "Payment method is required for paid or partial invoices.",
+            partialPaidRequired:
+              "Enter a paid amount greater than 0 for partial invoices.",
+            partialPaidTooHigh:
+              "Partial paid amount must be less than total.",
+            totalRequired:
+              "Add at least one valid line item before recording payment.",
           };
+    const normalizedTotal = Math.max(0, Number(totalAmount) || 0);
     const errors: InvoiceItemError[] = items.map(() => ({}));
     const summary: string[] = [];
     let missingCustomer = false;
     let missingProduct = false;
-    let missingWarehouse = false;
     let invalidQuantity = false;
     let invalidPrice = false;
     let invalidTax = false;
+    let missingPaymentMethod = false;
+    let invalidPartialPaidAmount = false;
+    let invalidPartialPaidTooHigh = false;
+    let invalidPaymentWithoutTotal = false;
+
+    const paymentStatus = form.payment_status;
+    const requiresPaymentDetails =
+      paymentStatus === "PAID" || paymentStatus === "PARTIALLY_PAID";
 
     if (!form.customer_id) {
       missingCustomer = true;
       summary.push(copy.chooseCustomer);
-    }
-
-    if (form.sync_sales && !form.warehouse_id) {
-      missingWarehouse = true;
-      summary.push(copy.chooseWarehouse);
     }
 
     if (items.length === 0) {
@@ -66,12 +86,9 @@ export const useInvoiceValidation = (
     }
 
     items.forEach((item, index) => {
-      if (!item.product_id) {
-        errors[index].product_id = t("validation.invoiceSelectProduct");
-        missingProduct = true;
-      }
       if (!item.name.trim()) {
         errors[index].name = t("validation.invoiceEnterItemName");
+        missingProduct = true;
       }
 
       const quantity = Number(item.quantity);
@@ -95,21 +112,44 @@ export const useInvoiceValidation = (
       }
     });
 
+    if (requiresPaymentDetails && normalizedTotal <= 0) {
+      invalidPaymentWithoutTotal = true;
+      summary.push(copy.totalRequired);
+    }
+
+    if (requiresPaymentDetails && !form.payment_method) {
+      missingPaymentMethod = true;
+      summary.push(copy.paymentMethodRequired);
+    }
+
+    if (paymentStatus === "PARTIALLY_PAID") {
+      const paidAmount = Number(form.amount_paid);
+      if (!Number.isFinite(paidAmount) || paidAmount <= 0) {
+        invalidPartialPaidAmount = true;
+        summary.push(copy.partialPaidRequired);
+      } else if (normalizedTotal > 0 && paidAmount >= normalizedTotal) {
+        invalidPartialPaidTooHigh = true;
+        summary.push(copy.partialPaidTooHigh);
+      }
+    }
+
     if (
       missingCustomer ||
       missingProduct ||
-      missingWarehouse ||
       invalidQuantity ||
       invalidPrice ||
-      invalidTax
+      invalidTax ||
+      missingPaymentMethod ||
+      invalidPartialPaidAmount ||
+      invalidPartialPaidTooHigh ||
+      invalidPaymentWithoutTotal
     ) {
       if (missingProduct) summary.push(copy.chooseProduct);
-      if (missingWarehouse) summary.push(copy.warehouseSummary);
       if (invalidQuantity) summary.push(copy.quantitySummary);
       if (invalidPrice) summary.push(copy.priceSummary);
       if (invalidTax) summary.push(copy.taxSummary);
     }
 
     return { errors, summary };
-  }, [form, items, language, t]);
+  }, [form, items, language, t, totalAmount]);
 };

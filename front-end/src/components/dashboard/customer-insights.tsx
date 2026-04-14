@@ -154,7 +154,7 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                 </p>
               ) : (
                 <div className="mt-3 grid gap-2">
-                  {data.topCustomers.map((customer) => {
+                  {data.topCustomers.map((customer, index) => {
                     let clvData: CustomerClvEntry | null = null;
                     let segment: "PREMIUM" | "REGULAR" | "NEW_LOW" = "NEW_LOW";
 
@@ -179,9 +179,14 @@ const CustomerInsights = ({ className }: { className?: string }) => {
                       clvData = newLow;
                     }
 
+                    const customerKey =
+                      clvData?.customerId != null
+                        ? `customer-${clvData.customerId}-${index}`
+                        : `customer-${customer.name}-${index}`;
+
                     return (
                       <div
-                        key={customer.name}
+                        key={customerKey}
                         className="flex items-start justify-between rounded-2xl border border-[#f2e6dc] bg-white/90 px-4 py-3 text-sm shadow-[0_14px_30px_-24px_rgba(31,27,22,0.28)]"
                       >
                         <div className="flex-1">

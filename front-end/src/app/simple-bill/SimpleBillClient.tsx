@@ -16,15 +16,17 @@ import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRendere
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import Modal from "@/components/ui/modal";
 import {
+  useCustomerSearchQuery,
   useCreateCustomerMutation,
   useCreateInvoiceMutation,
-  useCustomersQuery,
   useProductsQuery,
 } from "@/hooks/useInventoryQueries";
 import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import {
   fetchBusinessProfile,
+  fetchCustomers,
   type BusinessProfileRecord,
   type Customer,
   type Invoice,
@@ -35,13 +37,12 @@ import {
   formatBusinessAddressFromRecord,
   formatCustomerAddressFromRecord,
 } from "@/lib/indianAddress";
-import { useInvoiceTotals } from "@/hooks/invoice/useInvoiceTotals";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   DiscountType,
-  InvoiceFormState,
   InvoiceItemForm,
+  InvoiceTotals,
   TaxMode,
 } from "@/types/invoice";
 import type {
@@ -67,13 +68,18 @@ type SimpleBillItem = {
 };
 
 type PaymentChoice = "CASH" | "UPI" | "ONLINE";
+type SimplePaymentStatus = "UNPAID" | "PARTIALLY_PAID" | "PAID";
 type InvoicePaymentMethod = "CASH" | "UPI" | "BANK_TRANSFER";
 type DiscountMode = "AMOUNT" | "PERCENT";
 
 type SavedSimpleBill = {
   customerId?: number;
   customerName?: string;
-  payment: PaymentChoice;
+  selectedCustomer?: Customer | null;
+  paymentMethod: PaymentChoice;
+  paymentStatus: SimplePaymentStatus;
+  paidAmount: number;
+  paymentDate: string;
   discount: string;
   discountMode: DiscountMode;
   gstEnabled: boolean;
@@ -85,9 +91,27 @@ type SimpleBillDraft = SavedSimpleBill & {
   invoiceDate: string;
   customerSearch: string;
   selectedCustomerId: number | null;
+  selectedCustomer?: Customer | null;
   addingCustomer: boolean;
   newCustomerName: string;
   newCustomerPhone: string;
+  newCustomerEmail?: string;
+};
+
+type BillState = {
+  customer: Customer | null;
+  items: SimpleBillItem[];
+  totalAmount: number;
+  paymentStatus: SimplePaymentStatus;
+  paidAmount: number;
+  dueAmount: number;
+  paymentMethod: PaymentChoice;
+  paymentDate: string;
+  discount: string;
+  discountMode: DiscountMode;
+  gstEnabled: boolean;
+  notes: string;
+  invoiceDate: string;
 };
 
 const LAST_CUSTOMER_KEY = "billsutra.simple-bill.last-customer";
@@ -123,6 +147,22 @@ const createItem = (id?: string): SimpleBillItem => ({
   price: "",
 });
 
+const createInitialBillState = (invoiceDate: string): BillState => ({
+  customer: null,
+  items: [createItem(INITIAL_ITEM_ID)],
+  totalAmount: 0,
+  paymentStatus: "PAID",
+  paidAmount: 0,
+  dueAmount: 0,
+  paymentMethod: "CASH",
+  paymentDate: invoiceDate || todayInputValue(),
+  discount: "",
+  discountMode: "AMOUNT",
+  gstEnabled: false,
+  notes: "",
+  invoiceDate,
+});
+
 const toAmount = (value: string) => {
   const numberValue = Number(value);
   return Number.isFinite(numberValue) ? Math.max(0, numberValue) : 0;
@@ -147,9 +187,11 @@ const customerLabel = (customer: Customer) =>
       ? customer.businessName || customer.name
       : customer.name;
 
-const paymentMethod = (payment: PaymentChoice): InvoicePaymentMethod => {
-  if (payment === "UPI") return "UPI";
-  if (payment === "ONLINE") return "BANK_TRANSFER";
+const toInvoicePaymentMethod = (
+  paymentMethod: PaymentChoice,
+): InvoicePaymentMethod => {
+  if (paymentMethod === "UPI") return "UPI";
+  if (paymentMethod === "ONLINE") return "BANK_TRANSFER";
   return "CASH";
 };
 
@@ -164,6 +206,23 @@ const containsText = (value: string | null | undefined, search: string) =>
 
 const normalizeText = (value: string | null | undefined) =>
   value?.trim().toLowerCase() ?? "";
+
+const matchesSelectedCustomerInput = (
+  customer: Customer | null,
+  value: string,
+) => {
+  const normalizedValue = normalizeText(value);
+  if (!customer || !normalizedValue) return false;
+
+  return [
+    customer.name,
+    customer.phone,
+    customer.display_name,
+    customer.businessName,
+    customer.business_name,
+    customerLabel(customer),
+  ].some((entry) => normalizeText(entry) === normalizedValue);
+};
 
 const parseApiErrorMessage = (error: unknown, fallback: string) => {
   if (!axios.isAxiosError(error)) {
@@ -214,11 +273,101 @@ const isInvoiceItemReady = (item: InvoiceItemForm) =>
     item.name.trim() && Number(item.quantity) > 0 && Number(item.price) > 0,
   );
 
+const round2 = (value: number) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
+
+const calculateInvoiceTotals = (
+  items: InvoiceItemForm[],
+  discountValue: string | number,
+  discountType: DiscountType,
+  taxMode: TaxMode,
+): InvoiceTotals => {
+  let subtotal = 0;
+  let tax = 0;
+  let cgst = 0;
+  let sgst = 0;
+  let igst = 0;
+
+  items.forEach((item) => {
+    const quantity = Number(item.quantity) || 0;
+    const price = Number(item.price) || 0;
+    const taxRate = Number(item.tax_rate) || 0;
+    const lineSubtotal = quantity * price;
+    const lineTax = taxMode === "NONE" ? 0 : (lineSubtotal * taxRate) / 100;
+
+    subtotal += lineSubtotal;
+    tax += lineTax;
+
+    if (taxMode === "CGST_SGST") {
+      cgst += lineTax / 2;
+      sgst += lineTax / 2;
+    } else if (taxMode === "IGST") {
+      igst += lineTax;
+    }
+  });
+
+  const normalizedDiscountValue = Math.max(0, Number(discountValue) || 0);
+  const discount =
+    discountType === "PERCENTAGE"
+      ? (subtotal * Math.min(100, normalizedDiscountValue)) / 100
+      : Math.min(subtotal + tax, normalizedDiscountValue);
+  const total = subtotal + tax - discount;
+
+  return {
+    subtotal: round2(subtotal),
+    tax: round2(tax),
+    cgst: round2(cgst),
+    sgst: round2(sgst),
+    igst: round2(igst),
+    discount: round2(discount),
+    total: round2(Math.max(0, total)),
+  };
+};
+
+const normalizeBillState = (billState: BillState): BillState => {
+  const normalizedItems =
+    billState.items.length > 0 ? billState.items : [createItem(INITIAL_ITEM_ID)];
+  const totals = calculateInvoiceTotals(
+    mapSimpleBillItemsToInvoiceItems(normalizedItems, billState.gstEnabled),
+    billState.discount || "0",
+    toDiscountType(billState.discountMode),
+    billState.gstEnabled ? "CGST_SGST" : "NONE",
+  );
+  const normalizedPaidAmount =
+    billState.paymentStatus === "PAID"
+      ? totals.total
+      : billState.paymentStatus === "PARTIALLY_PAID"
+        ? Math.min(Math.max(billState.paidAmount || 0, 0), totals.total)
+        : 0;
+
+  return {
+    ...billState,
+    items: normalizedItems,
+    totalAmount: totals.total,
+    paidAmount: normalizedPaidAmount,
+    dueAmount: Math.max(totals.total - normalizedPaidAmount, 0),
+    paymentMethod: billState.paymentMethod || "CASH",
+    paymentDate:
+      billState.paymentDate || billState.invoiceDate || todayInputValue(),
+  };
+};
+
+const mapPaymentStatusToInvoiceStatus = (status: SimplePaymentStatus) => {
+  if (status === "PAID") return "PAID";
+  if (status === "PARTIALLY_PAID") return "PARTIALLY_PAID";
+  return "SENT";
+};
+
 const mapSimpleBillToInvoice = ({
   customerId,
   invoiceDate,
   discount,
   discountType,
+  paymentStatus,
+  paidAmount,
+  paymentDate,
+  paymentMethod,
+  totalAmount,
   notes,
   items,
 }: {
@@ -226,25 +375,43 @@ const mapSimpleBillToInvoice = ({
   invoiceDate: string;
   discount: string;
   discountType: DiscountType;
+  paymentStatus: SimplePaymentStatus;
+  paidAmount: number;
+  paymentDate: string;
+  paymentMethod: InvoicePaymentMethod;
+  totalAmount: number;
   notes: string;
   items: InvoiceItemForm[];
-}): InvoiceInput => ({
-  customer_id: customerId,
-  date: invoiceDate || todayInputValue(),
-  due_date: invoiceDate || todayInputValue(),
-  discount: Number(discount) || undefined,
-  discount_type: discountType,
-  notes: notes.trim() || undefined,
-  status: "SENT",
-  sync_sales: false,
-  items: items.filter(isInvoiceItemReady).map((item) => ({
-    product_id: item.product_id ? Number(item.product_id) : undefined,
-    name: item.name.trim(),
-    quantity: Number(item.quantity),
-    price: Number(item.price),
-    tax_rate: item.tax_rate ? Number(item.tax_rate) : undefined,
-  })),
-});
+}): InvoiceInput => {
+  const normalizedPaidAmount =
+    paymentStatus === "PAID"
+      ? totalAmount
+      : paymentStatus === "PARTIALLY_PAID"
+        ? Math.max(0, paidAmount)
+        : 0;
+
+  return {
+    customer_id: customerId,
+    date: invoiceDate || todayInputValue(),
+    due_date: invoiceDate || todayInputValue(),
+    discount: Number(discount) || undefined,
+    discount_type: discountType,
+    payment_status: paymentStatus,
+    amount_paid: paymentStatus === "UNPAID" ? undefined : normalizedPaidAmount,
+    payment_method: paymentStatus === "UNPAID" ? undefined : paymentMethod,
+    payment_date: paymentStatus === "UNPAID" ? undefined : paymentDate,
+    notes: notes.trim() || undefined,
+    status: mapPaymentStatusToInvoiceStatus(paymentStatus),
+    sync_sales: true,
+    items: items.filter(isInvoiceItemReady).map((item) => ({
+      product_id: item.product_id ? Number(item.product_id) : undefined,
+      name: item.name.trim(),
+      quantity: Number(item.quantity),
+      price: Number(item.price),
+      tax_rate: item.tax_rate ? Number(item.tax_rate) : undefined,
+    })),
+  };
+};
 
 const buildSimpleBillInvoicePreviewData = ({
   businessProfile,
@@ -258,6 +425,9 @@ const buildSimpleBillInvoicePreviewData = ({
   totals,
   discountType,
   discount,
+  paymentStatus,
+  paidAmount,
+  paymentDate,
   payment,
   notes,
   previewCopy,
@@ -273,18 +443,47 @@ const buildSimpleBillInvoicePreviewData = ({
   totals: NonNullable<InvoicePreviewData["totals"]>;
   discountType: DiscountType;
   discount: string;
+  paymentStatus: SimplePaymentStatus;
+  paidAmount: number;
+  paymentDate: string;
   payment: InvoicePaymentMethod;
   notes: string;
   previewCopy: {
     customerFallback: string;
     discountLabel: string;
-    paymentSelectedSuffix: string;
+    pendingLabel: string;
+    paidLabel: string;
+    partiallyPaidLabel: string;
+    awaitingPayment: string;
     paymentMethodPrefix: string;
     closingNote: string;
     signatureLabel: string;
   };
 }): InvoicePreviewData => {
   const selectedPaymentLabel = paymentLabel(payment);
+  const normalizedPaidAmount =
+    paymentStatus === "PAID"
+      ? totals.total
+      : paymentStatus === "PARTIALLY_PAID"
+        ? Math.min(Math.max(paidAmount, 0), totals.total)
+        : 0;
+  const remainingAmount = Math.max(totals.total - normalizedPaidAmount, 0);
+  const paymentSummaryStatusLabel =
+    paymentStatus === "PAID"
+      ? previewCopy.paidLabel
+      : paymentStatus === "PARTIALLY_PAID"
+        ? previewCopy.partiallyPaidLabel
+        : previewCopy.pendingLabel;
+  const paymentSummaryTone =
+    paymentStatus === "PAID"
+      ? "paid"
+      : paymentStatus === "PARTIALLY_PAID"
+        ? "partial"
+        : "pending";
+  const paymentSummaryNote =
+    paymentStatus === "UNPAID"
+      ? previewCopy.awaitingPayment
+      : `${previewCopy.paymentMethodPrefix}: ${selectedPaymentLabel}`;
 
   return {
     invoiceNumber,
@@ -354,15 +553,28 @@ const buildSimpleBillInvoicePreviewData = ({
           : previewCopy.discountLabel,
     },
     paymentSummary: {
-      statusLabel: `${selectedPaymentLabel} ${previewCopy.paymentSelectedSuffix}`,
-      statusTone: "pending",
-      statusNote: `${previewCopy.paymentMethodPrefix}: ${selectedPaymentLabel}`,
-      paidAmount: 0,
-      remainingAmount: totals.total,
-      history: [],
+      statusLabel: paymentSummaryStatusLabel,
+      statusTone: paymentSummaryTone,
+      statusNote: paymentSummaryNote,
+      paidAmount: normalizedPaidAmount,
+      remainingAmount,
+      history:
+        normalizedPaidAmount > 0
+          ? [
+              {
+                id: "simple-bill-payment",
+                amount: normalizedPaidAmount,
+                paidAt: paymentDate,
+                method: selectedPaymentLabel,
+              },
+            ]
+          : [],
     },
     notes: notes.trim(),
-    paymentInfo: `${previewCopy.paymentMethodPrefix}: ${selectedPaymentLabel}`,
+    paymentInfo:
+      paymentStatus === "UNPAID"
+        ? previewCopy.awaitingPayment
+        : `${previewCopy.paymentMethodPrefix}: ${selectedPaymentLabel}`,
     closingNote: previewCopy.closingNote,
     signatureLabel: previewCopy.signatureLabel,
   };
@@ -370,6 +582,8 @@ const buildSimpleBillInvoicePreviewData = ({
 
 const ExistingInvoicePreview = ({
   data,
+  previewKey,
+  templateRenderKey,
   hasItems = true,
   templateId,
   templateName,
@@ -380,6 +594,8 @@ const ExistingInvoicePreview = ({
   emptyMessage,
 }: {
   data: InvoicePreviewData;
+  previewKey: string;
+  templateRenderKey: string;
   hasItems?: boolean;
   templateId?: string | null;
   templateName?: string | null;
@@ -389,6 +605,8 @@ const ExistingInvoicePreview = ({
   designConfig: ReturnType<typeof normalizeDesignConfig>;
   emptyMessage: string;
 }) => {
+  const stackKey = `simple-bill-preview-${templateRenderKey}-${previewKey}`;
+
   if (!hasItems) {
     return (
       <div className="min-w-0 overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700">
@@ -409,10 +627,9 @@ const ExistingInvoicePreview = ({
       }}
     >
       <div className="min-w-0 overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none">
-        <A4PreviewStack
-          stackKey={`simple-bill-preview-${templateId ?? "default"}-${data.invoiceNumber}-${data.items.length}-${data.totals?.total ?? 0}`}
-        >
+        <A4PreviewStack key={stackKey} stackKey={stackKey}>
           <TemplatePreviewRenderer
+            key={`${templateRenderKey}-${previewKey}`}
             templateId={templateId}
             templateName={templateName}
             data={data}
@@ -443,7 +660,10 @@ const SimpleBillClient = ({
             guestName: "मेहमान",
             customerFallback: "ग्राहक",
             discountLabel: "छूट",
-            paymentSelectedSuffix: "चुना गया",
+          pendingLabel: "लंबित",
+          paidLabel: "भुगतान हो चुका",
+          partiallyPaidLabel: "आंशिक भुगतान",
+          awaitingPayment: "भुगतान की प्रतीक्षा",
             paymentMethodPrefix: "भुगतान तरीका",
             closingNote: "आपके व्यवसाय के लिए धन्यवाद।",
             signatureLabel: "अधिकृत हस्ताक्षर",
@@ -455,6 +675,12 @@ const SimpleBillClient = ({
             toastLoadBillError: "पिछला बिल लोड नहीं हो पाया।",
             toastChooseCustomer: "ग्राहक चुनें या टाइप करें।",
             toastAddItem: "कम से कम एक आइटम कीमत के साथ जोड़ें।",
+            toastPaymentMethodRequired:
+              "Paid या आंशिक भुगतान के लिए भुगतान तरीका चुनें।",
+            toastPartialPaidRequired:
+              "आंशिक भुगतान के लिए 0 से अधिक राशि दर्ज करें।",
+            toastPartialPaidTooHigh:
+              "आंशिक भुगतान राशि कुल से कम होनी चाहिए।",
             toastProductNameMissing: "प्रोडक्ट का नाम खाली है।",
             toastFixLineItems:
               "हर भरे हुए आइटम में नाम, मात्रा और कीमत 0 से अधिक होना चाहिए।",
@@ -510,6 +736,18 @@ const SimpleBillClient = ({
             gstHint: "GST वैकल्पिक है (सुझाव: GST चालू रखें अगर रजिस्टर्ड हैं)",
             customerAutoHint:
               "ग्राहक का नाम लिखें। खाली छोड़ेंगे तो वॉक-इन ग्राहक अपने आप जुड़ जाएगा।",
+            paymentStatusTitle: "भुगतान स्थिति",
+            paymentStatusHint:
+              "डिफॉल्ट Paid है। ज़रूरत हो तो Partial या Unpaid चुनें।",
+            paymentStatusPaid: "Paid",
+            paymentStatusPartial: "Partial",
+            paymentStatusUnpaid: "Unpaid",
+            paymentMethodLabel: "भुगतान तरीका",
+            paymentDateLabel: "भुगतान तारीख",
+            partialPaidAmountLabel: "आंशिक भुगतान राशि",
+            partialPaidAmountPlaceholder: "0",
+            paidAmountLabel: "भुगतान",
+            dueAmountLabel: "बाकी",
             totalAmountLabel: "कुल राशि",
             previewHint:
               "स्क्रीन के लिए प्रीव्यू। प्रिंट हमेशा साफ़ ब्लैक-एंड-व्हाइट रहेगा।",
@@ -518,7 +756,10 @@ const SimpleBillClient = ({
             guestName: "Guest",
             customerFallback: "Customer",
             discountLabel: "Discount",
-            paymentSelectedSuffix: "selected",
+            pendingLabel: "Pending",
+            paidLabel: "Paid",
+            partiallyPaidLabel: "Partially paid",
+            awaitingPayment: "Awaiting payment",
             paymentMethodPrefix: "Payment method",
             closingNote: "Thank you for your business.",
             signatureLabel: "Authorized Signature",
@@ -532,6 +773,12 @@ const SimpleBillClient = ({
             toastLoadBillError: "Could not load the last bill.",
             toastChooseCustomer: "Type or select a customer.",
             toastAddItem: "Add at least one item with a price.",
+            toastPaymentMethodRequired:
+              "Choose a payment method for paid or partial bills.",
+            toastPartialPaidRequired:
+              "Enter a paid amount greater than 0 for partial bills.",
+            toastPartialPaidTooHigh:
+              "Partial paid amount must be less than total.",
             toastProductNameMissing: "Product name is missing.",
             toastFixLineItems:
               "Each entered item needs a name, quantity above 0, and price above 0.",
@@ -589,6 +836,18 @@ const SimpleBillClient = ({
               "GST is optional (suggested: keep it ON if GST registered)",
             customerAutoHint:
               "Type customer name. Leave empty to use Walk-in automatically.",
+            paymentStatusTitle: "Payment status",
+            paymentStatusHint:
+              "Paid is selected by default. Switch to Partial or Unpaid when needed.",
+            paymentStatusPaid: "Paid",
+            paymentStatusPartial: "Partial",
+            paymentStatusUnpaid: "Unpaid",
+            paymentMethodLabel: "Payment method",
+            paymentDateLabel: "Payment date",
+            partialPaidAmountLabel: "Partial paid amount",
+            partialPaidAmountPlaceholder: "0",
+            paidAmountLabel: "Paid",
+            dueAmountLabel: "Due",
             totalAmountLabel: "Total Amount",
             previewHint:
               "Preview is for screen. Print always stays clean black and white.",
@@ -596,12 +855,6 @@ const SimpleBillClient = ({
     [isHindi],
   );
   const displayName = name.trim() || copy.guestName;
-  const {
-    data: customers = [],
-    isLoading: customersLoading,
-    isError: customersError,
-    refetch: refetchCustomers,
-  } = useCustomersQuery();
   const {
     data: products = [],
     isLoading: productsLoading,
@@ -615,27 +868,21 @@ const SimpleBillClient = ({
   const { downloadPdf } = useInvoicePdf();
   const createCustomer = useCreateCustomerMutation();
   const createInvoice = useCreateInvoiceMutation();
-  const [invoiceDate, setInvoiceDate] = useState(initialInvoiceDate);
-  const [gstEnabled, setGstEnabled] = useState(false);
-  const [notes, setNotes] = useState("");
+  const [billState, setBillState] = useState<BillState>(() =>
+    createInitialBillState(initialInvoiceDate),
+  );
   const [customerSearch, setCustomerSearch] = useState(
     initialCustomerName.trim(),
   );
-  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(
-    null,
+  const [debouncedCustomerSearch, setDebouncedCustomerSearch] = useState(
+    initialCustomerName.trim(),
   );
-  const [createdCustomer, setCreatedCustomer] = useState<Customer | null>(null);
   const [addingCustomer, setAddingCustomer] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState("");
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
   const [customerSuggestionsOpen, setCustomerSuggestionsOpen] = useState(false);
   const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
-  const [items, setItems] = useState<SimpleBillItem[]>(() => [
-    createItem(INITIAL_ITEM_ID),
-  ]);
-  const [discount, setDiscount] = useState("");
-  const [discountMode, setDiscountMode] = useState<DiscountMode>("AMOUNT");
-  const [payment, setPayment] = useState<PaymentChoice>("CASH");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedInvoice, setGeneratedInvoice] = useState<Invoice | null>(
@@ -649,17 +896,66 @@ const SimpleBillClient = ({
   const itemQuantityRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const itemPriceRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const pendingCustomerPrefillRef = useRef(initialCustomerName.trim());
+  const updateBillState = useCallback(
+    (updater: Partial<BillState> | ((current: BillState) => BillState)) => {
+      setBillState((current) =>
+        normalizeBillState(
+          typeof updater === "function"
+            ? updater(current)
+            : { ...current, ...updater },
+        ),
+      );
+    },
+    [],
+  );
+  const {
+    customer: selectedCustomer,
+    items,
+    totalAmount,
+    paymentStatus,
+    paidAmount,
+    dueAmount,
+    paymentMethod: payment,
+    paymentDate,
+    discount,
+    discountMode,
+    gstEnabled,
+    notes,
+    invoiceDate,
+  } = billState;
+  const selectedCustomerId = selectedCustomer?.id ?? null;
 
-  const selectedCustomer = useMemo(
-    () =>
-      customers.find((customer) => customer.id === selectedCustomerId) ??
-      (createdCustomer?.id === selectedCustomerId ? createdCustomer : null),
-    [createdCustomer, customers, selectedCustomerId],
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedCustomerSearch(customerSearch.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [customerSearch]);
+
+  const shouldSearchCustomers =
+    debouncedCustomerSearch.length > 0 &&
+    !matchesSelectedCustomerInput(selectedCustomer, debouncedCustomerSearch);
+  const {
+    data: customerSuggestions = [],
+    isFetching: customerSuggestionsLoading,
+    refetch: refetchCustomerSuggestions,
+  } = useCustomerSearchQuery(
+    shouldSearchCustomers ? debouncedCustomerSearch : "",
+    {
+      limit: 8,
+    },
+  );
+  const { data: walkInSuggestions = [] } = useCustomerSearchQuery(
+    copy.walkInCustomerName,
+    {
+      limit: 8,
+    },
   );
 
   const walkInCustomer = useMemo(
     () =>
-      customers.find((customer) => {
+      walkInSuggestions.find((customer) => {
         const normalizedName = normalizeText(customer.name);
         return (
           normalizedName === "walk-in customer" ||
@@ -667,30 +963,8 @@ const SimpleBillClient = ({
           normalizedName === normalizeText(copy.walkInCustomerName)
         );
       }) ?? null,
-    [copy.walkInCustomerName, customers],
+    [copy.walkInCustomerName, walkInSuggestions],
   );
-
-  const customerSuggestions = useMemo(() => {
-    const search = customerSearch.trim();
-    if (!search) return customers.slice(0, 5);
-    return customers
-      .filter(
-        (customer) =>
-          containsText(customer.name, search) ||
-          containsText(customer.phone, search),
-      )
-      .slice(0, 5);
-  }, [customerSearch, customers]);
-
-  const hasExactCustomerMatch = useMemo(() => {
-    const search = customerSearch.trim().toLowerCase();
-    if (!search) return false;
-    return customers.some(
-      (customer) =>
-        customer.name.toLowerCase() === search ||
-        customerLabel(customer).toLowerCase() === search,
-    );
-  }, [customerSearch, customers]);
 
   const discountType = useMemo(
     () => toDiscountType(discountMode),
@@ -706,9 +980,7 @@ const SimpleBillClient = ({
   );
   const hasSelectedCustomer = Boolean(selectedCustomer);
   const hasCustomerContext =
-    hasSelectedCustomer ||
-    Boolean(customerSearch.trim()) ||
-    (addingCustomer && Boolean(newCustomerName.trim()));
+    hasSelectedCustomer || Boolean(customerSearch.trim());
   const canGenerateBill = hasCustomerContext && validItems.length > 0;
   const productsLocked = !hasCustomerContext;
   const currentStep = !hasCustomerContext
@@ -735,10 +1007,14 @@ const SimpleBillClient = ({
         notes.trim() ||
         discount.trim() ||
         payment !== "CASH" ||
+        paymentStatus !== "PAID" ||
+        paidAmount > 0 ||
+        paymentDate.trim() !== (invoiceDate || "") ||
         gstEnabled ||
         addingCustomer ||
         newCustomerName.trim() ||
         newCustomerPhone.trim() ||
+        newCustomerEmail.trim() ||
         items.some(
           (item) =>
             item.name.trim() ||
@@ -752,36 +1028,154 @@ const SimpleBillClient = ({
       customerSearch,
       discount,
       gstEnabled,
+      invoiceDate,
       items,
+      newCustomerEmail,
       newCustomerName,
       newCustomerPhone,
       notes,
       payment,
+      paymentDate,
+      paymentStatus,
+      paidAmount,
       selectedCustomerId,
     ],
   );
-  const isInitialLoading = customersLoading || productsLoading;
-  const hasDataLoadError = customersError || productsError;
+  const isInitialLoading = productsLoading;
+  const hasDataLoadError = productsError;
   const taxMode: TaxMode = gstEnabled ? "CGST_SGST" : "NONE";
-  const invoiceForm = useMemo<InvoiceFormState>(
-    () => ({
-      customer_id: selectedCustomerId ? String(selectedCustomerId) : "",
-      date: invoiceDate,
-      due_date: invoiceDate,
-      discount: discount || "0",
-      discount_type: discountType,
+  const totals = useMemo(
+    () =>
+      calculateInvoiceTotals(
+        invoiceItems,
+        discount || "0",
+        discountType,
+        taxMode,
+      ),
+    [discount, discountType, invoiceItems, taxMode],
+  );
+  const selectedPaymentMethod = toInvoicePaymentMethod(payment);
+  const previewInvoiceDate = useMemo(
+    () =>
+      formatDate(invoiceDate ? `${invoiceDate}T00:00:00` : new Date(), {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }),
+    [formatDate, invoiceDate],
+  );
+  const previewRefreshKey = useMemo(
+    () =>
+      JSON.stringify({
+        customer: selectedCustomer
+          ? {
+              id: selectedCustomer.id,
+              name: selectedCustomer.name,
+              phone: selectedCustomer.phone ?? "",
+            }
+          : null,
+        items: items.map((item) => ({
+          id: item.id,
+          productId: item.productId ?? null,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        totalAmount,
+        paymentStatus,
+        paidAmount,
+        dueAmount,
+        paymentMethod: payment,
+        paymentDate,
+        discount,
+        discountMode,
+        gstEnabled,
+        notes,
+        invoiceDate,
+        fallbackCustomerName:
+          customerSearch.trim() || copy.walkInCustomerName,
+        invoiceNumber:
+          generatedInvoice?.invoice_number || t("invoice.invoicePreviewNumber"),
+      }),
+    [
+      copy.walkInCustomerName,
+      customerSearch,
+      discount,
+      discountMode,
+      dueAmount,
+      generatedInvoice?.invoice_number,
+      gstEnabled,
+      invoiceDate,
+      items,
       notes,
-      sync_sales: false,
-      warehouse_id: "",
-    }),
-    [discount, discountType, invoiceDate, notes, selectedCustomerId],
+      paidAmount,
+      payment,
+      paymentDate,
+      paymentStatus,
+      selectedCustomer,
+      t,
+      totalAmount,
+    ],
   );
-  const totals = useInvoiceTotals(
+  const invoicePreviewData = useMemo<InvoicePreviewData>(() => {
+    const previewPaymentDate = paymentDate
+      ? formatDate(`${paymentDate}T00:00:00`, {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })
+      : previewInvoiceDate;
+
+    return buildSimpleBillInvoicePreviewData({
+      businessProfile,
+      customer: selectedCustomer,
+      fallbackCustomerName:
+        selectedCustomer?.name || customerSearch.trim() || copy.walkInCustomerName,
+      fallbackCustomerPhone: selectedCustomer?.phone ?? "",
+      invoiceNumber:
+        generatedInvoice?.invoice_number || t("invoice.invoicePreviewNumber"),
+      invoiceDate: previewInvoiceDate,
+      dueDate: previewInvoiceDate,
+      items: invoiceItems,
+      totals,
+      discountType,
+      discount,
+      paymentStatus,
+      paidAmount,
+      paymentDate: previewPaymentDate,
+      payment: selectedPaymentMethod,
+      notes,
+      previewCopy: {
+        customerFallback: copy.customerFallback,
+        discountLabel: copy.discountLabel,
+        pendingLabel: copy.pendingLabel,
+        paidLabel: copy.paidLabel,
+        partiallyPaidLabel: copy.partiallyPaidLabel,
+        awaitingPayment: copy.awaitingPayment,
+        paymentMethodPrefix: copy.paymentMethodPrefix,
+        closingNote: copy.closingNote,
+        signatureLabel: copy.signatureLabel,
+      },
+    });
+  }, [
+    businessProfile,
+    copy,
+    customerSearch,
+    discount,
+    discountType,
+    formatDate,
+    generatedInvoice?.invoice_number,
     invoiceItems,
-    invoiceForm.discount,
-    invoiceForm.discount_type,
-    taxMode,
-  );
+    notes,
+    paidAmount,
+    paymentDate,
+    paymentStatus,
+    previewInvoiceDate,
+    selectedCustomer,
+    selectedPaymentMethod,
+    t,
+    totals,
+  ]);
   const fallbackActiveTemplate = useMemo(
     () => ({
       templateId: "professional",
@@ -800,63 +1194,29 @@ const SimpleBillClient = ({
     : activeTemplate.enabledSections;
   const activeTheme = activeTemplate.theme;
   const activeDesignConfig = activeTemplate.designConfig;
-  const previewInvoiceDate = useMemo(
+  const templateRenderKey = useMemo(
     () =>
-      formatDate(invoiceDate ? `${invoiceDate}T00:00:00` : new Date(), {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      }),
-    [formatDate, invoiceDate],
+      [
+        activeTemplate.templateId ?? "default",
+        activeTemplate.templateName ?? "",
+        activeSectionOrder.join(","),
+        activeEnabledSections.join(","),
+        activeTheme.primaryColor,
+        activeTheme.fontFamily,
+        activeTheme.tableStyle,
+        JSON.stringify(activeDesignConfig),
+      ].join("|"),
+    [
+      activeDesignConfig,
+      activeEnabledSections,
+      activeSectionOrder,
+      activeTemplate.templateId,
+      activeTemplate.templateName,
+      activeTheme.fontFamily,
+      activeTheme.primaryColor,
+      activeTheme.tableStyle,
+    ],
   );
-  const selectedPaymentMethod = paymentMethod(payment);
-  const invoicePreviewData = useMemo<InvoicePreviewData>(() => {
-    return buildSimpleBillInvoicePreviewData({
-      businessProfile,
-      customer: selectedCustomer,
-      fallbackCustomerName:
-        (addingCustomer ? newCustomerName.trim() : customerSearch.trim()) ||
-        copy.customerFallback,
-      fallbackCustomerPhone: addingCustomer
-        ? newCustomerPhone.replace(/\D/g, "")
-        : "",
-      invoiceNumber:
-        generatedInvoice?.invoice_number || t("invoice.invoicePreviewNumber"),
-      invoiceDate: previewInvoiceDate,
-      dueDate: previewInvoiceDate,
-      items: invoiceItems,
-      totals,
-      discountType,
-      discount: invoiceForm.discount,
-      payment: selectedPaymentMethod,
-      notes,
-      previewCopy: {
-        customerFallback: copy.customerFallback,
-        discountLabel: copy.discountLabel,
-        paymentSelectedSuffix: copy.paymentSelectedSuffix,
-        paymentMethodPrefix: copy.paymentMethodPrefix,
-        closingNote: copy.closingNote,
-        signatureLabel: copy.signatureLabel,
-      },
-    });
-  }, [
-    addingCustomer,
-    copy,
-    businessProfile,
-    customerSearch,
-    discountType,
-    invoiceForm.discount,
-    invoiceItems,
-    generatedInvoice?.invoice_number,
-    newCustomerName,
-    newCustomerPhone,
-    notes,
-    previewInvoiceDate,
-    selectedCustomer,
-    selectedPaymentMethod,
-    t,
-    totals,
-  ]);
 
   const frequentProducts = useMemo(
     () =>
@@ -899,35 +1259,44 @@ const SimpleBillClient = ({
       return;
     }
 
-    const lastCustomerId = Number(
-      window.localStorage.getItem(LAST_CUSTOMER_KEY),
-    );
-    if (Number.isFinite(lastCustomerId) && lastCustomerId > 0) {
-      setSelectedCustomerId(lastCustomerId);
-    }
-
     const storedDraft = window.localStorage.getItem(SIMPLE_BILL_DRAFT_KEY);
     if (!storedDraft) {
+      const storedLastCustomer = window.localStorage.getItem(LAST_CUSTOMER_KEY);
+      if (!storedLastCustomer) {
+        return;
+      }
+
+      try {
+        const lastCustomer = JSON.parse(storedLastCustomer) as Customer;
+        if (typeof lastCustomer?.id === "number" && lastCustomer.id > 0) {
+          updateBillState({ customer: lastCustomer });
+          setCustomerSearch(customerLabel(lastCustomer));
+        }
+      } catch {
+        window.localStorage.removeItem(LAST_CUSTOMER_KEY);
+      }
       return;
     }
 
     try {
       const draft = JSON.parse(storedDraft) as Partial<SimpleBillDraft>;
+      const nextBillPatch: Partial<BillState> = {};
 
       if (typeof draft.invoiceDate === "string" && draft.invoiceDate) {
-        setInvoiceDate(draft.invoiceDate);
+        nextBillPatch.invoiceDate = draft.invoiceDate;
       }
       if (typeof draft.customerSearch === "string") {
         setCustomerSearch(draft.customerSearch);
       }
       if (
-        typeof draft.selectedCustomerId === "number" &&
-        Number.isFinite(draft.selectedCustomerId) &&
-        draft.selectedCustomerId > 0
+        draft.selectedCustomer &&
+        typeof draft.selectedCustomer.id === "number" &&
+        draft.selectedCustomer.id > 0
       ) {
-        setSelectedCustomerId(draft.selectedCustomerId);
+        nextBillPatch.customer = draft.selectedCustomer;
+        setCustomerSearch(customerLabel(draft.selectedCustomer));
       } else if (draft.selectedCustomerId === null) {
-        setSelectedCustomerId(null);
+        nextBillPatch.customer = null;
       }
       if (typeof draft.addingCustomer === "boolean") {
         setAddingCustomer(draft.addingCustomer);
@@ -938,28 +1307,43 @@ const SimpleBillClient = ({
       if (typeof draft.newCustomerPhone === "string") {
         setNewCustomerPhone(draft.newCustomerPhone);
       }
+      if (typeof draft.newCustomerEmail === "string") {
+        setNewCustomerEmail(draft.newCustomerEmail);
+      }
       if (typeof draft.discount === "string") {
-        setDiscount(draft.discount);
+        nextBillPatch.discount = draft.discount;
       }
       if (draft.discountMode === "AMOUNT" || draft.discountMode === "PERCENT") {
-        setDiscountMode(draft.discountMode);
+        nextBillPatch.discountMode = draft.discountMode;
       }
       if (typeof draft.gstEnabled === "boolean") {
-        setGstEnabled(draft.gstEnabled);
+        nextBillPatch.gstEnabled = draft.gstEnabled;
       }
       if (typeof draft.notes === "string") {
-        setNotes(draft.notes);
+        nextBillPatch.notes = draft.notes;
       }
       if (
-        draft.payment === "CASH" ||
-        draft.payment === "UPI" ||
-        draft.payment === "ONLINE"
+        draft.paymentMethod === "CASH" ||
+        draft.paymentMethod === "UPI" ||
+        draft.paymentMethod === "ONLINE"
       ) {
-        setPayment(draft.payment);
+        nextBillPatch.paymentMethod = draft.paymentMethod;
+      }
+      if (
+        draft.paymentStatus === "UNPAID" ||
+        draft.paymentStatus === "PARTIALLY_PAID" ||
+        draft.paymentStatus === "PAID"
+      ) {
+        nextBillPatch.paymentStatus = draft.paymentStatus;
+      }
+      if (typeof draft.paidAmount === "number" && Number.isFinite(draft.paidAmount)) {
+        nextBillPatch.paidAmount = draft.paidAmount;
+      }
+      if (typeof draft.paymentDate === "string" && draft.paymentDate) {
+        nextBillPatch.paymentDate = draft.paymentDate;
       }
       if (Array.isArray(draft.items) && draft.items.length > 0) {
-        setItems(
-          draft.items.map((item) => ({
+        nextBillPatch.items = draft.items.map((item) => ({
             id: item.id || createItem().id,
             productId:
               typeof item.productId === "number" &&
@@ -969,13 +1353,13 @@ const SimpleBillClient = ({
             name: item.name ?? "",
             quantity: item.quantity ?? "1",
             price: item.price ?? "",
-          })),
-        );
+          }));
       }
+      updateBillState(nextBillPatch);
     } catch {
       window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
     }
-  }, [resetOnLoad]);
+  }, [resetOnLoad, updateBillState]);
 
   useEffect(() => {
     if (!selectedCustomer) return;
@@ -992,12 +1376,17 @@ const SimpleBillClient = ({
       invoiceDate,
       customerSearch,
       selectedCustomerId,
+      selectedCustomer,
       addingCustomer,
       newCustomerName,
       newCustomerPhone,
+      newCustomerEmail,
       customerId: selectedCustomerId ?? undefined,
       customerName: selectedCustomer?.name ?? customerSearch,
-      payment,
+      paymentMethod: payment,
+      paymentStatus,
+      paidAmount,
+      paymentDate,
       discount,
       discountMode,
       gstEnabled,
@@ -1017,9 +1406,13 @@ const SimpleBillClient = ({
     items,
     newCustomerName,
     newCustomerPhone,
+    newCustomerEmail,
     notes,
     payment,
-    selectedCustomer?.name,
+    paymentDate,
+    paymentStatus,
+    paidAmount,
+    selectedCustomer,
     selectedCustomerId,
   ]);
 
@@ -1040,44 +1433,55 @@ const SimpleBillClient = ({
 
   const updateItem = useCallback(
     (id: string, patch: Partial<SimpleBillItem>) => {
-      setItems((current) =>
-        current.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-      );
+      updateBillState((current) => ({
+        ...current,
+        items: current.items.map((item) =>
+          item.id === id ? { ...item, ...patch } : item,
+        ),
+      }));
     },
-    [],
+    [updateBillState],
   );
 
-  const selectCustomer = useCallback((customer: Customer) => {
-    setSelectedCustomerId(customer.id);
-    setCreatedCustomer((current) =>
-      current?.id === customer.id ? current : null,
-    );
-    setCustomerSearch(customerLabel(customer));
-    setNewCustomerName("");
-    setNewCustomerPhone("");
-    setAddingCustomer(false);
-    setCustomerSuggestionsOpen(false);
-  }, []);
+  const selectCustomer = useCallback(
+    (customer: Customer) => {
+      updateBillState({ customer });
+      setCustomerSearch(customerLabel(customer));
+      setNewCustomerName("");
+      setNewCustomerPhone("");
+      setAddingCustomer(false);
+      setCustomerSuggestionsOpen(false);
+    },
+    [updateBillState],
+  );
 
   useEffect(() => {
     const pendingPrefill = pendingCustomerPrefillRef.current.trim();
-    if (!pendingPrefill || customers.length === 0 || selectedCustomerId) {
+    if (
+      !pendingPrefill ||
+      customerSuggestionsLoading ||
+      selectedCustomerId ||
+      normalizeText(debouncedCustomerSearch) !== normalizeText(pendingPrefill)
+    ) {
       return;
     }
 
-    const normalizedPrefill = pendingPrefill.toLowerCase();
-    const exactMatch = customers.find(
-      (customer) => customer.name.toLowerCase() === normalizedPrefill,
+    const exactMatch = customerSuggestions.find((customer) =>
+      matchesSelectedCustomerInput(customer, pendingPrefill),
     );
 
     if (exactMatch) {
       selectCustomer(exactMatch);
-    } else {
-      setCustomerSearch(pendingPrefill);
     }
 
     pendingCustomerPrefillRef.current = "";
-  }, [customers, selectCustomer, selectedCustomerId]);
+  }, [
+    customerSuggestions,
+    customerSuggestionsLoading,
+    debouncedCustomerSearch,
+    selectCustomer,
+    selectedCustomerId,
+  ]);
 
   const ensureWalkInCustomer = useCallback(async () => {
     if (walkInCustomer) {
@@ -1143,45 +1547,53 @@ const SimpleBillClient = ({
 
   const addItemAfter = useCallback((afterId?: string) => {
     const nextItem = createItem();
-    setItems((current) => {
-      if (!afterId) return [...current, nextItem];
-      const index = current.findIndex((item) => item.id === afterId);
-      if (index < 0) return [...current, nextItem];
-      return [
-        ...current.slice(0, index + 1),
-        nextItem,
-        ...current.slice(index + 1),
-      ];
+    updateBillState((current) => {
+      if (!afterId) {
+        return { ...current, items: [...current.items, nextItem] };
+      }
+
+      const index = current.items.findIndex((item) => item.id === afterId);
+      if (index < 0) {
+        return { ...current, items: [...current.items, nextItem] };
+      }
+
+      return {
+        ...current,
+        items: [
+          ...current.items.slice(0, index + 1),
+          nextItem,
+          ...current.items.slice(index + 1),
+        ],
+      };
     });
     window.setTimeout(() => itemNameRefs.current[nextItem.id]?.focus(), 0);
-  }, []);
+  }, [updateBillState]);
 
   const removeItem = (id: string) => {
-    setItems((current) =>
-      current.length === 1
-        ? [{ ...createItem(), id }]
-        : current.filter((item) => item.id !== id),
-    );
+    updateBillState((current) => ({
+      ...current,
+      items:
+        current.items.length === 1
+          ? [{ ...createItem(), id }]
+          : current.items.filter((item) => item.id !== id),
+    }));
   };
 
   const handleCustomerSearch = (value: string) => {
     setCustomerSearch(value);
     setCustomerSuggestionsOpen(true);
     setAddingCustomer(false);
-    setCreatedCustomer(null);
-    const match = customers.find(
-      (customer) =>
-        customerLabel(customer).toLowerCase() === value.trim().toLowerCase() ||
-        customer.name.toLowerCase() === value.trim().toLowerCase(),
-    );
-    setSelectedCustomerId(match?.id ?? null);
+    if (!matchesSelectedCustomerInput(selectedCustomer, value)) {
+      updateBillState({ customer: null });
+    }
   };
 
   const startAddCustomer = (nameToUse = customerSearch) => {
     setAddingCustomer(true);
-    setSelectedCustomerId(null);
-    setCreatedCustomer(null);
+    updateBillState({ customer: null });
     setNewCustomerName(nameToUse.trim());
+    setNewCustomerPhone("");
+    setNewCustomerEmail("");
     setCustomerSuggestionsOpen(false);
     window.setTimeout(() => {
       if (nameToUse.trim()) {
@@ -1192,7 +1604,7 @@ const SimpleBillClient = ({
     }, 0);
   };
 
-  const handleQuickAddCustomer = () => {
+  const handleQuickAddCustomer = async () => {
     if (!newCustomerName.trim()) {
       toast.error(copy.toastEnterCustomerName);
       return;
@@ -1204,14 +1616,53 @@ const SimpleBillClient = ({
       return;
     }
 
-    setCustomerSearch(
-      normalizedPhone
-        ? `${newCustomerName.trim()} (${normalizedPhone})`
-        : newCustomerName.trim(),
-    );
-    setCustomerSuggestionsOpen(false);
-    toast.success(copy.toastCustomerQueued);
+    const normalizedEmail = newCustomerEmail.trim().toLowerCase();
+    if (
+      normalizedEmail &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)
+    ) {
+      toast.error("Enter a valid email address.");
+      return;
+    }
+
+    try {
+      const phoneMatches = await fetchCustomers({
+        search: normalizedPhone,
+        limit: 10,
+      });
+
+      if (
+        phoneMatches.some(
+          (customer) => customer.phone?.replace(/\D/g, "") === normalizedPhone,
+        )
+      ) {
+        toast.error("A customer with this phone number already exists.");
+        return;
+      }
+
+      const created = await createCustomer.mutateAsync({
+        name: newCustomerName.trim(),
+        phone: normalizedPhone,
+        email: normalizedEmail || null,
+      });
+
+      selectCustomer(created);
+      setNewCustomerName("");
+      setNewCustomerPhone("");
+      setNewCustomerEmail("");
+      setAddingCustomer(false);
+      toast.success("Customer added.");
+    } catch (error) {
+      toast.error(parseApiErrorMessage(error, "Could not add customer."));
+    }
   };
+
+  const closeAddCustomerModal = useCallback(() => {
+    setAddingCustomer(false);
+    setNewCustomerName("");
+    setNewCustomerPhone("");
+    setNewCustomerEmail("");
+  }, []);
 
   const loadLastBill = () => {
     const stored = window.localStorage.getItem(LAST_BILL_KEY);
@@ -1223,20 +1674,27 @@ const SimpleBillClient = ({
     try {
       const bill = JSON.parse(stored) as SavedSimpleBill;
       setAddingCustomer(false);
-      setSelectedCustomerId(bill.customerId ?? null);
-      setCreatedCustomer(null);
-      setCustomerSearch(bill.customerName ?? "");
-      setItems(
-        bill.items.length > 0
-          ? bill.items.map((item) => ({ ...item, id: createItem().id }))
-          : [createItem()],
+      setCustomerSearch(
+        bill.selectedCustomer
+          ? customerLabel(bill.selectedCustomer)
+          : bill.customerName ?? "",
       );
-      setDiscount(bill.discount);
-      setDiscountMode(bill.discountMode ?? "AMOUNT");
-      setGstEnabled(Boolean(bill.gstEnabled));
-      setNotes(bill.notes ?? "");
-      setPayment(bill.payment);
-      setInvoiceDate(todayInputValue());
+      updateBillState({
+        customer: bill.selectedCustomer ?? null,
+        items:
+          bill.items.length > 0
+            ? bill.items.map((item) => ({ ...item, id: createItem().id }))
+            : [createItem()],
+        discount: bill.discount,
+        discountMode: bill.discountMode ?? "AMOUNT",
+        gstEnabled: Boolean(bill.gstEnabled),
+        notes: bill.notes ?? "",
+        paymentMethod: bill.paymentMethod,
+        paymentStatus: bill.paymentStatus ?? "PAID",
+        paidAmount: bill.paidAmount ?? 0,
+        paymentDate: bill.paymentDate ?? todayInputValue(),
+        invoiceDate: todayInputValue(),
+      });
       toast.success(copy.toastLastBillLoaded);
     } catch {
       toast.error(copy.toastLoadBillError);
@@ -1257,14 +1715,18 @@ const SimpleBillClient = ({
     const saved: SavedSimpleBill = {
       customerId: customer.id,
       customerName: customerLabel(customer),
-      payment,
+      selectedCustomer: customer,
+      paymentMethod: payment,
+      paymentStatus,
+      paidAmount,
+      paymentDate,
       discount,
       discountMode,
       gstEnabled,
       notes,
       items: billItems,
     };
-    window.localStorage.setItem(LAST_CUSTOMER_KEY, String(customer.id));
+    window.localStorage.setItem(LAST_CUSTOMER_KEY, JSON.stringify(customer));
     window.localStorage.setItem(LAST_BILL_KEY, JSON.stringify(saved));
   };
 
@@ -1321,36 +1783,31 @@ const SimpleBillClient = ({
       return;
     }
 
+    if (paymentStatus !== "UNPAID" && !selectedPaymentMethod) {
+      toast.error(copy.toastPaymentMethodRequired);
+      return;
+    }
+
+    if (paymentStatus === "PARTIALLY_PAID") {
+      if (!(paidAmount > 0)) {
+        toast.error(copy.toastPartialPaidRequired);
+        return;
+      }
+
+      if (paidAmount >= totalAmount) {
+        toast.error(copy.toastPartialPaidTooHigh);
+        return;
+      }
+    }
+
     try {
       submitLockRef.current = true;
       setIsSubmitting(true);
 
       let customer: Customer | null = selectedCustomer;
 
-      if (!customer && addingCustomer && newCustomerName.trim()) {
-        const normalizedPhone = newCustomerPhone.replace(/\D/g, "");
-        if (!/^\d{10}$/.test(normalizedPhone)) {
-          toast.error(copy.toastCustomerPhoneMin);
-          return;
-        }
-
-        customer = await createCustomer.mutateAsync({
-          name: newCustomerName.trim(),
-          phone: normalizedPhone,
-        });
-      }
-
       if (!customer) {
-        const typedCustomerName = customerSearch.trim();
-        if (typedCustomerName) {
-          customer = await createCustomer.mutateAsync({
-            name: typedCustomerName,
-            phone: WALK_IN_CUSTOMER_PHONE,
-          });
-          selectCustomer(customer);
-        } else {
-          customer = await ensureWalkInCustomer();
-        }
+        customer = await ensureWalkInCustomer();
       }
 
       if (!customer) {
@@ -1361,8 +1818,13 @@ const SimpleBillClient = ({
       const invoicePayload = mapSimpleBillToInvoice({
         customerId: customer.id,
         invoiceDate,
-        discount: invoiceForm.discount,
-        discountType: invoiceForm.discount_type,
+        discount,
+        discountType,
+        paymentStatus,
+        paidAmount,
+        paymentDate: paymentDate || invoiceDate || todayInputValue(),
+        paymentMethod: selectedPaymentMethod,
+        totalAmount,
         notes,
         items: invoiceItems,
       });
@@ -1378,12 +1840,7 @@ const SimpleBillClient = ({
 
       saveProductUsage(billItems);
       saveLastBill(customer, billItems);
-      setCreatedCustomer(customer);
-      setSelectedCustomerId(customer.id);
-      setCustomerSearch(customerLabel(customer));
-      setAddingCustomer(false);
-      setNewCustomerName("");
-      setNewCustomerPhone("");
+      selectCustomer(customer);
       setGeneratedInvoice(createdInvoice);
       setPreviewOpen(true);
       toast.success(copy.toastBillGenerated);
@@ -1398,19 +1855,14 @@ const SimpleBillClient = ({
   };
 
   const handleCreateNewBill = useCallback(() => {
-    setInvoiceDate(todayInputValue());
+    const today = todayInputValue();
     setCustomerSearch("");
-    setSelectedCustomerId(null);
-    setCreatedCustomer(null);
+    setDebouncedCustomerSearch("");
     setAddingCustomer(false);
     setNewCustomerName("");
     setNewCustomerPhone("");
-    setItems([createItem(INITIAL_ITEM_ID)]);
-    setDiscount("");
-    setDiscountMode("AMOUNT");
-    setPayment("CASH");
-    setGstEnabled(false);
-    setNotes("");
+    setNewCustomerEmail("");
+    setBillState(createInitialBillState(today));
     setGeneratedInvoice(null);
     setPreviewOpen(false);
     setFocusedItemId(null);
@@ -1474,8 +1926,13 @@ const SimpleBillClient = ({
   };
 
   const handleRetryDataLoad = useCallback(() => {
-    void Promise.all([refetchCustomers(), refetchProducts()]);
-  }, [refetchCustomers, refetchProducts]);
+    if (shouldSearchCustomers) {
+      void Promise.all([refetchCustomerSuggestions(), refetchProducts()]);
+      return;
+    }
+
+    void refetchProducts();
+  }, [refetchCustomerSuggestions, refetchProducts, shouldSearchCustomers]);
 
   return (
     <DashboardLayout
@@ -1509,7 +1966,18 @@ const SimpleBillClient = ({
                 type="date"
                 aria-label="Bill date"
                 value={invoiceDate}
-                onChange={(event) => setInvoiceDate(event.target.value)}
+                onChange={(event) => {
+                  const nextDate = event.target.value;
+                  const previousDate = invoiceDate;
+                  updateBillState((current) => ({
+                    ...current,
+                    invoiceDate: nextDate,
+                    paymentDate:
+                      !current.paymentDate || current.paymentDate === previousDate
+                        ? nextDate
+                        : current.paymentDate,
+                  }));
+                }}
                 className="h-11"
               />
               <Button
@@ -1580,6 +2048,14 @@ const SimpleBillClient = ({
                 if (event.key === "Enter" && customerSuggestions[0]) {
                   event.preventDefault();
                   selectCustomer(customerSuggestions[0]);
+                } else if (
+                  event.key === "Enter" &&
+                  customerSearch.trim() &&
+                  !customerSuggestionsLoading &&
+                  customerSuggestions.length === 0
+                ) {
+                  event.preventDefault();
+                  startAddCustomer(customerSearch);
                 }
               }}
               className="h-12 text-base"
@@ -1591,7 +2067,17 @@ const SimpleBillClient = ({
             />
             {customerSuggestionsOpen ? (
               <div className="absolute left-0 right-0 top-19 z-20 overflow-hidden rounded-lg bg-popover shadow-[0_22px_50px_-30px_rgba(15,23,42,0.65)] ring-1 ring-border/70">
-                {customerSuggestions.length > 0 ? (
+                {customerSuggestionsLoading && customerSearch.trim() ? (
+                  <div className="px-4 py-3">
+                    <p className="text-sm text-muted-foreground">
+                    
+                    {isHindi
+                      ? "à¤—à¥à¤°à¤¾à¤¹à¤• à¤–à¥‹à¤œ à¤°à¤¹à¥‡ à¤¹à¥ˆà¤‚..."
+                      : "Searching customers..."}
+                  </p>
+                  </div>
+                ) : customerSearch.trim() ? (
+                  customerSuggestions.length > 0 ? (
                   customerSuggestions.map((customer) => (
                     <button
                       key={customer.id}
@@ -1601,7 +2087,9 @@ const SimpleBillClient = ({
                       onClick={() => selectCustomer(customer)}
                     >
                       <span className="font-semibold text-foreground">
-                        {customer.name}
+                        {customer.businessName ||
+                          customer.business_name ||
+                          customer.name}
                       </span>
                       {customer.phone ? (
                         <span className="text-muted-foreground">
@@ -1611,11 +2099,31 @@ const SimpleBillClient = ({
                     </button>
                   ))
                 ) : (
-                  <p className="px-4 py-3 text-sm text-muted-foreground">
+                  <div className="grid gap-1 border-t border-border/60 px-4 py-3">
+                    <p className="px-4 py-3 text-sm text-muted-foreground">
                     {isHindi
                       ? "कोई सेव ग्राहक नहीं मिला"
-                      : "No saved customer found"}
+                      : "No customer found"}
+                    </p>
+                    <button
+                      type="button"
+                      className="flex items-center gap-2 text-left text-sm font-semibold text-primary transition hover:opacity-80"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => startAddCustomer(customerSearch)}
+                    >
+                      <Plus size={16} />
+                      {`Add "${customerSearch.trim()}" as new customer`}
+                    </button>
+                  </div>
+                )
+                ) : (
+                  <div className="grid gap-1 border-t border-border/60 px-4 py-3">
+                    <p className="text-sm text-muted-foreground">
+                    {isHindi
+                      ? "à¤–à¥‹à¤œ à¤•à¥‡ à¤²à¤¿à¤ à¤¨à¤¾à¤® à¤¯à¤¾ à¤«à¥‹à¤¨ à¤²à¤¿à¤–à¥‡à¤‚"
+                      : "Type name or phone to search"}
                   </p>
+                  </div>
                 )}
               </div>
             ) : null}
@@ -1880,7 +2388,148 @@ const SimpleBillClient = ({
                 })}
               </p>
             </div>
-            <div className="grid gap-2">
+            <div className="grid gap-3">
+              <div className="rounded-xl border border-border/70 bg-background/70 p-3">
+                <p className="text-sm font-semibold text-foreground">
+                  {copy.paymentStatusTitle}
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {copy.paymentStatusHint}
+                </p>
+
+                <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                  <Button
+                    type="button"
+                    variant={paymentStatus === "PAID" ? "default" : "outline"}
+                    className="h-10"
+                    onClick={() => {
+                      updateBillState((current) => ({
+                        ...current,
+                        paymentStatus: "PAID",
+                        paidAmount: current.totalAmount,
+                        paymentDate:
+                          current.paymentDate ||
+                          current.invoiceDate ||
+                          todayInputValue(),
+                      }));
+                    }}
+                  >
+                    {copy.paymentStatusPaid}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={
+                      paymentStatus === "PARTIALLY_PAID" ? "default" : "outline"
+                    }
+                    className="h-10"
+                    onClick={() => {
+                      updateBillState((current) => ({
+                        ...current,
+                        paymentStatus: "PARTIALLY_PAID",
+                        paidAmount:
+                          current.paymentStatus === "PARTIALLY_PAID"
+                            ? current.paidAmount
+                            : Math.min(current.totalAmount, current.paidAmount),
+                        paymentDate:
+                          current.paymentDate ||
+                          current.invoiceDate ||
+                          todayInputValue(),
+                      }));
+                    }}
+                  >
+                    {copy.paymentStatusPartial}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={paymentStatus === "UNPAID" ? "default" : "outline"}
+                    className="h-10"
+                    onClick={() => {
+                      updateBillState({
+                        paymentStatus: "UNPAID",
+                        paidAmount: 0,
+                      });
+                    }}
+                  >
+                    {copy.paymentStatusUnpaid}
+                  </Button>
+                </div>
+
+                {paymentStatus !== "UNPAID" ? (
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="simple-payment-method">
+                        {copy.paymentMethodLabel}
+                      </Label>
+                      <select
+                        id="simple-payment-method"
+                        value={payment}
+                        onChange={(event) =>
+                          updateBillState({
+                            paymentMethod: event.target.value as PaymentChoice,
+                          })
+                        }
+                        className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="CASH">Cash</option>
+                        <option value="UPI">UPI</option>
+                        <option value="ONLINE">Online</option>
+                      </select>
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label htmlFor="simple-payment-date">
+                        {copy.paymentDateLabel}
+                      </Label>
+                      <Input
+                        id="simple-payment-date"
+                        type="date"
+                        value={paymentDate}
+                        onChange={(event) =>
+                          updateBillState({ paymentDate: event.target.value })
+                        }
+                        className="h-10"
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
+                {paymentStatus === "PARTIALLY_PAID" ? (
+                  <div className="mt-3 grid gap-1.5">
+                    <Label htmlFor="simple-partial-paid-amount">
+                      {copy.partialPaidAmountLabel}
+                    </Label>
+                    <Input
+                      id="simple-partial-paid-amount"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      value={paidAmount > 0 ? String(paidAmount) : ""}
+                      onChange={(event) =>
+                        updateBillState({
+                          paidAmount: Math.max(
+                            0,
+                            Number(
+                              event.target.value.replace(/[^\d.]/g, ""),
+                            ) || 0,
+                          ),
+                        })
+                      }
+                      placeholder={copy.partialPaidAmountPlaceholder}
+                      className="h-10"
+                    />
+                  </div>
+                ) : null}
+
+                <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                  <div className="rounded-lg bg-emerald-50 px-3 py-2 text-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-200">
+                    {copy.paidAmountLabel}: {formatMoney(paidAmount)}
+                  </div>
+                  <div className="rounded-lg bg-rose-50 px-3 py-2 text-rose-800 dark:bg-rose-950/20 dark:text-rose-200">
+                    {copy.dueAmountLabel}: {formatMoney(dueAmount)}
+                  </div>
+                </div>
+              </div>
+
               <Button
                 type="button"
                 size="lg"
@@ -1977,6 +2626,8 @@ const SimpleBillClient = ({
           <div className="mt-4">
             <ExistingInvoicePreview
               data={invoicePreviewData}
+              previewKey={previewRefreshKey}
+              templateRenderKey={templateRenderKey}
               hasItems={validItems.length > 0}
               templateId={activeTemplate.templateId}
               templateName={activeTemplate.templateName}
@@ -1988,6 +2639,78 @@ const SimpleBillClient = ({
             />
           </div>
         </section>
+
+        <Modal
+          open={addingCustomer}
+          onOpenChange={(open) => {
+            if (!open && !createCustomer.isPending) {
+              closeAddCustomerModal();
+            }
+          }}
+          title="Add customer"
+          description="Create a customer without leaving Simple Bill."
+        >
+          <form
+            className="grid gap-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleQuickAddCustomer();
+            }}
+          >
+            <div className="grid gap-2">
+              <Label htmlFor="simple-new-customer-name">Name</Label>
+              <Input
+                id="simple-new-customer-name"
+                value={newCustomerName}
+                onChange={(event) => setNewCustomerName(event.target.value)}
+                placeholder="Customer name"
+                autoComplete="name"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="simple-new-customer-phone">Phone</Label>
+              <Input
+                id="simple-new-customer-phone"
+                ref={newCustomerPhoneRef}
+                value={newCustomerPhone}
+                onChange={(event) =>
+                  setNewCustomerPhone(event.target.value.replace(/\D/g, ""))
+                }
+                inputMode="numeric"
+                maxLength={10}
+                placeholder="10-digit phone number"
+                autoComplete="tel"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="simple-new-customer-email">Email (optional)</Label>
+              <Input
+                id="simple-new-customer-email"
+                type="email"
+                value={newCustomerEmail}
+                onChange={(event) => setNewCustomerEmail(event.target.value)}
+                placeholder="name@example.com"
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeAddCustomerModal}
+                disabled={createCustomer.isPending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={createCustomer.isPending}>
+                {createCustomer.isPending ? "Saving..." : "Save customer"}
+              </Button>
+            </div>
+          </form>
+        </Modal>
       </div>
     </DashboardLayout>
   );

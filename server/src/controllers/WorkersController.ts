@@ -8,6 +8,7 @@ import {
   isBusinessTableAvailable,
   isWorkersTableAvailable,
 } from "../lib/authSession.js";
+import { createNotification } from "../services/notification.service.js";
 
 const WORKER_MIGRATION_MESSAGE =
   "Worker management requires the latest database migration. Run Prisma migrations and restart the server.";
@@ -672,6 +673,16 @@ class WorkersController {
       incentiveValue: incentiveValue ?? 0,
     });
 
+    if (req.user?.id) {
+      await createNotification({
+        userId: req.user.id,
+        businessId,
+        type: "worker",
+        message: `Worker ${worker.name} joined your team.`,
+        referenceKey: `worker-created:${worker.id}`,
+      });
+    }
+
     return sendResponse(res, 201, {
       message: "Worker created successfully",
       data: worker,
@@ -805,6 +816,15 @@ class WorkersController {
       });
     }
 
+    if (req.user?.id) {
+      await createNotification({
+        userId: req.user.id,
+        businessId,
+        type: "worker",
+        message: `Worker ${updatedWorker.name}'s profile was updated.`,
+      });
+    }
+
     return sendResponse(res, 200, {
       message: "Worker updated successfully",
       data: updatedWorker,
@@ -838,7 +858,7 @@ class WorkersController {
         id: workerId,
         businessId,
       },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     if (!worker) {
@@ -849,6 +869,15 @@ class WorkersController {
       prisma.$executeRaw`DELETE FROM "worker_profiles" WHERE "worker_id" = ${worker.id}`,
       prisma.worker.delete({ where: { id: worker.id } }),
     ]);
+
+    if (req.user?.id) {
+      await createNotification({
+        userId: req.user.id,
+        businessId,
+        type: "worker",
+        message: `Worker ${worker.name} was removed from your team.`,
+      });
+    }
 
     return sendResponse(res, 200, { message: "Worker deleted successfully" });
   }

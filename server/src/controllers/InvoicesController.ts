@@ -13,6 +13,7 @@ import {
   getWorkerAccessRole,
   type BillingAction,
 } from "../lib/workerPermissions.js";
+import { createNotification } from "../services/notification.service.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
@@ -64,6 +65,7 @@ class InvoicesController {
 
   static async store(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -126,6 +128,16 @@ class InvoicesController {
       } catch {
         // Migration-safe fallback: invoice creation should still succeed.
       }
+    }
+
+    if (businessId) {
+      await createNotification({
+        userId,
+        businessId,
+        type: "payment",
+        message: `Invoice ${invoice.invoice_number} was created successfully.`,
+        referenceKey: `invoice-created:${invoice.id}`,
+      });
     }
 
     return sendResponse(res, 201, {

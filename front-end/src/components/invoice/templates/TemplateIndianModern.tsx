@@ -170,6 +170,16 @@ const TemplateIndianModern = ({
     (balanceDue <= 0 ? "Paid" : "Pending");
   const closingNote =
     data.closingNote?.trim() || "Thank you for your business.";
+  const featuredAmountLabel =
+    data.paymentSummary?.statusTone === "paid"
+      ? "Amount Paid"
+      : "Amount Due";
+  const featuredAmountValue =
+    data.paymentSummary?.statusTone === "paid"
+      ? paidAmount
+      : showPayment
+        ? balanceDue
+        : totals.total;
 
   return (
     <div
@@ -177,9 +187,6 @@ const TemplateIndianModern = ({
       style={{ fontFamily: theme.fontFamily }}
     >
       <section className="bg-white px-5 py-4 text-[10px] leading-[1.35] text-black print:px-4 print:py-3">
-        <p className="mb-2 text-[11px] font-black uppercase tracking-[0.18em] text-black">
-          TEST TEMPLATE
-        </p>
         {showHeader ? (
           <header className="border-b border-black pb-4">
             <div className="grid gap-4 sm:grid-cols-[1.18fr_0.82fr]">
@@ -252,13 +259,10 @@ const TemplateIndianModern = ({
           <div className="sm:justify-self-end sm:w-full sm:max-w-[250px]">
             <div className="bg-black px-3 py-2.5 text-white">
               <p className="text-[8.5px] font-bold uppercase tracking-[0.16em] text-white">
-                Amount Due
+                {featuredAmountLabel}
               </p>
               <p className="mt-1 text-[29px] font-black leading-none tracking-tight text-white">
-                {formatCurrency(
-                  showPayment ? balanceDue : totals.total,
-                  data.business.currency,
-                )}
+                {formatCurrency(featuredAmountValue, data.business.currency)}
               </p>
             </div>
             <div className="mt-2 grid gap-1 text-[9.5px] text-black">
@@ -350,7 +354,7 @@ const TemplateIndianModern = ({
               <p className={sectionHeadingClass}>Amount in Words</p>
               <p className="mt-1 text-[9.75px] font-semibold leading-5 text-black">
                 {formatAmountInWords(
-                  showPayment ? balanceDue : totals.total,
+                  totals.total,
                   data.business.currency,
                 )}
               </p>
@@ -464,13 +468,10 @@ const TemplateIndianModern = ({
               <div className="border-t-2 border-black border-b-2 border-black py-2">
                 <div className="flex items-end justify-between gap-3">
                   <span className="font-bold uppercase tracking-[0.08em] text-black">
-                    Amount Due
+                    {featuredAmountLabel}
                   </span>
                   <span className="text-[24px] font-black leading-none tracking-tight text-black">
-                    {formatCurrency(
-                      showPayment ? balanceDue : totals.total,
-                      data.business.currency,
-                    )}
+                    {formatCurrency(featuredAmountValue, data.business.currency)}
                   </span>
                 </div>
               </div>

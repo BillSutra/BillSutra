@@ -14,6 +14,7 @@ import {
 } from "../validations/apiValidations.js";
 import { computePaymentState } from "../utils/paymentCalculations.js";
 import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
+import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
 
 type PurchaseCreateInput = z.infer<typeof purchaseCreateSchema>;
 type PurchaseItemInput = PurchaseCreateInput["items"][number];
@@ -218,6 +219,7 @@ class PurchasesController {
       return created;
     });
 
+    invalidateInventoryInsightsCacheByUser(userId);
     emitDashboardUpdate({ userId, source: "purchase.create" });
     return sendResponse(res, 201, {
       message: "Purchase recorded",
@@ -476,6 +478,7 @@ class PurchasesController {
       return updatedPurchase;
     });
 
+    invalidateInventoryInsightsCacheByUser(userId);
     emitDashboardUpdate({ userId, source: "purchase.update" });
     return sendResponse(res, 200, {
       message: "Purchase updated",

@@ -1,5 +1,12 @@
 import prisma from "../../config/db.config.js";
-import { InvoiceStatus, Prisma, SaleStatus, StockReason } from "@prisma/client";
+import {
+  InvoiceStatus,
+  PaymentMethod,
+  PaymentStatus,
+  Prisma,
+  SaleStatus,
+  StockReason,
+} from "@prisma/client";
 import puppeteer from "puppeteer";
 import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
@@ -12,6 +19,11 @@ import {
   buildBusinessAddressLines,
   normalizeBusinessAddressDraft,
 } from "../../lib/indianAddress.js";
+import {
+  applyBillingSaleInventoryAdjustments,
+  resolveBillingProducts,
+  resolveBillingWarehouse,
+} from "../../services/billingInventorySync.service.js";
 
 type ListInvoiceFilters = {
   status?: InvoiceStatus;
@@ -19,6 +31,8 @@ type ListInvoiceFilters = {
   from?: Date;
   to?: Date;
 };
+
+type InvoicePaymentStatusInput = "UNPAID" | "PARTIALLY_PAID" | "PAID";
 
 export type PublicInvoiceViewData = {
   id: number;
@@ -92,6 +106,201 @@ type CustomerInvoiceProfile = {
 };
 
 const toNumber = (value: unknown) => Number(value ?? 0);
+
+const roundCurrencyAmount = (value: number) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
+
+const normalizeStatusLabel = (value: string) =>
+  value
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const createInvoiceValidationError = (
+  message: string,
+  errors: Record<string, string[]>,
+) => {
+  const error = new Error(message) as Error & {
+    status?: number;
+    errors?: Record<string, string[]>;
+  };
+  error.status = 422;
+  error.errors = errors;
+  return error;
+};
+
+const resolveRequestedInvoicePaymentStatus = (
+  status?: InvoiceStatus,
+  paymentStatus?: InvoicePaymentStatusInput,
+): InvoicePaymentStatusInput => {
+  if (paymentStatus) {
+    return paymentStatus;
+  }
+
+  if (status === InvoiceStatus.PAID) {
+    return "PAID";
+  }
+
+  if (status === InvoiceStatus.PARTIALLY_PAID) {
+    return "PARTIALLY_PAID";
+  }
+
+  return "UNPAID";
+};
+
+const resolveInvoicePaymentState = (params: {
+  total: number;
+  status?: InvoiceStatus;
+  payment_status?: InvoicePaymentStatusInput;
+  amount_paid?: number | null;
+  payment_method?: PaymentMethod | null;
+  payment_date?: Date | string | null;
+}) => {
+  const total = roundCurrencyAmount(Math.max(0, params.total));
+  const requestedPaymentStatus = resolveRequestedInvoicePaymentStatus(
+    params.status,
+    params.payment_status,
+  );
+  const paidInput =
+    params.amount_paid === undefined || params.amount_paid === null
+      ? undefined
+      : roundCurrencyAmount(Math.max(0, Number(params.amount_paid)));
+
+  const paymentDateProvided =
+    params.payment_date !== undefined && params.payment_date !== null;
+  const parsedPaymentDate = paymentDateProvided
+    ? new Date(params.payment_date as Date | string)
+    : null;
+
+  if (
+    paymentDateProvided &&
+    (!parsedPaymentDate || Number.isNaN(parsedPaymentDate.getTime()))
+  ) {
+    throw createInvoiceValidationError("Invalid payment date.", {
+      payment_date: ["Payment date must be a valid date."],
+    });
+  }
+
+  if (requestedPaymentStatus !== "UNPAID" && total <= 0) {
+    throw createInvoiceValidationError(
+      "Cannot apply paid or partial payment to an empty invoice.",
+      {
+        amount_paid: ["Add at least one valid line item before recording payment."],
+      },
+    );
+  }
+
+  if (requestedPaymentStatus === "UNPAID") {
+    if (params.status === InvoiceStatus.PAID) {
+      throw createInvoiceValidationError(
+        "Status conflicts with payment status.",
+        {
+          status: ["Status PAID requires a paid payment status."],
+        },
+      );
+    }
+
+    if (params.status === InvoiceStatus.PARTIALLY_PAID) {
+      throw createInvoiceValidationError(
+        "Status conflicts with payment status.",
+        {
+          status: [
+            "Status PARTIALLY_PAID requires a partial payment status.",
+          ],
+        },
+      );
+    }
+
+    if (paidInput !== undefined && paidInput > 0) {
+      throw createInvoiceValidationError(
+        "Paid amount is not allowed for unpaid invoices.",
+        {
+          amount_paid: [
+            "Set paid amount to 0 or choose partial/paid payment status.",
+          ],
+        },
+      );
+    }
+
+    const status =
+      params.status === InvoiceStatus.DRAFT ||
+      params.status === InvoiceStatus.VOID ||
+      params.status === InvoiceStatus.SENT ||
+      params.status === InvoiceStatus.OVERDUE
+        ? params.status
+        : InvoiceStatus.SENT;
+
+    return {
+      invoiceStatus: status,
+      paymentStatus: requestedPaymentStatus,
+      paidAmount: 0,
+      remainingAmount: total,
+      paymentMethod: null,
+      paymentDate: null,
+    };
+  }
+
+  if (!params.payment_method) {
+    throw createInvoiceValidationError("Payment method is required.", {
+      payment_method: [
+        "Payment method is required for paid and partial invoices.",
+      ],
+    });
+  }
+
+  if (requestedPaymentStatus === "PAID") {
+    if (paidInput !== undefined && Math.abs(paidInput - total) > 0.009) {
+      throw createInvoiceValidationError(
+        "Paid invoices must be fully settled.",
+        {
+          amount_paid: [
+            "For paid invoices, amount_paid must match the invoice total.",
+          ],
+        },
+      );
+    }
+
+    return {
+      invoiceStatus: InvoiceStatus.PAID,
+      paymentStatus: requestedPaymentStatus,
+      paidAmount: total,
+      remainingAmount: 0,
+      paymentMethod: params.payment_method,
+      paymentDate: parsedPaymentDate ?? new Date(),
+    };
+  }
+
+  if (paidInput === undefined || paidInput <= 0) {
+    throw createInvoiceValidationError(
+      "Partial payment requires a positive paid amount.",
+      {
+        amount_paid: [
+          "For partially paid invoices, amount_paid must be greater than 0.",
+        ],
+      },
+    );
+  }
+
+  if (paidInput >= total) {
+    throw createInvoiceValidationError(
+      "Partial payment must be smaller than invoice total.",
+      {
+        amount_paid: [
+          "For partially paid invoices, amount_paid must be less than total.",
+        ],
+      },
+    );
+  }
+
+  return {
+    invoiceStatus: InvoiceStatus.PARTIALLY_PAID,
+    paymentStatus: requestedPaymentStatus,
+    paidAmount: paidInput,
+    remainingAmount: roundCurrencyAmount(total - paidInput),
+    paymentMethod: params.payment_method,
+    paymentDate: parsedPaymentDate ?? new Date(),
+  };
+};
 
 const formatCurrency = (value: unknown, currency = "INR") => {
   const amount = toNumber(value);
@@ -236,6 +445,11 @@ const buildInvoicePdfHtml = (
       tax_rate: unknown;
       total: unknown;
     }>;
+    payments: Array<{
+      amount: unknown;
+      method: PaymentMethod;
+      paid_at: Date;
+    }>;
   },
   company: {
     business_name: string;
@@ -252,6 +466,22 @@ const buildInvoicePdfHtml = (
   customerProfile?: CustomerInvoiceProfile | null,
 ) => {
   const currency = company?.currency ?? "INR";
+  const totalAmount = toNumber(invoice.total);
+  const paidFromPayments = invoice.payments.reduce(
+    (sum, payment) => sum + toNumber(payment.amount),
+    0,
+  );
+  const paidAmount =
+    paidFromPayments > 0
+      ? Math.max(0, Math.min(paidFromPayments, totalAmount))
+      : invoice.status === InvoiceStatus.PAID
+        ? totalAmount
+        : 0;
+  const remainingAmount = Math.max(totalAmount - paidAmount, 0);
+  const latestPayment = [...invoice.payments].sort(
+    (left, right) => right.paid_at.getTime() - left.paid_at.getTime(),
+  )[0];
+
   const companyAddressLines = buildBusinessAddressLines(
     {
       addressLine1: company?.address_line1 ?? undefined,
@@ -361,7 +591,9 @@ const buildInvoicePdfHtml = (
             <div class="muted">#${escapeHtml(invoice.invoice_number)}</div>
             <div class="muted">Issue Date: ${formatDate(invoice.date)}</div>
             <div class="muted">Due Date: ${formatDate(invoice.due_date)}</div>
-            <div class="muted">Status: ${escapeHtml(invoice.status)}</div>
+            <div class="muted">Status: ${escapeHtml(normalizeStatusLabel(invoice.status))}</div>
+            <div class="muted">Paid: ${formatCurrency(paidAmount, currency)} | Balance: ${formatCurrency(remainingAmount, currency)}</div>
+            ${latestPayment ? `<div class="muted">Last payment: ${formatDate(latestPayment.paid_at)} (${escapeHtml(normalizeStatusLabel(latestPayment.method))})</div>` : ""}
           </div>
           <div>
             <h2>Company Details</h2>
@@ -422,6 +654,14 @@ const buildInvoicePdfHtml = (
             <tr class="final">
               <td>Grand Total</td>
               <td>${formatCurrency(invoice.total, currency)}</td>
+            </tr>
+            <tr>
+              <td>Paid Amount</td>
+              <td>${formatCurrency(paidAmount, currency)}</td>
+            </tr>
+            <tr>
+              <td>Balance Due</td>
+              <td>${formatCurrency(remainingAmount, currency)}</td>
             </tr>
           </table>
         </div>
@@ -651,6 +891,10 @@ export const createInvoice = async (
     discount?: number | null;
     discount_type?: "PERCENTAGE" | "FIXED" | null;
     status?: InvoiceStatus;
+    payment_status?: InvoicePaymentStatusInput;
+    amount_paid?: number | null;
+    payment_date?: Date | string | null;
+    payment_method?: PaymentMethod | null;
     notes?: string | null;
     sync_sales?: boolean;
     warehouse_id?: number | null;
@@ -670,96 +914,54 @@ export const createInvoice = async (
     payload.discount_type ?? "FIXED",
   );
 
-  const itemPayload = totals.items.map((item) => ({
-    product_id: item.product_id ?? undefined,
-    name: item.name,
-    quantity: item.quantity,
-    price: item.price,
-    tax_rate: item.tax_rate ?? undefined,
-    total: item.total,
-  }));
+  const syncSales =
+    payload.status !== InvoiceStatus.DRAFT && payload.status !== InvoiceStatus.VOID;
+  const paymentState = resolveInvoicePaymentState({
+    total: totals.total,
+    status: payload.status,
+    payment_status: payload.payment_status,
+    amount_paid: payload.amount_paid,
+    payment_date: payload.payment_date,
+    payment_method: payload.payment_method,
+  });
 
-  const syncSales = payload.sync_sales !== false;
+  const syncedSalePaymentStatus =
+    paymentState.paymentStatus === "PAID"
+      ? PaymentStatus.PAID
+      : paymentState.paymentStatus === "PARTIALLY_PAID"
+        ? PaymentStatus.PARTIALLY_PAID
+        : PaymentStatus.UNPAID;
 
   return prisma.$transaction(async (tx) => {
+    const warehouse = syncSales
+      ? await resolveBillingWarehouse(tx, userId, payload.warehouse_id)
+      : null;
+    const resolvedItems = syncSales
+      ? await resolveBillingProducts(tx, userId, totals.items, {
+          autoCreateProducts: true,
+        })
+      : totals.items.map((item) => ({
+          product_id: item.product_id as number,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          tax_rate: item.tax_rate ?? undefined,
+        }));
+
+    const itemPayload = resolvedItems.map((item, index) => ({
+      product_id: syncSales ? item.product_id : totals.items[index]?.product_id ?? undefined,
+      name: item.name,
+      quantity: item.quantity,
+      price: item.price,
+      tax_rate: item.tax_rate ?? undefined,
+      total: totals.items[index]?.total ?? item.quantity * item.price,
+    }));
+
     if (syncSales) {
-      const missingProduct = totals.items.some((item) => !item.product_id);
-      if (missingProduct) {
-        const error = new Error(
-          "All items must have products to sync sales and inventory.",
-        ) as Error & { status?: number };
-        error.status = 400;
-        throw error;
-      }
-
-      if (!payload.warehouse_id) {
-        const error = new Error(
-          "Select a warehouse to sync inventory.",
-        ) as Error & { status?: number };
-        error.status = 400;
-        throw error;
-      }
-
-      const productIds = totals.items.map((item) => item.product_id as number);
-      const products = await tx.product.findMany({
-        where: { id: { in: productIds }, user_id: userId },
-      });
-
-      if (products.length !== productIds.length) {
-        const error = new Error("Product not found.") as Error & {
-          status?: number;
-        };
-        error.status = 404;
-        throw error;
-      }
-
-      const productMap = new Map(products.map((p) => [p.id, p]));
-
-      const warehouse = await tx.warehouse.findFirst({
-        where: { id: payload.warehouse_id, user_id: userId },
-      });
-
       if (!warehouse) {
-        const error = new Error("Warehouse not found.") as Error & {
-          status?: number;
-        };
-        error.status = 404;
-        throw error;
-      }
-
-      const inventories = await tx.inventory.findMany({
-        where: {
-          warehouse_id: payload.warehouse_id,
-          product_id: { in: productIds },
-        },
-      });
-
-      const inventoryMap = new Map(
-        inventories.map((inventory) => [inventory.product_id, inventory]),
-      );
-
-      for (const item of totals.items) {
-        const product = productMap.get(item.product_id as number);
-        if (!product || product.stock_on_hand < item.quantity) {
-          const error = new Error("Insufficient stock.") as Error & {
-            status?: number;
-            errors?: Record<string, unknown>;
-          };
-          error.status = 409;
-          error.errors = { product_id: item.product_id };
-          throw error;
-        }
-
-        const inventory = inventoryMap.get(item.product_id as number);
-        if (!inventory || inventory.quantity < item.quantity) {
-          const error = new Error("Insufficient warehouse stock.") as Error & {
-            status?: number;
-            errors?: Record<string, unknown>;
-          };
-          error.status = 409;
-          error.errors = { product_id: item.product_id };
-          throw error;
-        }
+        throw createInvoiceValidationError("Warehouse resolution failed.", {
+          warehouse_id: ["Unable to determine a warehouse for this invoice."],
+        });
       }
     }
 
@@ -770,7 +972,7 @@ export const createInvoice = async (
         invoice_number: invoiceNumber,
         date: payload.date ?? undefined,
         due_date: payload.due_date ?? undefined,
-        status: payload.status ?? InvoiceStatus.SENT,
+        status: paymentState.invoiceStatus,
         subtotal: totals.subtotal,
         tax: totals.tax,
         discount: totals.discount,
@@ -778,17 +980,29 @@ export const createInvoice = async (
         notes: payload.notes ?? undefined,
         items: { create: itemPayload },
       },
-      include: { items: true },
+      include: { items: true, payments: true },
     });
 
+    if (paymentState.paidAmount > 0 && paymentState.paymentMethod) {
+      await tx.payment.create({
+        data: {
+          user_id: userId,
+          invoice_id: invoice.id,
+          amount: paymentState.paidAmount,
+          method: paymentState.paymentMethod,
+          paid_at: paymentState.paymentDate ?? new Date(),
+        },
+      });
+    }
+
     if (syncSales) {
-      const saleItems = totals.items.map((item) => ({
-        product_id: item.product_id ?? undefined,
+      const saleItems = resolvedItems.map((item, index) => ({
+        product_id: item.product_id,
         name: item.name,
         quantity: item.quantity,
         unit_price: item.price,
         tax_rate: item.tax_rate ?? undefined,
-        line_total: item.total,
+        line_total: totals.items[index]?.total ?? item.quantity * item.price,
       }));
 
       await tx.sale.create({
@@ -800,38 +1014,26 @@ export const createInvoice = async (
           subtotal: totals.subtotal,
           tax: totals.tax,
           total: totals.total,
+          totalAmount: totals.total,
+          paidAmount: paymentState.paidAmount,
+          pendingAmount: paymentState.remainingAmount,
+          paymentStatus: syncedSalePaymentStatus,
+          paymentDate: paymentState.paymentDate ?? undefined,
+          paymentMethod: paymentState.paymentMethod ?? undefined,
           notes: payload.notes
-            ? `${payload.notes} (Synced from invoice ${invoiceNumber})`
-            : `Synced from invoice ${invoiceNumber}`,
+            ? `${payload.notes} (Synced from invoice ${invoiceNumber}, Warehouse ${warehouse?.id})`
+            : `Synced from invoice ${invoiceNumber} (Warehouse ${warehouse?.id})`,
           items: { create: saleItems },
         },
       });
 
-      for (const item of totals.items) {
-        await tx.product.update({
-          where: { id: item.product_id as number },
-          data: { stock_on_hand: { decrement: item.quantity } },
-        });
-
-        await tx.inventory.update({
-          where: {
-            warehouse_id_product_id: {
-              warehouse_id: payload.warehouse_id as number,
-              product_id: item.product_id as number,
-            },
-          },
-          data: { quantity: { decrement: item.quantity } },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            product_id: item.product_id as number,
-            change: -item.quantity,
-            reason: StockReason.SALE,
-            note: `Invoice ${invoiceNumber} (Warehouse ${payload.warehouse_id})`,
-          },
-        });
-      }
+      await applyBillingSaleInventoryAdjustments({
+        tx,
+        warehouseId: warehouse?.id as number,
+        items: resolvedItems,
+        referenceId: invoice.id,
+        referenceType: "invoice",
+      });
     }
 
     return invoice;
@@ -942,7 +1144,13 @@ export const markInvoiceAsSent = async (userId: number, id: number) => {
     throw error;
   }
 
-  if (invoice.status === InvoiceStatus.PAID) {
+  if (
+    invoice.status === InvoiceStatus.PAID ||
+    invoice.status === InvoiceStatus.PARTIALLY_PAID ||
+    invoice.status === InvoiceStatus.OVERDUE ||
+    invoice.status === InvoiceStatus.VOID ||
+    invoice.status === InvoiceStatus.SENT
+  ) {
     return invoice;
   }
 
@@ -1032,6 +1240,7 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
     include: {
       customer: true,
       items: true,
+      payments: true,
     },
   });
 

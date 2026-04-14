@@ -17,7 +17,9 @@ import {
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
 import { useInventoryDemandPredictions } from "@/hooks/usePredictionQueries";
+import { useInventoryInsights } from "@/hooks/usePredictionQueries";
 import InventoryPredictionDrawer from "@/components/inventory/inventory-prediction-drawer";
+import SmartInventoryInsights from "@/components/inventory/SmartInventoryInsights";
 import { useI18n } from "@/providers/LanguageProvider";
 import type { Inventory, InventoryDemandPrediction } from "@/lib/apiClient";
 
@@ -42,6 +44,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
   const predictionsQuery = useInventoryDemandPredictions(
     scopedWarehouseId ? { warehouseId: scopedWarehouseId } : undefined,
   );
+  const insightsQuery = useInventoryInsights(scopedWarehouseId);
   const adjustInventory = useAdjustInventoryMutation();
   const [form, setForm] = useState({
     warehouse_id: "",
@@ -254,6 +257,12 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
             </div>
           </div>
         </section>
+
+        <SmartInventoryInsights
+          data={insightsQuery.data}
+          isLoading={insightsQuery.isLoading}
+          isError={insightsQuery.isError}
+        />
 
         <section className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.2fr]">
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-gray-800">

@@ -338,6 +338,12 @@ export type CustomerInput = {
   opening_balance?: number | null;
 };
 
+export type CustomerListParams = {
+  page?: number;
+  limit?: number;
+  search?: string | null;
+};
+
 export type CustomerLedgerEntry = {
   id: string;
   type: "invoice" | "payment";
@@ -663,6 +669,17 @@ export type InvoiceInput = {
   due_date?: string | Date | null;
   discount?: number | null;
   discount_type?: "PERCENTAGE" | "FIXED" | null;
+  payment_status?: "PAID" | "PARTIALLY_PAID" | "UNPAID";
+  amount_paid?: number | null;
+  payment_date?: string | Date | null;
+  payment_method?:
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "CHEQUE"
+    | "OTHER"
+    | null;
   tax_mode?: "AUTO" | "CGST_SGST" | "IGST" | "NONE" | null;
   customer_type?: "B2C" | "B2B" | null;
   customer_gstin?: string | null;
@@ -755,6 +772,47 @@ export type InventoryDemandPredictionFilters = {
   supplierId?: number;
   alertLevel?: InventoryDemandAlertLevel;
   limit?: number;
+};
+
+export type InventoryInsightType =
+  | "low_stock"
+  | "out_of_stock"
+  | "prediction"
+  | "slow_moving"
+  | "reorder_reminder"
+  | "supplier_suggestion";
+
+export type InventoryInsightSeverity = "critical" | "warning" | "info";
+
+export type InventoryInsight = {
+  id: string;
+  productId: string;
+  productName: string;
+  warehouseId: number | null;
+  warehouseName: string | null;
+  type: InventoryInsightType;
+  message: string;
+  severity: InventoryInsightSeverity;
+  suggestedQuantity?: number;
+  suggestedSupplierId?: number | null;
+  suggestedSupplierName?: string | null;
+  daysToStockout?: number | null;
+  avgDailySales?: number;
+  unitCost?: number;
+  stockLeft: number;
+  threshold?: number;
+  referenceKey: string;
+};
+
+export type InventoryInsightsResponse = {
+  generatedAt: string;
+  summary: {
+    critical: number;
+    warning: number;
+    info: number;
+    total: number;
+  };
+  insights: InventoryInsight[];
 };
 
 export type DashboardOverview = {
@@ -997,6 +1055,27 @@ export type UserSettingsPreferences = {
     terms: string;
     signature: string;
   };
+};
+
+export type AppNotificationType =
+  | "payment"
+  | "inventory"
+  | "customer"
+  | "subscription"
+  | "worker";
+
+export type AppNotification = {
+  id: string;
+  businessId: string;
+  type: AppNotificationType;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+};
+
+export type NotificationListResponse = {
+  notifications: AppNotification[];
+  unreadCount: number;
 };
 
 export type SecurityActivityEvent = {
@@ -2062,8 +2141,16 @@ const normalizeSupplierPayload = (
   };
 };
 
-export const fetchCustomers = async (): Promise<Customer[]> => {
-  const response = await apiClient.get("/customers");
+export const fetchCustomers = async (
+  params?: CustomerListParams,
+): Promise<Customer[]> => {
+  const response = await apiClient.get("/customers", {
+    params: {
+      page: params?.page,
+      limit: params?.limit,
+      search: params?.search?.trim() || undefined,
+    },
+  });
   return normalizeListResponse<Customer>(response.data?.data).map(
     normalizeCustomerRecord,
   );
@@ -2552,6 +2639,15 @@ export const fetchInventories = async (
   return response.data.data as Inventory[];
 };
 
+export const fetchInventoryInsights = async (
+  warehouseId?: number,
+): Promise<InventoryInsightsResponse> => {
+  const response = await apiClient.get("/inventories/insights", {
+    params: warehouseId ? { warehouseId } : undefined,
+  });
+  return response.data.data as InventoryInsightsResponse;
+};
+
 const buildInventoryPredictionParams = (
   filters?: InventoryDemandPredictionFilters,
 ) => {
@@ -2792,6 +2888,23 @@ export const saveUserSettingsPreferences = async (
 ): Promise<UserSettingsPreferences> => {
   const response = await apiClient.put("/settings/preferences", payload);
   return response.data.data as UserSettingsPreferences;
+};
+
+export const fetchNotifications = async (
+  limit = 10,
+): Promise<NotificationListResponse> => {
+  const response = await apiClient.get("/notifications", {
+    params: { limit },
+  });
+  return response.data.data as NotificationListResponse;
+};
+
+export const markNotificationAsRead = async (id: string): Promise<void> => {
+  await apiClient.post(`/notifications/${id}/read`);
+};
+
+export const markAllNotificationsAsRead = async (): Promise<void> => {
+  await apiClient.post("/notifications/read-all");
 };
 
 export const fetchSecurityActivity = async (): Promise<

@@ -111,7 +111,7 @@ const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
 
   const { data: customersQuery, isLoading: isCustomersLoading } = useQuery({
     queryKey: ["profile", "customers"],
-    queryFn: fetchCustomers,
+    queryFn: () => fetchCustomers(),
     initialData: previewData?.customers,
     enabled: !previewData,
     staleTime: queryStaleTime,

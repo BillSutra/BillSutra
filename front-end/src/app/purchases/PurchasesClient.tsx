@@ -849,6 +849,9 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     const warehouseId = searchParams.get("warehouseId");
     const quantity = searchParams.get("quantity");
     const unitCost = searchParams.get("unitCost");
+    const supplierId = searchParams.get("supplierId");
+    const supplierName = searchParams.get("supplierName");
+    const source = searchParams.get("source");
     const productLabel =
       searchParams.get("productLabel") ?? "Suggested product";
 
@@ -856,9 +859,11 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
       setEditingId(null);
       setForm((prev) => ({
         ...prev,
+        supplier_id: supplierId ?? prev.supplier_id,
         warehouse_id: warehouseId ?? prev.warehouse_id,
         notes:
-          prev.notes.trim() || "Loaded from inventory purchase suggestion.",
+          prev.notes.trim() ||
+          `Loaded from ${source === "smart_inventory_insights" ? "smart inventory insights" : "inventory purchase suggestion"}${supplierName ? ` with ${supplierName}` : ""}.`,
       }));
       setItems([
         {
@@ -879,6 +884,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
         productId,
         warehouseId,
         quantity,
+        supplierId,
       });
     }, 0);
 

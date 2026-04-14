@@ -15,6 +15,7 @@
     "remove": "निकालें",
     "search": "खोजें",
     "language": "भाषा",
+    "switchLanguage": "भाषा बदलें",
     "english": "अंग्रेज़ी",
     "hindi": "हिंदी",
     "currencyCode": "INR",
@@ -230,6 +231,16 @@
     "openSidebar": "साइडबार खोलें",
     "searchPlaceholder": "इनवॉइस, ग्राहक, प्रोडक्ट खोजें...",
     "notifications": "सूचनाएँ"
+  },
+  "notifications": {
+    "title": "सूचनाएँ",
+    "unreadCount": "{count} अपठित",
+    "allCaughtUp": "आपकी सभी सूचनाएँ देख ली गई हैं।",
+    "markAllRead": "सभी को पढ़ा हुआ चिन्हित करें",
+    "viewAll": "सभी सूचनाएँ देखें",
+    "empty": "अभी कोई सूचना नहीं है।",
+    "pageTitle": "सूचनाएँ",
+    "pageSubtitle": "हाल की व्यावसायिक अलर्ट, रिमाइंडर और टीम गतिविधि एक ही जगह।"
   },
   "themeToggle": {
     "toggleTheme": "थीम बदलें",

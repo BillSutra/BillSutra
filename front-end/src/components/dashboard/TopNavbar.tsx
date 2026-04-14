@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, CircleHelp, Menu, Search } from "lucide-react";
+import { CircleHelp, Menu, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,7 @@ import LanguageToggle from "@/components/language-toggle";
 import ProfileMenu from "@/components/auth/ProfileMenu";
 import { useI18n } from "@/providers/LanguageProvider";
 import BrandLogo from "@/components/branding/BrandLogo";
+import NotificationBell from "@/components/dashboard/NotificationBell";
 
 type TopNavbarProps = {
   name: string;
@@ -148,15 +149,7 @@ const TopNavbar = ({
             >
               <CircleHelp className="h-4 w-4" />
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="rounded-2xl"
-              aria-label={t("topNavbar.notifications")}
-            >
-              <Bell className="h-4 w-4" />
-            </Button>
+            <NotificationBell />
             <LanguageToggle className="hidden sm:inline-flex" />
             <ThemeToggle />
             <ProfileMenu name={name} image={image} />

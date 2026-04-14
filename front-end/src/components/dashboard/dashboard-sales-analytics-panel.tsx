@@ -265,9 +265,9 @@ const DashboardSalesAnalyticsPanel = ({
                     />
                     <Legend />
                     <Tooltip
-                      formatter={(value: number, name: string) => [
+                      formatter={(value, name) => [
                         currency(Number(value) || 0),
-                        name === "sales"
+                        String(name) === "sales"
                           ? t("dashboard.salesChart.legendSales")
                           : t("dashboard.salesChart.legendPurchases"),
                       ]}
