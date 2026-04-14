@@ -125,13 +125,16 @@ const InvoiceTotals = ({
         ) : null}
 
         <div className="flex items-center justify-between rounded-[1.15rem] bg-slate-50/90 px-4 py-3 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
-          <span className="text-slate-600 dark:text-slate-300">{discountLabel}</span>
+          <span className="text-slate-600 dark:text-slate-300">
+            {discountLabel}
+          </span>
           <span className="font-medium text-slate-950 dark:text-slate-100">
             {formatCurrency(totals.discount)}
           </span>
         </div>
 
-        {typeof paidAmount === "number" && typeof remainingAmount === "number" ? (
+        {typeof paidAmount === "number" &&
+        typeof remainingAmount === "number" ? (
           <div className="grid gap-2.5 sm:grid-cols-2">
             <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 ring-1 ring-emerald-200/80 dark:bg-emerald-950/30 dark:ring-emerald-900/60">
               <span className="text-emerald-700 dark:text-emerald-200">

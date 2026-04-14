@@ -69,7 +69,8 @@ const InvoiceForm = ({
             Choose customer and basic bill details
           </h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            Start with the customer first. You can keep the default settings and review the full bill in Step 3.
+            Start with the customer first. You can keep the default settings and
+            review the full bill in Step 3.
           </p>
         </div>
         <div className="rounded-[1.4rem] border border-slate-200 bg-white/80 px-4 py-3 text-right shadow-sm dark:border-gray-700 dark:bg-gray-900/70">
@@ -154,7 +155,9 @@ const InvoiceForm = ({
             value={taxMode}
             onChange={(event) => onTaxModeChange(event.target.value as TaxMode)}
           >
-            <option value="CGST_SGST">{t("invoiceForm.gstModeCgstSgst")}</option>
+            <option value="CGST_SGST">
+              {t("invoiceForm.gstModeCgstSgst")}
+            </option>
             <option value="IGST">{t("invoiceForm.gstModeIgst")}</option>
             <option value="NONE">{t("invoiceForm.gstModeNone")}</option>
           </select>
@@ -187,11 +190,14 @@ const InvoiceForm = ({
             onChange={(event) =>
               onFormChange({
                 ...form,
-                discount_type: event.target.value as InvoiceFormState["discount_type"],
+                discount_type: event.target
+                  .value as InvoiceFormState["discount_type"],
               })
             }
           >
-            <option value="PERCENTAGE">{t("invoiceForm.discountTypePercentage")}</option>
+            <option value="PERCENTAGE">
+              {t("invoiceForm.discountTypePercentage")}
+            </option>
             <option value="FIXED">{t("invoiceForm.discountTypeFixed")}</option>
           </select>
         </div>
@@ -217,7 +223,11 @@ const InvoiceForm = ({
             className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-500/20"
             value={form.warehouse_id ?? ""}
             onChange={(event) =>
-              onFormChange({ ...form, warehouse_id: event.target.value, sync_sales: true })
+              onFormChange({
+                ...form,
+                warehouse_id: event.target.value,
+                sync_sales: true,
+              })
             }
           >
             <option value="">Use default warehouse</option>
@@ -228,7 +238,9 @@ const InvoiceForm = ({
             ))}
           </select>
           <p className="text-xs text-gray-500">
-            Inventory sync runs automatically when the invoice is created. If you do not select a warehouse, BillSutra will use your default warehouse.
+            Inventory sync runs automatically when the invoice is created. If
+            you do not select a warehouse, BillSutra will use your default
+            warehouse.
           </p>
         </div>
 
@@ -248,11 +260,14 @@ const InvoiceForm = ({
                 onChange={(event) =>
                   onFormChange({
                     ...form,
-                    payment_status: event.target.value as InvoiceFormState["payment_status"],
+                    payment_status: event.target
+                      .value as InvoiceFormState["payment_status"],
                   })
                 }
               >
-                <option value="UNPAID">{t("invoiceHistory.status.SENT")}</option>
+                <option value="UNPAID">
+                  {t("invoiceHistory.status.SENT")}
+                </option>
                 <option value="PARTIALLY_PAID">
                   {t("invoiceHistory.status.PARTIALLY_PAID")}
                 </option>
@@ -301,17 +316,27 @@ const InvoiceForm = ({
                     aria-invalid={!form.payment_method}
                     required
                   >
-                    <option value="">{t("invoiceForm.selectOptionError")}</option>
-                    <option value="CASH">{t("invoiceDetail.paymentMethods.CASH")}</option>
-                    <option value="UPI">{t("invoiceDetail.paymentMethods.UPI")}</option>
+                    <option value="">
+                      {t("invoiceForm.selectOptionError")}
+                    </option>
+                    <option value="CASH">
+                      {t("invoiceDetail.paymentMethods.CASH")}
+                    </option>
+                    <option value="UPI">
+                      {t("invoiceDetail.paymentMethods.UPI")}
+                    </option>
                     <option value="BANK_TRANSFER">
                       {t("invoiceDetail.paymentMethods.BANK_TRANSFER")}
                     </option>
-                    <option value="CARD">{t("invoiceDetail.paymentMethods.CARD")}</option>
+                    <option value="CARD">
+                      {t("invoiceDetail.paymentMethods.CARD")}
+                    </option>
                     <option value="CHEQUE">
                       {t("invoiceDetail.paymentMethods.CHEQUE")}
                     </option>
-                    <option value="OTHER">{t("invoiceDetail.paymentMethods.OTHER")}</option>
+                    <option value="OTHER">
+                      {t("invoiceDetail.paymentMethods.OTHER")}
+                    </option>
                   </select>
                 </div>
 
