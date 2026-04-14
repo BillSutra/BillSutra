@@ -13,6 +13,8 @@ type InvoiceTotalsProps = {
   taxMode: TaxMode;
   discountValue?: string | number;
   discountType: DiscountType;
+  paidAmount?: number;
+  remainingAmount?: number;
   action?: React.ReactNode;
   className?: string;
 };
@@ -22,6 +24,8 @@ const InvoiceTotals = ({
   taxMode,
   discountValue = 0,
   discountType,
+  paidAmount,
+  remainingAmount,
   action,
   className,
 }: InvoiceTotalsProps) => {
@@ -121,11 +125,35 @@ const InvoiceTotals = ({
         ) : null}
 
         <div className="flex items-center justify-between rounded-[1.15rem] bg-slate-50/90 px-4 py-3 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
-          <span className="text-slate-600 dark:text-slate-300">{discountLabel}</span>
+          <span className="text-slate-600 dark:text-slate-300">
+            {discountLabel}
+          </span>
           <span className="font-medium text-slate-950 dark:text-slate-100">
             {formatCurrency(totals.discount)}
           </span>
         </div>
+
+        {typeof paidAmount === "number" &&
+        typeof remainingAmount === "number" ? (
+          <div className="grid gap-2.5 sm:grid-cols-2">
+            <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 ring-1 ring-emerald-200/80 dark:bg-emerald-950/30 dark:ring-emerald-900/60">
+              <span className="text-emerald-700 dark:text-emerald-200">
+                {t("invoicePreview.paid")}
+              </span>
+              <span className="font-semibold text-emerald-700 dark:text-emerald-200">
+                {formatCurrency(paidAmount)}
+              </span>
+            </div>
+            <div className="flex items-center justify-between rounded-[1.15rem] bg-rose-50 px-4 py-3 ring-1 ring-rose-200/80 dark:bg-rose-950/30 dark:ring-rose-900/60">
+              <span className="text-rose-700 dark:text-rose-200">
+                {t("invoicePreview.balance")}
+              </span>
+              <span className="font-semibold text-rose-700 dark:text-rose-200">
+                {formatCurrency(remainingAmount)}
+              </span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {action ? action : null}

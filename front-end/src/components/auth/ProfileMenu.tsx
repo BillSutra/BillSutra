@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useEffect, useState } from "react";
+import React, { Suspense, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,17 +16,16 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { Languages } from "lucide-react";
 import { useI18n } from "@/providers/LanguageProvider";
+import { usePersistedLanguage } from "@/hooks/usePersistedLanguage";
+import { useHydrated } from "@/hooks/useHydrated";
 const LogoutModalDynamic = dynamic(() => import("../auth/LogoutModal"));
 const ProfileMenu = ({ name, image }: { name: string; image?: string }) => {
   const [logoutopen, setLogoutOpen] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const { language, setLanguage, t } = useI18n();
+  const hydrated = useHydrated();
+  const { t } = useI18n();
+  const { language, setPersistedLanguage } = usePersistedLanguage();
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
+  if (!hydrated) {
     return <UserAvtar name={name} image={image} />;
   }
   return (
@@ -56,7 +55,9 @@ const ProfileMenu = ({ name, image }: { name: string; image?: string }) => {
           </DropdownMenuLabel>
           <DropdownMenuRadioGroup
             value={language}
-            onValueChange={(value) => setLanguage(value as "en" | "hi")}
+            onValueChange={(value) =>
+              setPersistedLanguage(value as "en" | "hi")
+            }
           >
             <DropdownMenuRadioItem value="en">
               {t("common.english")}

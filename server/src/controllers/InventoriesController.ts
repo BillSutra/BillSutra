@@ -7,6 +7,8 @@ import {
   inventoryAdjustSchema,
   inventoryQuerySchema,
 } from "../validations/apiValidations.js";
+import { createNotification } from "../services/notification.service.js";
+import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
 
 type InventoryAdjustInput = z.infer<typeof inventoryAdjustSchema>;
 type InventoryQueryInput = z.infer<typeof inventoryQuerySchema>;
@@ -52,6 +54,7 @@ class InventoriesController {
 
   static async adjust(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -110,6 +113,22 @@ class InventoriesController {
 
       return { inventory, product: productUpdated };
     });
+
+    if (
+      businessId &&
+      updated.product.reorder_level > 0 &&
+      updated.product.stock_on_hand <= updated.product.reorder_level
+    ) {
+      await createNotification({
+        userId,
+        businessId,
+        type: "inventory",
+        message: `${updated.product.name} is low in stock (${updated.product.stock_on_hand} left).`,
+        referenceKey: `low-stock:${updated.product.id}:${updated.product.stock_on_hand}`,
+      });
+    }
+
+    invalidateInventoryInsightsCacheByUser(userId);
 
     return sendResponse(res, 200, {
       message: "Inventory updated",

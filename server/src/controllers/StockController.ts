@@ -4,12 +4,15 @@ import prisma from "../config/db.config.js";
 import { StockReason } from "@prisma/client";
 import type { z } from "zod";
 import { stockAdjustSchema } from "../validations/apiValidations.js";
+import { createNotification } from "../services/notification.service.js";
+import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
 
 type StockAdjustInput = z.infer<typeof stockAdjustSchema>;
 
 class StockController {
   static async adjust(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -73,6 +76,22 @@ class StockController {
 
       return updatedProduct;
     });
+
+    if (
+      businessId &&
+      updated.reorder_level > 0 &&
+      updated.stock_on_hand <= updated.reorder_level
+    ) {
+      await createNotification({
+        userId,
+        businessId,
+        type: "inventory",
+        message: `${updated.name} is low in stock (${updated.stock_on_hand} left).`,
+        referenceKey: `low-stock:${updated.id}:${updated.stock_on_hand}`,
+      });
+    }
+
+    invalidateInventoryInsightsCacheByUser(userId);
 
     return sendResponse(res, 200, { message: "Stock updated", data: updated });
   }

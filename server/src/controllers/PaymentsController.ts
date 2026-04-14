@@ -5,6 +5,7 @@ import { InvoiceStatus, PaymentMethod } from "@prisma/client";
 import type { z } from "zod";
 import { paymentCreateSchema } from "../validations/apiValidations.js";
 import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
+import { createNotification } from "../services/notification.service.js";
 import {
   captureServerException,
   captureServerMessage,
@@ -30,6 +31,7 @@ class PaymentsController {
 
   static async store(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -85,6 +87,16 @@ class PaymentsController {
         where: { id: invoice.id },
         data: { status },
       });
+
+      if (businessId) {
+        await createNotification({
+          userId,
+          businessId,
+          type: "payment",
+          message: `Payment of Rs ${Number(body.amount).toFixed(2)} received for invoice ${invoice.invoice_number}.`,
+          referenceKey: `payment-received:${payment.id}`,
+        });
+      }
 
       emitDashboardUpdate({ userId, source: "payment.create" });
       return sendResponse(res, 201, {

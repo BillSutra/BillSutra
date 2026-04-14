@@ -13,6 +13,10 @@ export const idParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
+export const stringIdParamSchema = z.object({
+  id: z.string().trim().min(1).max(191),
+});
+
 export const publicInvoiceParamSchema = z.object({
   id: z.string().trim().min(1).max(64),
 });
@@ -850,6 +854,10 @@ export const invoiceCreateSchema = z.object({
   discount: z.coerce.number().nonnegative().optional(),
   discount_type: z.enum(["PERCENTAGE", "FIXED"]).optional(),
   status: z.nativeEnum(InvoiceStatus).optional(),
+  payment_status: z.enum(["UNPAID", "PARTIALLY_PAID", "PAID"]).optional(),
+  amount_paid: z.coerce.number().nonnegative().optional(),
+  payment_date: z.coerce.date().optional(),
+  payment_method: z.nativeEnum(PaymentMethod).optional(),
   notes: z.string().optional(),
   sync_sales: z.boolean().optional(),
   warehouse_id: z.coerce.number().int().positive().optional(),

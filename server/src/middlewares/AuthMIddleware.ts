@@ -71,12 +71,10 @@ const AuthMiddleware = (
         latestSessionVersion !== null &&
         latestSessionVersion !== authUser.sessionVersion
       ) {
-        res
-          .status(401)
-          .json({
-            status: 401,
-            message: "Session expired. Please login again.",
-          });
+        res.status(401).json({
+          status: 401,
+          message: "Session expired. Please login again.",
+        });
         return;
       }
 

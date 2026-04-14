@@ -5,10 +5,12 @@ import { useQuery } from "@tanstack/react-query";
 import {
   fetchDashboardForecast,
   fetchInventoryDemandPredictions,
+  fetchInventoryInsights,
   type DashboardForecastResponse,
   type InventoryDemandPrediction,
   type InventoryDemandPredictionFilters,
   type InventoryDemandPredictionsMetadata,
+  type InventoryInsightsResponse,
 } from "@/lib/apiClient";
 import { dashboardRetryDelay } from "@/lib/dashboardRefresh";
 import { usePurchasesQuery, useWarehousesQuery } from "@/hooks/useInventoryQueries";
@@ -28,6 +30,8 @@ export const inventoryDemandPredictionsQueryKey = (
 ) => ["inventory-demand", "predictions", normalizePredictionFilters(filters)] as const;
 
 export const forecastSalesQueryKey = ["dashboard", "forecast"] as const;
+export const inventoryInsightsQueryKey = (warehouseId?: number) =>
+  ["inventory", "insights", warehouseId ?? "all"] as const;
 
 export const useInventoryDemandPredictions = (
   filters?: InventoryDemandPredictionFilters,
@@ -52,6 +56,17 @@ export const useForecastSales = () =>
     gcTime: FORECAST_STALE_MS * 2,
     refetchInterval: false,
     retry: 3,
+    retryDelay: dashboardRetryDelay,
+  });
+
+export const useInventoryInsights = (warehouseId?: number) =>
+  useQuery<InventoryInsightsResponse>({
+    queryKey: inventoryInsightsQueryKey(warehouseId),
+    queryFn: () => fetchInventoryInsights(warehouseId),
+    staleTime: INVENTORY_PREDICTIONS_STALE_MS,
+    gcTime: INVENTORY_PREDICTIONS_STALE_MS * 2,
+    refetchInterval: false,
+    retry: 2,
     retryDelay: dashboardRetryDelay,
   });
 

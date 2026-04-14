@@ -47,12 +47,14 @@ import {
   formatBusinessAddressFromRecord,
   formatCustomerAddressFromRecord,
 } from "@/lib/indianAddress";
+import { formatPaymentMethodLabel } from "@/lib/invoicePayments";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   InvoiceDraft,
   InvoiceFormState,
   InvoiceItemError,
   InvoiceItemForm,
+  InvoicePaymentStatus,
   TaxMode,
 } from "@/types/invoice";
 import type {
@@ -109,6 +111,19 @@ const sanitizeDiscountAmount = (value: string) => {
   return String(Math.max(0, numericValue));
 };
 
+const sanitizePaidAmount = (value: string) => {
+  if (value === "") return value; 
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return value;
+  return String(Math.max(0, numericValue));
+};
+
+const mapPaymentStatusToInvoiceStatus = (status: InvoicePaymentStatus) => {
+  if (status === "PAID") return "PAID";
+  if (status === "PARTIALLY_PAID") return "PARTIALLY_PAID";
+  return "SENT";
+};
+
 const DEFAULT_INVOICE_SECTIONS: SectionKey[] = [
   "header",
   "company_details",
@@ -148,6 +163,10 @@ const createEmptyInvoiceForm = (customerId = ""): InvoiceFormState => ({
   due_date: "",
   discount: "0",
   discount_type: "PERCENTAGE",
+  payment_status: "UNPAID",
+  amount_paid: "",
+  payment_method: "",
+  payment_date: "",
   notes: "",
   sync_sales: true,
   warehouse_id: "",
@@ -285,13 +304,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const [itemErrors, setItemErrors] = useState<InvoiceItemError[]>([]);
   const [summaryErrors, setSummaryErrors] = useState<string[]>([]);
   const [serverError, setServerError] = useState<string | null>(null);
-  const validation = useInvoiceValidation(form, items);
   const totals = useInvoiceTotals(
     items,
     form.discount,
     form.discount_type,
     taxMode,
   );
+  const validation = useInvoiceValidation(form, items, totals.total);
   const fallbackActiveTemplate = useMemo(
     () => ({
       templateId: "professional",
@@ -588,6 +607,58 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
   const invoicePreviewData: InvoicePreviewData = useMemo(() => {
     const businessName = businessProfile?.business_name || "BillSutra";
+    const parsedPaidAmount = Number(form.amount_paid || 0);
+    const normalizedPaidAmount = Number.isFinite(parsedPaidAmount)
+      ? Math.max(parsedPaidAmount, 0)
+      : 0;
+    const totalAmount = Math.max(0, totals.total);
+    const paidAmount =
+      form.payment_status === "PAID"
+        ? totalAmount
+        : form.payment_status === "PARTIALLY_PAID"
+          ? Math.min(normalizedPaidAmount, totalAmount)
+          : 0;
+    const remainingAmount = Math.max(totalAmount - paidAmount, 0);
+    const paymentMethodLabel = form.payment_method
+      ? formatPaymentMethodLabel(form.payment_method)
+      : t("invoicePreview.manualEntry");
+    const paymentDateLabel = form.payment_date
+      ? formatDate(form.payment_date)
+      : formatDate(new Date());
+
+    const paymentStatusLabel =
+      form.payment_status === "PAID"
+        ? t("invoiceHistory.status.PAID")
+        : form.payment_status === "PARTIALLY_PAID"
+          ? t("invoiceHistory.status.PARTIALLY_PAID")
+          : t("invoicePreview.pending");
+
+    const paymentStatusTone =
+      form.payment_status === "PAID"
+        ? "paid"
+        : form.payment_status === "PARTIALLY_PAID"
+          ? "partial"
+          : "pending";
+
+    const paymentStatusNote =
+      form.payment_status === "PAID"
+        ? `${paymentMethodLabel} • ${paymentDateLabel}`
+        : form.payment_status === "PARTIALLY_PAID"
+          ? `${paymentMethodLabel} • ${t("invoicePreview.paid")}: ${paidAmount.toFixed(2)}`
+          : t("invoiceDetail.awaitingPayment");
+
+    const paymentHistory =
+      paidAmount > 0
+        ? [
+            {
+              id: "draft-payment",
+              amount: paidAmount,
+              paidAt: paymentDateLabel,
+              method: paymentMethodLabel,
+            },
+          ]
+        : [];
+
     return {
       invoiceNumber: t("invoice.invoicePreviewNumber"),
       invoiceDate,
@@ -661,15 +732,18 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             : t("invoice.discountFixedLabel"),
       },
       paymentSummary: {
-        statusLabel: t("invoicePreview.pending"),
-        statusTone: "pending",
-        statusNote: t("invoiceDetail.awaitingPayment"),
-        paidAmount: 0,
-        remainingAmount: totals.total,
-        history: [],
+        statusLabel: paymentStatusLabel,
+        statusTone: paymentStatusTone,
+        statusNote: paymentStatusNote,
+        paidAmount,
+        remainingAmount,
+        history: paymentHistory,
       },
       notes: form.notes || "",
-      paymentInfo: t("invoiceDetail.paymentInfo"),
+      paymentInfo:
+        form.payment_status === "UNPAID"
+          ? t("invoiceDetail.paymentInfo")
+          : `${t("purchasesPage.fields.paymentMethod")}: ${paymentMethodLabel}`,
       closingNote: t("invoiceDetail.closingNote"),
       signatureLabel: t("invoiceDetail.signatureLabel"),
     };
@@ -677,8 +751,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     businessProfile,
     customer,
     dueDate,
+    formatDate,
+    form.amount_paid,
     form.discount,
     form.discount_type,
+    form.payment_date,
+    form.payment_method,
+    form.payment_status,
     form.notes,
     invoiceDate,
     items,
@@ -689,6 +768,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const handleLoadDraft = useCallback((draft: InvoiceDraft) => {
     setForm({
       ...draft.form,
+      payment_status: draft.form.payment_status ?? "UNPAID",
+      amount_paid: draft.form.amount_paid ?? "",
+      payment_method: draft.form.payment_method ?? "",
+      payment_date: draft.form.payment_date ?? "",
       sync_sales: draft.form.sync_sales ?? true,
       warehouse_id: draft.form.warehouse_id ?? "",
     });
@@ -915,15 +998,29 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         next.discount_type === "PERCENTAGE"
           ? sanitizeDiscountPercent(next.discount)
           : sanitizeDiscountAmount(next.discount);
+      const rawPaidAmount = sanitizePaidAmount(next.amount_paid);
+      const amountPaid =
+        next.payment_status === "PAID"
+          ? String(Math.max(0, totals.total))
+          : next.payment_status === "UNPAID"
+            ? ""
+            : rawPaidAmount;
       setForm({
         ...next,
         discount,
+        amount_paid: amountPaid,
+        payment_method:
+          next.payment_status === "UNPAID" ? "" : next.payment_method,
+        payment_date:
+          next.payment_status === "UNPAID"
+            ? ""
+            : (next.payment_date || next.date),
       });
       setSummaryErrors([]);
       setServerError(null);
       markDirty();
     },
-    [markDirty],
+    [markDirty, totals.total],
   );
 
   const handleTaxModeChange = useCallback(
@@ -1118,7 +1215,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     setItemErrors(validation.errors);
     setSummaryErrors(validation.summary);
     if (validation.summary.length > 0) {
-      if (!form.customer_id || (form.sync_sales && !form.warehouse_id)) {
+      if (!form.customer_id) {
         flashShortcutSection("form");
       } else if (items.length === 0) {
         flashShortcutSection("entry");
@@ -1136,6 +1233,18 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         customers?.find(
           (customer) => customer.id === Number(form.customer_id),
         ) ?? null;
+      const effectivePaidAmount =
+        form.payment_status === "PAID"
+          ? totals.total
+          : form.payment_status === "PARTIALLY_PAID"
+            ? Number(form.amount_paid || 0)
+            : 0;
+      const effectivePaymentDate =
+        form.payment_status === "UNPAID"
+          ? undefined
+          : (form.payment_date ||
+            form.date ||
+            new Date().toISOString().slice(0, 10));
 
       const createdInvoice = await createInvoice.mutateAsync({
         customer_id: Number(form.customer_id),
@@ -1143,8 +1252,18 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         due_date: form.due_date || undefined,
         discount: Number(form.discount) || undefined,
         discount_type: form.discount_type,
-        status: "SENT",
-        sync_sales: form.sync_sales,
+        status: mapPaymentStatusToInvoiceStatus(form.payment_status),
+        payment_status: form.payment_status,
+        amount_paid:
+          form.payment_status === "UNPAID"
+            ? undefined
+            : Math.max(0, effectivePaidAmount),
+        payment_method:
+          form.payment_status === "UNPAID"
+            ? undefined
+            : (form.payment_method || undefined),
+        payment_date: effectivePaymentDate,
+        sync_sales: true,
         warehouse_id: form.warehouse_id ? Number(form.warehouse_id) : undefined,
         items: items.map((item) => ({
           product_id: item.product_id ? Number(item.product_id) : undefined,
@@ -1618,6 +1737,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                   form={form}
                   customers={customers}
                   warehouses={warehouses}
+                  totalAmount={totals.total}
                   taxMode={taxMode}
                   onFormChange={handleFormChange}
                   onTaxModeChange={handleTaxModeChange}
@@ -1774,6 +1894,30 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               taxMode={taxMode}
               discountValue={form.discount}
               discountType={form.discount_type}
+              paidAmount={
+                form.payment_status === "PAID"
+                  ? totals.total
+                  : form.payment_status === "PARTIALLY_PAID"
+                    ? Math.min(
+                        Math.max(Number(form.amount_paid || 0), 0),
+                        totals.total,
+                      )
+                    : 0
+              }
+              remainingAmount={
+                form.payment_status === "PAID"
+                  ? 0
+                  : Math.max(
+                      totals.total -
+                        (form.payment_status === "PARTIALLY_PAID"
+                          ? Math.min(
+                              Math.max(Number(form.amount_paid || 0), 0),
+                              totals.total,
+                            )
+                          : 0),
+                      0,
+                    )
+              }
               className="xl:max-w-[390px]"
               action={
                 <FirstTimeHint

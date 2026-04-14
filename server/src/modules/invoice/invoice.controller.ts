@@ -21,6 +21,8 @@ import { emitDashboardUpdate } from "../../services/dashboardRealtime.js";
 import { sendEmail } from "../../emails/index.js";
 import { buildPublicInvoiceUrl } from "../../lib/appUrls.js";
 import { incrementInvoiceUsage } from "../../services/subscription.service.js";
+import { createNotification } from "../../services/notification.service.js";
+import { invalidateInventoryInsightsCacheByUser } from "../../services/inventoryInsights.service.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
@@ -141,6 +143,7 @@ export const bootstrap = async (req: Request, res: Response) => {
 
 export const store = async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  const businessId = req.user?.businessId?.trim();
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
@@ -148,7 +151,33 @@ export const store = async (req: Request, res: Response) => {
   try {
     const body = req.body as InvoiceCreateInput;
     const invoice = await createInvoice(userId, body);
-    await incrementInvoiceUsage(userId);
+    invalidateInventoryInsightsCacheByUser(userId);
+
+    try {
+      await incrementInvoiceUsage(userId);
+    } catch (error) {
+      console.error(
+        "[Invoice] Usage increment failed, invoice was still created",
+        error,
+      );
+    }
+
+    if (businessId) {
+      try {
+        await createNotification({
+          userId,
+          businessId,
+          type: "payment",
+          message: `Invoice ${invoice.invoice_number} was created successfully.`,
+          referenceKey: `invoice-created:${invoice.id}`,
+        });
+      } catch (error) {
+        console.error(
+          "[Invoice] Notification creation failed, invoice was still created",
+          error,
+        );
+      }
+    }
     emitDashboardUpdate({ userId, source: "invoice.create" });
 
     return res.status(201).json({

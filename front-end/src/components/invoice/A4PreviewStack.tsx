@@ -96,7 +96,7 @@ const A4PreviewStack = ({
       observer?.disconnect();
       window.removeEventListener("resize", scheduleMeasure);
     };
-  }, []);
+  }, [stackKey]);
 
   const pages = useMemo(
     () => Array.from({ length: pageCount }, (_, index) => index),

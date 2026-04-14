@@ -45,6 +45,7 @@ model User {
   otp_codes                   OtpCode[]
   auth_events                 AuthEvent[]
   preferences                 UserPreference?
+  notifications               Notification[]
 
   session_version Int @default(0)
 
@@ -76,6 +77,26 @@ model UserPreference {
   updated_at DateTime @updatedAt
 
   @@map("user_preferences")
+}
+
+model Notification {
+  id String @id @default(cuid()) @db.VarChar(191)
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  business_id String @db.VarChar(191)
+  type        NotificationType
+  message     String   @db.VarChar(500)
+  is_read     Boolean  @default(false)
+  reference_key String? @db.VarChar(191)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@index([user_id, created_at])
+  @@index([business_id, created_at])
+  @@unique([business_id, reference_key])
+  @@map("notifications")
 }
 
 model Admin {
@@ -925,4 +946,12 @@ enum SubscriptionStatus {
 enum SubscriptionBillingCycle {
   MONTHLY
   YEARLY
+}
+
+enum NotificationType {
+  PAYMENT
+  INVENTORY
+  CUSTOMER
+  SUBSCRIPTION
+  WORKER
 }

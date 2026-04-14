@@ -7,6 +7,14 @@ import type { DesignConfig } from "@/components/invoice/DesignConfigContext";
 
 export type TaxMode = "CGST_SGST" | "IGST" | "NONE";
 export type DiscountType = "PERCENTAGE" | "FIXED";
+export type InvoicePaymentStatus = "UNPAID" | "PARTIALLY_PAID" | "PAID";
+export type InvoicePaymentMethod =
+  | "CASH"
+  | "CARD"
+  | "BANK_TRANSFER"
+  | "UPI"
+  | "CHEQUE"
+  | "OTHER";
 
 export type InvoiceFormState = {
   customer_id: string;
@@ -14,6 +22,10 @@ export type InvoiceFormState = {
   due_date: string;
   discount: string;
   discount_type: DiscountType;
+  payment_status: InvoicePaymentStatus;
+  amount_paid: string;
+  payment_method: InvoicePaymentMethod | "";
+  payment_date: string;
   notes: string;
   sync_sales: boolean;
   warehouse_id?: string;

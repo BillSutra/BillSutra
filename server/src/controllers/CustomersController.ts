@@ -14,6 +14,7 @@ import {
   parseLegacyBusinessAddress,
 } from "../lib/indianAddress.js";
 import { normalizeGstin } from "../lib/gstin.js";
+import { createNotification } from "../services/notification.service.js";
 
 type CustomerCreateInput = z.infer<typeof customerCreateSchema>;
 type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
@@ -62,6 +63,16 @@ type CustomerInvoiceRecord = {
     paid_at: Date;
   }>;
 };
+
+const customerBaseSelect = {
+  id: true,
+  name: true,
+  phone: true,
+  email: true,
+  address: true,
+  created_at: true,
+  updated_at: true,
+} satisfies Prisma.CustomerSelect;
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 
@@ -520,19 +531,49 @@ class CustomersController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    const search =
+      typeof req.query.search === "string" ? req.query.search.trim() : "";
+
     const { page, limit, skip } = parsePagination({
       page: req.query.page,
       limit: req.query.limit,
     });
 
-    const where = { user_id: userId };
+    const where: Prisma.CustomerWhereInput = {
+      user_id: userId,
+      ...(search
+        ? {
+            OR: [
+              {
+                name: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+              {
+                phone: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+              {
+                business_name: {
+                  contains: search,
+                  mode: "insensitive",
+                },
+              },
+            ],
+          }
+        : {}),
+    };
     const [items, total] = await prisma.$transaction([
       prisma.customer.findMany({
         where,
         orderBy: { created_at: "desc" },
         skip,
         take: limit,
-        include: {
+        select: {
+          ...customerBaseSelect,
           invoices: {
             select: {
               id: true,
@@ -577,6 +618,7 @@ class CustomersController {
 
   static async store(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -596,6 +638,7 @@ class CustomersController {
         phone: body.phone ?? null,
         address: legacyAddress,
       },
+      select: customerBaseSelect,
     });
 
     const customerType = normalizeCustomerType(body.type ?? body.customer_type);
@@ -626,6 +669,23 @@ class CustomersController {
 
     const extendedMap = await loadExtendedCustomerFields(userId, [customer.id]);
 
+    if (businessId) {
+      try {
+        await createNotification({
+          userId,
+          businessId,
+          type: "customer",
+          message: `New customer ${customer.name} was added to your business.`,
+          referenceKey: `customer-created:${customer.id}`,
+        });
+      } catch (error) {
+        console.error(
+          "[Customers] Notification creation failed, customer was still created",
+          error,
+        );
+      }
+    }
+
     return sendResponse(res, 201, {
       message: "Customer created",
       data: serializeCustomer(customer, extendedMap.get(customer.id)),
@@ -641,7 +701,8 @@ class CustomersController {
     const id = Number(req.params.id);
     const customer = await prisma.customer.findFirst({
       where: { id, user_id: userId },
-      include: {
+      select: {
+        ...customerBaseSelect,
         invoices: {
           select: {
             id: true,
@@ -688,7 +749,8 @@ class CustomersController {
     const id = Number(req.params.id);
     const customer = await prisma.customer.findFirst({
       where: { id, user_id: userId },
-      include: {
+      select: {
+        ...customerBaseSelect,
         invoices: {
           orderBy: { date: "asc" },
           select: {
