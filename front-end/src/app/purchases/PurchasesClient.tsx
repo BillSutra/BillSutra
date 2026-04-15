@@ -82,7 +82,7 @@ const createEmptyPurchaseItem = (): PurchaseFormItem => ({
 const COMPACT_MODE_STORAGE_KEY = "billsutra:purchases:compact-mode";
 
 const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
-  const { t, formatCurrency, formatDate } = useI18n();
+  const { t, safeT, formatCurrency, formatDate } = useI18n();
   const searchParams = useSearchParams();
   const { data, isLoading, isError } = usePurchasesQuery();
   const { data: suppliers } = useSuppliersQuery();
@@ -146,14 +146,12 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
 
   const translatePaymentStatus = (status: string) => {
     const key = `dashboard.enums.paymentStatus.${status}`;
-    const translated = t(key);
-    return translated === key ? humanizeEnum(status) : translated;
+    return safeT(key, humanizeEnum(status));
   };
 
   const translatePaymentMethod = (value: string) => {
     const key = `dashboard.enums.paymentMethod.${value}`;
-    const translated = t(key);
-    return translated === key ? humanizeEnum(value) : translated;
+    return safeT(key, humanizeEnum(value));
   };
 
   const paymentStatusBadgeClass = (status: string) => {

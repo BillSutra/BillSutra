@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/providers/LanguageProvider";
 
 const Hero = () => {
-  const { t } = useI18n();
+  const { t, safeT } = useI18n();
 
   return (
     <section className="relative overflow-hidden bg-[linear-gradient(180deg,#f7fbff_0%,#f9f5ee_42%,#ffffff_100%)] pb-20 pt-12 text-foreground sm:pb-24 sm:pt-16">
@@ -231,7 +231,10 @@ const Hero = () => {
                             style={{ height: `${height}%` }}
                           />
                           <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-[#7a8ea3]">
-                            {t(`landing.hero.chartLabels.${index + 1}`)}
+                            {safeT(
+                              `landing.hero.chartLabels.${index + 1}`,
+                              `W${index + 1}`,
+                            )}
                           </span>
                         </div>
                       ))}

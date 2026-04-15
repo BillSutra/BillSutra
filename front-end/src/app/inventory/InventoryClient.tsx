@@ -42,23 +42,19 @@ type InventoryTableRow = Inventory & {
 const STOCK_STATUS_META: Record<
   StockStatus,
   {
-    label: string;
     badgeClass: string;
     emphasisClass: string;
   }
 > = {
   out: {
-    label: "Out of Stock",
     badgeClass: "border border-red-200 bg-red-50 text-red-700",
     emphasisClass: "text-red-700",
   },
   low: {
-    label: "Low Stock",
     badgeClass: "border border-amber-200 bg-amber-50 text-amber-700",
     emphasisClass: "text-amber-700",
   },
   in: {
-    label: "In Stock",
     badgeClass: "border border-emerald-200 bg-emerald-50 text-emerald-700",
     emphasisClass: "text-emerald-700",
   },
@@ -178,6 +174,15 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
   const [serverError, setServerError] = useState<string | null>(null);
   const [formTouched, setFormTouched] = useState(false);
 
+  const stockStatusLabels = useMemo(
+    () => ({
+      out: t("inventory.tableView.outOfStock"),
+      low: t("inventory.tableView.lowStock"),
+      in: t("inventory.tableView.inStock"),
+    }),
+    [t],
+  );
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       setDebouncedSearch(searchInput.trim().toLowerCase());
@@ -221,10 +226,11 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
         null;
       const effectiveStock = prediction?.stock_left ?? item.quantity;
       const stockStatus = getStockStatus(item, prediction);
-      const categoryName = item.product.category?.name ?? "Uncategorized";
+      const categoryName =
+        item.product.category?.name ?? t("productsPage.uncategorized");
       const dailySalesText = prediction
         ? formatNumber(prediction.predicted_daily_sales, locale, 1)
-        : "Not available";
+        : t("inventory.predictions.notAvailable");
 
       return {
         ...item,
@@ -235,7 +241,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
         searchText: `${item.product.name} ${item.product.sku} ${categoryName} ${item.warehouse.name}`.toLowerCase(),
       };
     });
-  }, [data, locale, predictionByKey]);
+  }, [data, locale, predictionByKey, t]);
 
   const summary = useMemo(
     () => ({
@@ -409,23 +415,31 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
 
         <section className="mt-5 rounded-xl border border-gray-200 bg-white">
           <div className="border-b border-gray-200 px-4 py-4 sm:px-5">
-            <h2 className="text-lg font-semibold text-gray-900">Stock status</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              {t("inventory.tableView.title")}
+            </h2>
             <p className="mt-1 text-sm text-gray-600">
-              See what needs restocking first across all products.
+              {t("inventory.tableView.description")}
             </p>
           </div>
 
           <div className="grid gap-3 px-4 py-4 sm:grid-cols-3 sm:px-5">
             <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-4 text-red-700">
               <p className="text-sm font-semibold">
-                {summary.urgent} items need urgent restock
+                {t("inventory.tableView.urgentSummary", { count: summary.urgent })}
               </p>
             </div>
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-4 text-amber-700">
-              <p className="text-sm font-semibold">{summary.low} items low stock</p>
+              <p className="text-sm font-semibold">
+                {t("inventory.tableView.lowSummary", { count: summary.low })}
+              </p>
             </div>
             <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-emerald-700">
-              <p className="text-sm font-semibold">{summary.healthy} items healthy</p>
+              <p className="text-sm font-semibold">
+                {t("inventory.tableView.healthySummary", {
+                  count: summary.healthy,
+                })}
+              </p>
             </div>
           </div>
         </section>
@@ -434,9 +448,11 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
           <div className="border-b border-gray-200 px-4 py-4 sm:px-5">
             <div className="flex flex-col gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">All Inventory</h2>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {t("inventory.tableView.allInventoryTitle")}
+                </h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Search products, check stock status, and restock quickly.
+                  {t("inventory.tableView.allInventoryDescription")}
                 </p>
               </div>
 
@@ -444,7 +460,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                 <Input
                   value={searchInput}
                   onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="Search product or SKU"
+                  placeholder={t("inventory.tableView.searchPlaceholder")}
                   className="h-10 rounded-md border-gray-300"
                 />
 
@@ -453,7 +469,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   onChange={(event) => setCategoryFilter(event.target.value)}
                   className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
                 >
-                  <option value="">All categories</option>
+                  <option value="">{t("inventory.tableView.allCategories")}</option>
                   {(categories ?? []).map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
@@ -466,7 +482,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   onChange={(event) => setWarehouseFilter(event.target.value)}
                   className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
                 >
-                  <option value="">All warehouses</option>
+                  <option value="">{t("inventory.tableView.allWarehouses")}</option>
                   {(warehouses ?? []).map((warehouse) => (
                     <option key={warehouse.id} value={warehouse.id}>
                       {warehouse.name}
@@ -481,10 +497,10 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   }
                   className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
                 >
-                  <option value="all">All status</option>
-                  <option value="in">In Stock</option>
-                  <option value="low">Low Stock</option>
-                  <option value="out">Out of Stock</option>
+                  <option value="all">{t("inventory.tableView.allStatus")}</option>
+                  <option value="in">{t("inventory.tableView.inStock")}</option>
+                  <option value="low">{t("inventory.tableView.lowStock")}</option>
+                  <option value="out">{t("inventory.tableView.outOfStock")}</option>
                 </select>
 
                 <select
@@ -492,9 +508,9 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   onChange={(event) => setSortBy(event.target.value as SortOption)}
                   className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
                 >
-                  <option value="stock_asc">Stock: Low to High</option>
-                  <option value="stock_desc">Stock: High to Low</option>
-                  <option value="name_asc">Name: A to Z</option>
+                  <option value="stock_asc">{t("inventory.tableView.sortStockLowHigh")}</option>
+                  <option value="stock_desc">{t("inventory.tableView.sortStockHighLow")}</option>
+                  <option value="name_asc">{t("inventory.tableView.sortName")}</option>
                 </select>
               </div>
             </div>
@@ -508,14 +524,20 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   className="h-4 w-4 rounded border-gray-300"
                   checked={allVisibleSelected}
                   onChange={toggleSelectVisible}
-                  aria-label="Select visible products"
+                  aria-label={t("inventory.tableView.selectVisible")}
                 />
-                <span>Select page</span>
+                <span>{t("inventory.tableView.selectPage")}</span>
               </label>
               <span>
-                Showing {showingFrom}-{showingTo} of {filteredRows.length}
+                {t("inventory.tableView.showing", {
+                  from: showingFrom,
+                  to: showingTo,
+                  total: filteredRows.length,
+                })}
               </span>
-              {selectedRows.length > 0 ? <span>{selectedRows.length} selected</span> : null}
+              {selectedRows.length > 0 ? (
+                <span>{t("inventory.tableView.selected", { count: selectedRows.length })}</span>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -524,18 +546,20 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                 onChange={(event) => setPageSize(Number(event.target.value) as PageSizeOption)}
                 className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
               >
-                <option value={10}>10 / page</option>
-                <option value={25}>25 / page</option>
-                <option value={50}>50 / page</option>
+                <option value={10}>{t("inventory.tableView.pageSize", { count: 10 })}</option>
+                <option value={25}>{t("inventory.tableView.pageSize", { count: 25 })}</option>
+                <option value={50}>{t("inventory.tableView.pageSize", { count: 50 })}</option>
               </select>
 
               {selectedRows.length > 0 ? (
                 <Button asChild type="button" className="h-10 rounded-md px-4">
-                  <Link href={buildBulkPurchaseHref(selectedRows)}>Restock Selected</Link>
+                  <Link href={buildBulkPurchaseHref(selectedRows)}>
+                    {t("inventory.tableView.restockSelected")}
+                  </Link>
                 </Button>
               ) : (
                 <Button type="button" className="h-10 rounded-md px-4" disabled>
-                  Restock Selected
+                  {t("inventory.tableView.restockSelected")}
                 </Button>
               )}
             </div>
@@ -569,14 +593,14 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
             <div className="px-4 py-8 text-sm text-gray-600 sm:px-5">
               {allRows.length === 0
                 ? t("inventory.empty")
-                : "No products match your filters."}
+                : t("inventory.tableView.emptyFiltered")}
             </div>
           ) : null}
 
           {!isLoading && !isError && filteredRows.length > 0 && summary.urgent + summary.low === 0 ? (
             <div className="border-b border-gray-200 px-4 py-4 sm:px-5">
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-medium text-emerald-700">
-                All stock levels are healthy
+                {t("inventory.tableView.healthyState")}
               </div>
             </div>
           ) : null}
@@ -589,31 +613,31 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                     <thead>
                       <tr className="border-b border-gray-200 bg-gray-50 text-left">
                         <th className="w-12 px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                          <span className="sr-only">Select</span>
+                          <span className="sr-only">{t("inventory.tableView.selectPage")}</span>
                         </th>
                         <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                          Product Name
+                          {t("common.productName")}
                         </th>
                         <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                          SKU
+                          {t("common.sku")}
                         </th>
                         <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                          Category
+                          {t("common.category")}
                         </th>
                         <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                          Warehouse
+                          {t("common.warehouse")}
                         </th>
                         <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                          Stock
+                          {t("common.stock")}
                         </th>
                         <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                          Daily Sales
+                          {t("inventory.tableView.dailySales")}
                         </th>
                         <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                          Status
+                          {t("common.status")}
                         </th>
                         <th className="px-5 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                          Action
+                          {t("common.action")}
                         </th>
                       </tr>
                     </thead>
@@ -626,7 +650,9 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                               className="mt-1 h-4 w-4 rounded border-gray-300"
                               checked={selectedRowIds.includes(row.id)}
                               onChange={() => toggleRowSelection(row.id)}
-                              aria-label={`Select ${row.product.name}`}
+                              aria-label={t("inventory.tableView.selectRow", {
+                                name: row.product.name,
+                              })}
                             />
                           </td>
                           <td className="px-5 py-4">
@@ -635,10 +661,10 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                             </p>
                           </td>
                           <td className="px-5 py-4 text-sm text-gray-700">
-                            {row.product.sku || "Not assigned"}
+                            {row.product.sku || t("common.notAssigned")}
                           </td>
                           <td className="px-5 py-4 text-sm text-gray-700">
-                            {row.product.category?.name ?? "Uncategorized"}
+                            {row.product.category?.name ?? t("productsPage.uncategorized")}
                           </td>
                           <td className="px-5 py-4 text-sm text-gray-700">
                             {row.warehouse.name}
@@ -655,12 +681,14 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                             <span
                               className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STOCK_STATUS_META[row.stockStatus].badgeClass}`}
                             >
-                              {STOCK_STATUS_META[row.stockStatus].label}
+                              {stockStatusLabels[row.stockStatus]}
                             </span>
                           </td>
                           <td className="px-5 py-4">
                             <Button asChild type="button" className="h-10 rounded-md px-4">
-                              <Link href={buildPurchaseHref(row)}>Restock Now</Link>
+                              <Link href={buildPurchaseHref(row)}>
+                                {t("inventory.tableView.restockNow")}
+                              </Link>
                             </Button>
                           </td>
                         </tr>
@@ -679,7 +707,9 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                         className="mt-1 h-4 w-4 rounded border-gray-300"
                         checked={selectedRowIds.includes(row.id)}
                         onChange={() => toggleRowSelection(row.id)}
-                        aria-label={`Select ${row.product.name}`}
+                        aria-label={t("inventory.tableView.selectRow", {
+                          name: row.product.name,
+                        })}
                       />
 
                       <div className="min-w-0 flex-1">
@@ -687,32 +717,43 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                           {row.product.name}
                         </p>
                         <p className="mt-1 text-xs text-gray-500">
-                          SKU: {row.product.sku || "Not assigned"}
+                          {t("common.skuLabel", {
+                            value: row.product.sku || t("common.notAssigned"),
+                          })}
                         </p>
                         <p className="mt-1 text-xs text-gray-500">
-                          {row.product.category?.name ?? "Uncategorized"} | {row.warehouse.name}
+                          {row.product.category?.name ?? t("productsPage.uncategorized")} |{" "}
+                          {row.warehouse.name}
                         </p>
 
                         <div className="mt-4 grid gap-2 text-sm text-gray-700">
                           <p>
-                            <span className="font-medium">Stock:</span>{" "}
+                            <span className="font-medium">
+                              {t("inventory.tableView.stockLabel", { value: "" }).replace(/: $/, ":")}
+                            </span>{" "}
                             <span className={STOCK_STATUS_META[row.stockStatus].emphasisClass}>
                               {formatNumber(row.effectiveStock, locale)}
                             </span>
                           </p>
                           <p>
-                            <span className="font-medium">Daily sales:</span>{" "}
+                            <span className="font-medium">
+                              {t("inventory.tableView.dailySalesLabel", { value: "" }).replace(/: $/, ":")}
+                            </span>{" "}
                             {row.dailySalesText}
                           </p>
                           <p>
-                            <span className="font-medium">Status:</span>{" "}
-                            {STOCK_STATUS_META[row.stockStatus].label}
+                            <span className="font-medium">
+                              {t("inventory.tableView.statusLabel", { value: "" }).replace(/: $/, ":")}
+                            </span>{" "}
+                            {stockStatusLabels[row.stockStatus]}
                           </p>
                         </div>
 
                         <div className="mt-4">
                           <Button asChild type="button" className="h-10 rounded-md px-4">
-                            <Link href={buildPurchaseHref(row)}>Restock Now</Link>
+                            <Link href={buildPurchaseHref(row)}>
+                              {t("inventory.tableView.restockNow")}
+                            </Link>
                           </Button>
                         </div>
                       </div>
@@ -723,7 +764,10 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
 
               <div className="flex flex-col gap-3 border-t border-gray-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
                 <p className="text-sm text-gray-600">
-                  Page {safeCurrentPage} of {totalPages}
+                  {t("inventory.tableView.pageStatus", {
+                    current: safeCurrentPage,
+                    total: totalPages,
+                  })}
                 </p>
                 <div className="flex items-center gap-2">
                   <Button
@@ -733,7 +777,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                     onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                     disabled={safeCurrentPage <= 1}
                   >
-                    Previous
+                    {t("common.previous")}
                   </Button>
                   <Button
                     type="button"
@@ -744,7 +788,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                     }
                     disabled={safeCurrentPage >= totalPages}
                   >
-                    Next
+                    {t("common.next")}
                   </Button>
                 </div>
               </div>

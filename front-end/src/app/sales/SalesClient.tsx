@@ -68,7 +68,7 @@ const createEmptySaleItem = (): SaleFormItem => ({
 const getTodayValue = () => new Date().toISOString().slice(0, 10);
 
 const SalesClient = ({ name, image }: SalesClientProps) => {
-  const { t, formatCurrency, formatDate } = useI18n();
+  const { t, safeT, formatCurrency, formatDate } = useI18n();
   const productSearchRef = useRef<AsyncProductSelectHandle | null>(null);
   const quantityInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [showOptionalFields, setShowOptionalFields] = useState(false);
@@ -135,20 +135,17 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
 
   const translatePaymentStatus = (status: string) => {
     const key = `dashboard.enums.paymentStatus.${status}`;
-    const translated = t(key);
-    return translated === key ? humanizeEnum(status) : translated;
+    return safeT(key, humanizeEnum(status));
   };
 
   const translatePaymentMethod = (value: string) => {
     const key = `dashboard.enums.paymentMethod.${value}`;
-    const translated = t(key);
-    return translated === key ? humanizeEnum(value) : translated;
+    return safeT(key, humanizeEnum(value));
   };
 
   const translateSaleStatus = (status: string) => {
     const key = `salesPage.status.${status}`;
-    const translated = t(key);
-    return translated === key ? humanizeEnum(status) : translated;
+    return safeT(key, humanizeEnum(status));
   };
 
   const paymentStatusBadgeClass = (status: string) => {
@@ -233,7 +230,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
 
   const visibleRecentSales = useMemo(() => sales.slice(0, 8), [sales]);
 
-  const walkInLabel = "Walk-in";
+  const walkInLabel = t("salesPage.customer.walkIn");
 
   const addItemFromProduct = (product: Product) => {
     setItems((currentItems) => {
@@ -386,19 +383,19 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
 
     items.forEach((item, index) => {
       if (!item.product_id) {
-        errors[index].product_id = "Product choose karo";
+        errors[index].product_id = t("salesPage.pos.validation.product");
         missingProduct = true;
       }
 
       const quantity = Number(item.quantity);
       if (!Number.isFinite(quantity) || quantity <= 0) {
-        errors[index].quantity = "Qty sahi dalo";
+        errors[index].quantity = t("salesPage.pos.validation.quantity");
         invalidQuantity = true;
       }
 
       const unitPrice = Number(item.unit_price);
       if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
-        errors[index].unit_price = "Price sahi dalo";
+        errors[index].unit_price = t("salesPage.pos.validation.price");
         invalidPrice = true;
       }
 
@@ -414,15 +411,17 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
         Number.isFinite(quantity) &&
         quantity > availableStock
       ) {
-        errors[index].quantity = `Only ${availableStock} items left`;
+        errors[index].quantity = t("salesPage.pos.validation.stockLeft", {
+          count: availableStock,
+        });
         stockIssue = true;
       }
     });
 
-    if (missingProduct) summary.push("Product add karo");
-    if (invalidQuantity) summary.push("Qty check karo");
-    if (invalidPrice) summary.push("Price check karo");
-    if (stockIssue) summary.push("Stock available quantity se zyada hai");
+    if (missingProduct) summary.push(t("salesPage.pos.validation.summaryProduct"));
+    if (invalidQuantity) summary.push(t("salesPage.pos.validation.summaryQuantity"));
+    if (invalidPrice) summary.push(t("salesPage.pos.validation.summaryPrice"));
+    if (stockIssue) summary.push(t("salesPage.pos.validation.summaryStock"));
 
     setLineItemErrors(errors);
     setLineItemSummary(summary);
@@ -587,8 +586,8 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
     <DashboardLayout
       name={name}
       image={image}
-      title="New Bill"
-      subtitle="Fast billing for rush hour. Add items quickly, check total, and complete the sale."
+      title={t("salesPage.pos.title")}
+      subtitle={t("salesPage.pos.subtitle")}
     >
       <div className="mx-auto w-full max-w-7xl">
         <section className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(330px,0.9fr)]">
@@ -600,20 +599,22 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                 onClick={() => setShowOptionalFields((current) => !current)}
               >
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">Bill setup</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {t("salesPage.pos.setupTitle")}
+                  </p>
                   <p className="mt-1 text-xs text-gray-500">
-                    Customer, warehouse and date
+                    {t("salesPage.pos.setupDescription")}
                   </p>
                 </div>
                 <span className="text-xs font-medium text-gray-500">
-                  {showOptionalFields ? "Hide" : "Show"}
+                  {showOptionalFields ? t("common.hide") : t("common.show")}
                 </span>
               </button>
 
               <div className="mt-4 grid gap-4 md:grid-cols-3">
                 <div className="grid gap-2">
                   <div className="flex items-center justify-between">
-                    <Label htmlFor="customer">Customer</Label>
+                    <Label htmlFor="customer">{t("salesPage.fields.customer")}</Label>
                     <Dialog
                       open={customerDialogOpen}
                       onOpenChange={(open) => {
@@ -626,7 +627,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                     >
                       <DialogTrigger asChild>
                         <Button type="button" variant="outline" size="sm" className="h-8 rounded-md">
-                          + New Customer
+                          {t("salesPage.pos.newCustomer")}
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
@@ -762,7 +763,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="warehouse">Warehouse</Label>
+                  <Label htmlFor="warehouse">{t("salesPage.fields.warehouse")}</Label>
                   <select
                     id="warehouse"
                     className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
@@ -784,7 +785,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                 </div>
 
                 <div className="grid gap-2">
-                  <Label htmlFor="sale_date">Date</Label>
+                  <Label htmlFor="sale_date">{t("common.date")}</Label>
                   <Input
                     id="sale_date"
                     type="date"
@@ -802,7 +803,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
 
               {showOptionalFields ? (
                 <div className="mt-4 grid gap-2">
-                  <Label htmlFor="notes">Notes</Label>
+                  <Label htmlFor="notes">{t("salesPage.fields.notes")}</Label>
                   <Input
                     id="notes"
                     value={form.notes}
@@ -820,9 +821,11 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
               <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
                 <div className="flex flex-col gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-gray-900">Add products</p>
+                    <p className="text-sm font-semibold text-gray-900">
+                      {t("salesPage.pos.addProductsTitle")}
+                    </p>
                     <p className="mt-1 text-xs text-gray-500">
-                      Search product by name / barcode / SKU
+                      {t("salesPage.pos.addProductsDescription")}
                     </p>
                   </div>
 
@@ -841,7 +844,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                         productSearchRef.current?.clear();
                       }
                     }}
-                    placeholder="Search product by name / barcode / SKU"
+                    placeholder={t("salesPage.pos.productSearchPlaceholder")}
                     autoFocus
                     variant="warm"
                     inputClassName="h-12 rounded-lg border-gray-300 text-base"
@@ -869,10 +872,10 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                       className="h-10 rounded-md"
                       onClick={addItem}
                     >
-                      + Add item
+                      {t("salesPage.pos.addItem")}
                     </Button>
                     <div className="flex h-10 items-center rounded-md border border-dashed border-gray-300 px-3 text-sm text-gray-500">
-                      Barcode-ready input
+                      {t("salesPage.pos.barcodeReady")}
                     </div>
                   </div>
                 </div>
@@ -881,10 +884,10 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
               <div className="rounded-xl border border-gray-200 bg-white">
                 <div className="border-b border-gray-200 px-4 py-3">
                   <div className="grid grid-cols-[minmax(0,2.2fr)_80px_110px_110px_44px] gap-3 text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">
-                    <span>Product Name</span>
-                    <span>Qty</span>
-                    <span>Price</span>
-                    <span>Total</span>
+                    <span>{t("salesPage.pos.columns.product")}</span>
+                    <span>{t("salesPage.pos.columns.qty")}</span>
+                    <span>{t("salesPage.pos.columns.price")}</span>
+                    <span>{t("salesPage.pos.columns.total")}</span>
                     <span />
                   </div>
                 </div>
@@ -897,7 +900,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
 
                 {items.length === 0 ? (
                   <div className="px-4 py-10 text-center text-sm text-gray-500">
-                    Product search se item add karo. Billing yahin se start hoti hai.
+                    {t("salesPage.pos.emptyItems")}
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-200">
@@ -924,8 +927,10 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                                   {availableStock !== undefined ? (
                                     <p className="mt-1 text-xs text-gray-500">
                                       {availableStock > 0
-                                        ? `${availableStock} left`
-                                        : "Out of stock"}
+                                        ? t("salesPage.pos.stockLeft", {
+                                            count: availableStock,
+                                          })
+                                        : t("salesPage.pos.outOfStock")}
                                     </p>
                                   ) : null}
                                   {lineItemErrors[index]?.product_id ? (
@@ -950,7 +955,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                                       }, 50);
                                     }
                                   }}
-                                  placeholder="Search product by name / barcode / SKU"
+                                  placeholder={t("salesPage.pos.productSearchPlaceholder")}
                                   variant="warm"
                                   inputClassName="h-10 rounded-md border-gray-300"
                                 />
@@ -1002,7 +1007,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                               type="button"
                               onClick={() => removeItem(index)}
                               className="mt-1 rounded-md px-2 py-2 text-sm text-red-600 hover:bg-red-50"
-                              aria-label="Remove item"
+                              aria-label={t("salesPage.lineItems.removeItem")}
                             >
                               x
                             </button>
@@ -1024,29 +1029,33 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
 
           <aside className="grid gap-5">
             <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
-              <p className="text-sm font-semibold text-gray-900">Bill summary</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {t("salesPage.pos.summary.title")}
+              </p>
               <div className="mt-4 grid gap-3 text-sm text-gray-700">
                 <div className="flex items-center justify-between">
-                  <span>Subtotal</span>
+                  <span>{t("common.subtotal")}</span>
                   <span>{formatAmount(totals.subtotal)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Tax</span>
+                  <span>{t("common.tax")}</span>
                   <span>{formatAmount(totals.tax)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Discount</span>
+                  <span>{t("common.discount")}</span>
                   <span>{formatAmount(0)}</span>
                 </div>
                 <div className="flex items-center justify-between border-t border-gray-200 pt-3 text-lg font-semibold text-gray-900">
-                  <span>Grand Total</span>
+                  <span>{t("common.grandTotal")}</span>
                   <span>{formatAmount(totals.grandTotal)}</span>
                 </div>
               </div>
 
               <div className="mt-5 grid gap-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="payment_status">Payment status</Label>
+                  <Label htmlFor="payment_status">
+                    {t("salesPage.pos.summary.paymentStatus")}
+                  </Label>
                   <select
                     id="payment_status"
                     className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
@@ -1066,15 +1075,17 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                       }))
                     }
                   >
-                    <option value="PAID">Paid</option>
-                    <option value="UNPAID">Unpaid</option>
-                    <option value="PARTIALLY_PAID">Partial</option>
+                    <option value="PAID">{t("salesPage.pos.statuses.paid")}</option>
+                    <option value="UNPAID">{t("salesPage.pos.statuses.unpaid")}</option>
+                    <option value="PARTIALLY_PAID">{t("salesPage.pos.statuses.partial")}</option>
                   </select>
                 </div>
 
                 {form.payment_status === "PARTIALLY_PAID" ? (
                   <div className="grid gap-2">
-                    <Label htmlFor="amount_paid">Paid amount</Label>
+                    <Label htmlFor="amount_paid">
+                      {t("salesPage.pos.summary.paidAmount")}
+                    </Label>
                     <Input
                       id="amount_paid"
                       type="number"
@@ -1094,7 +1105,9 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                 {form.payment_status !== "UNPAID" ? (
                   <>
                     <div className="grid gap-2">
-                      <Label htmlFor="payment_method">Payment method</Label>
+                      <Label htmlFor="payment_method">
+                        {t("salesPage.pos.summary.paymentMethod")}
+                      </Label>
                       <select
                         id="payment_method"
                         className="h-10 rounded-md border border-gray-300 bg-white px-3 text-sm text-gray-900"
@@ -1106,14 +1119,16 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                           }))
                         }
                       >
-                        <option value="CASH">Cash</option>
-                        <option value="UPI">UPI</option>
-                        <option value="CARD">Card</option>
+                        <option value="CASH">{t("salesPage.pos.methods.cash")}</option>
+                        <option value="UPI">{t("salesPage.pos.methods.upi")}</option>
+                        <option value="CARD">{t("salesPage.pos.methods.card")}</option>
                       </select>
                     </div>
 
                     <div className="grid gap-2">
-                      <Label htmlFor="payment_date">Payment date</Label>
+                      <Label htmlFor="payment_date">
+                        {t("salesPage.pos.summary.paymentDate")}
+                      </Label>
                       <Input
                         id="payment_date"
                         type="date"
@@ -1132,11 +1147,11 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
 
                 <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">
                   <div className="flex items-center justify-between">
-                    <span>Paid</span>
+                    <span>{t("common.paid")}</span>
                     <span>{formatAmount(totals.paidAmount)}</span>
                   </div>
                   <div className="mt-2 flex items-center justify-between">
-                    <span>Balance</span>
+                    <span>{t("common.balance")}</span>
                     <span className="font-medium">{formatAmount(totals.balance)}</span>
                   </div>
                 </div>
@@ -1147,7 +1162,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                   className="h-12 rounded-lg text-base font-semibold"
                   disabled={createSale.isPending || items.length === 0}
                 >
-                  Complete Sale
+                  {t("salesPage.pos.summary.completeSale")}
                 </Button>
               </div>
             </div>
@@ -1155,9 +1170,11 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
             <div className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-sm font-semibold text-gray-900">Recent sales</p>
+                  <p className="text-sm font-semibold text-gray-900">
+                    {t("salesPage.pos.summary.recentTitle")}
+                  </p>
                   <p className="mt-1 text-xs text-gray-500">
-                    Quick view of the latest bills
+                    {t("salesPage.pos.summary.recentDescription")}
                   </p>
                 </div>
               </div>
@@ -1272,7 +1289,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                               />
                             </div>
                             <div className="flex flex-wrap gap-2">
-                              <Button type="submit">Save</Button>
+                              <Button type="submit">{t("salesPage.save")}</Button>
                               <Button
                                 type="button"
                                 variant="outline"
@@ -1286,7 +1303,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <p className="text-sm font-semibold text-gray-900">
-                                Bill #{sale.id}
+                                {t("salesPage.invoiceCode", { id: sale.id })}
                               </p>
                               <p className="mt-1 text-xs text-gray-500">
                                 {formatSaleDate(sale.sale_date)}
@@ -1310,7 +1327,7 @@ const SalesClient = ({ name, image }: SalesClientProps) => {
                                   size="sm"
                                   onClick={() => handleEdit(sale)}
                                 >
-                                  View details
+                                  {t("common.viewDetails")}
                                 </Button>
                                 <Button
                                   type="button"

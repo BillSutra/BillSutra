@@ -258,9 +258,11 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
 
               {!isLoading && !isError && warehouseCards.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-5 py-10 text-center">
-                  <p className="text-base font-semibold text-gray-900">No warehouse yet</p>
+                  <p className="text-base font-semibold text-gray-900">
+                    {t("warehousesPage.overview.emptyTitle")}
+                  </p>
                   <p className="mt-2 text-sm text-gray-600">
-                    Create your first warehouse to start tracking stock
+                    {t("warehousesPage.overview.emptyDescription")}
                   </p>
                 </div>
               ) : null}
@@ -324,14 +326,16 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                             </p>
                             <p className="mt-1 text-sm text-gray-600">
                               {warehouse.location
-                                ? `Location: ${warehouse.location}`
+                                ? t("warehousesPage.overview.location", {
+                                    value: warehouse.location,
+                                  })
                                 : t("warehousesPage.locationNotSet")}
                             </p>
 
                             <div className="mt-4 grid gap-3 sm:grid-cols-3">
                               <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
                                 <p className="text-xs font-medium uppercase tracking-[0.12em] text-gray-500">
-                                  Total Products
+                                  {t("warehousesPage.overview.stats.totalProducts")}
                                 </p>
                                 <p className="mt-1 text-lg font-semibold text-gray-900">
                                   {warehouse.totalProducts}
@@ -339,7 +343,7 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                               </div>
                               <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-3">
                                 <p className="text-xs font-medium uppercase tracking-[0.12em] text-amber-700">
-                                  Low Stock
+                                  {t("warehousesPage.overview.stats.lowStock")}
                                 </p>
                                 <p className="mt-1 text-lg font-semibold text-amber-700">
                                   {warehouse.lowStock}
@@ -347,7 +351,7 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                               </div>
                               <div className="rounded-md border border-red-200 bg-red-50 px-3 py-3">
                                 <p className="text-xs font-medium uppercase tracking-[0.12em] text-red-700">
-                                  Out of Stock
+                                  {t("warehousesPage.overview.stats.outOfStock")}
                                 </p>
                                 <p className="mt-1 text-lg font-semibold text-red-700">
                                   {warehouse.outOfStock}
@@ -359,7 +363,7 @@ const WarehousesClient = ({ name, image }: WarehousesClientProps) => {
                           <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                             <Button asChild type="button" className="h-10 rounded-md px-4">
                               <Link href={`/inventory?warehouseId=${warehouse.id}`}>
-                                View Inventory
+                                {t("warehousesPage.overview.viewInventory")}
                               </Link>
                             </Button>
                             <Button

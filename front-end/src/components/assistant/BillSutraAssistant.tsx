@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Bot, SendHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useI18n } from "@/providers/LanguageProvider";
 import { cn } from "@/lib/utils";
 import {
   fetchInventories,
@@ -37,25 +38,34 @@ type InventoryInsightRow = Inventory & {
   status: "urgent" | "low" | "ok";
 };
 
-const QUICK_ACTIONS = [
-  "Mera stock kaisa hai?",
-  "Kya restock karna hai?",
-  "Aaj ki sale kitni hui?",
-  "Low stock items dikhao",
-  "Sabse zyada bikne wala product",
+type TranslateFn = (
+  key: string,
+  params?: Record<string, string | number>,
+) => string;
+type CurrencyFormatter = (value: number) => string;
+
+const QUICK_ACTION_KEYS = [
+  "stock",
+  "restock",
+  "todaySales",
+  "lowStock",
+  "topProduct",
 ] as const;
 
-const INITIAL_MESSAGE: AssistantMessage = {
+const createWelcomeMessage = (t: TranslateFn): AssistantMessage => ({
   id: "welcome",
   role: "assistant",
-  text:
-    "Namaste!\nMain aapka BillSutra assistant hoon.\n\nAap pooch sakte ho:\n- Stock\n- Sales\n- Restock suggestions",
-};
+  text: t("assistantWidget.welcome"),
+});
 
 const getPredictionKey = (productId: number, warehouseId?: number | null) =>
   `${productId}:${warehouseId ?? "all"}`;
 
 const normalizeText = (value: string) => value.trim().toLowerCase();
+const humanizeQuickActionKey = (value: string) =>
+  value
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/^./, (segment) => segment.toUpperCase());
 
 const buildBulkRestockHref = (rows: InventoryInsightRow[]) => {
   const params = new URLSearchParams();
@@ -92,13 +102,6 @@ const buildBulkRestockHref = (rows: InventoryInsightRow[]) => {
 
   return `/purchases?${params.toString()}`;
 };
-
-const formatCurrency = (value: number) =>
-  new Intl.NumberFormat("en-IN", {
-    style: "currency",
-    currency: "INR",
-    maximumFractionDigits: 0,
-  }).format(value);
 
 const formatDateKey = (value: string | Date) => {
   const date = new Date(value);
@@ -160,11 +163,15 @@ const buildAssistantReply = ({
   inventoryRows,
   sales,
   invoices,
+  t,
+  formatCurrency,
 }: {
   query: string;
   inventoryRows: InventoryInsightRow[];
   sales: Sale[];
   invoices: Invoice[];
+  t: TranslateFn;
+  formatCurrency: CurrencyFormatter;
 }): AssistantMessage => {
   const normalized = normalizeText(query);
   const urgentRows = inventoryRows.filter((row) => row.status === "urgent");
@@ -196,45 +203,78 @@ const buildAssistantReply = ({
     normalized.includes("restock") ||
     normalized.includes("low stock") ||
     normalized.includes("urgent") ||
-    normalized.includes("dikhao")
+    normalized.includes("dikhao") ||
+    normalized.includes("रीस्टॉक") ||
+    normalized.includes("कम स्टॉक") ||
+    normalized.includes("तुरंत")
   ) {
     const itemsToShow = [...urgentRows, ...lowRows].slice(0, 4);
     if (itemsToShow.length === 0) {
       return {
         id: `assistant-${Date.now()}`,
         role: "assistant",
-        text: "Abhi koi urgent restock nahi hai. Stock theek lag raha hai.",
-        actions: [{ label: "View Inventory", href: "/inventory" }],
+        text: t("assistantWidget.responses.noUrgentRestock"),
+        actions: [
+          {
+            label: t("assistantWidget.actions.viewInventory"),
+            href: "/inventory",
+          },
+        ],
       };
     }
 
     return {
       id: `assistant-${Date.now()}`,
       role: "assistant",
-      text: `${urgentRows.length + lowRows.length} items dhyan maang rahe hain:\n${itemsToShow
-        .map(
-          (row) =>
-            `- ${row.product.name} (${row.status === "urgent" ? "out of stock" : "low stock"})`,
-        )
-        .join("\n")}\n\nYe items jaldi restock karo.`,
+      text: t("assistantWidget.responses.restockIntro", {
+        count: urgentRows.length + lowRows.length,
+        items: itemsToShow
+          .map((row) =>
+            t(
+              row.status === "urgent"
+                ? "assistantWidget.responses.restockItemUrgent"
+                : "assistantWidget.responses.restockItemLow",
+              { name: row.product.name },
+            ),
+          )
+          .join("\n"),
+      }),
       actions: [
-        { label: "Restock Now", href: buildBulkRestockHref(itemsToShow) },
-        { label: "View Inventory", href: "/inventory" },
+        {
+          label: t("assistantWidget.actions.restockNow"),
+          href: buildBulkRestockHref(itemsToShow),
+        },
+        {
+          label: t("assistantWidget.actions.viewInventory"),
+          href: "/inventory",
+        },
       ],
     };
   }
 
-  if (normalized.includes("stock")) {
+  if (normalized.includes("stock") || normalized.includes("स्टॉक")) {
     return {
       id: `assistant-${Date.now()}`,
       role: "assistant",
-      text: `Stock summary:\n- Urgent: ${urgentRows.length}\n- Low: ${lowRows.length}\n- Healthy: ${
-        inventoryRows.filter((row) => row.status === "ok").length
-      }\n\nStock thoda low lag raha hai to restock list dekh lo.`,
+      text: t("assistantWidget.responses.stockSummary", {
+        urgent: urgentRows.length,
+        low: lowRows.length,
+        healthy: inventoryRows.filter((row) => row.status === "ok").length,
+      }),
       actions: [
-        { label: "View Inventory", href: "/inventory" },
+        {
+          label: t("assistantWidget.actions.viewInventory"),
+          href: "/inventory",
+        },
         ...(urgentRows.length + lowRows.length > 0
-          ? [{ label: "Restock Now", href: buildBulkRestockHref([...urgentRows, ...lowRows].slice(0, 4)) }]
+          ? [
+              {
+                label: t("assistantWidget.actions.restockNow"),
+                href: buildBulkRestockHref(
+                  [...urgentRows, ...lowRows].slice(0, 4),
+                ),
+              },
+            ]
           : []),
       ],
     };
@@ -243,32 +283,47 @@ const buildAssistantReply = ({
   if (
     normalized.includes("aaj") ||
     normalized.includes("sale") ||
-    normalized.includes("sales")
+    normalized.includes("sales") ||
+    normalized.includes("आज") ||
+    normalized.includes("बिक्री")
   ) {
     return {
       id: `assistant-${Date.now()}`,
       role: "assistant",
-      text: `Aaj ki sale ${formatCurrency(todaySalesTotal)} rahi.\nTotal ${todaySales.length} sale entries hui hain.`,
-      actions: [{ label: "Open Sales", href: "/sales" }],
+      text: t("assistantWidget.responses.todaySales", {
+        amount: formatCurrency(todaySalesTotal),
+        count: todaySales.length,
+      }),
+      actions: [{ label: t("assistantWidget.actions.openSales"), href: "/sales" }],
     };
   }
 
   if (
     normalized.includes("sabse zyada") ||
     normalized.includes("top product") ||
-    normalized.includes("bikne")
+    normalized.includes("bikne") ||
+    normalized.includes("सबसे ज़्यादा") ||
+    normalized.includes("बिकने")
   ) {
     return {
       id: `assistant-${Date.now()}`,
       role: "assistant",
       text: topSellingProduct
-        ? `${topSellingProduct.name} sabse zyada bikne wala product lag raha hai.\nTotal quantity sold: ${topSellingProduct.quantity}.`
-        : "Abhi top selling product nikalne ke liye sales data kam hai.",
-      actions: [{ label: "Open Sales", href: "/sales" }],
+        ? t("assistantWidget.responses.topProduct", {
+            name: topSellingProduct.name,
+            count: topSellingProduct.quantity,
+          })
+        : t("assistantWidget.responses.topProductEmpty"),
+      actions: [{ label: t("assistantWidget.actions.openSales"), href: "/sales" }],
     };
   }
 
-  if (normalized.includes("bill") || normalized.includes("invoice")) {
+  if (
+    normalized.includes("bill") ||
+    normalized.includes("invoice") ||
+    normalized.includes("बिल") ||
+    normalized.includes("इनवॉइस")
+  ) {
     const latestInvoice = [...invoices].sort((left, right) =>
       new Date(right.date).getTime() - new Date(left.date).getTime(),
     )[0];
@@ -277,15 +332,17 @@ const buildAssistantReply = ({
       id: `assistant-${Date.now()}`,
       role: "assistant",
       text: latestInvoice
-        ? `Latest bill ${latestInvoice.invoice_number} hai. Agar dekhna hai to seedha khol sakte ho.`
-        : "Abhi koi bill nahi mila. Naya bill banana ho to invoices khol lo.",
+        ? t("assistantWidget.responses.latestBill", {
+            number: latestInvoice.invoice_number,
+          })
+        : t("assistantWidget.responses.latestBillEmpty"),
       actions: [
         latestInvoice
           ? {
-              label: "Open Bill",
+              label: t("assistantWidget.actions.openBill"),
               href: `/invoices/history/${latestInvoice.id}`,
             }
-          : { label: "Open Invoices", href: "/invoices" },
+          : { label: t("assistantWidget.actions.openInvoices"), href: "/invoices" },
       ],
     };
   }
@@ -293,19 +350,32 @@ const buildAssistantReply = ({
   return {
     id: `assistant-${Date.now()}`,
     role: "assistant",
-    text:
-      "Main stock, sales, restock aur bills me help kar sakta hoon. Quick chip try karo ya short sawaal poochho.",
-    actions: [{ label: "View Inventory", href: "/inventory" }],
+    text: t("assistantWidget.responses.fallback"),
+    actions: [{ label: t("assistantWidget.actions.viewInventory"), href: "/inventory" }],
   };
 };
 
 const BillSutraAssistant = () => {
   const pathname = usePathname();
+  const { language, t, safeT, formatCurrency } = useI18n();
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
-  const [messages, setMessages] = useState<AssistantMessage[]>([INITIAL_MESSAGE]);
+  const [messages, setMessages] = useState<AssistantMessage[]>(() => [
+    createWelcomeMessage(t),
+  ]);
   const proactiveShownRef = useRef<string | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const quickActions = useMemo(
+    () =>
+      QUICK_ACTION_KEYS.map((key) => ({
+        key,
+        label: safeT(
+          `assistantWidget.quickActions.${key}`,
+          humanizeQuickActionKey(key),
+        ),
+      })),
+    [safeT],
+  );
 
   const { data: inventories = [], isFetching: inventoriesFetching } = useQuery({
     queryKey: ["assistant", "inventories"],
@@ -349,6 +419,11 @@ const BillSutraAssistant = () => {
   }, [messages, open]);
 
   useEffect(() => {
+    proactiveShownRef.current = null;
+    setMessages([createWelcomeMessage(t)]);
+  }, [language, t]);
+
+  useEffect(() => {
     if (!open || pathname !== "/inventory") return;
     if (proactiveShownRef.current === pathname) return;
     if (inventoryRows.length === 0) return;
@@ -362,11 +437,13 @@ const BillSutraAssistant = () => {
       {
         id: `proactive-${Date.now()}`,
         role: "assistant",
-        text: `${urgentCount} items urgent restock me hain 👀`,
+        text: t("assistantWidget.responses.proactiveUrgent", {
+          count: urgentCount,
+        }),
         actions: [
-          { label: "View Inventory", href: "/inventory" },
+          { label: t("assistantWidget.actions.viewInventory"), href: "/inventory" },
           {
-            label: "Restock Now",
+            label: t("assistantWidget.actions.restockNow"),
             href: buildBulkRestockHref(
               inventoryRows.filter((row) => row.status === "urgent").slice(0, 4),
             ),
@@ -374,7 +451,7 @@ const BillSutraAssistant = () => {
         ],
       },
     ]);
-  }, [inventoryRows, open, pathname]);
+  }, [inventoryRows, open, pathname, t]);
 
   const submitQuery = (rawQuery: string) => {
     const query = rawQuery.trim();
@@ -395,7 +472,7 @@ const BillSutraAssistant = () => {
         {
           id: `assistant-loading-${Date.now()}`,
           role: "assistant",
-          text: "Ek second, aapka data dekh raha hoon...",
+          text: t("assistantWidget.loading"),
         },
       ]);
       setInput("");
@@ -407,6 +484,12 @@ const BillSutraAssistant = () => {
       inventoryRows,
       sales,
       invoices,
+      t,
+      formatCurrency: (value) =>
+        formatCurrency(value, "INR", {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        }),
     });
 
     setMessages((current) => [...current, reply]);
@@ -431,16 +514,18 @@ const BillSutraAssistant = () => {
         <div className="flex h-[420px] w-[min(92vw,360px)] flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-[0_12px_40px_-28px_rgba(15,23,42,0.45)]">
           <div className="flex items-start justify-between border-b border-gray-200 px-4 py-4">
             <div>
-              <p className="text-sm font-semibold text-gray-900">BillSutra Assistant</p>
+              <p className="text-sm font-semibold text-gray-900">
+                {t("assistantWidget.title")}
+              </p>
               <p className="mt-1 text-xs text-gray-500">
-                Ask about stock, sales, or bills
+                {t("assistantWidget.subtitle")}
               </p>
             </div>
             <button
               type="button"
               onClick={() => setOpen(false)}
               className="rounded-full p-1 text-gray-500 transition hover:bg-gray-100 hover:text-gray-800"
-              aria-label="Close assistant"
+              aria-label={t("assistantWidget.close")}
             >
               <X className="h-4 w-4" />
             </button>
@@ -448,14 +533,14 @@ const BillSutraAssistant = () => {
 
           <div className="border-b border-gray-200 px-4 py-3">
             <div className="flex flex-wrap gap-2">
-              {QUICK_ACTIONS.map((label) => (
+              {quickActions.map((action) => (
                 <button
-                  key={label}
+                  key={action.key}
                   type="button"
-                  onClick={() => submitQuery(label)}
+                  onClick={() => submitQuery(action.label)}
                   className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1.5 text-xs font-medium text-gray-700 transition hover:border-gray-300 hover:bg-gray-100"
                 >
-                  {label}
+                  {action.label}
                 </button>
               ))}
             </div>
@@ -493,7 +578,7 @@ const BillSutraAssistant = () => {
 
             {loading ? (
               <div className="max-w-[88%] rounded-2xl bg-gray-100 px-3 py-3 text-sm text-gray-600">
-                Data dekh raha hoon...
+                {t("assistantWidget.loading")}
               </div>
             ) : null}
           </div>
@@ -503,7 +588,7 @@ const BillSutraAssistant = () => {
               <Input
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
-                placeholder="Stock ya sales ke baare me poochho"
+                placeholder={t("assistantWidget.inputPlaceholder")}
                 className="h-10 rounded-md border-gray-300"
               />
               <Button
@@ -522,7 +607,7 @@ const BillSutraAssistant = () => {
       <div className="group relative flex justify-end">
         {!open ? (
           <div className="pointer-events-none absolute bottom-full right-0 mb-2 rounded-md bg-gray-900 px-3 py-2 text-xs text-white opacity-0 transition group-hover:opacity-100">
-            Need help? Ask me
+            {t("assistantWidget.tooltip")}
           </div>
         ) : null}
         <button
@@ -532,7 +617,7 @@ const BillSutraAssistant = () => {
             "group flex items-center gap-2 rounded-full border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-900 shadow-[0_12px_30px_-22px_rgba(15,23,42,0.45)] transition hover:-translate-y-0.5 hover:border-gray-300",
             !open && "animate-[pulse_3s_ease-in-out_infinite]",
           )}
-          aria-label="Ask BillSutra"
+          aria-label={t("assistantWidget.toggle")}
         >
           {open ? (
             <X className="h-4 w-4" />
@@ -541,7 +626,7 @@ const BillSutraAssistant = () => {
               <span className="rounded-full bg-gray-900 p-2 text-white">
                 <Bot className="h-4 w-4" />
               </span>
-              <span className="hidden sm:inline">Ask BillSutra</span>
+              <span className="hidden sm:inline">{t("assistantWidget.toggle")}</span>
             </>
           )}
         </button>

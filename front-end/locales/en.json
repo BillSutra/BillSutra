@@ -24,6 +24,33 @@
     "hindi": "Hindi",
     "looksGood": "Looks good",
     "selectOption": "Please select an option",
+    "retry": "Try again",
+    "show": "Show",
+    "hide": "Hide",
+    "date": "Date",
+    "subtotal": "Subtotal",
+    "tax": "Tax",
+    "discount": "Discount",
+    "total": "Total",
+    "stock": "Stock",
+    "quantity": "Qty",
+    "price": "Price",
+    "grandTotal": "Grand Total",
+    "paid": "Paid",
+    "unpaid": "Unpaid",
+    "partial": "Partial",
+    "balance": "Balance",
+    "previous": "Previous",
+    "next": "Next",
+    "viewDetails": "View details",
+    "notAssigned": "Not assigned",
+    "category": "Category",
+    "warehouse": "Warehouse",
+    "status": "Status",
+    "action": "Action",
+    "productName": "Product Name",
+    "sku": "SKU",
+    "skuLabel": "SKU: {value}",
     "currencyCode": "INR",
     "currencySymbol": "Rs"
   },
@@ -399,6 +426,40 @@
       "notProjected": "Not projected",
       "viewInsight": "View insight",
       "createPurchaseSuggestion": "Create Purchase from Suggestion"
+    },
+    "tableView": {
+      "title": "Stock status",
+      "description": "See what needs restocking first across all products.",
+      "urgentSummary": "{count} items need urgent restock",
+      "lowSummary": "{count} items low stock",
+      "healthySummary": "{count} items healthy",
+      "allInventoryTitle": "All Inventory",
+      "allInventoryDescription": "Search products, check stock status, and restock quickly.",
+      "searchPlaceholder": "Search product or SKU",
+      "allCategories": "All categories",
+      "allWarehouses": "All warehouses",
+      "allStatus": "All status",
+      "sortStockLowHigh": "Stock: Low to High",
+      "sortStockHighLow": "Stock: High to Low",
+      "sortName": "Name: A to Z",
+      "selectVisible": "Select visible products",
+      "selectPage": "Select page",
+      "showing": "Showing {from}-{to} of {total}",
+      "selected": "{count} selected",
+      "pageSize": "{count} / page",
+      "restockSelected": "Restock Selected",
+      "emptyFiltered": "No products match your filters.",
+      "healthyState": "All stock levels are healthy",
+      "dailySales": "Daily Sales",
+      "inStock": "In Stock",
+      "lowStock": "Low Stock",
+      "outOfStock": "Out of Stock",
+      "stockLabel": "Stock: {value}",
+      "dailySalesLabel": "Daily sales: {value}",
+      "statusLabel": "Status: {value}",
+      "pageStatus": "Page {current} of {total}",
+      "restockNow": "Restock Now",
+      "selectRow": "Select {name}"
     }
   },
   "productsPage": {
@@ -554,6 +615,17 @@
     "validation": {
       "nameMin": "Warehouse name must be at least 2 characters."
     },
+    "overview": {
+      "emptyTitle": "No warehouse yet",
+      "emptyDescription": "Create your first warehouse to start tracking stock",
+      "location": "Location: {value}",
+      "stats": {
+        "totalProducts": "Total Products",
+        "lowStock": "Low Stock",
+        "outOfStock": "Out of Stock"
+      },
+      "viewInventory": "View Inventory"
+    },
     "detail": {
       "titleFallback": "Warehouse",
       "backToWarehouses": "Back to warehouses",
@@ -698,6 +770,44 @@
       "sales": "Total sales and receipts",
       "pending": "Pending payments and dues",
       "cashflow": "Cashflow inflow and outflow"
+    }
+  },
+  "assistantWidget": {
+    "title": "BillSutra Assistant",
+    "subtitle": "Ask about stock, sales, or bills",
+    "tooltip": "Need help? Ask me",
+    "toggle": "Ask BillSutra",
+    "close": "Close assistant",
+    "inputPlaceholder": "Ask about stock or sales",
+    "loading": "Checking your data...",
+    "quickActions": {
+      "stock": "How is my stock?",
+      "restock": "What should I restock?",
+      "todaySales": "What are today's sales?",
+      "lowStock": "Show low stock items",
+      "topProduct": "Top selling product"
+    },
+    "welcome": "Hello!\nI am your BillSutra assistant.\n\nYou can ask about:\n- Stock\n- Sales\n- Restock suggestions",
+    "responses": {
+      "noUrgentRestock": "No urgent restock right now. Stock looks healthy.",
+      "restockIntro": "{count} items need attention:\n{items}\n\nRestock these soon.",
+      "restockItemUrgent": "- {name} (out of stock)",
+      "restockItemLow": "- {name} (low stock)",
+      "stockSummary": "Stock summary:\n- Urgent: {urgent}\n- Low: {low}\n- Healthy: {healthy}\n\nIf stock feels tight, open the restock list.",
+      "todaySales": "Today's sales are {amount}.\nThere are {count} sale entries today.",
+      "topProduct": "{name} looks like your top selling product.\nTotal quantity sold: {count}.",
+      "topProductEmpty": "There is not enough sales data yet to find the top product.",
+      "latestBill": "Your latest bill is {number}. You can open it directly.",
+      "latestBillEmpty": "No bill found yet. Open invoices to create a new bill.",
+      "fallback": "I can help with stock, sales, restock, and bills. Try a quick chip or ask a short question.",
+      "proactiveUrgent": "{count} items need urgent restock."
+    },
+    "actions": {
+      "viewInventory": "View Inventory",
+      "restockNow": "Restock Now",
+      "openSales": "Open Sales",
+      "openBill": "Open Bill",
+      "openInvoices": "Open Invoices"
     }
   },
   "dashboard": {
@@ -1615,6 +1725,57 @@
       "updateError": "Unable to update sale right now.",
       "deleteError": "Unable to delete sale right now.",
       "deleteConfirm": "Delete this sale? Product stock will be restored."
+    },
+    "pos": {
+      "title": "New Bill",
+      "subtitle": "Fast billing for rush hour. Add items quickly, check total, and complete the sale.",
+      "setupTitle": "Bill setup",
+      "setupDescription": "Customer, warehouse and date",
+      "newCustomer": "+ New Customer",
+      "addProductsTitle": "Add products",
+      "addProductsDescription": "Search product by name / barcode / SKU",
+      "productSearchPlaceholder": "Search product by name / barcode / SKU",
+      "addItem": "+ Add item",
+      "barcodeReady": "Barcode-ready input",
+      "columns": {
+        "product": "Product Name",
+        "qty": "Qty",
+        "price": "Price",
+        "total": "Total"
+      },
+      "emptyItems": "Add an item from product search to start billing.",
+      "stockLeft": "{count} left",
+      "outOfStock": "Out of stock",
+      "summary": {
+        "title": "Bill summary",
+        "paymentStatus": "Payment status",
+        "paidAmount": "Paid amount",
+        "paymentMethod": "Payment method",
+        "paymentDate": "Payment date",
+        "completeSale": "Complete Sale",
+        "recentTitle": "Recent sales",
+        "recentDescription": "Quick view of the latest bills"
+      },
+      "statuses": {
+        "paid": "Paid",
+        "unpaid": "Unpaid",
+        "partial": "Partial"
+      },
+      "methods": {
+        "cash": "Cash",
+        "upi": "UPI",
+        "card": "Card"
+      },
+      "validation": {
+        "product": "Choose a product.",
+        "quantity": "Enter a valid quantity.",
+        "price": "Enter a valid price.",
+        "summaryProduct": "Add a product.",
+        "summaryQuantity": "Check quantity.",
+        "summaryPrice": "Check price.",
+        "summaryStock": "Quantity is higher than available stock.",
+        "stockLeft": "Only {count} items left"
+      }
     }
   },
   "templatesPage": {
@@ -1828,6 +1989,7 @@
     "required": "This field is required",
     "validDate": "Select a valid date",
     "validNumber": "Enter a valid number",
+    "selectOptionError": "Please select an option",
     "validName": "Please enter a valid name (letters only)",
     "validEmail": "Enter a valid email address",
     "validPhone": "Enter a valid phone number",

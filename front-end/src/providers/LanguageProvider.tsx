@@ -14,7 +14,8 @@ import {
   DEFAULT_LANGUAGE,
   LOCALE_BY_LANGUAGE,
   isLanguage,
-  translate,
+  safeTranslate,
+  hasTranslation as hasTranslationForLanguage,
   type Language,
 } from "@/i18n";
 
@@ -24,6 +25,12 @@ type LanguageContextValue = {
   setLanguage: (language: Language) => void;
   toggleLanguage: () => void;
   t: (key: string, params?: Record<string, string | number>) => string;
+  safeT: (
+    key: string,
+    fallback?: string,
+    params?: Record<string, string | number>,
+  ) => string;
+  hasTranslation: (key: string) => boolean;
   formatCurrency: (
     value: number,
     currency?: string,
@@ -60,15 +67,60 @@ export const LanguageProvider = ({
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    const syncLanguage = (nextLanguage: unknown) => {
+      if (!isLanguage(nextLanguage)) return;
+
+      setLanguageState((currentLanguage) =>
+        currentLanguage === nextLanguage ? currentLanguage : nextLanguage,
+      );
+    };
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === LANGUAGE_STORAGE_KEY) {
+        syncLanguage(event.newValue);
+      }
+    };
+
+    const handleLanguageChange = (event: Event) => {
+      syncLanguage(
+        (event as CustomEvent<{ language?: unknown }>).detail?.language,
+      );
+    };
+
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(
+      "billsutra:language-change",
+      handleLanguageChange as EventListener,
+    );
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(
+        "billsutra:language-change",
+        handleLanguageChange as EventListener,
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
     window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
     document.cookie = `${LANGUAGE_COOKIE_KEY}=${language}; path=/; max-age=31536000; samesite=lax`;
-    document.documentElement.lang = language;
+    document.documentElement.lang = LOCALE_BY_LANGUAGE[language];
     document.documentElement.dir = "ltr";
     document.documentElement.dataset.language = language;
+    window.dispatchEvent(
+      new CustomEvent("billsutra:language-change", {
+        detail: { language },
+      }),
+    );
   }, [language]);
 
   const setLanguage = useCallback((nextLanguage: Language) => {
-    setLanguageState(nextLanguage);
+    setLanguageState((currentLanguage) =>
+      currentLanguage === nextLanguage ? currentLanguage : nextLanguage,
+    );
   }, []);
 
   const toggleLanguage = useCallback(() => {
@@ -77,7 +129,21 @@ export const LanguageProvider = ({
 
   const t = useCallback(
     (key: string, params?: Record<string, string | number>) =>
-      translate(language, key, params),
+      safeTranslate(language, key, undefined, params),
+    [language],
+  );
+
+  const safeT = useCallback(
+    (
+      key: string,
+      fallback?: string,
+      params?: Record<string, string | number>,
+    ) => safeTranslate(language, key, fallback, params),
+    [language],
+  );
+
+  const hasTranslation = useCallback(
+    (key: string) => hasTranslationForLanguage(language, key),
     [language],
   );
 
@@ -90,6 +156,8 @@ export const LanguageProvider = ({
       setLanguage,
       toggleLanguage,
       t,
+      safeT,
+      hasTranslation,
       formatCurrency: (amount: number, currency = "INR", options) =>
         new Intl.NumberFormat(locale, {
           style: "currency",
@@ -103,7 +171,7 @@ export const LanguageProvider = ({
       formatNumber: (input, options) =>
         new Intl.NumberFormat(locale, options).format(input),
     }),
-    [language, locale, setLanguage, t, toggleLanguage],
+    [hasTranslation, language, locale, safeT, setLanguage, t, toggleLanguage],
   );
 
   return (

@@ -1099,7 +1099,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           toastMessage: `${createdProduct.name} ${t("invoiceComposer.addToCart").toLowerCase()}`,
         });
       } catch (error) {
-        toast.error(parseServerErrors(error, t("inventory.saveError")));
+        toast.error(parseServerErrors(error, t("productsPage.saveError")));
       }
     },
     [addProductToBill, createProduct, parseServerErrors, quickProductForm, t],

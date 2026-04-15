@@ -111,7 +111,7 @@ const DataExportDialog = ({
   categoryOptions = [],
   disabled = false,
 }: DataExportDialogProps) => {
-  const { t, formatNumber } = useI18n();
+  const { t, safeT, formatNumber } = useI18n();
   const [open, setOpen] = useState(false);
   const [format, setFormat] = useState<ExportFormat>("xlsx");
   const [scope, setScope] = useState<ExportScope>(
@@ -150,19 +150,16 @@ const DataExportDialog = ({
     [fieldOptions, selectedFields],
   );
 
-  const localizedTitle =
-    t(`exportDialog.resources.${resource}`) === `exportDialog.resources.${resource}`
-      ? title
-      : t(`exportDialog.resources.${resource}`);
+  const localizedTitle = safeT(`exportDialog.resources.${resource}`, title);
 
   const getFieldLabel = (fieldId: string, fallback: string) => {
     const key = `exportDialog.fields.${fieldId}`;
-    return t(key) === key ? fallback : t(key);
+    return safeT(key, fallback);
   };
 
   const getStatusLabel = (status: string) => {
     const key = `exportDialog.statuses.${status}`;
-    return t(key) === key ? status.replaceAll("_", " ") : t(key);
+    return safeT(key, status.replaceAll("_", " "));
   };
 
   const toggleField = (fieldId: string) => {

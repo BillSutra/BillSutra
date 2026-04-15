@@ -72,7 +72,7 @@ type InvoiceDetailClientProps = {
 const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   const params = useParams();
   const id = Number(params?.id);
-  const { formatCurrency, formatDate, t } = useI18n();
+  const { formatCurrency, formatDate, t, safeT } = useI18n();
   const { data, isLoading, isError } = useInvoiceQuery(id);
   const { data: businessProfile } = useQuery({
     queryKey: ["business-profile"],
@@ -169,9 +169,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     (method?: Parameters<typeof formatPaymentMethodLabel>[0]) => {
       const normalized = (method ?? "MANUAL").toUpperCase();
       const key = `invoiceDetail.paymentMethods.${normalized}`;
-      return t(key) === key ? formatPaymentMethodLabel(method) : t(key);
+      return safeT(key, formatPaymentMethodLabel(method));
     },
-    [t],
+    [safeT],
   );
 
   const previewData = useMemo<InvoicePreviewData | null>(() => {
