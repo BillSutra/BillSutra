@@ -1,4 +1,6 @@
 import Env from "@/lib/env";
+import { getStateFromGstin } from "@/lib/gstin";
+import { parseBusinessAddressText } from "@/lib/indianAddress";
 import type { InvoicePreviewData } from "@/types/invoice-template";
 
 const DEFAULT_INVOICE_SECTIONS = [
@@ -14,10 +16,13 @@ const DEFAULT_INVOICE_SECTIONS = [
 ] as const;
 
 const DEFAULT_INVOICE_THEME = {
-  primaryColor: "#1f2937",
+  primaryColor: "#111111",
   fontFamily: "var(--font-geist-sans)",
-  tableStyle: "grid",
+  tableStyle: "minimal",
 } as const;
+
+export const DEFAULT_INVOICE_TEMPLATE_ID = "indian-gst-template";
+export const DEFAULT_INVOICE_TEMPLATE_NAME = "Indian GST Invoice Template";
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, "");
 
@@ -154,11 +159,22 @@ export const buildPublicInvoicePreviewData = (
   invoice: PublicInvoice,
 ): InvoicePreviewData => {
   const statusMeta = getStatusNote(invoice.status);
+  const businessState = parseBusinessAddressText(invoice.business_address ?? "").state;
+  const customerState = getStateFromGstin(invoice.customer_gstin);
+  const taxMode =
+    invoice.tax <= 0
+      ? "NONE"
+      : businessState && customerState && businessState !== customerState
+        ? "IGST"
+        : "CGST_SGST";
 
   return {
+    invoiceTitle: taxMode === "NONE" ? "Bill" : "Tax Invoice",
     invoiceNumber: invoice.invoice_id,
     invoiceDate: formatInvoiceDate(invoice.date),
     dueDate: formatInvoiceDate(invoice.due_date),
+    placeOfSupply: customerState || businessState || "",
+    taxMode,
     business: {
       businessName: invoice.business_name,
       address: invoice.business_address ?? "",
@@ -183,18 +199,21 @@ export const buildPublicInvoicePreviewData = (
     },
     items: invoice.items.map((item) => ({
       name: item.name,
-      description: item.tax_rate ? `GST ${item.tax_rate}%` : "No GST",
+      description: "",
       quantity: item.quantity,
       unitPrice: item.unit_price,
       taxRate: item.tax_rate ?? 0,
+      amount: item.line_total,
     })),
     totals: {
       subtotal: invoice.subtotal,
       tax: invoice.tax,
       discount: invoice.discount,
       total: invoice.amount,
-      cgst: invoice.tax > 0 ? invoice.tax / 2 : 0,
-      sgst: invoice.tax > 0 ? invoice.tax / 2 : 0,
+      cgst: taxMode === "CGST_SGST" && invoice.tax > 0 ? invoice.tax / 2 : 0,
+      sgst: taxMode === "CGST_SGST" && invoice.tax > 0 ? invoice.tax / 2 : 0,
+      igst: taxMode === "IGST" ? invoice.tax : 0,
+      roundOff: 0,
     },
     paymentSummary: {
       statusLabel: statusMeta.label,
@@ -202,6 +221,9 @@ export const buildPublicInvoicePreviewData = (
       statusNote: statusMeta.note,
       paidAmount: invoice.status === "PAID" ? invoice.amount : 0,
       remainingAmount: invoice.status === "PAID" ? 0 : invoice.amount,
+    },
+    payment: {
+      mode: invoice.status === "PAID" ? "Paid" : "Pending",
     },
     notes: invoice.notes ?? "",
     paymentInfo:

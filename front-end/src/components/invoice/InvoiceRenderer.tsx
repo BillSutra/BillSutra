@@ -22,9 +22,13 @@ import TemplateClassic from "./templates/TemplateClassic";
 import TemplateCompact from "./templates/TemplateCompact";
 import TemplateGST from "./templates/TemplateGST";
 import TemplateHeaderLeft from "./templates/TemplateHeaderLeft";
+import TemplateIndianGst from "./templates/TemplateIndianGst";
 import TemplateIndianModern from "./templates/TemplateIndianModern";
 import TemplateModern from "./templates/TemplateModern";
 import TemplateSplit from "./templates/TemplateSplit";
+import TemplateHalfPage from "./templates/TemplateHalfPage";
+import TemplateMini from "./templates/TemplateMini";
+import TemplateThermal from "./templates/TemplateThermal";
 
 const SECTION_MAP: Record<
   SectionKey,
@@ -87,6 +91,7 @@ export const InvoiceSectionRenderer = ({
 const TEMPLATE_MAP = {
   classic: TemplateClassic,
   modern: TemplateModern,
+  indianGst: TemplateIndianGst,
   indianModern: TemplateIndianModern,
   gst: TemplateGST,
   headerLeft: TemplateHeaderLeft,
@@ -94,6 +99,9 @@ const TEMPLATE_MAP = {
   split: TemplateSplit,
   compact: TemplateCompact,
   bold: TemplateBold,
+  halfPage: TemplateHalfPage,
+  mini: TemplateMini,
+  thermal: TemplateThermal,
 } as const;
 
 const InvoiceRenderer = ({
@@ -101,8 +109,8 @@ const InvoiceRenderer = ({
   templateName,
   ...rendererProps
 }: InvoiceRendererProps) => {
-  const SelectedTemplate =
-    TEMPLATE_MAP[resolveInvoiceTemplateVariant(templateId, templateName)];
+  const variant = resolveInvoiceTemplateVariant(templateId, templateName);
+  const SelectedTemplate = TEMPLATE_MAP[variant] ?? TEMPLATE_MAP.classic;
 
   return <SelectedTemplate {...rendererProps} />;
 };

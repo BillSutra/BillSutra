@@ -34,6 +34,7 @@ import {
   formatBusinessAddressFromRecord,
   formatCustomerAddressFromRecord,
 } from "@/lib/indianAddress";
+import { getStateFromGstin } from "@/lib/gstin";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import {
   useCreatePaymentMutation,
@@ -53,6 +54,8 @@ const DEFAULT_INVOICE_SECTIONS: SectionKey[] = [
   "company_details",
   "client_details",
   "items",
+  "tax",
+  "discount",
   "payment_info",
   "notes",
   "footer",
@@ -92,8 +95,8 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   const [invoiceEmailSending, setInvoiceEmailSending] = useState(false);
   const fallbackActiveTemplate = useMemo(
     () => ({
-      templateId: "professional",
-      templateName: "Professional",
+      templateId: "indian-gst-template",
+      templateName: "Indian GST Invoice Template",
       enabledSections: DEFAULT_INVOICE_SECTIONS,
       sectionOrder: DEFAULT_INVOICE_SECTIONS,
       theme: DEFAULT_INVOICE_THEME,
@@ -179,11 +182,32 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
 
     const tax = Number(data.tax ?? 0);
     const businessName = businessProfile?.business_name || "BillSutra";
+    const businessState =
+      getStateFromGstin(businessProfile?.tax_id) ||
+      businessProfile?.businessAddress?.state ||
+      businessProfile?.state ||
+      "";
+    const customerState =
+      getStateFromGstin(data.customer?.gstin) ||
+      data.customer?.customerAddress?.state ||
+      data.customer?.state ||
+      "";
+    const taxMode =
+      tax <= 0
+        ? "NONE"
+        : businessState && customerState && businessState !== customerState
+          ? "IGST"
+          : "CGST_SGST";
+    const latestPaymentMethod =
+      paymentHistory[0]?.method ? formatLocalizedPaymentMethod(paymentHistory[0].method) : "";
 
     return {
+      invoiceTitle: taxMode === "NONE" ? "Bill" : "Tax Invoice",
       invoiceNumber: data.invoice_number,
       invoiceDate: invoiceDate(data.date),
       dueDate: invoiceDate(data.due_date),
+      placeOfSupply: customerState || businessState || "",
+      taxMode,
       business: {
         businessName,
         businessAddress: businessProfile
@@ -233,22 +257,23 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
         phone: data.customer?.phone ?? "",
         address: formatCustomerAddressFromRecord(data.customer) || "",
       },
-      items: data.items.map((item) => ({
+      items: data.items?.map((item) => ({
         name: item.name,
-        description: item.tax_rate
-          ? `GST ${item.tax_rate}%`
-          : t("invoiceComposer.noGst"),
+        description: "",
         quantity: Number(item.quantity) || 0,
         unitPrice: Number(item.price) || 0,
         taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
+        amount: Number(item.total ?? 0),
       })),
       totals: {
         subtotal: Number(data.subtotal ?? 0),
         tax,
         discount: Number(data.discount ?? 0),
         total: Number(data.total ?? 0),
-        cgst: tax > 0 ? tax / 2 : 0,
-        sgst: tax > 0 ? tax / 2 : 0,
+        cgst: taxMode === "CGST_SGST" && tax > 0 ? tax / 2 : 0,
+        sgst: taxMode === "CGST_SGST" && tax > 0 ? tax / 2 : 0,
+        igst: taxMode === "IGST" ? tax : 0,
+        roundOff: 0,
       },
       paymentSummary: {
         statusLabel: localizedPaymentLabel,
@@ -267,6 +292,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
           paidAt: invoiceDate(payment.paid_at),
           method: formatLocalizedPaymentMethod(payment.method),
         })),
+      },
+      payment: {
+        mode: latestPaymentMethod,
       },
       notes: data.notes ?? "",
       paymentInfo: t("invoiceDetail.paymentInfo"),
@@ -857,7 +885,11 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setPartialOpen(false)}
+                onClick={() => {
+                  setPartialOpen(false);
+                  setPartialAmount("");
+                  setPartialError(null);
+                }}
               >
                 {t("common.cancel")}
               </Button>

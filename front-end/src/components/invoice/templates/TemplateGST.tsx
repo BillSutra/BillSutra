@@ -1,8 +1,8 @@
 import type { InvoiceSectionRendererProps } from "@/components/invoice/InvoiceRenderer";
-import TemplateFrame from "./TemplateFrame";
+import ProductionInvoiceTemplate from "./ProductionInvoiceTemplate";
 
 const TemplateGST = (props: InvoiceSectionRendererProps) => {
-  return <TemplateFrame variant="gst" {...props} />;
+  return <ProductionInvoiceTemplate {...props} variant="standard" />;
 };
 
 export default TemplateGST;

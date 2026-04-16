@@ -47,6 +47,7 @@ import {
   formatBusinessAddressFromRecord,
   formatCustomerAddressFromRecord,
 } from "@/lib/indianAddress";
+import { getStateFromGstin } from "@/lib/gstin";
 import { formatPaymentMethodLabel } from "@/lib/invoicePayments";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
@@ -138,7 +139,7 @@ const DEFAULT_INVOICE_SECTIONS: SectionKey[] = [
 
 const DEFAULT_INVOICE_THEME: InvoiceTheme = {
   primaryColor: "#1f2937",
-  fontFamily: "var(--font-geist-mono)",
+  fontFamily: "var(--font-geist-sans)",
   tableStyle: "grid",
 };
 
@@ -313,8 +314,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const validation = useInvoiceValidation(form, items, totals.total);
   const fallbackActiveTemplate = useMemo(
     () => ({
-      templateId: "professional",
-      templateName: "Professional",
+      templateId: "indian-gst-template",
+      templateName: "Indian GST Invoice Template",
       enabledSections: DEFAULT_INVOICE_SECTIONS,
       sectionOrder: DEFAULT_INVOICE_SECTIONS,
       theme: DEFAULT_INVOICE_THEME,
@@ -639,6 +640,17 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         : form.payment_status === "PARTIALLY_PAID"
           ? "partial"
           : "pending";
+    const businessState =
+      getStateFromGstin(businessProfile?.tax_id) ||
+      businessProfile?.businessAddress?.state ||
+      businessProfile?.state ||
+      "";
+    const customerState =
+      getStateFromGstin(customer?.gstin) ||
+      customer?.customerAddress?.state ||
+      customer?.state ||
+      "";
+    const placeOfSupply = customerState || businessState || "";
 
     const paymentStatusNote =
       form.payment_status === "PAID"
@@ -660,9 +672,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         : [];
 
     return {
+      invoiceTitle: taxMode === "NONE" ? "Bill" : "Tax Invoice",
       invoiceNumber: t("invoice.invoicePreviewNumber"),
       invoiceDate,
       dueDate,
+      placeOfSupply,
+      taxMode,
       business: {
         businessName,
         businessAddress: businessProfile
@@ -716,6 +731,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         quantity: Number(item.quantity) || 0,
         unitPrice: Number(item.price) || 0,
         taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
+        amount:
+          (Number(item.quantity) || 0) * (Number(item.price) || 0) +
+          ((taxMode === "NONE"
+            ? 0
+            : ((Number(item.quantity) || 0) *
+                (Number(item.price) || 0) *
+                (item.tax_rate ? Number(item.tax_rate) : 0)) /
+              100) || 0),
       })),
       totals,
       discount: {
@@ -739,6 +762,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         remainingAmount,
         history: paymentHistory,
       },
+      payment: {
+        mode: paymentMethodLabel,
+      },
       notes: form.notes || "",
       paymentInfo:
         form.payment_status === "UNPAID"
@@ -761,6 +787,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     form.notes,
     invoiceDate,
     items,
+    taxMode,
     t,
     totals,
   ]);

@@ -1,8 +1,8 @@
 import type { InvoiceSectionRendererProps } from "@/components/invoice/InvoiceRenderer";
-import TemplateFrame from "./TemplateFrame";
+import ProductionInvoiceTemplate from "./ProductionInvoiceTemplate";
 
 const TemplateModern = (props: InvoiceSectionRendererProps) => {
-  return <TemplateFrame variant="modern" {...props} />;
+  return <ProductionInvoiceTemplate {...props} variant="premium" />;
 };
 
 export default TemplateModern;

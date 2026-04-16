@@ -49,7 +49,7 @@ export type ActiveInvoiceTemplateSnapshot = {
 };
 
 const DEFAULT_TEMPLATE =
-  TEMPLATE_CATALOG.find((template) => template.id === "professional") ??
+  TEMPLATE_CATALOG.find((template) => template.id === "indian-gst-template") ??
   TEMPLATE_CATALOG[0];
 
 export const DEFAULT_ACTIVE_INVOICE_TEMPLATE: ActiveInvoiceTemplateInput = {
