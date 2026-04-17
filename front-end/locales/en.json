@@ -272,6 +272,20 @@
       "footerPrompt": "Already have an account?",
       "footerAction": "Login"
     },
+    "shared": {
+      "loginTab": "Login",
+      "signupTab": "Sign up",
+      "workerPrompt": "Team member?",
+      "workerAction": "Login as Worker",
+      "emailOrPhoneLabel": "Email or phone",
+      "emailOrPhonePlaceholder": "you@company.com or 9876543210",
+      "phoneLabel": "Phone number",
+      "phonePlaceholder": "9876543210",
+      "phoneHelper": "Use your active Indian mobile number.",
+      "signingIn": "Signing in...",
+      "createAccount": "Create account",
+      "creatingAccount": "Creating account..."
+    },
     "forgotPage": {
       "badge": "Reset access",
       "title": "Forgot your password?",

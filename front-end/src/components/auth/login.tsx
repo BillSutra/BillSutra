@@ -1,6 +1,7 @@
 "use client";
 
 import React, {
+  FormEvent,
   useActionState,
   useCallback,
   useEffect,
@@ -11,16 +12,15 @@ import React, {
 import { startAuthentication } from "@simplewebauthn/browser";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import Link from "next/link";
 import { loginAction, workerLoginAction } from "@/actions/authActions";
-import SubmitBtn from "@/components/common/SubmitBtn";
 import { signIn } from "next-auth/react";
 import Image from "next/image";
 import { useI18n } from "@/providers/LanguageProvider";
 import { useHydrated } from "@/hooks/useHydrated";
+import AuthFormField from "@/components/auth/AuthFormField";
 import {
   requestOtpLoginCode,
   requestPasskeyAuthenticationOptions,
@@ -29,12 +29,16 @@ import {
 } from "@/lib/authClient";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
 import { captureFrontendException } from "@/lib/observability/shared";
+import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 
 type LoginProps = {
   mode?: "owner" | "worker";
+  autoFocusFirstField?: boolean;
 };
 
 const OTP_LENGTH = 6;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const INDIAN_PHONE_REGEX = /^(?:\+91|91)?[6-9]\d{9}$/;
 
 const normalizeToken = (rawToken: unknown) => {
   if (typeof rawToken !== "string") {
@@ -50,8 +54,45 @@ const normalizeToken = (rawToken: unknown) => {
 };
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
+const normalizePhone = (value: string) => value.replace(/[^\d+]/g, "");
 
-export default function Login({ mode = "owner" }: LoginProps) {
+const isEmail = (value: string) => EMAIL_REGEX.test(value);
+const isIndianPhone = (value: string) => INDIAN_PHONE_REGEX.test(value);
+
+const asErrorText = (value: unknown) => {
+  if (Array.isArray(value)) {
+    return typeof value[0] === "string" ? value[0] : "";
+  }
+
+  return typeof value === "string" ? value : "";
+};
+
+const validateIdentifier = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "Enter your email or phone number.";
+  }
+
+  const phoneCandidate = normalizePhone(trimmed);
+  if (isEmail(trimmed) || isIndianPhone(phoneCandidate)) {
+    return "";
+  }
+
+  return "Enter a valid email or Indian phone number.";
+};
+
+const validatePassword = (value: string) => {
+  if (!value.trim()) {
+    return "Enter your password.";
+  }
+
+  return "";
+};
+
+export default function Login({
+  mode = "owner",
+  autoFocusFirstField = false,
+}: LoginProps) {
   const router = useRouter();
   const { t } = useI18n();
   const isWorkerMode = mode === "worker";
@@ -61,12 +102,24 @@ export default function Login({ mode = "owner" }: LoginProps) {
     errors: {},
     data: {},
   };
-  const [state, formAction] = useActionState(
+  const [state, formAction, isCredentialSubmitting] = useActionState(
     isWorkerMode ? workerLoginAction : loginAction,
     initialState,
   );
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<{
+    identifier?: string;
+    password?: string;
+  }>({});
+  const [touched, setTouched] = useState<{
+    identifier: boolean;
+    password: boolean;
+  }>({
+    identifier: false,
+    password: false,
+  });
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
   const [isOtpSending, setIsOtpSending] = useState(false);
@@ -126,18 +179,76 @@ export default function Login({ mode = "owner" }: LoginProps) {
         setIsSigningIn(false);
       }
     },
-    [callbackUrl, router],
+    [callbackUrl, mode, router],
   );
 
+  const identifierServerError = asErrorText(
+    state.errors?.identifier ?? state.errors?.email,
+  );
+  const passwordServerError = asErrorText(state.errors?.password);
+
+  const identifierError = fieldErrors.identifier || identifierServerError;
+  const passwordError = fieldErrors.password || passwordServerError;
+
+  const handleIdentifierChange = (value: string) => {
+    setIdentifier(value);
+    if (touched.identifier) {
+      setFieldErrors((current) => ({
+        ...current,
+        identifier: validateIdentifier(value),
+      }));
+    }
+  };
+
+  const handlePasswordChange = (value: string) => {
+    setPassword(value);
+    if (touched.password) {
+      setFieldErrors((current) => ({
+        ...current,
+        password: validatePassword(value),
+      }));
+    }
+  };
+
+  const handleIdentifierBlur = () => {
+    setTouched((current) => ({ ...current, identifier: true }));
+    setFieldErrors((current) => ({
+      ...current,
+      identifier: validateIdentifier(identifier),
+    }));
+  };
+
+  const handlePasswordBlur = () => {
+    setTouched((current) => ({ ...current, password: true }));
+    setFieldErrors((current) => ({
+      ...current,
+      password: validatePassword(password),
+    }));
+  };
+
+  const handlePasswordSubmit = (event: FormEvent<HTMLFormElement>) => {
+    setTouched({ identifier: true, password: true });
+
+    const nextErrors = {
+      identifier: validateIdentifier(identifier),
+      password: validatePassword(password),
+    };
+
+    setFieldErrors(nextErrors);
+
+    if (nextErrors.identifier || nextErrors.password) {
+      event.preventDefault();
+      return;
+    }
+
+    captureAnalyticsEvent("auth_login_started", {
+      method: "password",
+      mode,
+    });
+  };
+
   useEffect(() => {
-    if (state.status === 500) {
-      captureAnalyticsEvent("auth_login_failed", {
-        method: "password",
-        mode,
-        status: state.status,
-      });
-      toast.error(state.message);
-    } else if (state.status === 422) {
+    if (state.status >= 400) {
       captureAnalyticsEvent("auth_login_failed", {
         method: "password",
         mode,
@@ -183,9 +294,9 @@ export default function Login({ mode = "owner" }: LoginProps) {
   };
 
   const handlePasskeyLogin = async () => {
-    const normalizedEmail = email.trim();
-    if (!normalizedEmail) {
-      toast.error("Enter your email first to continue with a passkey.");
+    const normalizedIdentifier = identifier.trim();
+    if (!normalizedIdentifier || !isEmail(normalizedIdentifier)) {
+      toast.error("Enter a valid email first to continue with a passkey.");
       return;
     }
 
@@ -202,7 +313,7 @@ export default function Login({ mode = "owner" }: LoginProps) {
     try {
       const optionsResponse =
         await requestPasskeyAuthenticationOptions<Record<string, unknown>>(
-          normalizedEmail,
+          normalizeEmail(normalizedIdentifier),
         );
       const browserResponse = await startAuthentication({
         optionsJSON: optionsResponse.options as unknown as Parameters<
@@ -211,7 +322,7 @@ export default function Login({ mode = "owner" }: LoginProps) {
       });
 
       const authPayload = await verifyPasskeyAuthentication(
-        normalizedEmail,
+        normalizeEmail(normalizedIdentifier),
         optionsResponse.challenge_id,
         browserResponse,
       );
@@ -249,11 +360,13 @@ export default function Login({ mode = "owner" }: LoginProps) {
   };
 
   const handleSendOtp = async () => {
-    const normalizedEmail = normalizeEmail(email);
-    if (!normalizedEmail) {
-      toast.error("Enter your email first to receive a login code.");
+    const normalizedIdentifier = identifier.trim();
+    if (!normalizedIdentifier || !isEmail(normalizedIdentifier)) {
+      toast.error("Enter a valid email first to receive a login code.");
       return;
     }
+
+    const normalizedEmail = normalizeEmail(normalizedIdentifier);
 
     setIsOtpSending(true);
     captureAnalyticsEvent("auth_login_otp_requested", {
@@ -310,11 +423,12 @@ export default function Login({ mode = "owner" }: LoginProps) {
 
   const handleVerifyOtp = useCallback(
     async (codeOverride?: string) => {
-      const normalizedEmail = normalizeEmail(email);
+      const normalizedIdentifier = identifier.trim();
+      const normalizedEmail = normalizeEmail(normalizedIdentifier);
       const code = (codeOverride ?? otpDigits.join("")).trim();
 
-      if (!normalizedEmail) {
-        toast.error("Enter your email first.");
+      if (!normalizedIdentifier || !isEmail(normalizedIdentifier)) {
+        toast.error("Enter a valid email first.");
         return;
       }
 
@@ -360,7 +474,7 @@ export default function Login({ mode = "owner" }: LoginProps) {
         setIsOtpVerifying(false);
       }
     },
-    [completeTokenLogin, email, otpDigits],
+    [completeTokenLogin, identifier, isOtpVerifying, mode, otpDigits],
   );
 
   useEffect(() => {
@@ -411,52 +525,78 @@ export default function Login({ mode = "owner" }: LoginProps) {
 
   return (
     <>
-      <form action={formAction} className="grid gap-4">
-        <div className="grid gap-2">
-          <Label htmlFor="email">{t("auth.loginForm.emailLabel")}</Label>
-          <Input
-            id="email"
-            placeholder={t("auth.loginForm.emailPlaceholder")}
-            name="email"
-            type="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            autoComplete="email"
-          />
-          <span className="text-xs text-destructive">
-            {state.errors?.email}
-          </span>
+      <form
+        action={formAction}
+        className="grid gap-4"
+        noValidate
+        onSubmit={handlePasswordSubmit}
+      >
+        <AuthFormField
+          id="identifier"
+          name="identifier"
+          label={t("auth.shared.emailOrPhoneLabel")}
+          placeholder={t("auth.shared.emailOrPhonePlaceholder")}
+          value={identifier}
+          onChange={handleIdentifierChange}
+          onBlur={handleIdentifierBlur}
+          autoComplete="username"
+          autoFocus={autoFocusFirstField}
+          error={identifierError}
+          disabled={isCredentialSubmitting || isSigningIn}
+        />
+        <div className="flex items-center justify-end">
+          {!isWorkerMode ? (
+            <Link
+              href="/forgot-password"
+              className="text-xs font-semibold text-primary transition-colors hover:text-primary/80"
+            >
+              {t("auth.loginForm.forgotPassword")}
+            </Link>
+          ) : null}
         </div>
-        <div className="grid gap-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">
-              {t("auth.loginForm.passwordLabel")}
-            </Label>
-            {!isWorkerMode ? (
-              <Link
-                href="/forgot-password"
-                className="text-xs font-semibold text-primary transition-colors hover:text-primary/80"
-              >
-                {t("auth.loginForm.forgotPassword")}
-              </Link>
-            ) : null}
-          </div>
-          <Input
-            id="password"
-            type="password"
-            placeholder={t("auth.loginForm.passwordPlaceholder")}
-            name="password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            autoComplete={
-              isWorkerMode ? "current-password" : "current-password"
-            }
-          />
-          <span className="text-xs text-destructive">
-            {state.errors?.password}
-          </span>
-        </div>
-        <SubmitBtn />
+        <AuthFormField
+          id="password"
+          name="password"
+          label={t("auth.loginForm.passwordLabel")}
+          type={showPassword ? "text" : "password"}
+          placeholder={t("auth.loginForm.passwordPlaceholder")}
+          value={password}
+          onChange={handlePasswordChange}
+          onBlur={handlePasswordBlur}
+          autoComplete="current-password"
+          error={passwordError}
+          disabled={isCredentialSubmitting || isSigningIn}
+          rightAdornment={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="h-8 w-8"
+              onClick={() => setShowPassword((current) => !current)}
+              aria-label={showPassword ? t("common.hide") : t("common.show")}
+            >
+              {showPassword ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+            </Button>
+          }
+        />
+        <Button
+          type="submit"
+          className="mt-2 w-full"
+          disabled={isCredentialSubmitting || isSigningIn}
+        >
+          {isCredentialSubmitting || isSigningIn ? (
+            <>
+              <LoaderCircle className="h-4 w-4 animate-spin" />
+              {t("auth.shared.signingIn")}
+            </>
+          ) : (
+            t("auth.shared.loginTab")
+          )}
+        </Button>
       </form>
 
       {!isWorkerMode ? (

@@ -1832,6 +1832,20 @@
       "footerPrompt": "क्या आपका पहले से अकाउंट है?",
       "footerAction": "लॉगिन"
     },
+    "shared": {
+      "loginTab": "लॉगिन",
+      "signupTab": "साइन अप",
+      "workerPrompt": "टीम सदस्य?",
+      "workerAction": "वर्कर लॉगिन",
+      "emailOrPhoneLabel": "ईमेल या फोन",
+      "emailOrPhonePlaceholder": "you@company.com या 9876543210",
+      "phoneLabel": "फोन नंबर",
+      "phonePlaceholder": "9876543210",
+      "phoneHelper": "अपना सक्रिय भारतीय मोबाइल नंबर दर्ज करें।",
+      "signingIn": "साइन इन हो रहा है...",
+      "createAccount": "अकाउंट बनाएं",
+      "creatingAccount": "अकाउंट बन रहा है..."
+    },
     "forgotPage": {
       "badge": "एक्सेस रीसेट",
       "title": "पासवर्ड भूल गए?",
