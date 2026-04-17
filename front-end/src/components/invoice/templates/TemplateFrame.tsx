@@ -13,7 +13,10 @@ export type InvoiceTemplateVariant =
   | "banner"
   | "split"
   | "compact"
-  | "bold";
+  | "bold"
+  | "halfPage"
+  | "mini"
+  | "thermal";
 
 const variantClassMap: Record<InvoiceTemplateVariant, string> = {
   classic: styles.classic,
@@ -24,6 +27,9 @@ const variantClassMap: Record<InvoiceTemplateVariant, string> = {
   split: styles.split,
   compact: styles.compact,
   bold: styles.bold,
+  halfPage: styles.halfPage,
+  mini: styles.mini,
+  thermal: styles.thermal,
 };
 
 type TemplateFrameProps = InvoiceSectionRendererProps & {

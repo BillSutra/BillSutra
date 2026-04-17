@@ -15,6 +15,7 @@ import {
   formatBusinessAddressFromRecord,
   formatCustomerAddressFromRecord,
 } from "@/lib/indianAddress";
+import { getStateFromGstin } from "@/lib/gstin";
 
 export type SimpleBillMode = "simple" | "business";
 
@@ -268,11 +269,30 @@ export const buildSimpleBillInvoicePreviewData = ({
   notes: string;
 }): InvoicePreviewData => {
   const selectedPaymentLabel = paymentLabel(payment);
+  const businessState =
+    getStateFromGstin(businessProfile?.tax_id) ||
+    businessProfile?.businessAddress?.state ||
+    businessProfile?.state ||
+    "";
+  const customerState =
+    getStateFromGstin(customer?.gstin) ||
+    customer?.customerAddress?.state ||
+    customer?.state ||
+    "";
+  const taxMode =
+    (totals.tax ?? 0) <= 0
+      ? "NONE"
+      : businessState && customerState && businessState !== customerState
+        ? "IGST"
+        : "CGST_SGST";
 
   return {
+    invoiceTitle: taxMode === "NONE" ? "Bill" : "Tax Invoice",
     invoiceNumber,
     invoiceDate,
     dueDate,
+    placeOfSupply: customerState || businessState || "",
+    taxMode,
     business: {
       businessName: businessProfile?.business_name || "BillSutra",
       businessAddress: businessProfile
@@ -321,12 +341,26 @@ export const buildSimpleBillInvoicePreviewData = ({
     },
     items: items.filter(isInvoiceItemReady).map((item) => ({
       name: item.name.trim(),
-      description: item.tax_rate ? `GST ${item.tax_rate}%` : "",
+      description: "",
       quantity: Number(item.quantity),
       unitPrice: Number(item.price),
       taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
+      amount:
+        Number(item.quantity) * Number(item.price) +
+        ((taxMode === "NONE"
+          ? 0
+          : (Number(item.quantity) *
+              Number(item.price) *
+              (item.tax_rate ? Number(item.tax_rate) : 0)) /
+            100) || 0),
     })),
-    totals,
+    totals: {
+      ...totals,
+      cgst: taxMode === "CGST_SGST" ? totals.tax / 2 : 0,
+      sgst: taxMode === "CGST_SGST" ? totals.tax / 2 : 0,
+      igst: taxMode === "IGST" ? totals.tax : 0,
+      roundOff: 0,
+    },
     discount: {
       type: discountType,
       value: Number(discount) || 0,
@@ -342,6 +376,9 @@ export const buildSimpleBillInvoicePreviewData = ({
       paidAmount: 0,
       remainingAmount: totals.total,
       history: [],
+    },
+    payment: {
+      mode: selectedPaymentLabel,
     },
     notes: notes.trim(),
     paymentInfo: `Payment method: ${selectedPaymentLabel}`,

@@ -19,6 +19,28 @@ type TemplateSeed = {
 
 const templates: TemplateSeed[] = [
   {
+    name: "Indian GST Template",
+    description:
+      "Dedicated Indian GST invoice with tax-first structure and compliant billing sections.",
+    layoutConfig: {
+      primaryColor: "#111111",
+      font: "Geist Sans",
+      tableStyle: "minimal",
+      layout: "stacked",
+    },
+    sections: [
+      { key: "header", order: 1, isDefault: true },
+      { key: "company_details", order: 2, isDefault: true },
+      { key: "client_details", order: 3, isDefault: true },
+      { key: "items", order: 4, isDefault: true },
+      { key: "tax", order: 5, isDefault: true },
+      { key: "discount", order: 6, isDefault: true },
+      { key: "payment_info", order: 7, isDefault: true },
+      { key: "notes", order: 8, isDefault: true },
+      { key: "footer", order: 9, isDefault: true },
+    ],
+  },
+  {
     name: "Minimal",
     description: "Clean grid layout with quiet typography.",
     layoutConfig: {

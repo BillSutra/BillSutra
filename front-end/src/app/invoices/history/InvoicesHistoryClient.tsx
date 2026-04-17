@@ -48,7 +48,7 @@ const humanizeEnum = (status: string) =>
     .join(" ");
 
 const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
-  const { language, t, formatCurrency, formatDate } = useI18n();
+  const { language, t, safeT, formatCurrency, formatDate } = useI18n();
   const { data, isLoading, isError } = useInvoicesQuery();
   const updateInvoice = useUpdateInvoiceMutation();
   const createPayment = useCreatePaymentMutation();
@@ -77,8 +77,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
 
   const formatStatusLabel = (status: string) => {
     const key = `invoiceHistory.status.${status}`;
-    const translated = t(key);
-    return translated === key ? humanizeEnum(status) : translated;
+    return safeT(key, humanizeEnum(status));
   };
 
   const localizeSnapshotLabel = (invoice: Invoice) => {

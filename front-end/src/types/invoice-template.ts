@@ -16,18 +16,24 @@ export type InvoiceTheme = {
   tableStyle: "minimal" | "grid" | "modern";
 };
 
+export type InvoiceTaxMode = "CGST_SGST" | "IGST" | "NONE";
+
 export type TemplateLayout = "stacked" | "split";
 
 export type InvoiceTemplateVariant =
   | "classic"
   | "modern"
+  | "indianGst"
   | "indianModern"
   | "gst"
   | "headerLeft"
   | "banner"
   | "split"
   | "compact"
-  | "bold";
+  | "bold"
+  | "halfPage"
+  | "mini"
+  | "thermal";
 
 export type InvoiceTemplateConfig = {
   id: string;
@@ -75,12 +81,37 @@ export type InvoiceLineItem = {
   quantity: number;
   unitPrice: number;
   taxRate?: number;
+  hsnSac?: string;
+  unitLabel?: string;
+  discountAmount?: number;
+  discountPercent?: number;
+  taxableValue?: number;
+  amount?: number;
+};
+
+export type InvoicePaymentDetails = {
+  mode?: string;
+  label?: string;
+  upiId?: string;
+  upiUrl?: string;
+  qrCodeUrl?: string;
+  bankName?: string;
+  accountName?: string;
+  accountNumber?: string;
+  ifsc?: string;
+  branch?: string;
+  extraLines?: string[];
 };
 
 export type InvoicePreviewData = {
   invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
+  invoiceTitle?: string;
+  placeOfSupply?: string;
+  taxMode?: InvoiceTaxMode;
+  amountInWords?: string;
+  watermarkText?: string;
   business: BusinessProfileInput;
   client: {
     name: string;
@@ -100,6 +131,7 @@ export type InvoicePreviewData = {
     cgst?: number;
     sgst?: number;
     igst?: number;
+    roundOff?: number;
   };
   discount?: {
     type: "PERCENTAGE" | "FIXED";
@@ -119,6 +151,7 @@ export type InvoicePreviewData = {
       method?: string | null;
     }>;
   };
+  payment?: InvoicePaymentDetails;
   notes: string;
   paymentInfo: string;
   closingNote?: string;

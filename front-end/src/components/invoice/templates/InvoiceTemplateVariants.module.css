@@ -397,3 +397,38 @@
   font-size: 0.98em;
   font-weight: 600;
 }
+
+.halfPage {
+  padding: 8px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.halfPage :global(.invoice-content-root) {
+  gap: 8px;
+}
+
+.halfPage :global(.invoice-section > section) {
+  border-radius: 8px;
+  border-color: rgba(148, 163, 184, 0.3);
+}
+
+.mini {
+  padding: 6px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+}
+
+.mini :global(.invoice-content-root) {
+  gap: 6px;
+}
+
+.thermal {
+  padding: 4px;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.thermal :global(.invoice-content-root) {
+  gap: 4px;
+}

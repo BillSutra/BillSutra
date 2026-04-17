@@ -11,7 +11,7 @@ const humanizeEnum = (value: string) =>
     .join(" ");
 
 export const useDashboardFormatters = () => {
-  const { formatCurrency, formatDate, formatNumber, t } = useI18n();
+  const { formatCurrency, formatDate, formatNumber, t, safeT } = useI18n();
   const currencyCode = t("common.currencyCode");
 
   const currency = useCallback(
@@ -76,10 +76,9 @@ export const useDashboardFormatters = () => {
   const translateEnum = useCallback(
     (baseKey: string, value: string) => {
       const key = `${baseKey}.${value}`;
-      const translated = t(key);
-      return translated === key ? humanizeEnum(value) : translated;
+      return safeT(key, humanizeEnum(value));
     },
-    [t],
+    [safeT],
   );
 
   return {

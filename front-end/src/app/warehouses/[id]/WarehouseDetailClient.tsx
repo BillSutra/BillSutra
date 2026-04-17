@@ -28,7 +28,7 @@ const WarehouseDetailClient = ({
   image,
   warehouseId,
 }: WarehouseDetailClientProps) => {
-  const { t } = useI18n();
+  const { t, safeT } = useI18n();
   const { data, isLoading, isError } = useWarehouseQuery(warehouseId);
   const {
     data: inventories,
@@ -188,7 +188,10 @@ const WarehouseDetailClient = ({
                     className="text-xs text-destructive block"
                     role="alert"
                   >
-                    {t("validation.selectOptionError")}
+                    {safeT(
+                      "validation.selectOptionError",
+                      "Please select an option",
+                    )}
                   </span>
                 )}
               </div>

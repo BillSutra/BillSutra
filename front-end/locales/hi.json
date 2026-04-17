@@ -26,7 +26,33 @@
     "close": "बंद करें",
     "searchProducts": "नाम, SKU या बारकोड से प्रोडक्ट खोजें",
     "typeToSearchProducts": "प्रोडक्ट खोजने के लिए लिखें",
-    "noProductsFound": "कोई मेल खाता प्रोडक्ट नहीं मिला"
+    "noProductsFound": "कोई मेल खाता प्रोडक्ट नहीं मिला",
+    "show": "दिखाएँ",
+    "hide": "छिपाएँ",
+    "date": "तारीख",
+    "subtotal": "सबटोटल",
+    "tax": "कर",
+    "discount": "छूट",
+    "total": "कुल",
+    "stock": "स्टॉक",
+    "quantity": "मात्रा",
+    "price": "कीमत",
+    "grandTotal": "कुल राशि",
+    "paid": "भुगतान हुआ",
+    "unpaid": "बाकी",
+    "partial": "आंशिक",
+    "balance": "बाकी राशि",
+    "previous": "पिछला",
+    "next": "अगला",
+    "viewDetails": "विवरण देखें",
+    "notAssigned": "अभी नहीं दिया गया",
+    "category": "श्रेणी",
+    "warehouse": "वेयरहाउस",
+    "status": "स्थिति",
+    "action": "कार्रवाई",
+    "productName": "प्रोडक्ट नाम",
+    "sku": "SKU",
+    "skuLabel": "SKU: {value}"
   },
   "productsPage": {
     "title": "प्रोडक्ट्स",
@@ -180,6 +206,17 @@
     },
     "validation": {
       "nameMin": "वेयरहाउस का नाम कम से कम 2 अक्षरों का होना चाहिए।"
+    },
+    "overview": {
+      "emptyTitle": "अभी कोई वेयरहाउस नहीं है",
+      "emptyDescription": "स्टॉक ट्रैक करने के लिए अपना पहला वेयरहाउस बनाएँ",
+      "location": "लोकेशन: {value}",
+      "stats": {
+        "totalProducts": "कुल प्रोडक्ट",
+        "lowStock": "कम स्टॉक",
+        "outOfStock": "स्टॉक खत्म"
+      },
+      "viewInventory": "इन्वेंटरी देखें"
     },
     "detail": {
       "titleFallback": "वेयरहाउस",
@@ -1168,6 +1205,57 @@
       "updateError": "अभी बिक्री अपडेट नहीं हो सकी।",
       "deleteError": "अभी बिक्री हटाई नहीं जा सकी।",
       "deleteConfirm": "क्या यह बिक्री हटानी है? प्रोडक्ट स्टॉक वापस जोड़ दिया जाएगा।"
+    },
+    "pos": {
+      "title": "नई बिलिंग",
+      "subtitle": "भीड़ के समय तेज बिल बनाएं। जल्दी आइटम जोड़ें, कुल देखें और बिक्री पूरी करें।",
+      "setupTitle": "बिल सेटअप",
+      "setupDescription": "ग्राहक, वेयरहाउस और तारीख",
+      "newCustomer": "+ नया ग्राहक",
+      "addProductsTitle": "प्रोडक्ट जोड़ें",
+      "addProductsDescription": "नाम / बारकोड / SKU से प्रोडक्ट खोजें",
+      "productSearchPlaceholder": "नाम / बारकोड / SKU से प्रोडक्ट खोजें",
+      "addItem": "+ आइटम जोड़ें",
+      "barcodeReady": "बारकोड-रेडी इनपुट",
+      "columns": {
+        "product": "प्रोडक्ट नाम",
+        "qty": "मात्रा",
+        "price": "कीमत",
+        "total": "कुल"
+      },
+      "emptyItems": "बिल शुरू करने के लिए प्रोडक्ट खोज से आइटम जोड़ें।",
+      "stockLeft": "{count} बाकी",
+      "outOfStock": "स्टॉक खत्म",
+      "summary": {
+        "title": "बिल सारांश",
+        "paymentStatus": "भुगतान स्थिति",
+        "paidAmount": "भुगतान राशि",
+        "paymentMethod": "भुगतान तरीका",
+        "paymentDate": "भुगतान तारीख",
+        "completeSale": "बिक्री पूरी करें",
+        "recentTitle": "हाल की बिक्री",
+        "recentDescription": "नवीनतम बिल का तेज़ नज़ारा"
+      },
+      "statuses": {
+        "paid": "भुगतान हुआ",
+        "unpaid": "बाकी",
+        "partial": "आंशिक"
+      },
+      "methods": {
+        "cash": "नकद",
+        "upi": "UPI",
+        "card": "कार्ड"
+      },
+      "validation": {
+        "product": "प्रोडक्ट चुनें।",
+        "quantity": "सही मात्रा दर्ज करें।",
+        "price": "सही कीमत दर्ज करें।",
+        "summaryProduct": "प्रोडक्ट जोड़ें।",
+        "summaryQuantity": "मात्रा जाँचें।",
+        "summaryPrice": "कीमत जाँचें।",
+        "summaryStock": "मात्रा उपलब्ध स्टॉक से ज़्यादा है।",
+        "stockLeft": "सिर्फ {count} आइटम बचे हैं"
+      }
     }
   },
   "templatesPage": {
@@ -1381,6 +1469,7 @@
     "required": "यह फ़ील्ड आवश्यक है",
     "validDate": "मान्य तारीख चुनें",
     "validNumber": "मान्य संख्या दर्ज करें",
+    "selectOptionError": "कृपया एक विकल्प चुनें",
     "validName": "कृपया मान्य नाम दर्ज करें (केवल अक्षर)",
     "validEmail": "मान्य ईमेल पता दर्ज करें",
     "validPhone": "मान्य फ़ोन नंबर दर्ज करें",
@@ -1485,6 +1574,44 @@
       "sales": "Total sales aur receipts",
       "pending": "Pending payments aur dues",
       "cashflow": "Cashflow inflow aur outflow"
+    }
+  },
+  "assistantWidget": {
+    "title": "बिलसूत्र सहायक",
+    "subtitle": "स्टॉक, बिक्री या बिल के बारे में पूछें",
+    "tooltip": "मदद चाहिए? मुझसे पूछें",
+    "toggle": "बिलसूत्र से पूछें",
+    "close": "सहायक बंद करें",
+    "inputPlaceholder": "स्टॉक या बिक्री के बारे में पूछें",
+    "loading": "आपका डेटा देखा जा रहा है...",
+    "quickActions": {
+      "stock": "मेरा स्टॉक कैसा है?",
+      "restock": "क्या रीस्टॉक करना है?",
+      "todaySales": "आज की बिक्री कितनी हुई?",
+      "lowStock": "कम स्टॉक आइटम दिखाओ",
+      "topProduct": "सबसे ज़्यादा बिकने वाला प्रोडक्ट"
+    },
+    "welcome": "नमस्ते!\nमैं आपका बिलसूत्र सहायक हूँ.\n\nआप पूछ सकते हैं:\n- स्टॉक\n- बिक्री\n- रीस्टॉक सुझाव",
+    "responses": {
+      "noUrgentRestock": "अभी कोई तुरंत रीस्टॉक वाला आइटम नहीं है। स्टॉक ठीक लग रहा है।",
+      "restockIntro": "{count} आइटम पर ध्यान देना है:\n{items}\n\nइन्हें जल्दी रीस्टॉक करें।",
+      "restockItemUrgent": "- {name} (स्टॉक खत्म)",
+      "restockItemLow": "- {name} (कम स्टॉक)",
+      "stockSummary": "स्टॉक सारांश:\n- तुरंत: {urgent}\n- कम स्टॉक: {low}\n- ठीक: {healthy}\n\nज़रूरत लगे तो रीस्टॉक सूची खोल लें।",
+      "todaySales": "आज की बिक्री {amount} रही।\nआज कुल {count} बिक्री एंट्री हुई हैं।",
+      "topProduct": "{name} आपका सबसे ज़्यादा बिकने वाला प्रोडक्ट लग रहा है।\nकुल बिकी मात्रा: {count}.",
+      "topProductEmpty": "अभी टॉप प्रोडक्ट निकालने के लिए पर्याप्त बिक्री डेटा नहीं है।",
+      "latestBill": "आपका सबसे नया बिल {number} है। इसे सीधे खोल सकते हैं।",
+      "latestBillEmpty": "अभी कोई बिल नहीं मिला। नया बिल बनाने के लिए इनवॉइस खोलें।",
+      "fallback": "मैं स्टॉक, बिक्री, रीस्टॉक और बिल में मदद कर सकता हूँ। कोई quick chip दबाएँ या छोटा सवाल पूछें।",
+      "proactiveUrgent": "{count} आइटम तुरंत रीस्टॉक में हैं।"
+    },
+    "actions": {
+      "viewInventory": "इन्वेंटरी देखें",
+      "restockNow": "अभी रीस्टॉक करें",
+      "openSales": "बिक्री खोलें",
+      "openBill": "बिल खोलें",
+      "openInvoices": "इनवॉइस खोलें"
     }
   },
   "landing": {
@@ -1705,6 +1832,20 @@
       "footerPrompt": "क्या आपका पहले से अकाउंट है?",
       "footerAction": "लॉगिन"
     },
+    "shared": {
+      "loginTab": "लॉगिन",
+      "signupTab": "साइन अप",
+      "workerPrompt": "टीम सदस्य?",
+      "workerAction": "वर्कर लॉगिन",
+      "emailOrPhoneLabel": "ईमेल या फोन",
+      "emailOrPhonePlaceholder": "you@company.com या 9876543210",
+      "phoneLabel": "फोन नंबर",
+      "phonePlaceholder": "9876543210",
+      "phoneHelper": "अपना सक्रिय भारतीय मोबाइल नंबर दर्ज करें।",
+      "signingIn": "साइन इन हो रहा है...",
+      "createAccount": "अकाउंट बनाएं",
+      "creatingAccount": "अकाउंट बन रहा है..."
+    },
     "forgotPage": {
       "badge": "एक्सेस रीसेट",
       "title": "पासवर्ड भूल गए?",
@@ -1859,6 +2000,40 @@
       "notProjected": "अनुमानित नहीं",
       "viewInsight": "जानकारी देखें",
       "createPurchaseSuggestion": "सुझाव से खरीद बनाएं"
+    },
+    "tableView": {
+      "title": "स्टॉक स्थिति",
+      "description": "पहले वही देखें जिसे जल्दी रीस्टॉक करना है।",
+      "urgentSummary": "{count} आइटम तुरंत रीस्टॉक चाहिए",
+      "lowSummary": "{count} आइटम कम स्टॉक में हैं",
+      "healthySummary": "{count} आइटम ठीक हैं",
+      "allInventoryTitle": "पूरी इन्वेंटरी",
+      "allInventoryDescription": "प्रोडक्ट खोजें, स्टॉक देखें और जल्दी रीस्टॉक करें।",
+      "searchPlaceholder": "प्रोडक्ट या SKU खोजें",
+      "allCategories": "सभी श्रेणियाँ",
+      "allWarehouses": "सभी वेयरहाउस",
+      "allStatus": "सभी स्थिति",
+      "sortStockLowHigh": "स्टॉक: कम से ज़्यादा",
+      "sortStockHighLow": "स्टॉक: ज़्यादा से कम",
+      "sortName": "नाम: अ से ज्ञ",
+      "selectVisible": "दिख रहे प्रोडक्ट चुनें",
+      "selectPage": "यह पेज चुनें",
+      "showing": "{total} में से {from}-{to} दिख रहे हैं",
+      "selected": "{count} चुने गए",
+      "pageSize": "{count} / पेज",
+      "restockSelected": "चुने हुए रीस्टॉक करें",
+      "emptyFiltered": "आपके फ़िल्टर से कोई प्रोडक्ट नहीं मिला।",
+      "healthyState": "सभी स्टॉक लेवल ठीक हैं",
+      "dailySales": "रोज़ की बिक्री",
+      "inStock": "स्टॉक में",
+      "lowStock": "कम स्टॉक",
+      "outOfStock": "स्टॉक खत्म",
+      "stockLabel": "स्टॉक: {value}",
+      "dailySalesLabel": "रोज़ की बिक्री: {value}",
+      "statusLabel": "स्थिति: {value}",
+      "pageStatus": "पेज {current} / {total}",
+      "restockNow": "अभी रीस्टॉक करें",
+      "selectRow": "{name} चुनें"
     }
   },
   "customersPage": {

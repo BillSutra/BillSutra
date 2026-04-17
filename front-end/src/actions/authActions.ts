@@ -8,11 +8,36 @@ import {
 } from "@/lib/apiEndPoints";
 import axios, { AxiosError } from "axios";
 import { resetPassword } from "../lib/apiEndPoints";
-export async function registerAction(prevState: any, formdata: FormData) {
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeIdentifier = (value: unknown) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim();
+};
+
+const extractAxiosMessage = (error: AxiosError, fallback: string) => {
+  const responseMessage = (error.response?.data as { message?: unknown })
+    ?.message;
+
+  if (typeof responseMessage === "string" && responseMessage.trim()) {
+    return responseMessage;
+  }
+
+  return fallback;
+};
+
+export async function registerAction(prevState: unknown, formdata: FormData) {
   try {
+    const phone = normalizeIdentifier(formdata.get("phone"));
+
     const response = await axios.post(REGISTER_URL, {
       name: formdata.get("name"),
       email: formdata.get("email"),
+      phone: phone || undefined,
       password: formdata.get("password"),
       confirm_password: formdata.get("confirm_password"),
     });
@@ -28,8 +53,20 @@ export async function registerAction(prevState: any, formdata: FormData) {
       if (error.response?.status === 422) {
         return {
           status: 422,
-          message: error.response.data.message,
+          message: extractAxiosMessage(error, "Please check the form details."),
           errors: error.response.data.errors,
+          data: {},
+        };
+      }
+
+      if (error.response?.status === 409) {
+        return {
+          status: 409,
+          message: extractAxiosMessage(
+            error,
+            "An account already exists with this email or phone.",
+          ),
+          errors: {},
           data: {},
         };
       }
@@ -37,13 +74,13 @@ export async function registerAction(prevState: any, formdata: FormData) {
 
     return {
       status: 500,
-      message: "something went wrong. Try again",
+      message: "Something went wrong. Try again.",
       errors: {},
       data: {},
     };
   }
 }
-export async function forgetAction(prevState: any, formData: FormData) {
+export async function forgetAction(prevState: unknown, formData: FormData) {
   try {
     const response = await axios.post(forgetPassword, {
       email: formData.get("email"),
@@ -74,19 +111,27 @@ export async function forgetAction(prevState: any, formData: FormData) {
     };
   }
 }
-export async function loginAction(prevState: any, formData: FormData) {
+export async function loginAction(prevState: unknown, formData: FormData) {
   try {
+    const rawIdentifier = normalizeIdentifier(
+      formData.get("identifier") ?? formData.get("email"),
+    );
+    const normalizedPhone = rawIdentifier.replace(/[^\d+]/g, "");
+    const isEmailIdentifier = EMAIL_REGEX.test(rawIdentifier.toLowerCase());
+
     const response = await axios.post(check_credential, {
-      email: formData.get("email"),
+      identifier: rawIdentifier,
+      email: isEmailIdentifier ? rawIdentifier.toLowerCase() : undefined,
+      phone: !isEmailIdentifier ? normalizedPhone || undefined : undefined,
       password: formData.get("password"),
     });
     const authPayload = response.data?.data ?? response.data;
     return {
       status: 200,
-      message: "Credentials matched loging you shortly!",
+      message: "Credentials verified. Logging you in...",
       errors: {},
       data: {
-        email: formData.get("email"),
+        identifier: rawIdentifier,
         password: formData.get("password"),
         token: authPayload?.token ?? null,
       },
@@ -96,8 +141,17 @@ export async function loginAction(prevState: any, formData: FormData) {
       if (error.response?.status === 422) {
         return {
           status: 422,
-          message: error.response.data.message,
+          message: extractAxiosMessage(error, "Please check your credentials."),
           errors: error.response.data.errors,
+          data: {},
+        };
+      }
+
+      if (error.response?.status === 401) {
+        return {
+          status: 401,
+          message: extractAxiosMessage(error, "Invalid email/phone or password."),
+          errors: {},
           data: {},
         };
       }
@@ -105,17 +159,25 @@ export async function loginAction(prevState: any, formData: FormData) {
 
     return {
       status: 500,
-      message: "something went wrong. Try again",
+      message: "Something went wrong. Try again.",
       errors: {},
       data: {},
     };
   }
 }
 
-export async function workerLoginAction(prevState: any, formData: FormData) {
+export async function workerLoginAction(prevState: unknown, formData: FormData) {
   try {
+    const rawIdentifier = normalizeIdentifier(
+      formData.get("identifier") ?? formData.get("email"),
+    );
+    const normalizedPhone = rawIdentifier.replace(/[^\d+]/g, "");
+    const isEmailIdentifier = EMAIL_REGEX.test(rawIdentifier.toLowerCase());
+
     const response = await axios.post(WORKER_LOGIN_URL, {
-      email: formData.get("email"),
+      identifier: rawIdentifier,
+      email: isEmailIdentifier ? rawIdentifier.toLowerCase() : undefined,
+      phone: !isEmailIdentifier ? normalizedPhone || undefined : undefined,
       password: formData.get("password"),
     });
     const authPayload = response.data?.data ?? response.data;
@@ -124,7 +186,7 @@ export async function workerLoginAction(prevState: any, formData: FormData) {
       message: "Worker credentials matched",
       errors: {},
       data: {
-        email: formData.get("email"),
+        identifier: rawIdentifier,
         password: formData.get("password"),
         token: authPayload?.token ?? null,
       },
@@ -134,8 +196,17 @@ export async function workerLoginAction(prevState: any, formData: FormData) {
       if (error.response?.status === 422) {
         return {
           status: 422,
-          message: error.response.data.message,
+          message: extractAxiosMessage(error, "Please check your credentials."),
           errors: error.response.data.errors,
+          data: {},
+        };
+      }
+
+      if (error.response?.status === 401) {
+        return {
+          status: 401,
+          message: extractAxiosMessage(error, "Invalid email/phone or password."),
+          errors: {},
           data: {},
         };
       }
@@ -143,14 +214,14 @@ export async function workerLoginAction(prevState: any, formData: FormData) {
 
     return {
       status: 500,
-      message: "something went wrong. Try again",
+      message: "Something went wrong. Try again.",
       errors: {},
       data: {},
     };
   }
 }
 
-export async function resetPasswordAction(prevState: any, formdata: FormData) {
+export async function resetPasswordAction(prevState: unknown, formdata: FormData) {
   try {
     await axios.post(resetPassword, {
       email: formdata.get("email"),

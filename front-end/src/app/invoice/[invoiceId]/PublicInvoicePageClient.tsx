@@ -13,6 +13,8 @@ import { Button } from "@/components/ui/button";
 import {
   buildPublicInvoicePreviewData,
   DEFAULT_INVOICE_SECTIONS,
+  DEFAULT_INVOICE_TEMPLATE_ID,
+  DEFAULT_INVOICE_TEMPLATE_NAME,
   DEFAULT_INVOICE_THEME,
   type PublicInvoice,
 } from "@/lib/publicInvoice";
@@ -171,6 +173,8 @@ const PublicInvoicePageClient = ({
           >
             <A4PreviewStack stackKey={`public-invoice-${invoice.public_id}`}>
               <TemplatePreviewRenderer
+                templateId={DEFAULT_INVOICE_TEMPLATE_ID}
+                templateName={DEFAULT_INVOICE_TEMPLATE_NAME}
                 data={previewData}
                 enabledSections={[...DEFAULT_INVOICE_SECTIONS]}
                 sectionOrder={[...DEFAULT_INVOICE_SECTIONS]}

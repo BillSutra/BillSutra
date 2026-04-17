@@ -72,6 +72,12 @@ const PAYMENT_TERM_OPTIONS: SupplierPaymentTerms[] = [
   "NET_30",
 ];
 
+const PAYMENT_TERM_FALLBACKS: Record<SupplierPaymentTerms, string> = {
+  NET_7: "Net 7 days",
+  NET_15: "Net 15 days",
+  NET_30: "Net 30 days",
+};
+
 const SUPPLIER_CATEGORY_SUGGESTIONS = [
   "Electronics",
   "Groceries",
@@ -245,7 +251,7 @@ const validateSupplierForm = (form: SupplierFormState): SupplierFormErrors => {
 };
 
 const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
-  const { t } = useI18n();
+  const { t, safeT } = useI18n();
   const { data, isLoading, isError } = useSuppliersQuery();
   const createSupplier = useCreateSupplierMutation();
   const updateSupplier = useUpdateSupplierMutation();
@@ -795,7 +801,10 @@ const SuppliersClient = ({ name, image }: SuppliersClientProps) => {
                 >
                   {PAYMENT_TERM_OPTIONS.map((term) => (
                     <option key={term} value={term}>
-                      {t(`suppliersPage.paymentTerms.${term}`)}
+                      {safeT(
+                        `suppliersPage.paymentTerms.${term}`,
+                        PAYMENT_TERM_FALLBACKS[term],
+                      )}
                     </option>
                   ))}
                 </ValidationField>

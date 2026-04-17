@@ -37,6 +37,7 @@ import {
   formatBusinessAddressFromRecord,
   formatCustomerAddressFromRecord,
 } from "@/lib/indianAddress";
+import { getStateFromGstin } from "@/lib/gstin";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
@@ -134,7 +135,7 @@ const DEFAULT_INVOICE_SECTIONS: SectionKey[] = [
 ];
 const DEFAULT_INVOICE_THEME: InvoiceTheme = {
   primaryColor: "#1f2937",
-  fontFamily: "var(--font-geist-mono)",
+  fontFamily: "var(--font-geist-sans)",
   tableStyle: "grid",
 };
 
@@ -461,6 +462,22 @@ const buildSimpleBillInvoicePreviewData = ({
   };
 }): InvoicePreviewData => {
   const selectedPaymentLabel = paymentLabel(payment);
+  const businessState =
+    getStateFromGstin(businessProfile?.tax_id) ||
+    businessProfile?.businessAddress?.state ||
+    businessProfile?.state ||
+    "";
+  const customerState =
+    getStateFromGstin(customer?.gstin) ||
+    customer?.customerAddress?.state ||
+    customer?.state ||
+    "";
+  const taxMode =
+    (totals.tax ?? 0) <= 0
+      ? "NONE"
+      : businessState && customerState && businessState !== customerState
+        ? "IGST"
+        : "CGST_SGST";
   const normalizedPaidAmount =
     paymentStatus === "PAID"
       ? totals.total
@@ -486,9 +503,12 @@ const buildSimpleBillInvoicePreviewData = ({
       : `${previewCopy.paymentMethodPrefix}: ${selectedPaymentLabel}`;
 
   return {
+    invoiceTitle: taxMode === "NONE" ? "Bill" : "Tax Invoice",
     invoiceNumber,
     invoiceDate,
     dueDate,
+    placeOfSupply: customerState || businessState || "",
+    taxMode,
     business: {
       businessName: businessProfile?.business_name || "BillSutra",
       businessAddress: businessProfile
@@ -538,12 +558,26 @@ const buildSimpleBillInvoicePreviewData = ({
     },
     items: items.filter(isInvoiceItemReady).map((item) => ({
       name: item.name.trim(),
-      description: item.tax_rate ? `GST ${item.tax_rate}%` : "",
+      description: "",
       quantity: Number(item.quantity),
       unitPrice: Number(item.price),
       taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
+      amount:
+        Number(item.quantity) * Number(item.price) +
+        ((taxMode === "NONE"
+          ? 0
+          : (Number(item.quantity) *
+              Number(item.price) *
+              (item.tax_rate ? Number(item.tax_rate) : 0)) /
+            100) || 0),
     })),
-    totals,
+    totals: {
+      ...totals,
+      cgst: taxMode === "CGST_SGST" ? totals.tax / 2 : 0,
+      sgst: taxMode === "CGST_SGST" ? totals.tax / 2 : 0,
+      igst: taxMode === "IGST" ? totals.tax : 0,
+      roundOff: 0,
+    },
     discount: {
       type: discountType,
       value: Number(discount) || 0,
@@ -569,6 +603,9 @@ const buildSimpleBillInvoicePreviewData = ({
               },
             ]
           : [],
+    },
+    payment: {
+      mode: selectedPaymentLabel,
     },
     notes: notes.trim(),
     paymentInfo:
@@ -1178,8 +1215,8 @@ const SimpleBillClient = ({
   ]);
   const fallbackActiveTemplate = useMemo(
     () => ({
-      templateId: "professional",
-      templateName: "Professional",
+      templateId: "indian-gst-template",
+      templateName: "Indian GST Invoice Template",
       enabledSections: DEFAULT_INVOICE_SECTIONS,
       sectionOrder: DEFAULT_INVOICE_SECTIONS,
       theme: DEFAULT_INVOICE_THEME,
