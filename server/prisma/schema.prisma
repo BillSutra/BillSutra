@@ -46,6 +46,7 @@ model User {
   auth_events                 AuthEvent[]
   preferences                 UserPreference?
   notifications               Notification[]
+  extra_entries               ExtraEntry[]
 
   session_version Int @default(0)
 
@@ -243,6 +244,23 @@ model FinancialGoal {
 
   @@index([user_id])
   @@map("financial_goals")
+}
+
+model ExtraEntry {
+  id        String    @id @default(cuid()) @db.VarChar(191)
+  title     String    @db.VarChar(191)
+  amount    Decimal   @db.Decimal(12, 2)
+  type      EntryType
+  date      DateTime
+  notes     String?   @db.VarChar(500)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([userId, date])
+  @@map("extra_entries")
 }
 
 model Customer {
@@ -941,6 +959,13 @@ enum SubscriptionStatus {
   ACTIVE
   EXPIRED
   CANCELLED
+}
+
+enum EntryType {
+  INCOME
+  EXPENSE
+  LOSS
+  INVESTMENT
 }
 
 enum SubscriptionBillingCycle {

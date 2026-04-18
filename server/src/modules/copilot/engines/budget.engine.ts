@@ -36,7 +36,14 @@ export const buildBudgetEngine = (params: {
     ),
     0,
   );
-  const spentThisMonth = dataset.currentMonthStat.outflow;
+  const spentThisMonth = roundMetric(
+    dataset.currentMonthStat.outflow +
+    dataset.currentMonthStat.extraExpense +
+    dataset.currentMonthStat.extraLoss +
+    dataset.currentMonthStat.extraInvestment -
+    dataset.currentMonthStat.extraIncome,
+    0,
+  );
   const daysElapsed = Math.max(
     1,
     Math.round(

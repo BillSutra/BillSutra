@@ -20,6 +20,10 @@ import {
   resolveBillingWarehouse,
 } from "../services/billingInventorySync.service.js";
 import {
+  applyInventoryDelta,
+  parseWarehouseIdFromNote,
+} from "../services/inventoryValidation.service.js";
+import {
   canWorkerPerformBillingAction,
   getWorkerAccessRole,
   type BillingAction,
@@ -155,47 +159,67 @@ class SalesController {
       paymentMethod: body.payment_method,
     });
 
-    const sale = await prisma.$transaction(async (tx) => {
-      const warehouse = await resolveBillingWarehouse(tx, userId, body.warehouse_id);
-      const created = await tx.sale.create({
-        data: {
-          user_id: userId,
-          customer_id: body.customer_id,
-          sale_date: body.sale_date ?? undefined,
-          status: body.status ?? SaleStatus.COMPLETED,
-          subtotal,
-          tax,
-          total,
-          totalAmount: paymentState.totalAmount,
-          paidAmount: paymentState.paidAmount,
-          pendingAmount: paymentState.pendingAmount,
-          paymentStatus: paymentState.paymentStatus,
-          paymentDate: paymentState.paymentDate,
-          paymentMethod: paymentState.paymentMethod,
-          notes: body.notes
-            ? `${body.notes} (Warehouse ${warehouse.id})`
-            : `Warehouse ${warehouse.id}`,
-          items: { create: items },
-        },
-        include: { items: true, customer: true },
-      });
+    let sale;
+    try {
+      sale = await prisma.$transaction(async (tx) => {
+        const warehouse = await resolveBillingWarehouse(
+          tx,
+          userId,
+          body.warehouse_id,
+        );
+        const created = await tx.sale.create({
+          data: {
+            user_id: userId,
+            customer_id: body.customer_id,
+            sale_date: body.sale_date ?? undefined,
+            status: body.status ?? SaleStatus.COMPLETED,
+            subtotal,
+            tax,
+            total,
+            totalAmount: paymentState.totalAmount,
+            paidAmount: paymentState.paidAmount,
+            pendingAmount: paymentState.pendingAmount,
+            paymentStatus: paymentState.paymentStatus,
+            paymentDate: paymentState.paymentDate,
+            paymentMethod: paymentState.paymentMethod,
+            notes: body.notes
+              ? `${body.notes} (Warehouse ${warehouse.id})`
+              : `Warehouse ${warehouse.id}`,
+            items: { create: items },
+          },
+          include: { items: true, customer: true },
+        });
 
-      await applyBillingSaleInventoryAdjustments({
-        tx,
-        warehouseId: warehouse.id,
-        items: items.map((item) => ({
-          product_id: item.product_id,
-          name: item.name,
-          quantity: item.quantity,
-          price: item.unit_price,
-          tax_rate: item.tax_rate ?? undefined,
-        })),
-        referenceId: created.id,
-        referenceType: "sale",
-      });
+        await applyBillingSaleInventoryAdjustments({
+          tx,
+          warehouseId: warehouse.id,
+          items: items.map((item) => ({
+            product_id: item.product_id,
+            name: item.name,
+            quantity: item.quantity,
+            price: item.unit_price,
+            tax_rate: item.tax_rate ?? undefined,
+          })),
+          referenceId: created.id,
+          referenceType: "sale",
+        });
 
-      return created;
-    });
+        return created;
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        const statusCode =
+          "statusCode" in error && typeof error.statusCode === "number"
+            ? error.statusCode
+            : 500;
+
+        return sendResponse(res, statusCode, {
+          message: statusCode >= 500 ? "Sale could not be recorded" : error.message,
+        });
+      }
+
+      return sendResponse(res, 500, { message: "Sale could not be recorded" });
+    }
 
     if (req.user?.workerId) {
       try {
@@ -323,27 +347,41 @@ class SalesController {
       return sendResponse(res, 404, { message: "Sale not found" });
     }
 
-    await prisma.$transaction(async (tx) => {
-      for (const item of sale.items) {
-        if (!item.product_id) continue;
+    try {
+      await prisma.$transaction(async (tx) => {
+        const warehouseId = parseWarehouseIdFromNote(sale.notes);
 
-        await tx.product.update({
-          where: { id: item.product_id },
-          data: { stock_on_hand: { increment: item.quantity } },
-        });
+        for (const item of sale.items) {
+          if (!item.product_id) continue;
 
-        await tx.stockMovement.create({
-          data: {
-            product_id: item.product_id,
-            change: item.quantity,
+          await applyInventoryDelta({
+            tx,
+            productId: item.product_id,
+            warehouseId,
+            delta: item.quantity,
             reason: StockReason.RETURN,
-            note: `Sale reversal ${sale.id}`,
-          },
+            note: warehouseId
+              ? `Sale reversal ${sale.id} (Warehouse ${warehouseId})`
+              : `Sale reversal ${sale.id}`,
+          });
+        }
+
+        await tx.sale.delete({ where: { id: sale.id } });
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        const statusCode =
+          "statusCode" in error && typeof error.statusCode === "number"
+            ? error.statusCode
+            : 500;
+
+        return sendResponse(res, statusCode, {
+          message: statusCode >= 500 ? "Sale could not be deleted" : error.message,
         });
       }
 
-      await tx.sale.delete({ where: { id: sale.id } });
-    });
+      return sendResponse(res, 500, { message: "Sale could not be deleted" });
+    }
 
     invalidateInventoryInsightsCacheByUser(userId);
     emitDashboardUpdate({ userId, source: "sale.delete" });

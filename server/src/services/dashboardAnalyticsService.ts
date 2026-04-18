@@ -1,5 +1,6 @@
 import { InvoiceStatus, Prisma, SaleStatus } from "@prisma/client";
 import prisma from "../config/db.config.js";
+import { getExtraEntryStats } from "./extraEntry.service.js";
 
 type RevenuePoint = { date: Date; total: Prisma.Decimal | number };
 type CostPoint = { date: Date; total: Prisma.Decimal | number };
@@ -346,6 +347,10 @@ type DashboardSummaryTotals = {
   expenses: number;
   bookedProfit: number;
   margin: number;
+  extraIncome: number;
+  extraExpense: number;
+  extraLoss: number;
+  extraInvestment: number;
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -389,6 +394,10 @@ type TotalsSnapshot = {
   pendingSales: number;
   pendingPurchases: number;
   expenses: number;
+  extraIncome: number;
+  extraExpense: number;
+  extraLoss: number;
+  extraInvestment: number;
 };
 
 type SalesMetricSnapshot = {
@@ -741,14 +750,19 @@ const fetchTotalsSnapshot = async (params: {
     endExclusive,
   });
   const expenses = await getExpenseTotals({ userId, from: start, to: endExclusive });
+  const extraEntryStats = await getExtraEntryStats({ userId, from: start, to: endExclusive });
 
   return {
     bookedSales: roundMetric(totals.salesBooked),
-    totalSales: salesMetrics.totalSales,
+    totalSales: roundMetric(salesMetrics.totalSales + extraEntryStats.income),
     bookedPurchases: roundMetric(totals.purchasesBooked),
     pendingSales: salesMetrics.pendingSales,
     pendingPurchases: roundMetric(totals.purchasesPending),
     expenses: roundMetric(expenses),
+    extraIncome: roundMetric(extraEntryStats.income),
+    extraExpense: roundMetric(extraEntryStats.expense),
+    extraLoss: roundMetric(extraEntryStats.loss),
+    extraInvestment: roundMetric(extraEntryStats.investment),
   } satisfies TotalsSnapshot;
 };
 
@@ -962,8 +976,12 @@ const computeDashboardTotals = (params: {
   sales: Array<Pick<SaleSnapshot, "total" | "totalAmount" | "paidAmount" | "pendingAmount" | "paymentStatus">>;
   purchases: Array<Pick<PurchaseSnapshot, "total" | "totalAmount" | "paidAmount" | "pendingAmount" | "paymentStatus">>;
   expenses: number;
+  extraIncome?: number;
+  extraExpense?: number;
+  extraLoss?: number;
+  extraInvestment?: number;
 }) => {
-  const { sales, purchases, expenses } = params;
+  const { sales, purchases, expenses, extraIncome = 0, extraExpense = 0, extraLoss = 0, extraInvestment = 0 } = params;
 
   const bookedRevenue = sales.reduce(
     (sum, sale) => sum + resolveRecordedTotal(sale.totalAmount, sale.total),
@@ -1004,7 +1022,7 @@ const computeDashboardTotals = (params: {
     (sum, purchase) => sum + Math.max(0, toNumber(purchase.pendingAmount)),
     0,
   );
-  const bookedProfit = bookedRevenue - bookedPurchases - expenses;
+  const bookedProfit = bookedRevenue - bookedPurchases - expenses + extraIncome - extraExpense - extraLoss - extraInvestment;
   const margin = bookedRevenue === 0 ? 0 : (bookedProfit / bookedRevenue) * 100;
 
   return {
@@ -1017,6 +1035,10 @@ const computeDashboardTotals = (params: {
     expenses: roundMetric(expenses),
     bookedProfit: roundMetric(bookedProfit),
     margin: roundMetric(margin, 1),
+    extraIncome: roundMetric(extraIncome),
+    extraExpense: roundMetric(extraExpense),
+    extraLoss: roundMetric(extraLoss),
+    extraInvestment: roundMetric(extraInvestment),
   } satisfies DashboardSummaryTotals;
 };
 
@@ -1027,7 +1049,7 @@ const fetchProfitSnapshot = async (params: {
 }) => {
   const { userId, start, endExclusive } = params;
 
-  const [cashInflowSnapshot, purchases, expenses] = await Promise.all([
+  const [cashInflowSnapshot, purchases, expenses, extraEntryStats] = await Promise.all([
     fetchCashInflowSnapshot({
       userId,
       start,
@@ -1048,6 +1070,7 @@ const fetchProfitSnapshot = async (params: {
       },
     }),
     getExpenseTotals({ userId, from: start, to: endExclusive }),
+    getExtraEntryStats({ userId, from: start, to: endExclusive }),
   ]);
 
   const bookedPurchases = purchases.reduce(
@@ -1071,7 +1094,7 @@ const fetchProfitSnapshot = async (params: {
     0,
   );
   const realizedRevenue = roundMetric(cashInflowSnapshot.total);
-  const realizedProfit = realizedRevenue - bookedPurchases - expenses;
+  const realizedProfit = realizedRevenue - bookedPurchases - expenses + extraEntryStats.net;
   const realizedMargin =
     realizedRevenue === 0 ? 0 : (realizedProfit / realizedRevenue) * 100;
 
@@ -1085,6 +1108,10 @@ const fetchProfitSnapshot = async (params: {
     expenses: roundMetric(expenses),
     bookedProfit: roundMetric(realizedProfit),
     margin: roundMetric(realizedMargin, 1),
+    extraIncome: roundMetric(extraEntryStats.income),
+    extraExpense: roundMetric(extraEntryStats.expense),
+    extraLoss: roundMetric(extraEntryStats.loss),
+    extraInvestment: roundMetric(extraEntryStats.investment),
   } satisfies DashboardSummaryTotals;
 };
 
@@ -1160,6 +1187,8 @@ export const buildDashboardOverview = async (params: {
     totalSuppliers,
     dailyExpenses,
     previousExpensesTotal,
+    currentExtraEntryStats,
+    previousExtraEntryStats,
     currentSalesMetrics,
     previousSalesMetrics,
   ] = await Promise.all([
@@ -1263,6 +1292,16 @@ export const buildDashboardOverview = async (params: {
       from: resolved.previousStart,
       to: resolved.previousEndExclusive,
     }),
+    getExtraEntryStats({
+      userId,
+      from: resolved.start,
+      to: resolved.endExclusive,
+    }),
+    getExtraEntryStats({
+      userId,
+      from: resolved.previousStart,
+      to: resolved.previousEndExclusive,
+    }),
     fetchSalesMetricSnapshot({
       userId,
       start: resolved.start,
@@ -1287,11 +1326,19 @@ export const buildDashboardOverview = async (params: {
     sales: currentSales,
     purchases: currentPurchases,
     expenses: expenseTotal,
+    extraIncome: currentExtraEntryStats.income,
+    extraExpense: currentExtraEntryStats.expense,
+    extraLoss: currentExtraEntryStats.loss,
+    extraInvestment: currentExtraEntryStats.investment,
   });
   const previousTotals = computeDashboardTotals({
     sales: previousSales,
     purchases: previousPurchases,
     expenses: previousExpensesTotal,
+    extraIncome: previousExtraEntryStats.income,
+    extraExpense: previousExtraEntryStats.expense,
+    extraLoss: previousExtraEntryStats.loss,
+    extraInvestment: previousExtraEntryStats.investment,
   });
 
   const now = new Date();
@@ -1851,7 +1898,7 @@ export const buildDashboardCardMetrics = async (params: {
   });
 
   const calcProfit = (snapshot: TotalsSnapshot) =>
-    roundMetric(snapshot.totalSales - snapshot.bookedPurchases - snapshot.expenses);
+    roundMetric(snapshot.totalSales - snapshot.bookedPurchases - snapshot.expenses + snapshot.extraIncome - snapshot.extraExpense - snapshot.extraLoss - snapshot.extraInvestment);
 
   const profits = {
     today: calcProfit(todaySnapshot),
