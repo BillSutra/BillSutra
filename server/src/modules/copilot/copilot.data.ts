@@ -6,6 +6,7 @@ import type {
   CopilotDataset,
   CopilotMonthStat,
   CopilotPurchaseRecord,
+  ExtraEntryRecord,
   FinancialGoalRecord,
 } from "./copilot.types.js";
 import {
@@ -249,6 +250,7 @@ const buildMonthStats = (params: {
   inflowEntries: Array<{ amount: number; date: Date }>;
   purchases: CopilotPurchaseRecord[];
   expenseEntries: Array<{ day: Date; amount: number }>;
+  extraEntries: ExtraEntryRecord[];
 }) => {
   const inflowMap = new Map<string, number>();
   params.inflowEntries.forEach((entry) => {
@@ -269,12 +271,39 @@ const buildMonthStats = (params: {
     expenseMap.set(key, (expenseMap.get(key) ?? 0) + entry.amount);
   });
 
+  const extraIncomeMap = new Map<string, number>();
+  const extraExpenseMap = new Map<string, number>();
+  const extraLossMap = new Map<string, number>();
+  const extraInvestmentMap = new Map<string, number>();
+  params.extraEntries.forEach((entry) => {
+    const key = monthKey(entry.date);
+    switch (entry.type) {
+      case "INCOME":
+        extraIncomeMap.set(key, (extraIncomeMap.get(key) ?? 0) + entry.amount);
+        break;
+      case "EXPENSE":
+        extraExpenseMap.set(key, (extraExpenseMap.get(key) ?? 0) + entry.amount);
+        break;
+      case "LOSS":
+        extraLossMap.set(key, (extraLossMap.get(key) ?? 0) + entry.amount);
+        break;
+      case "INVESTMENT":
+        extraInvestmentMap.set(key, (extraInvestmentMap.get(key) ?? 0) + entry.amount);
+        break;
+    }
+  });
+
   return params.monthStarts.map<CopilotMonthStat>((monthStart) => {
     const key = monthKey(monthStart);
     const inflow = roundMetric(inflowMap.get(key) ?? 0, 2);
     const purchaseOutflow = roundMetric(purchaseMap.get(key) ?? 0, 2);
     const expenses = roundMetric(expenseMap.get(key) ?? 0, 2);
     const outflow = roundMetric(purchaseOutflow + expenses, 2);
+    const extraIncome = roundMetric(extraIncomeMap.get(key) ?? 0, 2);
+    const extraExpense = roundMetric(extraExpenseMap.get(key) ?? 0, 2);
+    const extraLoss = roundMetric(extraLossMap.get(key) ?? 0, 2);
+    const extraInvestment = roundMetric(extraInvestmentMap.get(key) ?? 0, 2);
+    const extraNet = roundMetric(extraIncome - extraExpense - extraLoss - extraInvestment, 2);
 
     return {
       key,
@@ -285,6 +314,11 @@ const buildMonthStats = (params: {
       expenses,
       outflow,
       net: roundMetric(inflow - outflow, 2),
+      extraIncome,
+      extraExpense,
+      extraLoss,
+      extraInvestment,
+      extraNet,
     };
   });
 };
@@ -304,7 +338,7 @@ export const buildCopilotDataset = async (userId: number): Promise<CopilotDatase
   const previous30Start = addDaysUtc(trailing30Start, -30);
   const historicalWindowStart = addMonthsUtc(currentMonthStart, -5);
 
-  const [forecast, inflowSnapshot, purchasesRaw, expenseEntries, goals] = await Promise.all([
+  const [forecast, inflowSnapshot, purchasesRaw, expenseEntries, goals, extraEntriesRaw] = await Promise.all([
     buildDashboardForecast({ userId }),
     fetchCashInflowSnapshot({
       userId,
@@ -352,6 +386,13 @@ export const buildCopilotDataset = async (userId: number): Promise<CopilotDatase
     }),
     getDailyExpenses({ userId, from: historicalWindowStart }),
     listFinancialGoals(userId),
+    prisma.extraEntry.findMany({
+      where: {
+        userId,
+        date: { gte: historicalWindowStart, lt: nextMonthStart },
+      },
+      orderBy: { date: "asc" },
+    }),
   ]);
 
   const purchases: CopilotPurchaseRecord[] = purchasesRaw.map((purchase) => ({
@@ -372,11 +413,24 @@ export const buildCopilotDataset = async (userId: number): Promise<CopilotDatase
     })),
   }));
 
+  const extraEntries: ExtraEntryRecord[] = extraEntriesRaw.map((entry) => ({
+    id: entry.id,
+    title: entry.title,
+    amount: toNumber(entry.amount),
+    type: entry.type,
+    date: entry.date,
+    notes: entry.notes,
+    userId: entry.userId,
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  }));
+
   const monthStats = buildMonthStats({
     monthStarts: buildMonthStarts(now),
     inflowEntries: inflowSnapshot.entries,
     purchases,
     expenseEntries,
+    extraEntries,
   });
 
   const currentMonthStat =
@@ -389,6 +443,11 @@ export const buildCopilotDataset = async (userId: number): Promise<CopilotDatase
       expenses: 0,
       outflow: 0,
       net: 0,
+      extraIncome: 0,
+      extraExpense: 0,
+      extraLoss: 0,
+      extraInvestment: 0,
+      extraNet: 0,
     };
 
   const recentInflowEntries = inflowSnapshot.entries.filter(
@@ -412,5 +471,6 @@ export const buildCopilotDataset = async (userId: number): Promise<CopilotDatase
     ),
     forecast,
     goals,
+    extraEntries,
   };
 };

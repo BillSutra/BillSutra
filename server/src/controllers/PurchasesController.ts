@@ -15,6 +15,7 @@ import {
 import { computePaymentState } from "../utils/paymentCalculations.js";
 import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
 import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
+import { applyInventoryDelta } from "../services/inventoryValidation.service.js";
 
 type PurchaseCreateInput = z.infer<typeof purchaseCreateSchema>;
 type PurchaseItemInput = PurchaseCreateInput["items"][number];
@@ -182,37 +183,15 @@ class PurchasesController {
       });
 
       for (const item of items) {
-        await tx.product.update({
-          where: { id: item.product_id },
-          data: { stock_on_hand: { increment: item.quantity } },
-        });
-
-        if (body.warehouse_id) {
-          await tx.inventory.upsert({
-            where: {
-              warehouse_id_product_id: {
-                warehouse_id: body.warehouse_id,
-                product_id: item.product_id,
-              },
-            },
-            update: { quantity: { increment: item.quantity } },
-            create: {
-              warehouse_id: body.warehouse_id,
-              product_id: item.product_id,
-              quantity: item.quantity,
-            },
-          });
-        }
-
-        await tx.stockMovement.create({
-          data: {
-            product_id: item.product_id,
-            change: item.quantity,
-            reason: StockReason.PURCHASE,
-            note: body.warehouse_id
-              ? `Purchase ${created.id} (Warehouse ${body.warehouse_id})`
-              : `Purchase ${created.id}`,
-          },
+        await applyInventoryDelta({
+          tx,
+          productId: item.product_id,
+          warehouseId: body.warehouse_id,
+          delta: item.quantity,
+          reason: StockReason.PURCHASE,
+          note: body.warehouse_id
+            ? `Purchase ${created.id} (Warehouse ${body.warehouse_id})`
+            : `Purchase ${created.id}`,
         });
       }
 
@@ -420,57 +399,46 @@ class PurchasesController {
         const nextQty = nextQtyMap.get(productId) ?? 0;
         const stockDiff = nextQty - previousQty;
 
-        if (stockDiff) {
-          await tx.product.update({
-            where: { id: productId },
-            data: { stock_on_hand: { increment: stockDiff } },
-          });
+        if (warehouseChanged) {
+          if (previousQty > 0) {
+            await applyInventoryDelta({
+              tx,
+              productId,
+              warehouseId: previousWarehouseId,
+              delta: -previousQty,
+              reason: StockReason.PURCHASE,
+              note: previousWarehouseId
+                ? `Purchase ${purchase.id} moved out of Warehouse ${previousWarehouseId}`
+                : `Purchase ${purchase.id} stock reduced`,
+            });
+          }
 
-          await tx.stockMovement.create({
-            data: {
-              product_id: productId,
-              change: stockDiff,
+          if (nextQty > 0) {
+            await applyInventoryDelta({
+              tx,
+              productId,
+              warehouseId: nextWarehouseId,
+              delta: nextQty,
               reason: StockReason.PURCHASE,
               note: nextWarehouseId
-                ? `Purchase ${purchase.id} updated (Warehouse ${nextWarehouseId})`
-                : `Purchase ${purchase.id} updated`,
-            },
-          });
+                ? `Purchase ${purchase.id} moved into Warehouse ${nextWarehouseId}`
+                : `Purchase ${purchase.id} stock added`,
+            });
+          }
+
+          continue;
         }
 
-        if (warehouseChanged && previousWarehouseId && previousQty) {
-          await tx.inventory.upsert({
-            where: {
-              warehouse_id_product_id: {
-                warehouse_id: previousWarehouseId,
-                product_id: productId,
-              },
-            },
-            update: { quantity: { increment: -previousQty } },
-            create: {
-              warehouse_id: previousWarehouseId,
-              product_id: productId,
-              quantity: -previousQty,
-            },
-          });
-        }
-
-        if (nextWarehouseId) {
-          const inventoryDiff = warehouseChanged ? nextQty : stockDiff;
-          if (!inventoryDiff) continue;
-          await tx.inventory.upsert({
-            where: {
-              warehouse_id_product_id: {
-                warehouse_id: nextWarehouseId,
-                product_id: productId,
-              },
-            },
-            update: { quantity: { increment: inventoryDiff } },
-            create: {
-              warehouse_id: nextWarehouseId,
-              product_id: productId,
-              quantity: inventoryDiff,
-            },
+        if (stockDiff) {
+          await applyInventoryDelta({
+            tx,
+            productId,
+            warehouseId: nextWarehouseId,
+            delta: stockDiff,
+            reason: StockReason.PURCHASE,
+            note: nextWarehouseId
+              ? `Purchase ${purchase.id} updated (Warehouse ${nextWarehouseId})`
+              : `Purchase ${purchase.id} updated`,
           });
         }
       }

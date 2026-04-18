@@ -1,4 +1,5 @@
 import { Prisma, StockReason } from "@prisma/client";
+import { applyInventoryDelta } from "./inventoryValidation.service.js";
 
 type TransactionClient = Prisma.TransactionClient;
 type BillingProductRecord = Awaited<ReturnType<TransactionClient["product"]["create"]>>;
@@ -232,39 +233,19 @@ export const applyBillingSaleInventoryAdjustments = async (params: {
   const { tx, warehouseId, items, referenceId, referenceType } = params;
 
   for (const item of items) {
-    await tx.product.update({
-      where: { id: item.product_id },
-      data: { stock_on_hand: { decrement: item.quantity } },
-    });
-
-    await tx.inventory.upsert({
-      where: {
-        warehouse_id_product_id: {
-          warehouse_id: warehouseId,
-          product_id: item.product_id,
-        },
-      },
-      update: { quantity: { decrement: item.quantity } },
-      create: {
-        warehouse_id: warehouseId,
-        product_id: item.product_id,
-        quantity: -item.quantity,
-      },
-    });
-
-    await tx.stockMovement.create({
-      data: {
-        product_id: item.product_id,
-        change: -item.quantity,
-        reason: StockReason.SALE,
-        note: JSON.stringify({
-          type: "sale",
-          warehouseId,
-          referenceType,
-          referenceId,
-          quantity: item.quantity,
-        }),
-      },
+    await applyInventoryDelta({
+      tx,
+      productId: item.product_id,
+      warehouseId,
+      delta: -item.quantity,
+      reason: StockReason.SALE,
+      note: JSON.stringify({
+        type: "sale",
+        warehouseId,
+        referenceType,
+        referenceId,
+        quantity: item.quantity,
+      }),
     });
   }
 };

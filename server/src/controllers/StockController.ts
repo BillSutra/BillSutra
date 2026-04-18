@@ -6,6 +6,7 @@ import type { z } from "zod";
 import { stockAdjustSchema } from "../validations/apiValidations.js";
 import { createNotification } from "../services/notification.service.js";
 import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
+import { applyInventoryDelta } from "../services/inventoryValidation.service.js";
 
 type StockAdjustInput = z.infer<typeof stockAdjustSchema>;
 
@@ -38,62 +39,59 @@ class StockController {
       }
     }
 
-    const updated = await prisma.$transaction(async (tx) => {
-      const updatedProduct = await tx.product.update({
-        where: { id: product.id },
-        data: {
-          stock_on_hand: product.stock_on_hand + change,
-        },
-      });
-
-      if (warehouse_id) {
-        await tx.inventory.upsert({
-          where: {
-            warehouse_id_product_id: {
-              warehouse_id,
-              product_id: product.id,
-            },
-          },
-          update: { quantity: { increment: change } },
-          create: {
-            warehouse_id,
-            product_id: product.id,
-            quantity: change,
-          },
-        });
-      }
-
-      await tx.stockMovement.create({
-        data: {
-          product_id: product.id,
-          change,
+    try {
+      const updated = await prisma.$transaction(async (tx) => {
+        await applyInventoryDelta({
+          tx,
+          productId: product.id,
+          warehouseId: warehouse_id,
+          delta: change,
           reason: reason ?? StockReason.ADJUSTMENT,
           note: warehouse_id
             ? `${note ?? "Adjustment"} (Warehouse ${warehouse_id})`
             : note,
-        },
+        });
+
+        return tx.product.findUnique({
+          where: { id: product.id },
+        });
       });
 
-      return updatedProduct;
-    });
+      if (!updated) {
+        return sendResponse(res, 500, { message: "Stock could not be updated" });
+      }
 
-    if (
-      businessId &&
-      updated.reorder_level > 0 &&
-      updated.stock_on_hand <= updated.reorder_level
-    ) {
-      await createNotification({
-        userId,
-        businessId,
-        type: "inventory",
-        message: `${updated.name} is low in stock (${updated.stock_on_hand} left).`,
-        referenceKey: `low-stock:${updated.id}:${updated.stock_on_hand}`,
-      });
+      if (
+        businessId &&
+        updated.reorder_level > 0 &&
+        updated.stock_on_hand <= updated.reorder_level
+      ) {
+        await createNotification({
+          userId,
+          businessId,
+          type: "inventory",
+          message: `${updated.name} is low in stock (${updated.stock_on_hand} left).`,
+          referenceKey: `low-stock:${updated.id}:${updated.stock_on_hand}`,
+        });
+      }
+
+      invalidateInventoryInsightsCacheByUser(userId);
+
+      return sendResponse(res, 200, { message: "Stock updated", data: updated });
+    } catch (error) {
+      if (error instanceof Error) {
+        const statusCode =
+          "statusCode" in error && typeof error.statusCode === "number"
+            ? error.statusCode
+            : 500;
+
+        return sendResponse(res, statusCode, {
+          message: statusCode >= 500 ? "Stock could not be updated" : error.message,
+        });
+      }
+
+      return sendResponse(res, 500, { message: "Stock could not be updated" });
     }
-
-    invalidateInventoryInsightsCacheByUser(userId);
-
-    return sendResponse(res, 200, { message: "Stock updated", data: updated });
   }
 }
 

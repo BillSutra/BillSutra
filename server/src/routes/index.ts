@@ -27,6 +27,7 @@ import SubscriptionController from "../controllers/SubscriptionController.js";
 import SettingsController from "../controllers/SettingsController.js";
 import NotificationsController from "../controllers/NotificationsController.js";
 import InventoryInsightsController from "../controllers/InventoryInsightsController.js";
+import ExtraEntryController from "../controllers/ExtraEntryController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
 import AdminAuthMiddleware from "../middlewares/AdminAuthMiddleware.js";
 import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
@@ -816,5 +817,12 @@ router.get(
   DashboardController.productSales,
 );
 router.get("/dashboard/forecast", AuthMiddleware, DashboardController.forecast);
+
+// Extra Entries
+router.get("/extra-entries", AuthMiddleware, ExtraEntryController.index);
+router.post("/extra-entries", AuthMiddleware, ExtraEntryController.store);
+router.get("/extra-entries/:id", AuthMiddleware, ExtraEntryController.show);
+router.put("/extra-entries/:id", AuthMiddleware, ExtraEntryController.update);
+router.delete("/extra-entries/:id", AuthMiddleware, ExtraEntryController.destroy);
 
 export default router;

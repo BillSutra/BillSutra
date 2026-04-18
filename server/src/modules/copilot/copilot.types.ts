@@ -20,6 +20,11 @@ export type CopilotMonthStat = {
   expenses: number;
   outflow: number;
   net: number;
+  extraIncome: number;
+  extraExpense: number;
+  extraLoss: number;
+  extraInvestment: number;
+  extraNet: number;
 };
 
 export type CopilotPurchaseRecord = {
@@ -53,6 +58,18 @@ export type FinancialGoalRecord = {
   updatedAt: string;
 };
 
+export type ExtraEntryRecord = {
+  id: string;
+  title: string;
+  amount: number;
+  type: "INCOME" | "EXPENSE" | "LOSS" | "INVESTMENT";
+  date: Date;
+  notes: string | null;
+  userId: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export type CopilotDataset = {
   now: Date;
   today: Date;
@@ -67,6 +84,7 @@ export type CopilotDataset = {
   pendingPurchaseAmount: number;
   forecast: DashboardForecastPayload;
   goals: FinancialGoalRecord[];
+  extraEntries: ExtraEntryRecord[];
 };
 
 export type CopilotBudgetInsight = {
