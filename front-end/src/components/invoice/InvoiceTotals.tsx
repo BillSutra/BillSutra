@@ -13,6 +13,7 @@ type InvoiceTotalsProps = {
   taxMode: TaxMode;
   discountValue?: string | number;
   discountType: DiscountType;
+  discountLabel?: string;
   paidAmount?: number;
   remainingAmount?: number;
   action?: React.ReactNode;
@@ -24,6 +25,7 @@ const InvoiceTotals = ({
   taxMode,
   discountValue = 0,
   discountType,
+  discountLabel,
   paidAmount,
   remainingAmount,
   action,
@@ -31,12 +33,13 @@ const InvoiceTotals = ({
 }: InvoiceTotalsProps) => {
   const { formatCurrency, t } = useI18n();
   const normalizedDiscountValue = Math.max(0, Number(discountValue) || 0);
-  const discountLabel =
-    discountType === "PERCENTAGE"
+  const resolvedDiscountLabel =
+    discountLabel ??
+    (discountType === "PERCENTAGE"
       ? t("invoiceTotals.discountPercentage", {
           value: Math.min(100, normalizedDiscountValue).toFixed(2),
         })
-      : t("invoiceTotals.discountFixed");
+      : t("invoiceTotals.discountFixed"));
 
   return (
     <div
@@ -125,11 +128,11 @@ const InvoiceTotals = ({
         ) : null}
 
         <div className="flex items-center justify-between rounded-[1.15rem] bg-slate-50/90 px-4 py-3 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
-          <span className="text-slate-600 dark:text-slate-300">
-            {discountLabel}
+            <span className="text-slate-600 dark:text-slate-300">
+            {resolvedDiscountLabel}
           </span>
           <span className="font-medium text-slate-950 dark:text-slate-100">
-            {formatCurrency(totals.discount)}
+            -{formatCurrency(totals.discount)}
           </span>
         </div>
 

@@ -26,7 +26,7 @@ const DiscountSection = ({ data, theme }: InvoiceSectionProps) => {
       >
         <span>{discountLabel}</span>
         <span className="font-semibold">
-          {formatCurrency(discountAmount, data.business.currency)}
+          -{formatCurrency(discountAmount, data.business.currency)}
         </span>
       </div>
     </section>

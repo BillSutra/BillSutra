@@ -28,6 +28,20 @@ export type InvoiceTotals = {
 const round2 = (value: number) =>
   Math.round((value + Number.EPSILON) * 100) / 100;
 
+export const getDiscountAmount = (
+  subtotal: number,
+  discount = 0,
+  discountType: "PERCENTAGE" | "FIXED" = "FIXED",
+) => {
+  const safeDiscountValue = Math.max(0, discount);
+
+  if (discountType === "PERCENTAGE") {
+    return round2((subtotal * Math.min(100, safeDiscountValue)) / 100);
+  }
+
+  return round2(Math.min(subtotal, safeDiscountValue));
+};
+
 export const calculateTotals = (
   items: InvoiceCalcItem[],
   discount = 0,
@@ -54,11 +68,7 @@ export const calculateTotals = (
     };
   });
 
-  const safeDiscountValue = Math.max(0, discount);
-  const safeDiscount =
-    discountType === "PERCENTAGE"
-      ? round2((subtotal * Math.min(100, safeDiscountValue)) / 100)
-      : round2(Math.min(subtotal + tax, safeDiscountValue));
+  const safeDiscount = getDiscountAmount(subtotal, discount, discountType);
   const total = round2(subtotal + tax - safeDiscount);
 
   return {

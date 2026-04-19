@@ -689,7 +689,9 @@ const ProductionInvoiceTemplate = ({
               </div>
               {totals.discount > 0 ? (
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-slate-500">Discount Total</span>
+                  <span className="text-slate-500">
+                    {data.discount?.label ?? "Discount"}
+                  </span>
                   <span className="font-semibold text-slate-950">
                     -{formatCurrency(totals.discount, data.business.currency)}
                   </span>

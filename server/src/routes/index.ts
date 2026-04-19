@@ -23,6 +23,7 @@ import UserSavedTemplateController from "../controllers/UserSavedTemplateControl
 import PublicInvoiceController from "../controllers/PublicInvoiceController.js";
 import LogoController from "../controllers/LogoController.js";
 import WorkersController from "../controllers/WorkersController.js";
+import WorkerPanelController from "../controllers/WorkerPanelController.js";
 import SubscriptionController from "../controllers/SubscriptionController.js";
 import SettingsController from "../controllers/SettingsController.js";
 import NotificationsController from "../controllers/NotificationsController.js";
@@ -72,6 +73,8 @@ import {
   workerUpdateSchema,
   userProfileUpdateSchema,
   userPasswordUpdateSchema,
+  workerPasswordChangeSchema,
+  workerProfileUpdateSchema,
   customerCreateSchema,
   customerUpdateSchema,
   categoryCreateSchema,
@@ -397,6 +400,40 @@ router.delete(
   RequireFeatureAccessMiddleware("WORKERS_MANAGEMENT"),
   validate({ params: workerIdParamSchema }),
   WorkersController.destroy,
+);
+
+// Worker Panel (self-service for workers)
+router.get(
+  "/worker/profile",
+  AuthMiddleware,
+  WorkerPanelController.getProfile,
+);
+router.put(
+  "/worker/profile",
+  AuthMiddleware,
+  validate({ body: workerProfileUpdateSchema }),
+  WorkerPanelController.updateProfile,
+);
+router.put(
+  "/worker/password",
+  AuthMiddleware,
+  validate({ body: workerPasswordChangeSchema }),
+  WorkerPanelController.changePassword,
+);
+router.get(
+  "/worker/dashboard/overview",
+  AuthMiddleware,
+  WorkerPanelController.getDashboardOverview,
+);
+router.get(
+  "/worker/dashboard/incentives",
+  AuthMiddleware,
+  WorkerPanelController.getIncentives,
+);
+router.get(
+  "/worker/dashboard/history",
+  AuthMiddleware,
+  WorkerPanelController.getWorkHistory,
 );
 
 // Logo management

@@ -34,6 +34,7 @@ import {
   formatBusinessAddressFromRecord,
   formatCustomerAddressFromRecord,
 } from "@/lib/indianAddress";
+import { buildDiscountLabel } from "@/lib/invoiceDiscount";
 import { getStateFromGstin } from "@/lib/gstin";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import {
@@ -181,6 +182,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     if (!data || !paymentSnapshot) return null;
 
     const tax = Number(data.tax ?? 0);
+    const invoiceCurrency = businessProfile?.currency ?? "INR";
     const businessName = businessProfile?.business_name || "BillSutra";
     const businessState =
       getStateFromGstin(businessProfile?.tax_id) ||
@@ -200,6 +202,10 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
           : "CGST_SGST";
     const latestPaymentMethod =
       paymentHistory[0]?.method ? formatLocalizedPaymentMethod(paymentHistory[0].method) : "";
+    const discountType =
+      data.discount_type === "PERCENTAGE" ? "PERCENTAGE" : "FIXED";
+    const discountValue =
+      Number(data.discount_value ?? data.discount ?? 0) || 0;
 
     return {
       invoiceTitle: taxMode === "NONE" ? "Bill" : "Tax Invoice",
@@ -275,6 +281,16 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
         igst: taxMode === "IGST" ? tax : 0,
         roundOff: 0,
       },
+      discount: {
+        type: discountType,
+        value: discountValue,
+        calculatedAmount: Number(data.discount_calculated ?? data.discount ?? 0),
+        label: buildDiscountLabel({
+          discountType,
+          discountValue,
+          formatCurrency: (value) => formatCurrency(value, invoiceCurrency),
+        }),
+      },
       paymentSummary: {
         statusLabel: localizedPaymentLabel,
         statusTone:
@@ -304,6 +320,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   }, [
     businessProfile,
     data,
+    formatCurrency,
     formatLocalizedPaymentMethod,
     invoiceDate,
     localizedPaymentHint,

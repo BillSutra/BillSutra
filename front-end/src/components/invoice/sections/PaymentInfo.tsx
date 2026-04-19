@@ -98,7 +98,7 @@ const PaymentInfo = ({ data, theme }: InvoiceSectionProps) => {
             </div>
             {totals.discount ? (
               <div className="flex items-center justify-between text-slate-700">
-                <span>{t("invoicePreview.discount")}</span>
+                <span>{data.discount?.label ?? t("invoicePreview.discount")}</span>
                 <span>-{formatCurrency(totals.discount, data.business.currency)}</span>
               </div>
             ) : null}

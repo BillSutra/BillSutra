@@ -314,7 +314,9 @@ const TemplateThermal = ({
             </div>
             {discount > 0 ? (
               <div className="flex justify-between">
-                <span className="text-neutral-700">Discount</span>
+                <span className="text-neutral-700">
+                  {data.discount?.label ?? "Discount"}
+                </span>
                 <span className="font-semibold text-neutral-950">
                   -{fmt(discount)}
                 </span>

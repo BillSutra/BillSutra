@@ -5,6 +5,7 @@ import type {
   InvoiceTotals,
   TaxMode,
 } from "@/types/invoice";
+import { getAppliedDiscountAmount } from "@/lib/invoiceDiscount";
 
 const round2 = (value: number) =>
   Math.round((value + Number.EPSILON) * 100) / 100;
@@ -40,11 +41,11 @@ export const useInvoiceTotals = (
       }
     });
 
-    const normalizedDiscountValue = Math.max(0, Number(discountValue) || 0);
-    const discount =
-      discountType === "PERCENTAGE"
-        ? (subtotal * Math.min(100, normalizedDiscountValue)) / 100
-        : Math.min(subtotal + tax, normalizedDiscountValue);
+    const discount = getAppliedDiscountAmount({
+      subtotal,
+      discountValue,
+      discountType,
+    });
     const total = subtotal + tax - discount;
 
     return {

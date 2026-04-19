@@ -8,7 +8,10 @@ import {
   StockReason,
 } from "@prisma/client";
 import puppeteer from "puppeteer";
-import { calculateTotals } from "../../utils/calculateTotals.js";
+import {
+  calculateTotals,
+  getDiscountAmount,
+} from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
 import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
 import {
@@ -42,6 +45,9 @@ export type PublicInvoiceViewData = {
   subtotal: number;
   tax: number;
   discount: number;
+  discount_type: "PERCENTAGE" | "FIXED";
+  discount_value: number;
+  discount_calculated: number;
   currency: string;
   status: InvoiceStatus;
   date: string;
@@ -110,6 +116,25 @@ const toNumber = (value: unknown) => Number(value ?? 0);
 const roundCurrencyAmount = (value: number) =>
   Math.round((value + Number.EPSILON) * 100) / 100;
 
+const normalizeDiscountType = (value: unknown): "PERCENTAGE" | "FIXED" =>
+  value === "PERCENTAGE" ? "PERCENTAGE" : "FIXED";
+
+const buildDiscountLabel = ({
+  discountType,
+  discountValue,
+  currency,
+}: {
+  discountType: "PERCENTAGE" | "FIXED";
+  discountValue: number;
+  currency: string;
+}) => {
+  if (discountType === "PERCENTAGE") {
+    return `Discount (${roundCurrencyAmount(discountValue).toFixed(2)}%)`;
+  }
+
+  return `Discount (${formatCurrency(discountValue, currency)})`;
+};
+
 const normalizeStatusLabel = (value: string) =>
   value
     .replaceAll("_", " ")
@@ -127,6 +152,40 @@ const createInvoiceValidationError = (
   error.status = 422;
   error.errors = errors;
   return error;
+};
+
+const validateDiscountInput = ({
+  subtotal,
+  discountValue,
+  discountType,
+}: {
+  subtotal: number;
+  discountValue: number;
+  discountType: "PERCENTAGE" | "FIXED";
+}) => {
+  if (discountValue < 0) {
+    throw createInvoiceValidationError("Discount cannot be negative.", {
+      discount: ["Discount cannot be negative."],
+    });
+  }
+
+  if (discountType === "PERCENTAGE" && discountValue > 100) {
+    throw createInvoiceValidationError(
+      "Discount percentage cannot exceed 100%.",
+      {
+        discount: ["Discount percentage cannot exceed 100%."],
+      },
+    );
+  }
+
+  if (discountType === "FIXED" && discountValue > subtotal) {
+    throw createInvoiceValidationError(
+      "Discount cannot exceed total amount.",
+      {
+        discount: ["Discount cannot exceed total amount."],
+      },
+    );
+  }
 };
 
 const resolveRequestedInvoicePaymentStatus = (
@@ -431,6 +490,8 @@ const buildInvoicePdfHtml = (
     subtotal: unknown;
     tax: unknown;
     discount: unknown;
+    discount_type: unknown;
+    discount_value: unknown;
     total: unknown;
     customer: {
       name: string;
@@ -467,6 +528,13 @@ const buildInvoicePdfHtml = (
 ) => {
   const currency = company?.currency ?? "INR";
   const totalAmount = toNumber(invoice.total);
+  const discountType = normalizeDiscountType(invoice.discount_type);
+  const discountValue = toNumber(invoice.discount_value);
+  const discountLabel = buildDiscountLabel({
+    discountType,
+    discountValue,
+    currency,
+  });
   const paidFromPayments = invoice.payments.reduce(
     (sum, payment) => sum + toNumber(payment.amount),
     0,
@@ -648,8 +716,8 @@ const buildInvoicePdfHtml = (
               <td>${formatCurrency(invoice.tax, currency)}</td>
             </tr>
             <tr>
-              <td>Discount</td>
-              <td>${formatCurrency(invoice.discount, currency)}</td>
+              <td>${discountLabel}</td>
+              <td>-${formatCurrency(invoice.discount, currency)}</td>
             </tr>
             <tr class="final">
               <td>Grand Total</td>
@@ -718,6 +786,9 @@ const mapPublicInvoice = (
     subtotal: unknown;
     tax: unknown;
     discount: unknown;
+    discount_type: unknown;
+    discount_value: unknown;
+    discount_calculated: unknown;
     total: unknown;
     customer: {
       name: string;
@@ -782,6 +853,9 @@ const mapPublicInvoice = (
     subtotal: toNumber(invoice.subtotal),
     tax: toNumber(invoice.tax),
     discount: toNumber(invoice.discount),
+    discount_type: normalizeDiscountType(invoice.discount_type),
+    discount_value: toNumber(invoice.discount_value),
+    discount_calculated: toNumber(invoice.discount_calculated),
     currency,
     status: invoice.status,
     date: invoice.date.toISOString(),
@@ -901,6 +975,19 @@ export const createInvoice = async (
     items: InvoiceCalcItem[];
   },
 ) => {
+  const discountType = normalizeDiscountType(payload.discount_type);
+  const discountValue = Math.max(0, Number(payload.discount ?? 0));
+  const subtotalBeforeDiscount = payload.items.reduce(
+    (sum, item) => sum + item.quantity * item.price,
+    0,
+  );
+
+  validateDiscountInput({
+    subtotal: roundCurrencyAmount(subtotalBeforeDiscount),
+    discountValue,
+    discountType,
+  });
+
   const latest = await prisma.invoice.findFirst({
     where: { user_id: userId },
     orderBy: { createdAt: "desc" },
@@ -910,8 +997,8 @@ export const createInvoice = async (
   const invoiceNumber = generateInvoiceNumber(latest?.invoice_number);
   const totals = calculateTotals(
     payload.items,
-    payload.discount ?? 0,
-    payload.discount_type ?? "FIXED",
+    discountValue,
+    discountType,
   );
 
   const syncSales =
@@ -976,6 +1063,9 @@ export const createInvoice = async (
         subtotal: totals.subtotal,
         tax: totals.tax,
         discount: totals.discount,
+        discount_type: discountType,
+        discount_value: discountValue,
+        discount_calculated: totals.discount,
         total: totals.total,
         notes: payload.notes ?? undefined,
         items: { create: itemPayload },
@@ -1214,6 +1304,9 @@ export const duplicateInvoice = async (userId: number, id: number) => {
         subtotal: source.subtotal,
         tax: source.tax,
         discount: source.discount,
+        discount_type: source.discount_type,
+        discount_value: source.discount_value,
+        discount_calculated: source.discount_calculated,
         total: source.total,
         notes: source.notes,
         items: {

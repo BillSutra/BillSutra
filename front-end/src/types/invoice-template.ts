@@ -136,6 +136,7 @@ export type InvoicePreviewData = {
   discount?: {
     type: "PERCENTAGE" | "FIXED";
     value: number;
+    calculatedAmount?: number;
     label?: string;
   };
   paymentSummary?: {
