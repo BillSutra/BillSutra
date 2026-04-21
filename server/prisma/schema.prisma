@@ -254,7 +254,7 @@ model ExtraEntry {
   date      DateTime
   notes     String?   @db.VarChar(500)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId    Int
+  userId    Int       @map("user_id")
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 

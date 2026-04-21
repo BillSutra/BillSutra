@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../../config/db.config.js";
 import { fetchCashInflowSnapshot, getDailyExpenses } from "../../services/dashboardAnalyticsService.js";
+import { listExtraEntriesInRange } from "../../services/extraEntry.service.js";
 import { buildDashboardForecast } from "../../services/dashboardForecastService.js";
 import type {
   CopilotDataset,
@@ -386,12 +387,11 @@ export const buildCopilotDataset = async (userId: number): Promise<CopilotDatase
     }),
     getDailyExpenses({ userId, from: historicalWindowStart }),
     listFinancialGoals(userId),
-    prisma.extraEntry.findMany({
-      where: {
-        userId,
-        date: { gte: historicalWindowStart, lt: nextMonthStart },
-      },
-      orderBy: { date: "asc" },
+    listExtraEntriesInRange({
+      userId,
+      from: historicalWindowStart,
+      to: nextMonthStart,
+      order: "asc",
     }),
   ]);
 
