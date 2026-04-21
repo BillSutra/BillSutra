@@ -1,0 +1,8 @@
+ALTER TABLE "invoices"
+  ADD COLUMN IF NOT EXISTS "tax_mode" VARCHAR(32) NOT NULL DEFAULT 'CGST_SGST';
+
+UPDATE "invoices"
+SET "tax_mode" = CASE
+  WHEN COALESCE("tax", 0) <= 0 THEN 'NONE'
+  ELSE COALESCE(NULLIF("tax_mode", ''), 'CGST_SGST')
+END;

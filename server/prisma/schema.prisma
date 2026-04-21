@@ -549,6 +549,7 @@ model Invoice {
 
   subtotal Decimal @db.Decimal(12, 2)
   tax      Decimal @db.Decimal(12, 2)
+  tax_mode String  @default("CGST_SGST") @map("tax_mode") @db.VarChar(32)
   discount Decimal @default(0) @db.Decimal(12, 2)
   discount_type       String  @default("FIXED") @map("discount_type") @db.VarChar(32)
   discount_value      Decimal @default(0) @map("discount_value") @db.Decimal(12, 2)

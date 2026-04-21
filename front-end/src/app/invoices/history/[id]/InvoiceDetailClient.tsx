@@ -37,6 +37,7 @@ import {
 import { buildDiscountLabel } from "@/lib/invoiceDiscount";
 import { getStateFromGstin } from "@/lib/gstin";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
+import { resolveBackendAssetUrl } from "@/lib/backendAssetUrl";
 import {
   useCreatePaymentMutation,
   useInvoiceQuery,
@@ -195,11 +196,13 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
       data.customer?.state ||
       "";
     const taxMode =
-      tax <= 0
-        ? "NONE"
-        : businessState && customerState && businessState !== customerState
-          ? "IGST"
-          : "CGST_SGST";
+      data.tax_mode === "IGST" || data.tax_mode === "CGST_SGST"
+        ? data.tax_mode
+        : tax <= 0
+          ? "NONE"
+          : businessState && customerState && businessState !== customerState
+            ? "IGST"
+            : "CGST_SGST";
     const latestPaymentMethod =
       paymentHistory[0]?.method ? formatLocalizedPaymentMethod(paymentHistory[0].method) : "";
     const discountType =
@@ -240,7 +243,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
         phone: businessProfile?.phone ?? "",
         email: businessProfile?.email ?? "",
         website: businessProfile?.website ?? "",
-        logoUrl: businessProfile?.logo_url ?? "",
+        logoUrl: resolveBackendAssetUrl(businessProfile?.logo_url),
         taxId: businessProfile?.tax_id ?? "",
         currency: businessProfile?.currency ?? "INR",
         showLogoOnInvoice: businessProfile?.show_logo_on_invoice ?? false,

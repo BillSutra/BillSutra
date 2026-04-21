@@ -871,7 +871,7 @@ const invoiceItemSchema = z.object({
   product_id: z.coerce.number().int().positive().optional(),
   name: z.string().min(1),
   quantity: z.coerce.number().int().positive(),
-  price: z.coerce.number().nonnegative(),
+  price: z.coerce.number().positive(),
   tax_rate: z.coerce.number().nonnegative().optional(),
 });
 
@@ -881,6 +881,7 @@ export const invoiceCreateSchema = z.object({
   due_date: z.coerce.date().optional(),
   discount: z.coerce.number().nonnegative().optional(),
   discount_type: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  tax_mode: z.enum(["CGST_SGST", "IGST", "NONE"]).optional(),
   status: z.nativeEnum(InvoiceStatus).optional(),
   payment_status: z.enum(["UNPAID", "PARTIALLY_PAID", "PAID"]).optional(),
   amount_paid: z.coerce.number().nonnegative().optional(),

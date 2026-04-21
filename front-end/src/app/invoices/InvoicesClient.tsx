@@ -54,6 +54,7 @@ import {
   getAppliedDiscountAmount,
   getDiscountValidationMessage,
 } from "@/lib/invoiceDiscount";
+import { resolveBackendAssetUrl } from "@/lib/backendAssetUrl";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   InvoiceDraft,
@@ -164,12 +165,29 @@ type QuickCustomerForm = {
 const RECENT_PRODUCT_USAGE_STORAGE_KEY = "invoice-smart-recent-products";
 const LAST_DISCOUNT_TYPE_STORAGE_KEY = "invoice-last-discount-type";
 
-const createEmptyInvoiceForm = (customerId = ""): InvoiceFormState => ({
+const getStoredDiscountType = (): InvoiceFormState["discount_type"] => {
+  if (typeof window === "undefined") {
+    return "PERCENTAGE";
+  }
+
+  const storedDiscountType = window.localStorage.getItem(
+    LAST_DISCOUNT_TYPE_STORAGE_KEY,
+  );
+
+  return storedDiscountType === "FIXED" || storedDiscountType === "PERCENTAGE"
+    ? storedDiscountType
+    : "PERCENTAGE";
+};
+
+const createEmptyInvoiceForm = (
+  customerId = "",
+  discountType = getStoredDiscountType(),
+): InvoiceFormState => ({
   customer_id: customerId,
   date: "",
   due_date: "",
   discount: "0",
-  discount_type: "PERCENTAGE",
+  discount_type: discountType,
   payment_status: "UNPAID",
   amount_paid: "",
   payment_method: "",
@@ -560,26 +578,6 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const storedDiscountType = window.localStorage.getItem(
-      LAST_DISCOUNT_TYPE_STORAGE_KEY,
-    );
-
-    if (
-      storedDiscountType !== "PERCENTAGE" &&
-      storedDiscountType !== "FIXED"
-    ) {
-      return;
-    }
-
-    setForm((currentForm) => ({
-      ...currentForm,
-      discount_type: storedDiscountType,
-    }));
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
     window.localStorage.setItem(
       LAST_DISCOUNT_TYPE_STORAGE_KEY,
       form.discount_type,
@@ -767,7 +765,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         phone: businessProfile?.phone ?? "",
         email: businessProfile?.email ?? "",
         website: businessProfile?.website ?? "",
-        logoUrl: businessProfile?.logo_url ?? "",
+        logoUrl: resolveBackendAssetUrl(businessProfile?.logo_url),
         taxId: businessProfile?.tax_id ?? "",
         currency: businessProfile?.currency ?? "INR",
         showLogoOnInvoice: businessProfile?.show_logo_on_invoice ?? false,
@@ -788,21 +786,18 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         phone: customer?.phone ?? "",
         address: formatCustomerAddressFromRecord(customer) || "",
       },
-      items: items.map((item) => ({
-        name: item.name || t("invoice.fallbackItem"),
-        description: "",
-        quantity: Number(item.quantity) || 0,
-        unitPrice: Number(item.price) || 0,
-        taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
-        amount:
-          (Number(item.quantity) || 0) * (Number(item.price) || 0) +
-          ((taxMode === "NONE"
-            ? 0
-            : ((Number(item.quantity) || 0) *
-                (Number(item.price) || 0) *
-                (item.tax_rate ? Number(item.tax_rate) : 0)) /
-              100) || 0),
-      })),
+      items: items.map((item, index) => {
+        const calculatedItem = totals.items?.[index];
+
+        return {
+          name: item.name || t("invoice.fallbackItem"),
+          description: "",
+          quantity: Number(item.quantity) || 0,
+          unitPrice: Number(item.price) || 0,
+          taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
+          amount: calculatedItem?.lineTotal ?? 0,
+        };
+      }),
       totals,
       discount: {
         type: form.discount_type,
@@ -957,7 +952,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         focusProductSearch();
       }
     },
-    [flashShortcutSection, focusProductSearch, markDirty],
+    [flashShortcutSection, focusProductSearch, markDirty, t],
   );
 
   const resetInvoiceComposer = useCallback(
@@ -984,7 +979,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
       focusProductSearch();
     },
-    [clearDraft, flashShortcutSection, focusProductSearch, form.discount_type],
+    [clearDraft, flashShortcutSection, focusProductSearch, form.discount_type, t],
   );
 
   const handleItemChange = useCallback(
@@ -1132,7 +1127,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
       addProductToBill(product);
     },
-    [addProductToBill, flashShortcutSection, focusProductSearch],
+    [addProductToBill, flashShortcutSection, focusProductSearch, t],
   );
 
   const handleSuggestedProductAdd = useCallback(
@@ -1259,6 +1254,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       parseServerErrors,
       queryClient,
       quickCustomerForm,
+      t,
     ],
   );
 
@@ -1354,6 +1350,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             ? undefined
             : (form.payment_method || undefined),
         payment_date: effectivePaymentDate,
+        tax_mode: taxMode,
         sync_sales: true,
         warehouse_id: form.warehouse_id ? Number(form.warehouse_id) : undefined,
         items: items.map((item) => ({
@@ -1402,6 +1399,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     flashShortcutSection,
     resetInvoiceComposer,
     focusProductSearch,
+    taxMode,
     t,
     totals.total,
     validation.errors,

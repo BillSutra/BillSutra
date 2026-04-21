@@ -50,6 +50,10 @@ const ItemsTable = ({ data, theme }: InvoiceSectionProps) => {
             {data.items.map((item, index) => {
               const lineTotal = item.quantity * item.unitPrice;
               const taxAmount = lineTotal * ((item.taxRate ?? 0) / 100);
+              const displayedAmount =
+                typeof item.amount === "number"
+                  ? item.amount
+                  : lineTotal + taxAmount;
               return (
                 <tr key={`${item.name}-${index}`} className="invoice-row">
                   <td className="border-b border-slate-200 px-4 py-3">
@@ -75,7 +79,7 @@ const ItemsTable = ({ data, theme }: InvoiceSectionProps) => {
                     data-part="line-total-cell"
                   >
                     {formatCurrency(
-                      lineTotal + taxAmount,
+                      displayedAmount,
                       data.business.currency,
                     )}
                   </td>

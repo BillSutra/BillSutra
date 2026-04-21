@@ -695,6 +695,7 @@ export type Invoice = {
   status: string;
   subtotal: string;
   tax: string;
+  tax_mode?: "CGST_SGST" | "IGST" | "NONE" | null;
   discount: string;
   discount_type?: "PERCENTAGE" | "FIXED" | null;
   discount_value?: string | null;

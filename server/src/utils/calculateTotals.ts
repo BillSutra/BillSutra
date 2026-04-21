@@ -1,3 +1,8 @@
+import {
+  calculateInvoiceTotals,
+  getAppliedDiscountAmount,
+} from "../../../shared/invoice-calculations.js";
+
 export type InvoiceCalcItem = {
   product_id?: number | null;
   name: string;
@@ -25,57 +30,44 @@ export type InvoiceTotals = {
   items: InvoiceCalcResultItem[];
 };
 
-const round2 = (value: number) =>
-  Math.round((value + Number.EPSILON) * 100) / 100;
-
 export const getDiscountAmount = (
   subtotal: number,
   discount = 0,
   discountType: "PERCENTAGE" | "FIXED" = "FIXED",
-) => {
-  const safeDiscountValue = Math.max(0, discount);
-
-  if (discountType === "PERCENTAGE") {
-    return round2((subtotal * Math.min(100, safeDiscountValue)) / 100);
-  }
-
-  return round2(Math.min(subtotal, safeDiscountValue));
-};
+) =>
+  getAppliedDiscountAmount({
+    subtotal,
+    discountValue: discount,
+    discountType,
+  });
 
 export const calculateTotals = (
   items: InvoiceCalcItem[],
   discount = 0,
   discountType: "PERCENTAGE" | "FIXED" = "FIXED",
+  taxMode: "CGST_SGST" | "IGST" | "NONE" = "CGST_SGST",
 ): InvoiceTotals => {
-  let subtotal = 0;
-  let tax = 0;
+  const totals = calculateInvoiceTotals({
+    items,
+    discountValue: discount,
+    discountType,
+    taxMode,
+  });
 
-  const computedItems = items.map((item) => {
-    const lineSubtotal = item.quantity * item.price;
-    const lineTax = item.tax_rate ? (lineSubtotal * item.tax_rate) / 100 : 0;
-    subtotal += lineSubtotal;
-    tax += lineTax;
-
-    return {
+  return {
+    subtotal: totals.subtotal,
+    tax: totals.tax,
+    discount: totals.discount,
+    total: totals.total,
+    items: totals.items.map((item) => ({
       product_id: item.product_id ?? undefined,
       name: item.name,
       quantity: item.quantity,
       price: item.price,
       tax_rate: item.tax_rate ?? undefined,
-      total: round2(lineSubtotal + lineTax),
-      lineSubtotal: round2(lineSubtotal),
-      lineTax: round2(lineTax),
-    };
-  });
-
-  const safeDiscount = getDiscountAmount(subtotal, discount, discountType);
-  const total = round2(subtotal + tax - safeDiscount);
-
-  return {
-    subtotal: round2(subtotal),
-    tax: round2(tax),
-    discount: round2(safeDiscount),
-    total: Math.max(0, total),
-    items: computedItems,
+      total: item.lineTotal,
+      lineSubtotal: item.lineSubtotal,
+      lineTax: item.lineTax,
+    })),
   };
 };

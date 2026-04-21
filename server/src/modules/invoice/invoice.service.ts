@@ -8,12 +8,10 @@ import {
   StockReason,
 } from "@prisma/client";
 import puppeteer from "puppeteer";
-import {
-  calculateTotals,
-  getDiscountAmount,
-} from "../../utils/calculateTotals.js";
+import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
 import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
+import { normalizeTaxMode } from "../../../../shared/invoice-calculations.js";
 import {
   buildPublicInvoiceReference,
   buildPublicInvoiceUrl,
@@ -44,6 +42,7 @@ export type PublicInvoiceViewData = {
   amount: number;
   subtotal: number;
   tax: number;
+  tax_mode: "CGST_SGST" | "IGST" | "NONE";
   discount: number;
   discount_type: "PERCENTAGE" | "FIXED";
   discount_value: number;
@@ -119,6 +118,42 @@ const roundCurrencyAmount = (value: number) =>
 const normalizeDiscountType = (value: unknown): "PERCENTAGE" | "FIXED" =>
   value === "PERCENTAGE" ? "PERCENTAGE" : "FIXED";
 
+const normalizeInvoiceTaxMode = (
+  value: unknown,
+): "CGST_SGST" | "IGST" | "NONE" =>
+  normalizeTaxMode(typeof value === "string" ? value : undefined);
+
+const toAbsoluteBackendAssetUrl = (value: string | null | undefined) => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (
+    /^https?:\/\//i.test(trimmed) ||
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("blob:")
+  ) {
+    return trimmed;
+  }
+
+  const baseUrl = (
+    process.env.BACKEND_URL ??
+    process.env.APP_URL ??
+    process.env.SERVER_URL ??
+    `http://127.0.0.1:${process.env.PORT ?? 4000}`
+  )
+    .trim()
+    .replace(/\/$/, "");
+
+  if (!baseUrl) {
+    return null;
+  }
+
+  const normalizedPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return `${baseUrl}${normalizedPath}`;
+};
+
 const buildDiscountLabel = ({
   discountType,
   discountValue,
@@ -169,6 +204,12 @@ const validateDiscountInput = ({
     });
   }
 
+  if (subtotal <= 0 && discountValue > 0) {
+    throw createInvoiceValidationError("Add items first to apply a discount.", {
+      discount: ["Add items first to apply a discount."],
+    });
+  }
+
   if (discountType === "PERCENTAGE" && discountValue > 100) {
     throw createInvoiceValidationError(
       "Discount percentage cannot exceed 100%.",
@@ -180,9 +221,9 @@ const validateDiscountInput = ({
 
   if (discountType === "FIXED" && discountValue > subtotal) {
     throw createInvoiceValidationError(
-      "Discount cannot exceed total amount.",
+      "Discount cannot exceed subtotal.",
       {
-        discount: ["Discount cannot exceed total amount."],
+        discount: ["Discount cannot exceed subtotal."],
       },
     );
   }
@@ -489,6 +530,7 @@ const buildInvoicePdfHtml = (
     notes: string | null;
     subtotal: unknown;
     tax: unknown;
+    tax_mode: unknown;
     discount: unknown;
     discount_type: unknown;
     discount_value: unknown;
@@ -521,6 +563,7 @@ const buildInvoicePdfHtml = (
     pincode: string | null;
     phone: string | null;
     email: string | null;
+    logo_url: string | null;
     tax_id: string | null;
     currency: string;
   } | null,
@@ -528,6 +571,7 @@ const buildInvoicePdfHtml = (
 ) => {
   const currency = company?.currency ?? "INR";
   const totalAmount = toNumber(invoice.total);
+  const taxMode = normalizeInvoiceTaxMode(invoice.tax_mode);
   const discountType = normalizeDiscountType(invoice.discount_type);
   const discountValue = toNumber(invoice.discount_value);
   const discountLabel = buildDiscountLabel({
@@ -535,6 +579,7 @@ const buildInvoicePdfHtml = (
     discountValue,
     currency,
   });
+  const companyLogoUrl = toAbsoluteBackendAssetUrl(company?.logo_url);
   const paidFromPayments = invoice.payments.reduce(
     (sum, payment) => sum + toNumber(payment.amount),
     0,
@@ -650,6 +695,28 @@ const buildInvoicePdfHtml = (
             border: 1px solid #e5e7eb;
             border-radius: 8px;
           }
+          .company-block {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+          }
+          .logo-box {
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            overflow: hidden;
+          }
+          .logo-box img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+          }
         </style>
       </head>
       <body>
@@ -665,13 +732,24 @@ const buildInvoicePdfHtml = (
           </div>
           <div>
             <h2>Company Details</h2>
-            <div>${escapeHtml(company?.business_name ?? "Your Business")}</div>
-            ${companyAddressLines
-              .map((line) => `<div class="muted">${escapeHtml(line)}</div>`)
-              .join("")}
-            <div class="muted">${escapeHtml(company?.phone ?? "")}</div>
-            <div class="muted">${escapeHtml(company?.email ?? "")}</div>
-            <div class="muted">Tax ID: ${escapeHtml(company?.tax_id ?? "-")}</div>
+            <div class="company-block">
+              <div class="logo-box">
+                ${
+                  companyLogoUrl
+                    ? `<img src="${escapeHtml(companyLogoUrl)}" alt="${escapeHtml(company?.business_name ?? "Business")} logo" />`
+                    : `<span class="muted">Logo</span>`
+                }
+              </div>
+              <div>
+                <div>${escapeHtml(company?.business_name ?? "Your Business")}</div>
+                ${companyAddressLines
+                  .map((line) => `<div class="muted">${escapeHtml(line)}</div>`)
+                  .join("")}
+                <div class="muted">${escapeHtml(company?.phone ?? "")}</div>
+                <div class="muted">${escapeHtml(company?.email ?? "")}</div>
+                <div class="muted">Tax ID: ${escapeHtml(company?.tax_id ?? "-")}</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -715,6 +793,27 @@ const buildInvoicePdfHtml = (
               <td>Tax</td>
               <td>${formatCurrency(invoice.tax, currency)}</td>
             </tr>
+            ${
+              taxMode === "CGST_SGST"
+                ? `
+            <tr>
+              <td>CGST</td>
+              <td>${formatCurrency(roundCurrencyAmount(toNumber(invoice.tax) / 2), currency)}</td>
+            </tr>
+            <tr>
+              <td>SGST</td>
+              <td>${formatCurrency(roundCurrencyAmount(toNumber(invoice.tax) / 2), currency)}</td>
+            </tr>
+            `
+                : taxMode === "IGST"
+                  ? `
+            <tr>
+              <td>IGST</td>
+              <td>${formatCurrency(invoice.tax, currency)}</td>
+            </tr>
+            `
+                  : ""
+            }
             <tr>
               <td>${discountLabel}</td>
               <td>-${formatCurrency(invoice.discount, currency)}</td>
@@ -785,6 +884,7 @@ const mapPublicInvoice = (
     notes: string | null;
     subtotal: unknown;
     tax: unknown;
+    tax_mode: unknown;
     discount: unknown;
     discount_type: unknown;
     discount_value: unknown;
@@ -852,6 +952,7 @@ const mapPublicInvoice = (
     amount: toNumber(invoice.total),
     subtotal: toNumber(invoice.subtotal),
     tax: toNumber(invoice.tax),
+    tax_mode: normalizeInvoiceTaxMode(invoice.tax_mode),
     discount: toNumber(invoice.discount),
     discount_type: normalizeDiscountType(invoice.discount_type),
     discount_value: toNumber(invoice.discount_value),
@@ -964,6 +1065,7 @@ export const createInvoice = async (
     due_date?: Date | string | null;
     discount?: number | null;
     discount_type?: "PERCENTAGE" | "FIXED" | null;
+    tax_mode?: "CGST_SGST" | "IGST" | "NONE" | null;
     status?: InvoiceStatus;
     payment_status?: InvoicePaymentStatusInput;
     amount_paid?: number | null;
@@ -976,6 +1078,7 @@ export const createInvoice = async (
   },
 ) => {
   const discountType = normalizeDiscountType(payload.discount_type);
+  const taxMode = normalizeInvoiceTaxMode(payload.tax_mode);
   const discountValue = Math.max(0, Number(payload.discount ?? 0));
   const subtotalBeforeDiscount = payload.items.reduce(
     (sum, item) => sum + item.quantity * item.price,
@@ -999,6 +1102,7 @@ export const createInvoice = async (
     payload.items,
     discountValue,
     discountType,
+    taxMode,
   );
 
   const syncSales =
@@ -1062,6 +1166,7 @@ export const createInvoice = async (
         status: paymentState.invoiceStatus,
         subtotal: totals.subtotal,
         tax: totals.tax,
+        tax_mode: taxMode,
         discount: totals.discount,
         discount_type: discountType,
         discount_value: discountValue,
@@ -1303,6 +1408,7 @@ export const duplicateInvoice = async (userId: number, id: number) => {
         due_date: source.due_date,
         subtotal: source.subtotal,
         tax: source.tax,
+        tax_mode: source.tax_mode,
         discount: source.discount,
         discount_type: source.discount_type,
         discount_value: source.discount_value,
@@ -1354,6 +1460,7 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
       pincode: true,
       phone: true,
       email: true,
+      logo_url: true,
       tax_id: true,
       currency: true,
     },

@@ -55,6 +55,16 @@ export type InvoiceTotals = {
   igst: number;
   discount: number;
   total: number;
+  items?: Array<{
+    product_id?: number | null;
+    name: string;
+    quantity: number;
+    price: number;
+    tax_rate?: number;
+    lineSubtotal: number;
+    lineTax: number;
+    lineTotal: number;
+  }>;
 };
 
 export type InvoiceDraft = {

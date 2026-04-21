@@ -38,6 +38,7 @@ import {
   formatCustomerAddressFromRecord,
 } from "@/lib/indianAddress";
 import { getStateFromGstin } from "@/lib/gstin";
+import { resolveBackendAssetUrl } from "@/lib/backendAssetUrl";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
@@ -51,6 +52,10 @@ import type {
   InvoiceTheme,
   SectionKey,
 } from "@/types/invoice-template";
+import {
+  calculateInvoiceTotals,
+  getDiscountValidationMessage,
+} from "../../../../shared/invoice-calculations";
 
 type SimpleBillClientProps = {
   name: string;
@@ -84,6 +89,7 @@ type SavedSimpleBill = {
   discount: string;
   discountMode: DiscountMode;
   gstEnabled: boolean;
+  taxMode: TaxMode;
   notes: string;
   items: SimpleBillItem[];
 };
@@ -111,6 +117,7 @@ type BillState = {
   discount: string;
   discountMode: DiscountMode;
   gstEnabled: boolean;
+  taxMode: TaxMode;
   notes: string;
   invoiceDate: string;
 };
@@ -160,6 +167,7 @@ const createInitialBillState = (invoiceDate: string): BillState => ({
   discount: "",
   discountMode: "AMOUNT",
   gstEnabled: false,
+  taxMode: "CGST_SGST",
   notes: "",
   invoiceDate,
 });
@@ -207,6 +215,19 @@ const containsText = (value: string | null | undefined, search: string) =>
 
 const normalizeText = (value: string | null | undefined) =>
   value?.trim().toLowerCase() ?? "";
+
+const CUSTOMER_NAME_PATTERN = /^[\p{L}\p{M}\s.'-]+$/u;
+
+const parseCustomerPrefill = (value: string) => {
+  const trimmedValue = value.trim();
+  const normalizedPhone = trimmedValue.replace(/\D/g, "");
+  const isPhoneLike = /^\d{10}$/.test(normalizedPhone);
+
+  return {
+    name: isPhoneLike ? "" : trimmedValue,
+    phone: isPhoneLike ? normalizedPhone : "",
+  };
+};
 
 const matchesSelectedCustomerInput = (
   customer: Customer | null,
@@ -274,66 +295,15 @@ const isInvoiceItemReady = (item: InvoiceItemForm) =>
     item.name.trim() && Number(item.quantity) > 0 && Number(item.price) > 0,
   );
 
-const round2 = (value: number) =>
-  Math.round((value + Number.EPSILON) * 100) / 100;
-
-const calculateInvoiceTotals = (
-  items: InvoiceItemForm[],
-  discountValue: string | number,
-  discountType: DiscountType,
-  taxMode: TaxMode,
-): InvoiceTotals => {
-  let subtotal = 0;
-  let tax = 0;
-  let cgst = 0;
-  let sgst = 0;
-  let igst = 0;
-
-  items.forEach((item) => {
-    const quantity = Number(item.quantity) || 0;
-    const price = Number(item.price) || 0;
-    const taxRate = Number(item.tax_rate) || 0;
-    const lineSubtotal = quantity * price;
-    const lineTax = taxMode === "NONE" ? 0 : (lineSubtotal * taxRate) / 100;
-
-    subtotal += lineSubtotal;
-    tax += lineTax;
-
-    if (taxMode === "CGST_SGST") {
-      cgst += lineTax / 2;
-      sgst += lineTax / 2;
-    } else if (taxMode === "IGST") {
-      igst += lineTax;
-    }
-  });
-
-  const normalizedDiscountValue = Math.max(0, Number(discountValue) || 0);
-  const discount =
-    discountType === "PERCENTAGE"
-      ? (subtotal * Math.min(100, normalizedDiscountValue)) / 100
-      : Math.min(subtotal + tax, normalizedDiscountValue);
-  const total = subtotal + tax - discount;
-
-  return {
-    subtotal: round2(subtotal),
-    tax: round2(tax),
-    cgst: round2(cgst),
-    sgst: round2(sgst),
-    igst: round2(igst),
-    discount: round2(discount),
-    total: round2(Math.max(0, total)),
-  };
-};
-
 const normalizeBillState = (billState: BillState): BillState => {
   const normalizedItems =
     billState.items.length > 0 ? billState.items : [createItem(INITIAL_ITEM_ID)];
-  const totals = calculateInvoiceTotals(
-    mapSimpleBillItemsToInvoiceItems(normalizedItems, billState.gstEnabled),
-    billState.discount || "0",
-    toDiscountType(billState.discountMode),
-    billState.gstEnabled ? "CGST_SGST" : "NONE",
-  );
+  const totals = calculateInvoiceTotals({
+    items: mapSimpleBillItemsToInvoiceItems(normalizedItems, billState.gstEnabled),
+    discountValue: billState.discount || "0",
+    discountType: toDiscountType(billState.discountMode),
+    taxMode: billState.gstEnabled ? billState.taxMode : "NONE",
+  });
   const normalizedPaidAmount =
     billState.paymentStatus === "PAID"
       ? totals.total
@@ -350,6 +320,10 @@ const normalizeBillState = (billState: BillState): BillState => {
     paymentMethod: billState.paymentMethod || "CASH",
     paymentDate:
       billState.paymentDate || billState.invoiceDate || todayInputValue(),
+    taxMode:
+      billState.taxMode === "IGST" || billState.taxMode === "CGST_SGST"
+        ? billState.taxMode
+        : "CGST_SGST",
   };
 };
 
@@ -364,6 +338,7 @@ const mapSimpleBillToInvoice = ({
   invoiceDate,
   discount,
   discountType,
+  taxMode,
   paymentStatus,
   paidAmount,
   paymentDate,
@@ -376,6 +351,7 @@ const mapSimpleBillToInvoice = ({
   invoiceDate: string;
   discount: string;
   discountType: DiscountType;
+  taxMode: TaxMode;
   paymentStatus: SimplePaymentStatus;
   paidAmount: number;
   paymentDate: string;
@@ -397,6 +373,7 @@ const mapSimpleBillToInvoice = ({
     due_date: invoiceDate || todayInputValue(),
     discount: Number(discount) || undefined,
     discount_type: discountType,
+    tax_mode: taxMode,
     payment_status: paymentStatus,
     amount_paid: paymentStatus === "UNPAID" ? undefined : normalizedPaidAmount,
     payment_method: paymentStatus === "UNPAID" ? undefined : paymentMethod,
@@ -422,8 +399,8 @@ const buildSimpleBillInvoicePreviewData = ({
   invoiceNumber,
   invoiceDate,
   dueDate,
-  items,
   totals,
+  taxMode,
   discountType,
   discount,
   paymentStatus,
@@ -440,8 +417,8 @@ const buildSimpleBillInvoicePreviewData = ({
   invoiceNumber: string;
   invoiceDate: string;
   dueDate: string;
-  items: InvoiceItemForm[];
-  totals: NonNullable<InvoicePreviewData["totals"]>;
+  totals: InvoiceTotals;
+  taxMode: TaxMode;
   discountType: DiscountType;
   discount: string;
   paymentStatus: SimplePaymentStatus;
@@ -472,12 +449,6 @@ const buildSimpleBillInvoicePreviewData = ({
     customer?.customerAddress?.state ||
     customer?.state ||
     "";
-  const taxMode =
-    (totals.tax ?? 0) <= 0
-      ? "NONE"
-      : businessState && customerState && businessState !== customerState
-        ? "IGST"
-        : "CGST_SGST";
   const normalizedPaidAmount =
     paymentStatus === "PAID"
       ? totals.total
@@ -535,7 +506,7 @@ const buildSimpleBillInvoicePreviewData = ({
       phone: businessProfile?.phone ?? "",
       email: businessProfile?.email ?? "",
       website: businessProfile?.website ?? "",
-      logoUrl: businessProfile?.logo_url ?? "",
+      logoUrl: resolveBackendAssetUrl(businessProfile?.logo_url),
       taxId: businessProfile?.tax_id ?? "",
       currency: businessProfile?.currency ?? "INR",
       showLogoOnInvoice: businessProfile?.show_logo_on_invoice ?? false,
@@ -556,21 +527,16 @@ const buildSimpleBillInvoicePreviewData = ({
       phone: customer?.phone ?? fallbackCustomerPhone,
       address: formatCustomerAddressFromRecord(customer) || "",
     },
-    items: items.filter(isInvoiceItemReady).map((item) => ({
-      name: item.name.trim(),
-      description: "",
-      quantity: Number(item.quantity),
-      unitPrice: Number(item.price),
-      taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
-      amount:
-        Number(item.quantity) * Number(item.price) +
-        ((taxMode === "NONE"
-          ? 0
-          : (Number(item.quantity) *
-              Number(item.price) *
-              (item.tax_rate ? Number(item.tax_rate) : 0)) /
-            100) || 0),
-    })),
+    items: (totals.items ?? [])
+      .filter((item) => item.name.trim() && item.quantity > 0 && item.price > 0)
+      .map((item) => ({
+        name: item.name.trim(),
+        description: "",
+        quantity: item.quantity,
+        unitPrice: item.price,
+        taxRate: item.tax_rate ?? 0,
+        amount: item.lineTotal,
+      })),
     totals: {
       ...totals,
       cgst: taxMode === "CGST_SGST" ? totals.tax / 2 : 0,
@@ -957,6 +923,7 @@ const SimpleBillClient = ({
     discount,
     discountMode,
     gstEnabled,
+    taxMode: selectedTaxMode,
     notes,
     invoiceDate,
   } = billState;
@@ -1048,6 +1015,7 @@ const SimpleBillClient = ({
         paidAmount > 0 ||
         paymentDate.trim() !== (invoiceDate || "") ||
         gstEnabled ||
+        (gstEnabled && selectedTaxMode !== "CGST_SGST") ||
         addingCustomer ||
         newCustomerName.trim() ||
         newCustomerPhone.trim() ||
@@ -1075,21 +1043,31 @@ const SimpleBillClient = ({
       paymentDate,
       paymentStatus,
       paidAmount,
+      selectedTaxMode,
       selectedCustomerId,
     ],
   );
   const isInitialLoading = productsLoading;
   const hasDataLoadError = productsError;
-  const taxMode: TaxMode = gstEnabled ? "CGST_SGST" : "NONE";
+  const taxMode: TaxMode = gstEnabled ? selectedTaxMode : "NONE";
   const totals = useMemo(
     () =>
-      calculateInvoiceTotals(
-        invoiceItems,
-        discount || "0",
+      calculateInvoiceTotals({
+        items: invoiceItems,
+        discountValue: discount || "0",
         discountType,
         taxMode,
-      ),
+      }),
     [discount, discountType, invoiceItems, taxMode],
+  );
+  const discountValidationMessage = useMemo(
+    () =>
+      getDiscountValidationMessage({
+        subtotal: totals.subtotal,
+        discountValue: discount || "0",
+        discountType,
+      }),
+    [discount, discountType, totals.subtotal],
   );
   const selectedPaymentMethod = toInvoicePaymentMethod(payment);
   const previewInvoiceDate = useMemo(
@@ -1127,6 +1105,7 @@ const SimpleBillClient = ({
         discount,
         discountMode,
         gstEnabled,
+        taxMode,
         notes,
         invoiceDate,
         fallbackCustomerName:
@@ -1142,6 +1121,7 @@ const SimpleBillClient = ({
       dueAmount,
       generatedInvoice?.invoice_number,
       gstEnabled,
+      taxMode,
       invoiceDate,
       items,
       notes,
@@ -1173,8 +1153,8 @@ const SimpleBillClient = ({
         generatedInvoice?.invoice_number || t("invoice.invoicePreviewNumber"),
       invoiceDate: previewInvoiceDate,
       dueDate: previewInvoiceDate,
-      items: invoiceItems,
       totals,
+      taxMode,
       discountType,
       discount,
       paymentStatus,
@@ -1356,6 +1336,9 @@ const SimpleBillClient = ({
       if (typeof draft.gstEnabled === "boolean") {
         nextBillPatch.gstEnabled = draft.gstEnabled;
       }
+      if (draft.taxMode === "IGST" || draft.taxMode === "CGST_SGST") {
+        nextBillPatch.taxMode = draft.taxMode;
+      }
       if (typeof draft.notes === "string") {
         nextBillPatch.notes = draft.notes;
       }
@@ -1427,6 +1410,7 @@ const SimpleBillClient = ({
       discount,
       discountMode,
       gstEnabled,
+      taxMode: selectedTaxMode,
       notes,
       items,
     };
@@ -1438,6 +1422,7 @@ const SimpleBillClient = ({
     discount,
     discountMode,
     gstEnabled,
+    selectedTaxMode,
     hasDraftContent,
     invoiceDate,
     items,
@@ -1626,14 +1611,18 @@ const SimpleBillClient = ({
   };
 
   const startAddCustomer = (nameToUse = customerSearch) => {
+    const prefill = parseCustomerPrefill(nameToUse);
+
     setAddingCustomer(true);
     updateBillState({ customer: null });
-    setNewCustomerName(nameToUse.trim());
-    setNewCustomerPhone("");
+    setNewCustomerName(prefill.name);
+    setNewCustomerPhone(prefill.phone);
     setNewCustomerEmail("");
     setCustomerSuggestionsOpen(false);
     window.setTimeout(() => {
-      if (nameToUse.trim()) {
+      if (prefill.phone) {
+        document.getElementById("simple-new-customer-name")?.focus();
+      } else if (prefill.name) {
         newCustomerPhoneRef.current?.focus();
       } else {
         document.getElementById("simple-new-customer-name")?.focus();
@@ -1644,6 +1633,11 @@ const SimpleBillClient = ({
   const handleQuickAddCustomer = async () => {
     if (!newCustomerName.trim()) {
       toast.error(copy.toastEnterCustomerName);
+      return;
+    }
+
+    if (!CUSTOMER_NAME_PATTERN.test(newCustomerName.trim())) {
+      toast.error("Enter a valid customer name.");
       return;
     }
 
@@ -1725,6 +1719,10 @@ const SimpleBillClient = ({
         discount: bill.discount,
         discountMode: bill.discountMode ?? "AMOUNT",
         gstEnabled: Boolean(bill.gstEnabled),
+        taxMode:
+          bill.taxMode === "IGST" || bill.taxMode === "CGST_SGST"
+            ? bill.taxMode
+            : "CGST_SGST",
         notes: bill.notes ?? "",
         paymentMethod: bill.paymentMethod,
         paymentStatus: bill.paymentStatus ?? "PAID",
@@ -1760,6 +1758,7 @@ const SimpleBillClient = ({
       discount,
       discountMode,
       gstEnabled,
+      taxMode,
       notes,
       items: billItems,
     };
@@ -1820,6 +1819,11 @@ const SimpleBillClient = ({
       return;
     }
 
+    if (discountValidationMessage) {
+      toast.error(discountValidationMessage);
+      return;
+    }
+
     if (paymentStatus !== "UNPAID" && !selectedPaymentMethod) {
       toast.error(copy.toastPaymentMethodRequired);
       return;
@@ -1857,6 +1861,7 @@ const SimpleBillClient = ({
         invoiceDate,
         discount,
         discountType,
+        taxMode,
         paymentStatus,
         paidAmount,
         paymentDate: paymentDate || invoiceDate || todayInputValue(),
@@ -2412,18 +2417,177 @@ const SimpleBillClient = ({
 
         <section className="rounded-2xl bg-card/95 p-5 ring-1 ring-border/55">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(16rem,22rem)] md:items-center">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">
-                {copy.totalAmountLabel}
-              </p>
-              <p className="mt-1 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-                {formatMoney(totals.total)}
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {t("invoiceComposer.lineItemsCount", {
-                  count: validItems.length,
-                })}
-              </p>
+            <div className="grid gap-4">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">
+                  {isHindi ? "लाइव सारांश" : "Live summary"}
+                </p>
+                <p className="mt-1 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+                  {formatMoney(totals.total)}
+                </p>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  {t("invoiceComposer.lineItemsCount", {
+                    count: validItems.length,
+                  })}
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+                <div className="grid gap-2 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">
+                      {isHindi ? "उप-कुल" : "Subtotal"}
+                    </span>
+                    <span className="font-medium text-foreground">
+                      {formatMoney(totals.subtotal)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">
+                      {isHindi ? "छूट" : "Discount"}
+                    </span>
+                    <span className="font-medium text-foreground">
+                      -{formatMoney(totals.discount)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">
+                      {taxMode === "IGST"
+                        ? isHindi
+                          ? "कर (IGST)"
+                          : "Tax (IGST)"
+                        : gstEnabled
+                          ? isHindi
+                            ? "कर (CGST + SGST)"
+                            : "Tax (CGST + SGST)"
+                          : isHindi
+                            ? "कर"
+                            : "Tax"}
+                    </span>
+                    <span className="font-medium text-foreground">
+                      +{formatMoney(totals.tax)}
+                    </span>
+                  </div>
+                  <div className="my-1 border-t border-dashed border-border/70" />
+                  <div className="flex items-center justify-between gap-3 text-base font-semibold text-foreground">
+                    <span>{isHindi ? "अंतिम कुल" : "Final Total"}</span>
+                    <span>{formatMoney(totals.total)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border/70 bg-background/70 p-4">
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="simple-discount">
+                      {isHindi ? "छूट" : "Discount"}
+                    </Label>
+                    <Input
+                      id="simple-discount"
+                      type="number"
+                      inputMode="decimal"
+                      min="0"
+                      step="0.01"
+                      value={discount}
+                      disabled={totals.subtotal <= 0}
+                      onChange={(event) =>
+                        updateBillState({ discount: event.target.value })
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          const nextField = document.getElementById(
+                            gstEnabled
+                              ? "simple-tax-mode"
+                              : "simple-payment-method",
+                          ) as HTMLElement | null;
+                          nextField?.focus();
+                        }
+                      }}
+                      placeholder="0"
+                      className="h-11"
+                    />
+                  </div>
+                  <div className="flex rounded-lg border border-border bg-background p-1">
+                    {(["AMOUNT", "PERCENT"] as DiscountMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        disabled={totals.subtotal <= 0}
+                        className={`h-10 min-w-11 rounded-md px-3 text-sm font-semibold transition ${
+                          discountMode === mode
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        } disabled:cursor-not-allowed disabled:opacity-50`}
+                        onClick={() => updateBillState({ discountMode: mode })}
+                      >
+                        {mode === "AMOUNT"
+                          ? isHindi
+                            ? "₹"
+                            : "Rs"
+                          : "%"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {totals.subtotal <= 0 ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {isHindi
+                      ? "छूट लगाने से पहले आइटम जोड़ें।"
+                      : "Add items before applying a discount."}
+                  </p>
+                ) : null}
+
+                {discountValidationMessage ? (
+                  <p className="mt-2 text-sm text-destructive">
+                    {discountValidationMessage}
+                  </p>
+                ) : null}
+
+                <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,12rem)]">
+                  <label className="flex items-center justify-between rounded-lg border border-border/70 bg-background px-3 py-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        {isHindi ? "GST लागू करें" : "Enable GST"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {isHindi
+                          ? "टैक्स सारांश और प्रीव्यू में तुरंत दिखेगा"
+                          : "Tax updates instantly in the summary and preview."}
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={gstEnabled}
+                      onChange={(event) =>
+                        updateBillState({ gstEnabled: event.target.checked })
+                      }
+                      className="h-4 w-4"
+                    />
+                  </label>
+
+                  <div className="grid gap-1.5">
+                    <Label htmlFor="simple-tax-mode">
+                      {isHindi ? "कर प्रकार" : "Tax mode"}
+                    </Label>
+                    <select
+                      id="simple-tax-mode"
+                      value={selectedTaxMode}
+                      disabled={!gstEnabled}
+                      onChange={(event) =>
+                        updateBillState({
+                          taxMode: event.target.value as TaxMode,
+                        })
+                      }
+                      className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <option value="CGST_SGST">CGST + SGST</option>
+                      <option value="IGST">IGST</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
             </div>
             <div className="grid gap-3">
               <div className="rounded-xl border border-border/70 bg-background/70 p-3">

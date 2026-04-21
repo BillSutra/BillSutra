@@ -8,7 +8,8 @@ const ensureInvoiceDiscountMetadataColumnsInternal = async () => {
     ALTER TABLE "invoices"
       ADD COLUMN IF NOT EXISTS "discount_type" VARCHAR(32) NOT NULL DEFAULT 'FIXED',
       ADD COLUMN IF NOT EXISTS "discount_value" NUMERIC(12,2) NOT NULL DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS "discount_calculated" NUMERIC(12,2) NOT NULL DEFAULT 0;
+      ADD COLUMN IF NOT EXISTS "discount_calculated" NUMERIC(12,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "tax_mode" VARCHAR(32) NOT NULL DEFAULT 'CGST_SGST';
   `);
 
   await prisma.$executeRawUnsafe(`
@@ -22,6 +23,10 @@ const ensureInvoiceDiscountMetadataColumnsInternal = async () => {
       "discount_calculated" = CASE
         WHEN COALESCE("discount_calculated", 0) = 0 THEN COALESCE("discount", 0)
         ELSE "discount_calculated"
+      END,
+      "tax_mode" = CASE
+        WHEN COALESCE("tax", 0) <= 0 THEN 'NONE'
+        ELSE COALESCE(NULLIF("tax_mode", ''), 'CGST_SGST')
       END;
   `);
 };
