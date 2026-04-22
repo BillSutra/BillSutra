@@ -173,17 +173,56 @@ if (shouldForceLocalQueryEngine()) {
   };
 }
 
-const createTestPrismaStub = () =>
-  new Proxy(
+const createTestPrismaStub = () => {
+  const delegates = new Map<string | symbol, Record<string, unknown>>();
+
+  return new Proxy(
     {},
     {
-      get() {
-        throw new Error(
-          "Prisma client is unavailable in test bootstrap mode. Run prisma generate and set DATABASE_URL when a test needs DB access.",
-        );
+      get(_target, prop) {
+        // Prevent accidental real DB operations.
+        if (
+          typeof prop === "string" &&
+          (prop.startsWith("$") || prop === "then")
+        ) {
+          throw new Error(
+            "Prisma client is unavailable in test bootstrap mode. Run prisma generate and set DATABASE_URL when a test needs DB access.",
+          );
+        }
+
+        // Return a stable, per-delegate proxy so tests can monkey-patch
+        // individual methods (e.g. prisma.customer.findFirst = ...).
+        if (!delegates.has(prop)) {
+          const delegateObj: Record<string, unknown> = {};
+          delegates.set(
+            prop,
+            new Proxy(delegateObj, {
+              get(dt, method) {
+                if (method in dt) return dt[method as string];
+                // Default: throw so un-mocked calls are caught early.
+                return () => {
+                  throw new Error(
+                    `Prisma delegate "${String(prop)}.${String(method)}" is not mocked. Provide a mock in your test.`,
+                  );
+                };
+              },
+              set(dt, method, value) {
+                dt[method as string] = value;
+                return true;
+              },
+            }),
+          );
+        }
+
+        return delegates.get(prop);
+      },
+      set(_target, prop, value) {
+        delegates.set(prop, value);
+        return true;
       },
     },
   ) as PrismaClient;
+};
 
 const prisma =
   globalForPrisma.prisma ??
