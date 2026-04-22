@@ -1,10 +1,23 @@
-import { InvoiceStatus, Prisma, SaleStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import prisma from "../config/db.config.js";
 import { getExtraEntryStats } from "./extraEntry.service.js";
 
 type RevenuePoint = { date: Date; total: Prisma.Decimal | number };
 type CostPoint = { date: Date; total: Prisma.Decimal | number };
 type ExpensePoint = { month: Date; amount: number };
+
+const INVOICE_STATUS = {
+  DRAFT: "DRAFT",
+  SENT: "SENT",
+  PARTIALLY_PAID: "PARTIALLY_PAID",
+  PAID: "PAID",
+  OVERDUE: "OVERDUE",
+  VOID: "VOID",
+} as const;
+
+const SALE_STATUS = {
+  COMPLETED: "COMPLETED",
+} as const;
 
 type NotificationInput = {
   lowStock: string[];
@@ -484,7 +497,7 @@ const logCashInflowSnapshot = (
 
 const resolveInvoicePaidAmount = (invoice: {
   total: unknown;
-  status: InvoiceStatus | string;
+  status: string;
   payments: Array<{ amount: unknown }>;
 }) => {
   const total = toNumber(invoice.total);
@@ -498,15 +511,18 @@ const resolveInvoicePaidAmount = (invoice: {
     return normalizedPaid;
   }
 
-  return invoice.status === InvoiceStatus.PAID ? total : 0;
+  return invoice.status === INVOICE_STATUS.PAID ? total : 0;
 };
 
 const resolveInvoicePendingAmount = (invoice: {
   total: unknown;
-  status: InvoiceStatus | string;
+  status: string;
   payments: Array<{ amount: unknown }>;
 }) => {
-  if (invoice.status === InvoiceStatus.VOID || invoice.status === InvoiceStatus.DRAFT) {
+  if (
+    invoice.status === INVOICE_STATUS.VOID ||
+    invoice.status === INVOICE_STATUS.DRAFT
+  ) {
     return 0;
   }
 
@@ -527,7 +543,7 @@ export const fetchCashInflowSnapshot = async (params: {
     prisma.sale.findMany({
       where: {
         user_id: userId,
-        status: SaleStatus.COMPLETED,
+        status: SALE_STATUS.COMPLETED,
         paidAmount: { gt: 0 },
         OR: [
           { paymentDate: { gte: start, lt: endExclusive } },
@@ -558,7 +574,7 @@ export const fetchCashInflowSnapshot = async (params: {
       where: {
         user_id: userId,
         date: { gte: start, lt: endExclusive },
-        status: InvoiceStatus.PAID,
+        status: INVOICE_STATUS.PAID,
         payments: { none: {} },
       },
       select: {
@@ -646,7 +662,7 @@ const fetchSalesMetricSnapshot = async (params: {
     prisma.sale.findMany({
       where: {
         user_id: userId,
-        status: SaleStatus.COMPLETED,
+        status: SALE_STATUS.COMPLETED,
         sale_date: { gte: start, lt: endExclusive },
       },
       select: {
@@ -660,10 +676,10 @@ const fetchSalesMetricSnapshot = async (params: {
         date: { gte: start, lt: endExclusive },
         status: {
           in: [
-            InvoiceStatus.SENT,
-            InvoiceStatus.PARTIALLY_PAID,
-            InvoiceStatus.PAID,
-            InvoiceStatus.OVERDUE,
+            INVOICE_STATUS.SENT,
+            INVOICE_STATUS.PARTIALLY_PAID,
+            INVOICE_STATUS.PAID,
+            INVOICE_STATUS.OVERDUE,
           ],
         },
       },

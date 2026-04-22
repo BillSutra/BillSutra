@@ -1,4 +1,15 @@
-import { InvoiceStatus, SaleStatus } from "@prisma/client";
+const INVOICE_STATUS = {
+  DRAFT: "DRAFT",
+  SENT: "SENT",
+  PARTIALLY_PAID: "PARTIALLY_PAID",
+  PAID: "PAID",
+  OVERDUE: "OVERDUE",
+  VOID: "VOID",
+} as const;
+
+const SALE_STATUS = {
+  COMPLETED: "COMPLETED",
+} as const;
 import prisma from "../config/db.config.js";
 import { fetchCashInflowSnapshot, getDailyExpenses } from "./dashboardAnalyticsService.js";
 
@@ -193,7 +204,7 @@ const isSyncedInvoiceSale = (notes: string | null | undefined) =>
 
 const resolveInvoicePaidAmount = (invoice: {
   total: unknown;
-  status: InvoiceStatus | string;
+  status: string;
   payments: Array<{ amount: unknown }>;
 }) => {
   const total = toNumber(invoice.total);
@@ -207,15 +218,18 @@ const resolveInvoicePaidAmount = (invoice: {
     return normalizedPaid;
   }
 
-  return invoice.status === InvoiceStatus.PAID ? total : 0;
+  return invoice.status === INVOICE_STATUS.PAID ? total : 0;
 };
 
 const resolveInvoicePendingAmount = (invoice: {
   total: unknown;
-  status: InvoiceStatus | string;
+  status: string;
   payments: Array<{ amount: unknown }>;
 }) => {
-  if (invoice.status === InvoiceStatus.DRAFT || invoice.status === InvoiceStatus.VOID) {
+  if (
+    invoice.status === INVOICE_STATUS.DRAFT ||
+    invoice.status === INVOICE_STATUS.VOID
+  ) {
     return 0;
   }
 
@@ -506,7 +520,7 @@ const fetchOutstandingReceivables = async (userId: number) => {
     prisma.sale.findMany({
       where: {
         user_id: userId,
-        status: SaleStatus.COMPLETED,
+        status: SALE_STATUS.COMPLETED,
         pendingAmount: { gt: 0 },
       },
       select: {
@@ -519,10 +533,10 @@ const fetchOutstandingReceivables = async (userId: number) => {
         user_id: userId,
         status: {
           in: [
-            InvoiceStatus.SENT,
-            InvoiceStatus.PARTIALLY_PAID,
-            InvoiceStatus.OVERDUE,
-            InvoiceStatus.PAID,
+            INVOICE_STATUS.SENT,
+            INVOICE_STATUS.PARTIALLY_PAID,
+            INVOICE_STATUS.OVERDUE,
+            INVOICE_STATUS.PAID,
           ],
         },
       },
