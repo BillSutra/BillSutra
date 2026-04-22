@@ -134,6 +134,11 @@ const normalizeDatabaseUrl = () => {
   return url.toString();
 };
 
+const isTestRun =
+  process.env.NODE_ENV === "test" ||
+  process.argv.includes("--test") ||
+  process.env.npm_lifecycle_event?.startsWith("test:") === true;
+
 process.env.DATABASE_URL = normalizeDatabaseUrl();
 
 const shouldForceLocalQueryEngine = () => {
@@ -168,11 +173,25 @@ if (shouldForceLocalQueryEngine()) {
   };
 }
 
+const createTestPrismaStub = () =>
+  new Proxy(
+    {},
+    {
+      get() {
+        throw new Error(
+          "Prisma client is unavailable in test bootstrap mode. Run prisma generate and set DATABASE_URL when a test needs DB access.",
+        );
+      },
+    },
+  ) as PrismaClient;
+
 const prisma =
   globalForPrisma.prisma ??
-  new PrismaClient(
-    prismaClientOptions as PrismaClientConstructorOptions,
-  );
+  (isTestRun
+    ? createTestPrismaStub()
+    : new PrismaClient(
+        prismaClientOptions as PrismaClientConstructorOptions,
+      ));
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
