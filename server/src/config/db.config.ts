@@ -78,6 +78,16 @@ const normalizeDatabaseUrl = () => {
   const rawUrl = process.env.DATABASE_URL;
 
   if (!rawUrl) {
+    const isTestRun =
+      process.env.NODE_ENV === "test" ||
+      process.argv.includes("--test") ||
+      process.env.npm_lifecycle_event?.startsWith("test:") === true;
+
+    if (isTestRun) {
+      // Allow parser/unit tests that do not hit DB to bootstrap modules safely.
+      return "postgresql://postgres:postgres@localhost:5432/test?sslmode=disable";
+    }
+
     throw new Error("DATABASE_URL is not set");
   }
 
