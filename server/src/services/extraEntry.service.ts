@@ -79,7 +79,7 @@ const buildWhereClause = (params: {
     conditions.push(Prisma.sql`"type" = ${params.type}::"EntryType"`);
   }
 
-  return Prisma.sql`WHERE ${Prisma.join(conditions, Prisma.sql` AND `)}`;
+  return Prisma.sql`WHERE ${Prisma.join(conditions, " AND ")}`;
 };
 
 const queryExtraEntries = async (params: {

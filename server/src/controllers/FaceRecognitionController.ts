@@ -205,9 +205,11 @@ export const registerFace = async (req: Request, res: Response) => {
 
       // Record auth event
       await recordAuthEvent({
+        req,
         userId,
         method: AuthMethod.FACE_RECOGNITION,
         success: true,
+        actorType: "user",
         metadata: { action: "face_registration" },
       });
 
@@ -223,9 +225,11 @@ export const registerFace = async (req: Request, res: Response) => {
       );
 
       await recordAuthEvent({
+        req,
         userId,
         method: AuthMethod.FACE_RECOGNITION,
         success: false,
+        actorType: "user",
         metadata: { action: "face_registration", error: "database_error" },
       });
 
@@ -274,8 +278,10 @@ export const authenticateFace = async (req: Request, res: Response) => {
       console.log(`[Face Auth] User not found: ${email}`);
 
       await recordAuthEvent({
+        req,
         method: AuthMethod.FACE_RECOGNITION,
         success: false,
+        actorType: "user",
         metadata: { email, error: "user_not_found" },
       });
 
@@ -290,9 +296,11 @@ export const authenticateFace = async (req: Request, res: Response) => {
       console.log(`[Face Auth] No face data registered for user: ${user.id}`);
 
       await recordAuthEvent({
+        req,
         userId: user.id,
         method: AuthMethod.FACE_RECOGNITION,
         success: false,
+        actorType: "user",
         metadata: { error: "no_face_registered" },
       });
 
@@ -359,9 +367,11 @@ export const authenticateFace = async (req: Request, res: Response) => {
       );
 
       await recordAuthEvent({
+        req,
         userId: user.id,
         method: AuthMethod.FACE_RECOGNITION,
         success: false,
+        actorType: "user",
         metadata: { error: "service_error" },
       });
 
@@ -399,9 +409,11 @@ export const authenticateFace = async (req: Request, res: Response) => {
       );
 
       await recordAuthEvent({
+        req,
         userId: user.id,
         method: AuthMethod.FACE_RECOGNITION,
         success: false,
+        actorType: "user",
         metadata: {
           error: faceResponse.error_code,
           distance: faceResponse.distance,
@@ -424,9 +436,11 @@ export const authenticateFace = async (req: Request, res: Response) => {
       );
 
       await recordAuthEvent({
+        req,
         userId: user.id,
         method: AuthMethod.FACE_RECOGNITION,
         success: false,
+        actorType: "user",
         metadata: {
           matched: false,
           distance: faceResponse.distance,
@@ -451,9 +465,11 @@ export const authenticateFace = async (req: Request, res: Response) => {
 
     // Record successful auth event
     await recordAuthEvent({
+      req,
       userId: user.id,
       method: AuthMethod.FACE_RECOGNITION,
       success: true,
+      actorType: "user",
       metadata: {
         matched: true,
         distance: faceResponse.distance,
@@ -554,9 +570,11 @@ export const deleteFaceData = async (req: Request, res: Response) => {
     console.log(`[Face Delete] Disabled face data for user ${userId}`);
 
     await recordAuthEvent({
+      req,
       userId,
       method: AuthMethod.FACE_RECOGNITION,
       success: true,
+      actorType: "user",
       metadata: { action: "face_data_deleted" },
     });
 
