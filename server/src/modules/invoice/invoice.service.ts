@@ -1,12 +1,8 @@
 import prisma from "../../config/db.config.js";
 import {
-  InvoiceStatus,
-  PaymentMethod,
-  PaymentStatus,
   Prisma,
-  SaleStatus,
-  StockReason,
 } from "@prisma/client";
+import type { InvoiceStatus, PaymentMethod, PaymentStatus, SaleStatus } from "@prisma/client";
 import puppeteer from "puppeteer";
 import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
@@ -25,6 +21,25 @@ import {
   resolveBillingProducts,
   resolveBillingWarehouse,
 } from "../../services/billingInventorySync.service.js";
+
+const InvoiceStatus = {
+  DRAFT: "DRAFT",
+  SENT: "SENT",
+  PAID: "PAID",
+  PARTIALLY_PAID: "PARTIALLY_PAID",
+  OVERDUE: "OVERDUE",
+  VOID: "VOID",
+} as const satisfies Record<string, InvoiceStatus>;
+
+const PaymentStatus = {
+  PAID: "PAID",
+  PARTIALLY_PAID: "PARTIALLY_PAID",
+  UNPAID: "UNPAID",
+} as const satisfies Record<string, PaymentStatus>;
+
+const SaleStatus = {
+  COMPLETED: "COMPLETED",
+} as const satisfies Record<string, SaleStatus>;
 
 type ListInvoiceFilters = {
   status?: InvoiceStatus;
