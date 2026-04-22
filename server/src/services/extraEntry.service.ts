@@ -35,7 +35,7 @@ export type ExtraEntryRecord = {
   updatedAt: Date;
 };
 
-const selectEntryColumns = Prisma.sql`
+const getSelectEntryColumns = () => Prisma.sql`
   "id",
   "title",
   "amount",
@@ -104,7 +104,7 @@ const queryExtraEntries = async (params: {
       : Prisma.sql`OFFSET ${params.skip} LIMIT ${params.take}`;
 
   return prisma.$queryRaw<ExtraEntryRow[]>(Prisma.sql`
-    SELECT ${selectEntryColumns}
+    SELECT ${getSelectEntryColumns()}
     FROM "extra_entries"
     ${whereClause}
     ${orderByClause}
@@ -172,7 +172,7 @@ export const getExtraEntryById = async (params: {
   await ensureExtraEntriesTable();
 
   const rows = await prisma.$queryRaw<ExtraEntryRow[]>(Prisma.sql`
-    SELECT ${selectEntryColumns}
+    SELECT ${getSelectEntryColumns()}
     FROM "extra_entries"
     WHERE "id" = ${params.id}
       AND "user_id" = ${params.userId}
@@ -211,7 +211,7 @@ export const createExtraEntry = async (params: {
       ${params.notes ?? null},
       ${params.userId}
     )
-    RETURNING ${selectEntryColumns}
+    RETURNING ${getSelectEntryColumns()}
   `);
 
   return mapRow(entry);
@@ -246,7 +246,7 @@ export const updateExtraEntry = async (params: {
       "updated_at" = CURRENT_TIMESTAMP
     WHERE "id" = ${params.id}
       AND "user_id" = ${params.userId}
-    RETURNING ${selectEntryColumns}
+    RETURNING ${getSelectEntryColumns()}
   `);
 
   return entry ? mapRow(entry) : null;
