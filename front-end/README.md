@@ -4,6 +4,23 @@ This is the **Next.js** web application for BillSutra. It provides the UI for ma
 
 ---
 
+## Required Features (Baseline)
+
+- Secure authentication UX for owner/admin/worker flows
+- Complete workspace for invoices, sales, purchases, CRM, and inventory
+- Consistent state management and validation for forms and API interactions
+- Dashboard-first experience with actionable financial and operational insights
+- Responsive and accessible interface patterns across business-critical pages
+
+## Updated Features (April 2026)
+
+- Added facial recognition UI flow (registration and login integration points)
+- Improved dashboard KPI layout to better separate inbound and outbound payment pressure
+- Refined inventory risk visualization to align summary counts with detailed risk lists
+- Continued feature parity alignment with backend analytics and auth capabilities
+
+---
+
 ## 🛠 Tech Stack
 
 | Tool | Purpose |

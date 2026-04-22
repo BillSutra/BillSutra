@@ -4,6 +4,23 @@ This is the **Express.js REST API** that powers BillSutra. It handles all busine
 
 ---
 
+## Required Features (Baseline)
+
+- Secure JWT-based API access with validation and rate limiting
+- Reliable CRUD and transaction workflows for all business entities
+- Invoice lifecycle, recurring automation, and payment reconciliation
+- Analytics endpoints that provide actionable and consistent business KPIs
+- Production-safe observability, error handling, and environment-driven configuration
+
+## Updated Features (April 2026)
+
+- Added facial recognition API support through dedicated controller and routes
+- Improved analytics consistency using payment-status-focused query logic
+- Updated dashboard data model behavior for clearer pending financial obligations
+- Documentation now reflects required startup variables vs optional feature-specific ones
+
+---
+
 ## 🛠 Tech Stack
 
 | Tool                        | Purpose                                                  |

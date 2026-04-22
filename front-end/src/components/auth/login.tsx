@@ -21,6 +21,7 @@ import Image from "next/image";
 import { useI18n } from "@/providers/LanguageProvider";
 import { useHydrated } from "@/hooks/useHydrated";
 import AuthFormField from "@/components/auth/AuthFormField";
+import FaceLoginModal from "./FaceLoginModal";
 import {
   requestOtpLoginCode,
   requestPasskeyAuthenticationOptions,
@@ -29,7 +30,7 @@ import {
 } from "@/lib/authClient";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
 import { captureFrontendException } from "@/lib/observability/shared";
-import { Eye, EyeOff, LoaderCircle } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle, Camera } from "lucide-react";
 
 type LoginProps = {
   mode?: "owner" | "worker";
@@ -120,6 +121,7 @@ export default function Login({
     identifier: false,
     password: false,
   });
+  const [isFaceLoginOpen, setIsFaceLoginOpen] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [isPasskeyLoading, setIsPasskeyLoading] = useState(false);
   const [isOtpSending, setIsOtpSending] = useState(false);
@@ -599,6 +601,15 @@ export default function Login({
         </Button>
       </form>
 
+      <FaceLoginModal 
+        isOpen={isFaceLoginOpen} 
+        onClose={() => setIsFaceLoginOpen(false)} 
+        onSuccess={(auth) => {
+          void completeTokenLogin(auth.token);
+        }}
+        email={identifier}
+      />
+
       {!isWorkerMode ? (
         <div className="mt-6 space-y-4">
           <div className="relative">
@@ -723,6 +734,17 @@ export default function Login({
                 height={18}
               />
               {t("auth.loginForm.google")}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="flex items-center justify-center gap-3 border-border bg-card hover:bg-accent"
+              onClick={() => setIsFaceLoginOpen(true)}
+              disabled={isSigningIn}
+            >
+              <Camera className="w-4 h-4" />
+              Continue with Face
             </Button>
 
             {!supportsPasskeys ? (

@@ -3,6 +3,23 @@
 
 ---
 
+## Required Features (Baseline)
+
+- Predictive analytics that are explainable and actionable for SMB operators
+- KPI outputs that map directly to business decisions (cashflow, retention, stock risk)
+- Practical model choices suitable for sparse, real-world transactional data
+- Visualization quality that improves interpretation, not just presentation
+- Consistent data filtering and metric definitions across dashboard and analytics APIs
+
+## Updated Features (April 2026)
+
+- Churn analytics is now integrated as a production-facing risk segmentation capability
+- Inventory risk reporting has improved state separation for low-stock vs out-of-stock products
+- Financial triage clarity improved via separate pending sales and pending purchase indicators
+- Visualization polish and layout upgrades support faster decision-making in dense dashboards
+
+---
+
 ## 1. Executive Summary
 This project transforms a standard billing application into an **Intelligent Business ERP**. As a Data Science student, I implemented four key analytical pillars: **Predictive Maintenance (Inventory)**, **Customer Behavioral Segmentation (CLV)**, **Risk Mitigation (Churn Prediction)**, and **Strategic Forecasting (Sales & Profit)**.
 

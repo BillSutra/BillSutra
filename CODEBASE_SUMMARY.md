@@ -10,6 +10,23 @@
 
 ---
 
+## REQUIRED FEATURES (Baseline)
+
+- Secure multi-method authentication with session and token protection
+- End-to-end invoicing and payment workflows with lifecycle status handling
+- Integrated catalog, warehouse, and inventory movement management
+- Operations analytics for receivables, payables, cashflow, and trend reporting
+- Maintainable architecture with clear route, service, and data-layer boundaries
+
+## UPDATED FEATURES (April 2026)
+
+- Face recognition authentication has been integrated via dedicated backend and Python service layers
+- Dashboard business metrics now consistently apply payment-status-aware filtering
+- Inventory risk panels now separate low-stock and out-of-stock metrics with improved clarity
+- Dashboard UI has been refined to reduce dead space and improve card-level decision flow
+
+---
+
 ## 2. TECHNOLOGY STACK
 
 ### Frontend

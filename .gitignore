@@ -16,3 +16,11 @@ front-end/.next/
 front-end/out/
 .DS_Store
 Thumbs.db
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.python-version
+.idea/
+.vscode/

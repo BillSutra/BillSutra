@@ -2,6 +2,21 @@
 
 This document lists the implemented features currently present in the codebase. It is based on the active frontend pages, backend routes, services, and supporting modules in the repository.
 
+## Required Features (Baseline)
+
+- Role-aware authentication and secure route protection
+- Full business operations across invoicing, CRM, sales, purchases, and inventory
+- Payment tracking with partial payment and outstanding balance visibility
+- Actionable dashboard analytics for financial and operational decisions
+- Reliable import/export and admin operations for business continuity
+
+## Updated Features (April 2026)
+
+- Facial recognition flows are now implemented across backend, frontend, and Python service
+- Dashboard analytics now use consistent payment-status filtering in key computations
+- Inventory risk summaries now distinguish low-stock and out-of-stock counts more accurately
+- KPI design and card grouping have been refreshed for clearer financial triage
+
 ## 1. Authentication and Access Control
 
 - Email/password registration and login
