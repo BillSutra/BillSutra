@@ -1,17 +1,13 @@
 import prisma from "../../config/db.config.js";
 import {
-  InvoiceStatus,
-  PaymentMethod,
-  PaymentStatus,
   Prisma,
-  SaleStatus,
-  StockReason,
 } from "@prisma/client";
+import type { InvoiceStatus, PaymentMethod, PaymentStatus, SaleStatus } from "@prisma/client";
 import puppeteer from "puppeteer";
 import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
 import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
-import { normalizeTaxMode } from "../../../../shared/invoice-calculations.js";
+import { normalizeTaxMode } from "../../utils/invoiceCalculations.js";
 import {
   buildPublicInvoiceReference,
   buildPublicInvoiceUrl,
@@ -25,6 +21,25 @@ import {
   resolveBillingProducts,
   resolveBillingWarehouse,
 } from "../../services/billingInventorySync.service.js";
+
+const INVOICE_STATUS = {
+  DRAFT: "DRAFT",
+  SENT: "SENT",
+  PAID: "PAID",
+  PARTIALLY_PAID: "PARTIALLY_PAID",
+  OVERDUE: "OVERDUE",
+  VOID: "VOID",
+} as const satisfies Record<string, InvoiceStatus>;
+
+const PAYMENT_STATUS = {
+  PAID: "PAID",
+  PARTIALLY_PAID: "PARTIALLY_PAID",
+  UNPAID: "UNPAID",
+} as const satisfies Record<string, PaymentStatus>;
+
+const SALE_STATUS = {
+  COMPLETED: "COMPLETED",
+} as const satisfies Record<string, SaleStatus>;
 
 type ListInvoiceFilters = {
   status?: InvoiceStatus;
@@ -256,11 +271,11 @@ const resolveRequestedInvoicePaymentStatus = (
     return paymentStatus;
   }
 
-  if (status === InvoiceStatus.PAID) {
+  if (status === INVOICE_STATUS.PAID) {
     return "PAID";
   }
 
-  if (status === InvoiceStatus.PARTIALLY_PAID) {
+  if (status === INVOICE_STATUS.PARTIALLY_PAID) {
     return "PARTIALLY_PAID";
   }
 
@@ -310,7 +325,7 @@ const resolveInvoicePaymentState = (params: {
   }
 
   if (requestedPaymentStatus === "UNPAID") {
-    if (params.status === InvoiceStatus.PAID) {
+    if (params.status === INVOICE_STATUS.PAID) {
       throw createInvoiceValidationError(
         "Status conflicts with payment status.",
         {
@@ -319,7 +334,7 @@ const resolveInvoicePaymentState = (params: {
       );
     }
 
-    if (params.status === InvoiceStatus.PARTIALLY_PAID) {
+    if (params.status === INVOICE_STATUS.PARTIALLY_PAID) {
       throw createInvoiceValidationError(
         "Status conflicts with payment status.",
         {
@@ -342,12 +357,12 @@ const resolveInvoicePaymentState = (params: {
     }
 
     const status =
-      params.status === InvoiceStatus.DRAFT ||
-      params.status === InvoiceStatus.VOID ||
-      params.status === InvoiceStatus.SENT ||
-      params.status === InvoiceStatus.OVERDUE
+      params.status === INVOICE_STATUS.DRAFT ||
+      params.status === INVOICE_STATUS.VOID ||
+      params.status === INVOICE_STATUS.SENT ||
+      params.status === INVOICE_STATUS.OVERDUE
         ? params.status
-        : InvoiceStatus.SENT;
+        : INVOICE_STATUS.SENT;
 
     return {
       invoiceStatus: status,
@@ -380,7 +395,7 @@ const resolveInvoicePaymentState = (params: {
     }
 
     return {
-      invoiceStatus: InvoiceStatus.PAID,
+      invoiceStatus: INVOICE_STATUS.PAID,
       paymentStatus: requestedPaymentStatus,
       paidAmount: total,
       remainingAmount: 0,
@@ -412,7 +427,7 @@ const resolveInvoicePaymentState = (params: {
   }
 
   return {
-    invoiceStatus: InvoiceStatus.PARTIALLY_PAID,
+    invoiceStatus: INVOICE_STATUS.PARTIALLY_PAID,
     paymentStatus: requestedPaymentStatus,
     paidAmount: paidInput,
     remainingAmount: roundCurrencyAmount(total - paidInput),
@@ -656,7 +671,7 @@ const buildInvoicePdfHtml = (
   const paidAmount =
     paidFromPayments > 0
       ? Math.max(0, Math.min(paidFromPayments, totalAmount))
-      : invoice.status === InvoiceStatus.PAID
+      : invoice.status === INVOICE_STATUS.PAID
         ? totalAmount
         : 0;
   const remainingAmount = Math.max(totalAmount - paidAmount, 0);
@@ -915,10 +930,10 @@ const syncOverdueInvoices = async (userId: number) => {
     where: {
       user_id: userId,
       due_date: { lt: now },
-      status: { not: InvoiceStatus.PAID },
+      status: { not: INVOICE_STATUS.PAID },
     },
     data: {
-      status: InvoiceStatus.OVERDUE,
+      status: INVOICE_STATUS.OVERDUE,
     },
   });
 };
@@ -931,15 +946,15 @@ const markPublicInvoiceOverdueIfNeeded = async (invoice: {
   if (
     invoice.due_date &&
     invoice.due_date < new Date() &&
-    invoice.status !== InvoiceStatus.PAID &&
-    invoice.status !== InvoiceStatus.OVERDUE
+    invoice.status !== INVOICE_STATUS.PAID &&
+    invoice.status !== INVOICE_STATUS.OVERDUE
   ) {
     await prisma.invoice.update({
       where: { id: invoice.id },
-      data: { status: InvoiceStatus.OVERDUE },
+      data: { status: INVOICE_STATUS.OVERDUE },
     });
 
-    invoice.status = InvoiceStatus.OVERDUE;
+    invoice.status = INVOICE_STATUS.OVERDUE;
   }
 };
 
@@ -1177,7 +1192,7 @@ export const createInvoice = async (
   );
 
   const syncSales =
-    payload.status !== InvoiceStatus.DRAFT && payload.status !== InvoiceStatus.VOID;
+    payload.status !== INVOICE_STATUS.DRAFT && payload.status !== INVOICE_STATUS.VOID;
   const paymentState = resolveInvoicePaymentState({
     total: totals.total,
     status: payload.status,
@@ -1189,10 +1204,10 @@ export const createInvoice = async (
 
   const syncedSalePaymentStatus =
     paymentState.paymentStatus === "PAID"
-      ? PaymentStatus.PAID
+      ? PAYMENT_STATUS.PAID
       : paymentState.paymentStatus === "PARTIALLY_PAID"
-        ? PaymentStatus.PARTIALLY_PAID
-        : PaymentStatus.UNPAID;
+        ? PAYMENT_STATUS.PARTIALLY_PAID
+        : PAYMENT_STATUS.UNPAID;
 
   return prisma.$transaction(async (tx) => {
     const warehouse = syncSales
@@ -1319,7 +1334,7 @@ export const createInvoice = async (
           user_id: userId,
           customer_id: payload.customer_id,
           sale_date: payload.date ?? undefined,
-          status: SaleStatus.COMPLETED,
+          status: SALE_STATUS.COMPLETED,
           subtotal: totals.subtotal,
           tax: totals.tax,
           total: totals.total,
@@ -1456,18 +1471,18 @@ export const markInvoiceAsSent = async (userId: number, id: number) => {
   }
 
   if (
-    invoice.status === InvoiceStatus.PAID ||
-    invoice.status === InvoiceStatus.PARTIALLY_PAID ||
-    invoice.status === InvoiceStatus.OVERDUE ||
-    invoice.status === InvoiceStatus.VOID ||
-    invoice.status === InvoiceStatus.SENT
+    invoice.status === INVOICE_STATUS.PAID ||
+    invoice.status === INVOICE_STATUS.PARTIALLY_PAID ||
+    invoice.status === INVOICE_STATUS.OVERDUE ||
+    invoice.status === INVOICE_STATUS.VOID ||
+    invoice.status === INVOICE_STATUS.SENT
   ) {
     return invoice;
   }
 
   return prisma.invoice.update({
     where: { id: invoice.id },
-    data: { status: InvoiceStatus.SENT },
+    data: { status: INVOICE_STATUS.SENT },
     select: { id: true, status: true },
   });
 };
@@ -1519,7 +1534,7 @@ export const duplicateInvoice = async (userId: number, id: number) => {
         user_id: userId,
         customer_id: source.customer_id,
         invoice_number: invoiceNumber,
-        status: InvoiceStatus.DRAFT,
+        status: INVOICE_STATUS.DRAFT,
         date: source.date,
         due_date: source.due_date,
         subtotal: source.subtotal,

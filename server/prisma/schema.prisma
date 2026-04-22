@@ -44,6 +44,7 @@ model User {
   auth_challenges             AuthChallenge[]
   otp_codes                   OtpCode[]
   auth_events                 AuthEvent[]
+  face_data                   FaceData?
   preferences                 UserPreference?
   notifications               Notification[]
   extra_entries               ExtraEntry[]
@@ -880,6 +881,22 @@ model AuthEvent {
   @@map("auth_events")
 }
 
+model FaceData {
+  id Int @id @default(autoincrement())
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int  @unique
+
+  face_encoding String  @db.Text
+  face_encoding_json String @db.Text
+  is_enabled    Boolean @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  @@index([user_id])
+  @@map("face_data")
+}
+
 enum InvoiceStatus {
   DRAFT
   SENT
@@ -949,6 +966,7 @@ enum AuthMethod {
   OTP
   PASSKEY
   WORKER_PASSWORD
+  FACE_RECOGNITION
 }
 
 enum AccessPaymentMethod {

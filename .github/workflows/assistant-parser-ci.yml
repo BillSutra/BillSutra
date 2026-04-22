@@ -32,5 +32,8 @@ jobs:
       - name: Run assistant chatflow E2E tests
         run: npm run test:assistant-chatflow --workspace server
 
+      - name: Generate Prisma client
+        run: npm run prisma:generate --workspace server
+
       - name: Build server
         run: npm run build --workspace server

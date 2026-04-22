@@ -13,6 +13,7 @@
     "test:assistant-chatflow": "tsx --test src/modules/assistant/assistant.chatflow.e2e.test.ts",
     "test:subscription-access": "tsx --test src/config/subscriptionPlans.matrix.test.ts src/routes/subscriptionAccess.contract.test.ts",
     "test:settings-security": "tsx --test src/routes/settingsSecurity.contract.test.ts",
+    "prisma:generate": "prisma generate",
     "seed": "prisma db seed"
   },
   "prisma": {
@@ -41,6 +42,7 @@
     "@simplewebauthn/server": "^13.3.0",
     "@types/morgan": "^1.9.10",
     "@types/multer": "^2.1.0",
+    "axios": "^1.15.0",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "csv-parser": "^3.2.0",

@@ -5,7 +5,6 @@ import {
   PaymentMethod,
   PaymentStatus,
   Prisma,
-  StockReason,
 } from "@prisma/client";
 import type { z } from "zod";
 import {
@@ -188,7 +187,7 @@ class PurchasesController {
           productId: item.product_id,
           warehouseId: body.warehouse_id,
           delta: item.quantity,
-          reason: StockReason.PURCHASE,
+          reason: "PURCHASE",
           note: body.warehouse_id
             ? `Purchase ${created.id} (Warehouse ${body.warehouse_id})`
             : `Purchase ${created.id}`,
@@ -406,7 +405,7 @@ class PurchasesController {
               productId,
               warehouseId: previousWarehouseId,
               delta: -previousQty,
-              reason: StockReason.PURCHASE,
+              reason: "PURCHASE",
               note: previousWarehouseId
                 ? `Purchase ${purchase.id} moved out of Warehouse ${previousWarehouseId}`
                 : `Purchase ${purchase.id} stock reduced`,
@@ -419,7 +418,7 @@ class PurchasesController {
               productId,
               warehouseId: nextWarehouseId,
               delta: nextQty,
-              reason: StockReason.PURCHASE,
+              reason: "PURCHASE",
               note: nextWarehouseId
                 ? `Purchase ${purchase.id} moved into Warehouse ${nextWarehouseId}`
                 : `Purchase ${purchase.id} stock added`,
@@ -435,7 +434,7 @@ class PurchasesController {
             productId,
             warehouseId: nextWarehouseId,
             delta: stockDiff,
-            reason: StockReason.PURCHASE,
+            reason: "PURCHASE",
             note: nextWarehouseId
               ? `Purchase ${purchase.id} updated (Warehouse ${nextWarehouseId})`
               : `Purchase ${purchase.id} updated`,

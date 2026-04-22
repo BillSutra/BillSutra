@@ -1,7 +1,6 @@
 import type { Request, Response } from "express";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
-import { StockReason } from "@prisma/client";
 import type { z } from "zod";
 import {
   inventoryAdjustSchema,
@@ -87,7 +86,7 @@ class InventoriesController {
           productId: product_id,
           warehouseId: warehouse_id,
           delta: change,
-          reason: reason ?? StockReason.ADJUSTMENT,
+          reason: reason ?? "ADJUSTMENT",
           note: note
             ? `${note} (Warehouse ${warehouse_id})`
             : `Warehouse ${warehouse_id}`,

@@ -1,7 +1,4 @@
-import {
-  calculateInvoiceTotals,
-  getAppliedDiscountAmount,
-} from "../../../shared/invoice-calculations.js";
+import { calculateInvoiceTotals } from "./invoiceCalculations.js";
 
 export type InvoiceCalcItem = {
   product_id?: number | null;
@@ -44,12 +41,24 @@ export const getDiscountAmount = (
   subtotal: number,
   discount = 0,
   discountType: "PERCENTAGE" | "FIXED" = "FIXED",
-) =>
-  getAppliedDiscountAmount({
-    subtotal,
-    discountValue: discount,
-    discountType,
-  });
+) => {
+  const safeSubtotal = Math.max(0, Number(subtotal) || 0);
+  const safeDiscount = Math.max(0, Number(discount) || 0);
+
+  if (safeSubtotal <= 0) {
+    return 0;
+  }
+
+  if (discountType === "PERCENTAGE") {
+    return (
+      Math.round(
+        (((safeSubtotal * Math.min(100, safeDiscount)) / 100) + Number.EPSILON) * 100,
+      ) / 100
+    );
+  }
+
+  return Math.min(safeSubtotal, safeDiscount);
+};
 
 export const calculateTotals = (
   items: InvoiceCalcItem[],
@@ -57,12 +66,7 @@ export const calculateTotals = (
   discountType: "PERCENTAGE" | "FIXED" = "FIXED",
   taxMode: "CGST_SGST" | "IGST" | "NONE" = "CGST_SGST",
 ): InvoiceTotals => {
-  const totals = calculateInvoiceTotals({
-    items,
-    discountValue: discount,
-    discountType,
-    taxMode,
-  });
+  const totals = calculateInvoiceTotals(items, discount, taxMode, discountType);
 
   return {
     subtotal: totals.subtotal,

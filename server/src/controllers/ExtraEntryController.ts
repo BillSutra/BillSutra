@@ -30,7 +30,7 @@ const index = async (req: Request, res: Response) => {
   const type = req.query.type as EntryType | undefined;
 
   const result = await listExtraEntries({ userId, from, to, type, page, limit });
-  return sendResponse(res, 200, true, result);
+  return sendResponse(res, 200, { data: result });
 };
 
 const show = async (req: Request, res: Response) => {
@@ -38,9 +38,9 @@ const show = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   const entry = await getExtraEntryById({ id, userId });
-  if (!entry) return sendResponse(res, 404, false, "Entry not found");
+  if (!entry) return sendResponse(res, 404, { message: "Entry not found" });
 
-  return sendResponse(res, 200, true, entry);
+  return sendResponse(res, 200, { data: entry });
 };
 
 const store = async (req: Request, res: Response) => {
@@ -48,16 +48,16 @@ const store = async (req: Request, res: Response) => {
   const { title, amount, type, date, notes } = req.body;
 
   if (!title || typeof title !== "string" || title.trim().length === 0) {
-    return sendResponse(res, 400, false, "Title is required");
+    return sendResponse(res, 400, { message: "Title is required" });
   }
   if (amount === undefined || amount === null || Number(amount) <= 0) {
-    return sendResponse(res, 400, false, "Amount must be a positive number");
+    return sendResponse(res, 400, { message: "Amount must be a positive number" });
   }
   if (!type || !["INCOME", "EXPENSE", "LOSS", "INVESTMENT"].includes(type)) {
-    return sendResponse(res, 400, false, "Type must be INCOME, EXPENSE, LOSS, or INVESTMENT");
+    return sendResponse(res, 400, { message: "Type must be INCOME, EXPENSE, LOSS, or INVESTMENT" });
   }
   if (!date || Number.isNaN(new Date(date).getTime())) {
-    return sendResponse(res, 400, false, "Valid date is required");
+    return sendResponse(res, 400, { message: "Valid date is required" });
   }
 
   const entry = await createExtraEntry({
@@ -69,7 +69,7 @@ const store = async (req: Request, res: Response) => {
     notes: notes?.trim() || null,
   });
 
-  return sendResponse(res, 201, true, entry);
+  return sendResponse(res, 201, { data: entry });
 };
 
 const update = async (req: Request, res: Response) => {
@@ -78,16 +78,16 @@ const update = async (req: Request, res: Response) => {
   const { title, amount, type, date, notes } = req.body;
 
   if (title !== undefined && (typeof title !== "string" || title.trim().length === 0)) {
-    return sendResponse(res, 400, false, "Title cannot be empty");
+    return sendResponse(res, 400, { message: "Title cannot be empty" });
   }
   if (amount !== undefined && (Number(amount) <= 0 || Number.isNaN(Number(amount)))) {
-    return sendResponse(res, 400, false, "Amount must be a positive number");
+    return sendResponse(res, 400, { message: "Amount must be a positive number" });
   }
   if (type !== undefined && !["INCOME", "EXPENSE", "LOSS", "INVESTMENT"].includes(type)) {
-    return sendResponse(res, 400, false, "Type must be INCOME, EXPENSE, LOSS, or INVESTMENT");
+    return sendResponse(res, 400, { message: "Type must be INCOME, EXPENSE, LOSS, or INVESTMENT" });
   }
   if (date !== undefined && Number.isNaN(new Date(date).getTime())) {
-    return sendResponse(res, 400, false, "Invalid date");
+    return sendResponse(res, 400, { message: "Invalid date" });
   }
 
   const entry = await updateExtraEntry({
@@ -100,9 +100,9 @@ const update = async (req: Request, res: Response) => {
     notes: notes === undefined ? undefined : notes?.trim() || null,
   });
 
-  if (!entry) return sendResponse(res, 404, false, "Entry not found");
+  if (!entry) return sendResponse(res, 404, { message: "Entry not found" });
 
-  return sendResponse(res, 200, true, entry);
+  return sendResponse(res, 200, { data: entry });
 };
 
 const destroy = async (req: Request, res: Response) => {
@@ -110,9 +110,9 @@ const destroy = async (req: Request, res: Response) => {
   const { id } = req.params;
 
   const deleted = await deleteExtraEntry({ id, userId });
-  if (!deleted) return sendResponse(res, 404, false, "Entry not found");
+  if (!deleted) return sendResponse(res, 404, { message: "Entry not found" });
 
-  return sendResponse(res, 200, true, { deleted: true });
+  return sendResponse(res, 200, { data: { deleted: true } });
 };
 
 const ExtraEntryController = { index, show, store, update, destroy };

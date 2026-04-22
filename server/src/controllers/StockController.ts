@@ -1,7 +1,6 @@
 import type { Request, Response } from "express";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
-import { StockReason } from "@prisma/client";
 import type { z } from "zod";
 import { stockAdjustSchema } from "../validations/apiValidations.js";
 import { createNotification } from "../services/notification.service.js";
@@ -46,7 +45,7 @@ class StockController {
           productId: product.id,
           warehouseId: warehouse_id,
           delta: change,
-          reason: reason ?? StockReason.ADJUSTMENT,
+          reason: reason ?? "ADJUSTMENT",
           note: warehouse_id
             ? `${note ?? "Adjustment"} (Warehouse ${warehouse_id})`
             : note,

@@ -78,6 +78,16 @@ const normalizeDatabaseUrl = () => {
   const rawUrl = process.env.DATABASE_URL;
 
   if (!rawUrl) {
+    const isTestRun =
+      process.env.NODE_ENV === "test" ||
+      process.argv.includes("--test") ||
+      process.env.npm_lifecycle_event?.startsWith("test:") === true;
+
+    if (isTestRun) {
+      // Allow parser/unit tests that do not hit DB to bootstrap modules safely.
+      return "postgresql://postgres:postgres@localhost:5432/test?sslmode=disable";
+    }
+
     throw new Error("DATABASE_URL is not set");
   }
 
@@ -124,6 +134,11 @@ const normalizeDatabaseUrl = () => {
   return url.toString();
 };
 
+const isTestRun =
+  process.env.NODE_ENV === "test" ||
+  process.argv.includes("--test") ||
+  process.env.npm_lifecycle_event?.startsWith("test:") === true;
+
 process.env.DATABASE_URL = normalizeDatabaseUrl();
 
 const shouldForceLocalQueryEngine = () => {
@@ -158,11 +173,64 @@ if (shouldForceLocalQueryEngine()) {
   };
 }
 
+const createTestPrismaStub = () => {
+  const delegates = new Map<string | symbol, Record<string, unknown>>();
+
+  return new Proxy(
+    {},
+    {
+      get(_target, prop) {
+        // Prevent accidental real DB operations.
+        if (
+          typeof prop === "string" &&
+          (prop.startsWith("$") || prop === "then")
+        ) {
+          throw new Error(
+            "Prisma client is unavailable in test bootstrap mode. Run prisma generate and set DATABASE_URL when a test needs DB access.",
+          );
+        }
+
+        // Return a stable, per-delegate proxy so tests can monkey-patch
+        // individual methods (e.g. prisma.customer.findFirst = ...).
+        if (!delegates.has(prop)) {
+          const delegateObj: Record<string, unknown> = {};
+          delegates.set(
+            prop,
+            new Proxy(delegateObj, {
+              get(dt, method) {
+                if (method in dt) return dt[method as string];
+                // Default: throw so un-mocked calls are caught early.
+                return () => {
+                  throw new Error(
+                    `Prisma delegate "${String(prop)}.${String(method)}" is not mocked. Provide a mock in your test.`,
+                  );
+                };
+              },
+              set(dt, method, value) {
+                dt[method as string] = value;
+                return true;
+              },
+            }),
+          );
+        }
+
+        return delegates.get(prop);
+      },
+      set(_target, prop, value) {
+        delegates.set(prop, value);
+        return true;
+      },
+    },
+  ) as PrismaClient;
+};
+
 const prisma =
   globalForPrisma.prisma ??
-  new PrismaClient(
-    prismaClientOptions as PrismaClientConstructorOptions,
-  );
+  (isTestRun
+    ? createTestPrismaStub()
+    : new PrismaClient(
+        prismaClientOptions as PrismaClientConstructorOptions,
+      ));
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;

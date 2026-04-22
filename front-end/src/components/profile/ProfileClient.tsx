@@ -34,6 +34,7 @@ import { Label } from "@/components/ui/label";
 import Modal from "@/components/ui/modal";
 import Link from "next/link";
 import PasskeySettingsCard from "@/components/profile/PasskeySettingsCard";
+import FaceRegistrationModal from "@/components/auth/FaceRegistrationModal";
 import PlanManagementCard from "@/components/pricing/PlanManagementCard";
 import ProfileOverviewStat from "@/components/profile/ProfileOverviewStat";
 import { useI18n } from "@/providers/LanguageProvider";
@@ -171,6 +172,7 @@ const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
   const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSaving, setPasswordSaving] = useState(false);
+  const [isFaceRegistrationOpen, setIsFaceRegistrationOpen] = useState(false);
   const [deleteDataOpen, setDeleteDataOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [deleteDataConfirmation, setDeleteDataConfirmation] = useState("");
@@ -568,6 +570,11 @@ const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
       className="min-h-screen bg-[radial-gradient(circle_at_top,#fffdf8,#f7f3ee_42%,#f2e9dc_100%)] text-[#1f1b16]"
       data-testid="profile-hub-layout"
     >
+      <FaceRegistrationModal 
+        isOpen={isFaceRegistrationOpen} 
+        onClose={() => setIsFaceRegistrationOpen(false)}
+        onSuccess={() => toast.success("Face registered successfully")}
+      />
       <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-6">
         <header className="rounded-3xl border border-[#eadccf] bg-white/90 p-6 shadow-[0_30px_80px_-60px_rgba(31,27,22,0.35)] sm:p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
@@ -902,6 +909,24 @@ const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
             </Card>
 
             <PasskeySettingsCard />
+
+            <Card className="border-[#ecdccf] bg-white/90">
+              <CardHeader>
+                <CardTitle className="text-lg">
+                  Facial Recognition
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4 text-sm text-[#5c4b3b]">
+                  <p className="font-semibold text-[#1f1b16]">Face Login</p>
+                  <p className="mt-1 mb-4">Register your face to enable secure and fast login without a password.</p>
+                  <Button onClick={() => setIsFaceRegistrationOpen(true)}>
+                    Register Face
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
           </div>
 
           <aside className="grid gap-4 xl:col-span-4">

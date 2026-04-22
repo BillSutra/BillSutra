@@ -5,6 +5,21 @@ This app now includes:
 - Sentry for error tracking and performance monitoring
 - PostHog for product analytics
 
+## Required Features (Baseline)
+
+- Error and performance tracking on both frontend and backend
+- Privacy-safe telemetry with redaction for sensitive fields
+- Request-level correlation to support root-cause analysis
+- Product event instrumentation for critical user journeys
+- Configurable alerting for incidents and abnormal performance patterns
+
+## Updated Features (April 2026)
+
+- Added richer auth and billing journey analytics coverage
+- Strengthened request and query context capture for debugging failed operations
+- Improved guidance for telemetry opt-out defaults and privacy-safe event design
+- Expanded operational recommendations for Sentry and PostHog funnels
+
 ## Environment Variables
 
 Backend (`server/.env`)

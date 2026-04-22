@@ -1,4 +1,5 @@
-import { Prisma, StockReason } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import type { StockReason } from "@prisma/client";
 import AppError from "../utils/AppError.js";
 
 type TransactionClient = Prisma.TransactionClient;

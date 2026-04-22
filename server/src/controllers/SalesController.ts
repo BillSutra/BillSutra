@@ -5,7 +5,6 @@ import {
   PaymentMethod,
   PaymentStatus,
   SaleStatus,
-  StockReason,
 } from "@prisma/client";
 import type { z } from "zod";
 import {
@@ -359,7 +358,7 @@ class SalesController {
             productId: item.product_id,
             warehouseId,
             delta: item.quantity,
-            reason: StockReason.RETURN,
+            reason: "RETURN",
             note: warehouseId
               ? `Sale reversal ${sale.id} (Warehouse ${warehouseId})`
               : `Sale reversal ${sale.id}`,

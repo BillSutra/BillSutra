@@ -1,4 +1,4 @@
-import { InvoiceStatus, Prisma, SaleStatus } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import prisma from "../../config/db.config.js";
 import {
   fetchCashInflowSnapshot,
@@ -29,6 +29,19 @@ import type {
 
 type AssistantIntent = ContractAssistantIntent;
 type AssistantHistoryMessage = ContractAssistantHistoryMessage;
+
+const INVOICE_STATUS = {
+  DRAFT: "DRAFT",
+  SENT: "SENT",
+  PARTIALLY_PAID: "PARTIALLY_PAID",
+  PAID: "PAID",
+  OVERDUE: "OVERDUE",
+  VOID: "VOID",
+} as const;
+
+const SALE_STATUS = {
+  COMPLETED: "COMPLETED",
+} as const;
 
 type AssistantPeriodKey =
   | "today"
@@ -1356,7 +1369,7 @@ const isSyncedInvoiceSale = (notes: string | null | undefined) =>
 
 const resolveInvoicePaidAmount = (invoice: {
   total: unknown;
-  status: InvoiceStatus | string;
+  status: string;
   payments: Array<{ amount: unknown }>;
 }) => {
   const total = toNumber(invoice.total);
@@ -1370,17 +1383,17 @@ const resolveInvoicePaidAmount = (invoice: {
     return normalizedPaid;
   }
 
-  return invoice.status === InvoiceStatus.PAID ? total : 0;
+  return invoice.status === INVOICE_STATUS.PAID ? total : 0;
 };
 
 const resolveInvoicePendingAmount = (invoice: {
   total: unknown;
-  status: InvoiceStatus | string;
+  status: string;
   payments: Array<{ amount: unknown }>;
 }) => {
   if (
-    invoice.status === InvoiceStatus.DRAFT ||
-    invoice.status === InvoiceStatus.VOID
+    invoice.status === INVOICE_STATUS.DRAFT ||
+    invoice.status === INVOICE_STATUS.VOID
   ) {
     return 0;
   }
@@ -2032,7 +2045,7 @@ const fetchTopSellingProducts = async (params: {
     where: {
       sale: {
         user_id: params.userId,
-        status: SaleStatus.COMPLETED,
+        status: SALE_STATUS.COMPLETED,
         sale_date: {
           gte: params.period.start,
           lt: params.period.endExclusive,
@@ -2356,7 +2369,7 @@ const buildAssistantSnapshot = async (
       prisma.sale.findMany({
         where: {
           user_id: userId,
-          status: SaleStatus.COMPLETED,
+          status: SALE_STATUS.COMPLETED,
           sale_date: { gte: period.start, lt: period.endExclusive },
         },
         select: {
@@ -2370,10 +2383,10 @@ const buildAssistantSnapshot = async (
           date: { gte: period.start, lt: period.endExclusive },
           status: {
             in: [
-              InvoiceStatus.SENT,
-              InvoiceStatus.PARTIALLY_PAID,
-              InvoiceStatus.OVERDUE,
-              InvoiceStatus.PAID,
+              INVOICE_STATUS.SENT,
+              INVOICE_STATUS.PARTIALLY_PAID,
+              INVOICE_STATUS.OVERDUE,
+              INVOICE_STATUS.PAID,
             ],
           },
         },

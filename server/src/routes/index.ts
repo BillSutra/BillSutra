@@ -108,6 +108,7 @@ import inventoryDemandRoutes from "../modules/inventory-demand/inventoryDemand.r
 import assistantRoutes from "../modules/assistant/assistant.routes.js";
 import copilotRoutes from "../modules/copilot/copilot.routes.js";
 import ExportController from "../modules/export/export.controller.js";
+import faceRecognitionRoutes from "./faceRecognition.js";
 
 const router = Router();
 const readRouteParam = (value: string | string[] | undefined) =>
@@ -674,6 +675,9 @@ router.use("/forecast", forecastRoutes);
 
 // Inventory Demand Predictions
 router.use("/inventory-demand", inventoryDemandRoutes);
+
+// Face Recognition
+router.use("/face", faceRecognitionRoutes);
 
 // Assistant
 router.use(

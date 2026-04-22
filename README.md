@@ -4,6 +4,23 @@
 
 ---
 
+## Required Features (Baseline)
+
+- Secure authentication with protected workspace access
+- Complete billing lifecycle: invoices, payments, reminders, and PDF sharing
+- Inventory-aware operations for sales, purchases, products, and warehouses
+- Business analytics for cashflow, receivables, payables, and trends
+- Production-ready setup with clear environment and deployment docs
+
+## Updated Features (April 2026)
+
+- Facial recognition login and face registration flow has been added (see facial recognition docs)
+- Dashboard analytics has improved KPI separation for pending sales vs pending purchases
+- Inventory risk presentation now clearly separates low-stock and out-of-stock states
+- Feature-specific documentation has been aligned across root, frontend, and server README files
+
+---
+
 ## 📐 Project Structure
 
 ```
