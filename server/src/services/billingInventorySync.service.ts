@@ -1,4 +1,4 @@
-import { Prisma, StockReason } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { applyInventoryDelta } from "./inventoryValidation.service.js";
 
 type TransactionClient = Prisma.TransactionClient;
@@ -241,7 +241,7 @@ export const applyBillingSaleInventoryAdjustments = async (params: {
       productId: item.product_id,
       warehouseId,
       delta: -item.quantity,
-      reason: StockReason.SALE,
+      reason: "SALE",
       note: JSON.stringify({
         type: "sale",
         warehouseId,
