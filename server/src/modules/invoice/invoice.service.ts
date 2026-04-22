@@ -11,7 +11,7 @@ import puppeteer from "puppeteer";
 import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
 import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
-import { normalizeTaxMode } from "../../../../shared/invoice-calculations.js";
+import { normalizeTaxMode } from "../../utils/invoiceCalculations.js";
 import {
   buildPublicInvoiceReference,
   buildPublicInvoiceUrl,
