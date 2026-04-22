@@ -33,7 +33,7 @@ jobs:
         run: npm run test:assistant-chatflow --workspace server
 
       - name: Generate Prisma client
-        run: npx prisma generate --schema server/prisma/schema.prisma
+        run: npm run prisma:generate --workspace server
 
       - name: Build server
         run: npm run build --workspace server
