@@ -10,6 +10,7 @@ export type BillingInventoryItemInput = {
   quantity: number;
   price: number;
   tax_rate?: number | null;
+  gst_type?: "CGST_SGST" | "IGST" | "NONE" | null;
 };
 
 export type BillingInventoryResolvedItem = {
@@ -18,6 +19,7 @@ export type BillingInventoryResolvedItem = {
   quantity: number;
   price: number;
   tax_rate?: number | null;
+  gst_type?: "CGST_SGST" | "IGST" | "NONE" | null;
 };
 
 const DEFAULT_WAREHOUSE_NAME = "Main Warehouse";
@@ -217,6 +219,7 @@ export const resolveBillingProducts = async (
       quantity: item.quantity,
       price: item.price,
       tax_rate: item.tax_rate ?? undefined,
+      gst_type: item.gst_type ?? undefined,
     });
   }
 

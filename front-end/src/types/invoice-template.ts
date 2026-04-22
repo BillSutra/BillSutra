@@ -81,6 +81,12 @@ export type InvoiceLineItem = {
   quantity: number;
   unitPrice: number;
   taxRate?: number;
+  gstType?: InvoiceTaxMode;
+  baseAmount?: number;
+  gstAmount?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
+  igstAmount?: number;
   hsnSac?: string;
   unitLabel?: string;
   discountAmount?: number;
@@ -125,17 +131,20 @@ export type InvoicePreviewData = {
   items: InvoiceLineItem[];
   totals?: {
     subtotal: number;
+    totalBase?: number;
     tax: number;
     discount: number;
     total: number;
     cgst?: number;
     sgst?: number;
     igst?: number;
+    grandTotal?: number;
     roundOff?: number;
   };
   discount?: {
     type: "PERCENTAGE" | "FIXED";
     value: number;
+    calculatedAmount?: number;
     label?: string;
   };
   paymentSummary?: {

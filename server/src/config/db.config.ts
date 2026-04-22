@@ -1,5 +1,17 @@
 import { PrismaClient } from "@prisma/client";
 
+type PrismaClientConstructorOptions = ConstructorParameters<
+  typeof PrismaClient
+>[0];
+
+type PrismaClientRuntimeOverrideOptions = PrismaClientConstructorOptions & {
+  __internal?: {
+    configOverride?: (
+      config: Record<string, unknown>,
+    ) => Record<string, unknown>;
+  };
+};
+
 const resolvePositiveNumber = (value: string | null | undefined) => {
   if (!value) return null;
   const parsed = Number.parseInt(value.trim(), 10);
@@ -114,19 +126,43 @@ const normalizeDatabaseUrl = () => {
 
 process.env.DATABASE_URL = normalizeDatabaseUrl();
 
+const shouldForceLocalQueryEngine = () => {
+  const databaseUrl = process.env.DATABASE_URL?.trim().toLowerCase() ?? "";
+
+  return (
+    databaseUrl.startsWith("postgresql://") ||
+    databaseUrl.startsWith("postgres://")
+  );
+};
+
 const globalForPrisma = globalThis as typeof globalThis & {
   prisma?: PrismaClient;
 };
 
+const prismaClientOptions: PrismaClientRuntimeOverrideOptions = {
+  log: ["error"],
+  transactionOptions: {
+    maxWait: 30000,
+    timeout: 30000,
+  },
+};
+
+if (shouldForceLocalQueryEngine()) {
+  // Some Prisma client artifacts can be generated with copyEngine=false,
+  // which incorrectly routes plain Postgres URLs through the Accelerate path.
+  prismaClientOptions.__internal = {
+    configOverride: (config) => ({
+      ...config,
+      copyEngine: true,
+    }),
+  };
+}
+
 const prisma =
   globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ["error"],
-    transactionOptions: {
-      maxWait: 30000,
-      timeout: 30000,
-    },
-  });
+  new PrismaClient(
+    prismaClientOptions as PrismaClientConstructorOptions,
+  );
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;

@@ -232,6 +232,34 @@ export const userPasswordUpdateSchema = z
     path: ["confirm_password"],
   });
 
+export const workerPasswordChangeSchema = z
+  .object({
+    current_password: z.string().min(1, "Current password is required"),
+    password: z
+      .string()
+      .min(6, "Password must be at least 6 characters")
+      .regex(/\d/, "Password must contain at least 1 number"),
+    confirm_password: z.string().min(1, "Please confirm your password"),
+  })
+  .refine((data) => data.password === data.confirm_password, {
+    message: "Passwords do not match",
+    path: ["confirm_password"],
+  });
+
+export const workerProfileUpdateSchema = z
+  .object({
+    name: z.string().min(1, "Name is required").optional(),
+    email: z.string().email("Invalid email format").optional(),
+    phone: z
+      .string()
+      .regex(/^\d{10}$/, "Phone must be exactly 10 digits")
+      .optional(),
+  })
+  .refine(
+    (data) => data.name || data.email || data.phone,
+    { message: "At least one field must be provided" }
+  );
+
 const emptyToUndefined = (value: unknown) => {
   if (typeof value !== "string") return value;
   const trimmed = value.trim();
@@ -843,8 +871,9 @@ const invoiceItemSchema = z.object({
   product_id: z.coerce.number().int().positive().optional(),
   name: z.string().min(1),
   quantity: z.coerce.number().int().positive(),
-  price: z.coerce.number().nonnegative(),
+  price: z.coerce.number().positive(),
   tax_rate: z.coerce.number().nonnegative().optional(),
+  gst_type: z.enum(["CGST_SGST", "IGST", "NONE"]).optional(),
 });
 
 export const invoiceCreateSchema = z.object({
@@ -853,6 +882,7 @@ export const invoiceCreateSchema = z.object({
   due_date: z.coerce.date().optional(),
   discount: z.coerce.number().nonnegative().optional(),
   discount_type: z.enum(["PERCENTAGE", "FIXED"]).optional(),
+  tax_mode: z.enum(["CGST_SGST", "IGST", "NONE"]).optional(),
   status: z.nativeEnum(InvoiceStatus).optional(),
   payment_status: z.enum(["UNPAID", "PARTIALLY_PAID", "PAID"]).optional(),
   amount_paid: z.coerce.number().nonnegative().optional(),

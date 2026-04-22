@@ -49,6 +49,12 @@ import {
 } from "@/lib/indianAddress";
 import { getStateFromGstin } from "@/lib/gstin";
 import { formatPaymentMethodLabel } from "@/lib/invoicePayments";
+import {
+  buildDiscountLabel,
+  getAppliedDiscountAmount,
+  getDiscountValidationMessage,
+} from "@/lib/invoiceDiscount";
+import { resolveBackendAssetUrl } from "@/lib/backendAssetUrl";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   InvoiceDraft,
@@ -102,7 +108,7 @@ const sanitizeDiscountPercent = (value: string) => {
   if (value === "") return value;
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return value;
-  return String(Math.min(100, Math.max(0, numericValue)));
+  return String(Math.max(0, numericValue));
 };
 
 const sanitizeDiscountAmount = (value: string) => {
@@ -157,13 +163,31 @@ type QuickCustomerForm = {
 };
 
 const RECENT_PRODUCT_USAGE_STORAGE_KEY = "invoice-smart-recent-products";
+const LAST_DISCOUNT_TYPE_STORAGE_KEY = "invoice-last-discount-type";
 
-const createEmptyInvoiceForm = (customerId = ""): InvoiceFormState => ({
+const getStoredDiscountType = (): InvoiceFormState["discount_type"] => {
+  if (typeof window === "undefined") {
+    return "PERCENTAGE";
+  }
+
+  const storedDiscountType = window.localStorage.getItem(
+    LAST_DISCOUNT_TYPE_STORAGE_KEY,
+  );
+
+  return storedDiscountType === "FIXED" || storedDiscountType === "PERCENTAGE"
+    ? storedDiscountType
+    : "PERCENTAGE";
+};
+
+const createEmptyInvoiceForm = (
+  customerId = "",
+  discountType = getStoredDiscountType(),
+): InvoiceFormState => ({
   customer_id: customerId,
   date: "",
   due_date: "",
   discount: "0",
-  discount_type: "PERCENTAGE",
+  discount_type: discountType,
   payment_status: "UNPAID",
   amount_paid: "",
   payment_method: "",
@@ -188,7 +212,7 @@ const buildProductSku = (name: string, barcode: string) => {
 };
 
 const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
-  const { formatDate, language, locale, t } = useI18n();
+  const { formatCurrency, formatDate, language, locale, t } = useI18n();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const {
@@ -310,6 +334,34 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     form.discount,
     form.discount_type,
     taxMode,
+  );
+  const discountAppliedAmount = useMemo(
+    () =>
+      getAppliedDiscountAmount({
+        subtotal: totals.subtotal,
+        discountValue: form.discount,
+        discountType: form.discount_type,
+      }),
+    [form.discount, form.discount_type, totals.subtotal],
+  );
+  const discountValidationMessage = useMemo(
+    () =>
+      getDiscountValidationMessage({
+        subtotal: totals.subtotal,
+        discountValue: form.discount,
+        discountType: form.discount_type,
+      }),
+    [form.discount, form.discount_type, totals.subtotal],
+  );
+  const discountSummaryLabel = useMemo(
+    () =>
+      buildDiscountLabel({
+        discountType: form.discount_type,
+        discountValue: form.discount,
+        formatCurrency: (value) =>
+          formatCurrency(value, businessProfile?.currency ?? "INR"),
+      }),
+    [businessProfile?.currency, form.discount, form.discount_type, formatCurrency],
   );
   const validation = useInvoiceValidation(form, items, totals.total);
   const fallbackActiveTemplate = useMemo(
@@ -524,6 +576,15 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   }, [recentProductUsage]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.setItem(
+      LAST_DISCOUNT_TYPE_STORAGE_KEY,
+      form.discount_type,
+    );
+  }, [form.discount_type]);
+
+  useEffect(() => {
     if (!quickAddProductOpen) return;
 
     const timeoutId = window.setTimeout(() => {
@@ -704,7 +765,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         phone: businessProfile?.phone ?? "",
         email: businessProfile?.email ?? "",
         website: businessProfile?.website ?? "",
-        logoUrl: businessProfile?.logo_url ?? "",
+        logoUrl: resolveBackendAssetUrl(businessProfile?.logo_url),
         taxId: businessProfile?.tax_id ?? "",
         currency: businessProfile?.currency ?? "INR",
         showLogoOnInvoice: businessProfile?.show_logo_on_invoice ?? false,
@@ -725,34 +786,24 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         phone: customer?.phone ?? "",
         address: formatCustomerAddressFromRecord(customer) || "",
       },
-      items: items.map((item) => ({
-        name: item.name || t("invoice.fallbackItem"),
-        description: "",
-        quantity: Number(item.quantity) || 0,
-        unitPrice: Number(item.price) || 0,
-        taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
-        amount:
-          (Number(item.quantity) || 0) * (Number(item.price) || 0) +
-          ((taxMode === "NONE"
-            ? 0
-            : ((Number(item.quantity) || 0) *
-                (Number(item.price) || 0) *
-                (item.tax_rate ? Number(item.tax_rate) : 0)) /
-              100) || 0),
-      })),
+      items: items.map((item, index) => {
+        const calculatedItem = totals.items?.[index];
+
+        return {
+          name: item.name || t("invoice.fallbackItem"),
+          description: "",
+          quantity: Number(item.quantity) || 0,
+          unitPrice: Number(item.price) || 0,
+          taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
+          amount: calculatedItem?.lineTotal ?? 0,
+        };
+      }),
       totals,
       discount: {
         type: form.discount_type,
         value: Number(form.discount) || 0,
-        label:
-          form.discount_type === "PERCENTAGE"
-            ? t("invoice.discountPercentageLabel", {
-                value: Math.min(
-                  100,
-                  Math.max(0, Number(form.discount) || 0),
-                ).toFixed(2),
-              })
-            : t("invoice.discountFixedLabel"),
+        calculatedAmount: discountAppliedAmount,
+        label: discountSummaryLabel,
       },
       paymentSummary: {
         statusLabel: paymentStatusLabel,
@@ -777,6 +828,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     businessProfile,
     customer,
     dueDate,
+    discountAppliedAmount,
+    discountSummaryLabel,
     formatDate,
     form.amount_paid,
     form.discount,
@@ -899,12 +952,15 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         focusProductSearch();
       }
     },
-    [flashShortcutSection, focusProductSearch, markDirty],
+    [flashShortcutSection, focusProductSearch, markDirty, t],
   );
 
   const resetInvoiceComposer = useCallback(
     (options?: { announce?: boolean }) => {
-      setForm(createEmptyInvoiceForm());
+      setForm({
+        ...createEmptyInvoiceForm(),
+        discount_type: form.discount_type,
+      });
       setTaxMode("CGST_SGST");
       setItems([]);
       setQuickEntryProduct(null);
@@ -923,7 +979,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
       focusProductSearch();
     },
-    [clearDraft, flashShortcutSection, focusProductSearch],
+    [clearDraft, flashShortcutSection, focusProductSearch, form.discount_type, t],
   );
 
   const handleItemChange = useCallback(
@@ -1071,7 +1127,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
       addProductToBill(product);
     },
-    [addProductToBill, flashShortcutSection, focusProductSearch],
+    [addProductToBill, flashShortcutSection, focusProductSearch, t],
   );
 
   const handleSuggestedProductAdd = useCallback(
@@ -1198,6 +1254,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       parseServerErrors,
       queryClient,
       quickCustomerForm,
+      t,
     ],
   );
 
@@ -1240,8 +1297,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     setServerError(null);
 
     setItemErrors(validation.errors);
-    setSummaryErrors(validation.summary);
-    if (validation.summary.length > 0) {
+    const nextSummaryErrors = discountValidationMessage
+      ? [discountValidationMessage, ...validation.summary]
+      : validation.summary;
+    setSummaryErrors(nextSummaryErrors);
+    if (nextSummaryErrors.length > 0) {
       if (!form.customer_id) {
         flashShortcutSection("form");
       } else if (items.length === 0) {
@@ -1251,7 +1311,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         flashShortcutSection("items");
       }
 
-      toast.error(validation.summary[0] ?? t("invoiceComposer.missingDetails"));
+      toast.error(nextSummaryErrors[0] ?? t("invoiceComposer.missingDetails"));
       return;
     }
 
@@ -1290,6 +1350,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             ? undefined
             : (form.payment_method || undefined),
         payment_date: effectivePaymentDate,
+        tax_mode: taxMode,
         sync_sales: true,
         warehouse_id: form.warehouse_id ? Number(form.warehouse_id) : undefined,
         items: items.map((item) => ({
@@ -1331,12 +1392,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   }, [
     createInvoice,
     customers,
+    discountValidationMessage,
     form,
     items,
     parseServerErrors,
     flashShortcutSection,
     resetInvoiceComposer,
     focusProductSearch,
+    taxMode,
     t,
     totals.total,
     validation.errors,
@@ -1760,15 +1823,18 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                     : undefined
                 }
               >
-                <InvoiceForm
-                  form={form}
-                  customers={customers}
-                  warehouses={warehouses}
-                  totalAmount={totals.total}
-                  taxMode={taxMode}
-                  onFormChange={handleFormChange}
-                  onTaxModeChange={handleTaxModeChange}
-                  onSubmit={handleSubmit}
+            <InvoiceForm
+              form={form}
+              customers={customers}
+              warehouses={warehouses}
+              subtotalAmount={totals.subtotal}
+              totalAmount={totals.total}
+              taxMode={taxMode}
+              discountAppliedAmount={discountAppliedAmount}
+              discountError={discountValidationMessage}
+              onFormChange={handleFormChange}
+              onTaxModeChange={handleTaxModeChange}
+              onSubmit={handleSubmit}
                   isSubmitting={createInvoice.isPending}
                   summaryErrors={summaryErrors}
                   serverError={serverError}
@@ -1921,6 +1987,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               taxMode={taxMode}
               discountValue={form.discount}
               discountType={form.discount_type}
+              discountLabel={discountSummaryLabel}
               paidAmount={
                 form.payment_status === "PAID"
                   ? totals.total

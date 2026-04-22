@@ -8,7 +8,9 @@
       "Bash(tasklist)",
       "Bash(netstat -ano)",
       "Bash(taskkill *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(PGPASSWORD='G@jkflasuiyocasjkfs@hh334' psql *)",
+      "Bash(curl -s http://localhost:8000/api/dashboard/overview)"
     ]
   }
 }

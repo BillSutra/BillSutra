@@ -238,7 +238,9 @@ const TemplateMini = ({
           </div>
           {discount > 0 ? (
             <div className="flex items-center justify-between text-[10px]">
-              <span className="text-neutral-600">Discount</span>
+              <span className="text-neutral-600">
+                {data.discount?.label ?? "Discount"}
+              </span>
               <span className="font-semibold text-neutral-950">
                 -{formatCurrency(discount, data.business.currency)}
               </span>

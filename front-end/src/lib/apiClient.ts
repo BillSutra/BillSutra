@@ -512,6 +512,66 @@ export type WorkerUpdateInput = {
   incentiveValue?: number;
 };
 
+// Worker Panel types
+export type WorkerProfileResponse = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+  role: string;
+  accessRole: string;
+  status: string;
+  joiningDate: string | null;
+  createdAt: string;
+};
+
+export type WorkerDashboardOverviewResponse = {
+  metrics: {
+    totalInvoices: number;
+    totalSales: number;
+    totalOrders: number;
+    averageOrderValue: number;
+    thisMonthSales: number;
+    incentiveEarned: number;
+  };
+};
+
+export type WorkerIncentiveResponse = {
+  totalIncentiveEarned: number;
+  incentiveType: "NONE" | "PERCENTAGE" | "PER_SALE";
+  incentiveValue: number;
+  calculationNote: string;
+  monthlyBreakdown: Array<{ month: string; incentive: number }>;
+};
+
+export type WorkerHistoryEntry = {
+  id: string;
+  type: "INVOICE" | "SALE";
+  reference: string;
+  customerName: string | null;
+  amount: number;
+  status: string;
+  date: string;
+};
+
+export type WorkerHistoryResponse = {
+  entries: WorkerHistoryEntry[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+export type WorkerHistoryParams = {
+  page?: number;
+  limit?: number;
+  startDate?: string;
+  endDate?: string;
+  minAmount?: string;
+  maxAmount?: string;
+  search?: string;
+};
+
 export type Purchase = {
   id: number;
   purchase_date: string;
@@ -634,9 +694,18 @@ export type Invoice = {
   due_date?: string | null;
   status: string;
   subtotal: string;
+  total_base?: string | null;
   tax: string;
+  tax_mode?: "CGST_SGST" | "IGST" | "NONE" | null;
+  total_cgst?: string | null;
+  total_sgst?: string | null;
+  total_igst?: string | null;
   discount: string;
+  discount_type?: "PERCENTAGE" | "FIXED" | null;
+  discount_value?: string | null;
+  discount_calculated?: string | null;
   total: string;
+  grand_total?: string | null;
   notes?: string | null;
   customer?: Customer | null;
   payments: Array<{
@@ -659,6 +728,12 @@ export type Invoice = {
     quantity: number;
     price: string;
     tax_rate?: string | null;
+    gst_type?: "CGST_SGST" | "IGST" | "NONE" | null;
+    base_amount?: string | null;
+    gst_amount?: string | null;
+    cgst_amount?: string | null;
+    sgst_amount?: string | null;
+    igst_amount?: string | null;
     total: string;
   }>;
 };
@@ -696,6 +771,7 @@ export type InvoiceInput = {
     quantity: number;
     price: number;
     tax_rate?: number | null;
+    gst_type?: "CGST_SGST" | "IGST" | "NONE" | null;
   }>;
 };
 
@@ -2258,6 +2334,60 @@ export const updateWorker = async (
 
 export const deleteWorker = async (id: string): Promise<void> => {
   await apiClient.delete(`/workers/${id}`);
+};
+
+// Worker Panel API functions
+export const fetchWorkerProfile = async (): Promise<WorkerProfileResponse> => {
+  const response = await apiClient.get("/worker/profile");
+  return response.data.data as WorkerProfileResponse;
+};
+
+export const updateWorkerProfile = async (payload: {
+  name?: string;
+  email?: string;
+  phone?: string;
+}): Promise<WorkerProfileResponse> => {
+  const response = await apiClient.put("/worker/profile", payload);
+  return response.data.data as WorkerProfileResponse;
+};
+
+export const changeWorkerPassword = async (payload: {
+  current_password: string;
+  password: string;
+  confirm_password: string;
+}): Promise<void> => {
+  await apiClient.put("/worker/password", payload);
+};
+
+export const fetchWorkerDashboardOverview =
+  async (): Promise<WorkerDashboardOverviewResponse> => {
+    const response = await apiClient.get("/worker/dashboard/overview");
+    return response.data.data as WorkerDashboardOverviewResponse;
+  };
+
+export const fetchWorkerIncentives =
+  async (): Promise<WorkerIncentiveResponse> => {
+    const response = await apiClient.get("/worker/dashboard/incentives");
+    return response.data.data as WorkerIncentiveResponse;
+  };
+
+export const fetchWorkerHistory = async (
+  params?: WorkerHistoryParams,
+): Promise<WorkerHistoryResponse> => {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.startDate) searchParams.set("startDate", params.startDate);
+  if (params?.endDate) searchParams.set("endDate", params.endDate);
+  if (params?.minAmount) searchParams.set("minAmount", params.minAmount);
+  if (params?.maxAmount) searchParams.set("maxAmount", params.maxAmount);
+  if (params?.search) searchParams.set("search", params.search);
+
+  const query = searchParams.toString();
+  const response = await apiClient.get(
+    query ? `/worker/dashboard/history?${query}` : "/worker/dashboard/history",
+  );
+  return response.data.data as WorkerHistoryResponse;
 };
 
 export const fetchPurchases = async (): Promise<Purchase[]> => {

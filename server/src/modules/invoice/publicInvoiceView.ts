@@ -38,6 +38,14 @@ const renderMultiline = (value: string | null | undefined) =>
     .map((line) => escapeHtml(line))
     .join("<br />");
 
+const renderDiscountLabel = (invoice: PublicInvoiceViewData) => {
+  if (invoice.discount_type === "PERCENTAGE") {
+    return `Discount (${invoice.discount_value.toFixed(2)}%)`;
+  }
+
+  return `Discount (${formatCurrency(invoice.discount_value, invoice.currency)})`;
+};
+
 export const renderPublicInvoiceHtml = (invoice: PublicInvoiceViewData) => {
   const itemRows = invoice.items
     .map(
@@ -352,7 +360,7 @@ export const renderPublicInvoiceHtml = (invoice: PublicInvoiceViewData) => {
                 <div class="totals-grid">
                   <div class="totals-row"><span>Subtotal</span><strong>${escapeHtml(formatCurrency(invoice.subtotal, invoice.currency))}</strong></div>
                   <div class="totals-row"><span>Tax</span><strong>${escapeHtml(formatCurrency(invoice.tax, invoice.currency))}</strong></div>
-                  <div class="totals-row"><span>Discount</span><strong>${escapeHtml(formatCurrency(invoice.discount, invoice.currency))}</strong></div>
+                  <div class="totals-row"><span>${escapeHtml(renderDiscountLabel(invoice))}</span><strong>-${escapeHtml(formatCurrency(invoice.discount, invoice.currency))}</strong></div>
                   <div class="totals-row total"><span>Grand total</span><strong>${escapeHtml(formatCurrency(invoice.amount, invoice.currency))}</strong></div>
                 </div>
               </aside>

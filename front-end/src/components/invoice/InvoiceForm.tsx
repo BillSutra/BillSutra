@@ -5,6 +5,7 @@ import { ValidationField } from "@/components/ui/ValidationField";
 import { validateDate, validateNumber } from "@/lib/validation";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import FirstTimeHint from "@/components/ui/FirstTimeHint";
 import type { InvoiceFormState, TaxMode } from "@/types/invoice";
 import { useI18n } from "@/providers/LanguageProvider";
@@ -13,8 +14,11 @@ export type InvoiceFormProps = {
   form: InvoiceFormState;
   customers: Array<{ id: number; name: string; email?: string | null }>;
   warehouses: Array<{ id: number; name: string }>;
+  subtotalAmount: number;
   totalAmount: number;
   taxMode: TaxMode;
+  discountAppliedAmount: number;
+  discountError?: string | null;
   onFormChange: (next: InvoiceFormState) => void;
   onTaxModeChange: (mode: TaxMode) => void;
   onSubmit: (event: FormEvent) => void;
@@ -28,8 +32,11 @@ const InvoiceForm = ({
   form,
   customers,
   warehouses,
+  subtotalAmount,
   totalAmount,
   taxMode,
+  discountAppliedAmount,
+  discountError,
   onFormChange,
   onTaxModeChange,
   onSubmit,
@@ -54,6 +61,7 @@ const InvoiceForm = ({
         ? Math.min(normalizedPartialPaid, totalAmount)
         : 0;
   const dueAmount = Math.max(totalAmount - paidAmount, 0);
+  const isDiscountDisabled = subtotalAmount <= 0;
 
   return (
     <form
@@ -162,44 +170,90 @@ const InvoiceForm = ({
             <option value="NONE">{t("invoiceForm.gstModeNone")}</option>
           </select>
         </div>
-        <ValidationField
-          id="discount"
-          label={
-            form.discount_type === "PERCENTAGE"
-              ? t("invoiceForm.discountPercentage")
-              : t("invoiceForm.discountAmount")
-          }
-          type="number"
-          value={form.discount}
-          onChange={(value) => onFormChange({ ...form, discount: value })}
-          validate={validateOptionalNumber}
-          placeholder={t("invoiceForm.discountPlaceholder")}
-          success
-        />
-        <div className="grid gap-2">
-          <Label
-            className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
-            htmlFor="discount_type"
-          >
-            {t("invoiceForm.discountType")}
-          </Label>
-          <select
-            id="discount_type"
-            className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-200 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-500/20"
-            value={form.discount_type}
-            onChange={(event) =>
-              onFormChange({
-                ...form,
-                discount_type: event.target
-                  .value as InvoiceFormState["discount_type"],
-              })
-            }
-          >
-            <option value="PERCENTAGE">
-              {t("invoiceForm.discountTypePercentage")}
-            </option>
-            <option value="FIXED">{t("invoiceForm.discountTypeFixed")}</option>
-          </select>
+        <div className="grid gap-3 sm:col-span-2">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-900/60">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <Label
+                  className="text-xs font-semibold uppercase tracking-[0.2em] text-gray-500"
+                  htmlFor="discount"
+                >
+                  Discount (₹ / %)
+                </Label>
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  Use % for offers, or ₹ for direct reductions.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isDiscountDisabled}
+                onClick={() =>
+                  onFormChange({
+                    ...form,
+                    discount: "10",
+                    discount_type: "PERCENTAGE",
+                  })
+                }
+              >
+                Flat 10% discount
+              </Button>
+            </div>
+
+            <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px]">
+              <Input
+                id="discount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.discount}
+                disabled={isDiscountDisabled}
+                onChange={(event) =>
+                  onFormChange({ ...form, discount: event.target.value })
+                }
+                placeholder={t("invoiceForm.discountPlaceholder")}
+                aria-invalid={Boolean(discountError)}
+              />
+              <select
+                id="discount_type"
+                disabled={isDiscountDisabled}
+                className="h-10 w-full rounded-xl border border-gray-200 bg-white px-3 text-sm text-gray-900 shadow-sm focus:border-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:focus:border-indigo-400 dark:focus:ring-indigo-500/20"
+                value={form.discount_type}
+                onChange={(event) =>
+                  onFormChange({
+                    ...form,
+                    discount_type: event.target
+                      .value as InvoiceFormState["discount_type"],
+                  })
+                }
+              >
+                <option value="FIXED">{t("invoiceForm.discountTypeFixed")}</option>
+                <option value="PERCENTAGE">
+                  {t("invoiceForm.discountTypePercentage")}
+                </option>
+              </select>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-slate-600 dark:text-slate-300">
+                Applied discount
+              </span>
+              <span className="font-semibold text-slate-950 dark:text-slate-100">
+                -{formatCurrency(discountAppliedAmount)}
+              </span>
+            </div>
+
+            {isDiscountDisabled ? (
+              <p className="mt-2 text-xs text-slate-500">
+                Add products first to enable discounts.
+              </p>
+            ) : null}
+
+            {discountError ? (
+              <p className="mt-2 text-sm text-destructive">{discountError}</p>
+            ) : null}
+          </div>
         </div>
         <div className="grid gap-2 sm:col-span-2">
           <ValidationField

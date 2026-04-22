@@ -1,3 +1,10 @@
+import {
+  calculateInvoiceTotals as calculateSharedInvoiceTotals,
+  normalizeTaxMode,
+  roundCurrency,
+  type InvoiceTaxMode,
+} from "../../../shared/invoice-calculations.js";
+
 export type InvoiceCalcItem = {
   product_id?: number | null;
   name: string;
@@ -36,8 +43,8 @@ export type InvoiceTotals = {
   >;
 };
 
-const round2 = (value: number) =>
-  Math.round((value + Number.EPSILON) * 100) / 100;
+const toInvoiceTaxMode = (taxMode: TaxMode): InvoiceTaxMode =>
+  taxMode === "GST" ? "CGST_SGST" : normalizeTaxMode(taxMode);
 
 export const calculateLineTotals = (
   quantity: number,
@@ -45,25 +52,23 @@ export const calculateLineTotals = (
   taxRate?: number | null,
   taxMode: TaxMode = "GST",
 ): LineTotals => {
-  const lineSubtotal = round2(quantity * price);
+  const safeTaxMode = toInvoiceTaxMode(taxMode);
+  const lineSubtotal = roundCurrency(quantity * price);
   const rate = taxRate ?? 0;
-  const lineTax = taxMode === "NONE" ? 0 : round2((lineSubtotal * rate) / 100);
-
-  let cgst = 0;
-  let sgst = 0;
-  let igst = 0;
-
-  if (taxMode === "CGST_SGST") {
-    cgst = round2(lineTax / 2);
-    sgst = round2(lineTax / 2);
-  } else if (taxMode === "IGST") {
-    igst = lineTax;
-  }
+  const lineTax =
+    safeTaxMode === "NONE"
+      ? 0
+      : roundCurrency((lineSubtotal * rate) / 100);
+  const igst = safeTaxMode === "IGST" ? lineTax : 0;
+  const cgst =
+    safeTaxMode === "CGST_SGST" ? roundCurrency(lineTax / 2) : 0;
+  const sgst =
+    safeTaxMode === "CGST_SGST" ? roundCurrency(lineTax - cgst) : 0;
 
   return {
     lineSubtotal,
     lineTax,
-    lineTotal: round2(lineSubtotal + lineTax),
+    lineTotal: roundCurrency(lineSubtotal + lineTax),
     cgst,
     sgst,
     igst,
@@ -75,47 +80,42 @@ export const calculateInvoiceTotals = (
   discount = 0,
   taxMode: TaxMode = "GST",
 ): InvoiceTotals => {
-  let subtotal = 0;
-  let tax = 0;
-  let cgst = 0;
-  let sgst = 0;
-  let igst = 0;
-
-  const computedItems = items.map((item) => {
-    const totals = calculateLineTotals(
-      item.quantity,
-      item.price,
-      item.tax_rate,
-      taxMode,
-    );
-
-    subtotal += totals.lineSubtotal;
-    tax += totals.lineTax;
-    cgst += totals.cgst;
-    sgst += totals.sgst;
-    igst += totals.igst;
-
-    return {
-      product_id: item.product_id ?? undefined,
-      name: item.name,
-      quantity: item.quantity,
-      price: item.price,
-      tax_rate: item.tax_rate ?? undefined,
-      ...totals,
-    };
+  const totals = calculateSharedInvoiceTotals({
+    items,
+    discountValue: discount,
+    taxMode: toInvoiceTaxMode(taxMode),
   });
-
-  const safeDiscount = Math.max(0, discount);
-  const total = round2(subtotal + tax - safeDiscount);
+  const safeTaxMode = toInvoiceTaxMode(taxMode);
 
   return {
-    subtotal: round2(subtotal),
-    tax: round2(tax),
-    discount: round2(safeDiscount),
-    total: Math.max(0, total),
-    cgst: round2(cgst),
-    sgst: round2(sgst),
-    igst: round2(igst),
-    items: computedItems,
+    subtotal: totals.subtotal,
+    tax: totals.tax,
+    discount: totals.discount,
+    total: totals.total,
+    cgst: totals.cgst,
+    sgst: totals.sgst,
+    igst: totals.igst,
+    items: totals.items.map((item) => {
+      const lineCgst =
+        safeTaxMode === "CGST_SGST" ? roundCurrency(item.lineTax / 2) : 0;
+      const lineSgst =
+        safeTaxMode === "CGST_SGST"
+          ? roundCurrency(item.lineTax - lineCgst)
+          : 0;
+
+      return {
+        product_id: item.product_id ?? undefined,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        tax_rate: item.tax_rate ?? undefined,
+        lineSubtotal: item.lineSubtotal,
+        lineTax: item.lineTax,
+        lineTotal: item.lineTotal,
+        cgst: lineCgst,
+        sgst: lineSgst,
+        igst: safeTaxMode === "IGST" ? item.lineTax : 0,
+      };
+    }),
   };
 };

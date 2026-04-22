@@ -26,6 +26,25 @@ import { invalidateInventoryInsightsCacheByUser } from "../../services/inventory
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
+type HttpLikeError = Error & {
+  status?: number;
+  statusCode?: number;
+  errors?: Record<string, unknown>;
+};
+
+const getErrorStatus = (error: unknown) => {
+  const candidate = error as HttpLikeError;
+
+  if (typeof candidate?.status === "number") {
+    return candidate.status;
+  }
+
+  if (typeof candidate?.statusCode === "number") {
+    return candidate.statusCode;
+  }
+
+  return undefined;
+};
 
 const readQueryValue = (value: unknown): string | undefined => {
   if (typeof value === "string") {
@@ -185,12 +204,10 @@ export const store = async (req: Request, res: Response) => {
       data: invoice,
     });
   } catch (error) {
-    const err = error as Error & {
-      status?: number;
-      errors?: Record<string, unknown>;
-    };
-    if (err.status) {
-      return res.status(err.status).json({
+    const err = error as HttpLikeError;
+    const status = getErrorStatus(error);
+    if (status) {
+      return res.status(status).json({
         message: err.message,
         errors: err.errors,
       });
@@ -268,13 +285,11 @@ export const duplicate = async (req: Request, res: Response) => {
       data: invoice,
     });
   } catch (error) {
-    const err = error as Error & {
-      status?: number;
-      errors?: Record<string, unknown>;
-    };
+    const err = error as HttpLikeError;
+    const status = getErrorStatus(error);
 
-    if (err.status) {
-      return res.status(err.status).json({
+    if (status) {
+      return res.status(status).json({
         message: err.message,
         errors: err.errors,
       });
@@ -302,13 +317,11 @@ export const pdf = async (req: Request, res: Response) => {
 
     return res.status(200).send(result.buffer);
   } catch (error) {
-    const err = error as Error & {
-      status?: number;
-      errors?: Record<string, unknown>;
-    };
+    const err = error as HttpLikeError;
+    const status = getErrorStatus(error);
 
-    if (err.status) {
-      return res.status(err.status).json({
+    if (status) {
+      return res.status(status).json({
         message: err.message,
         errors: err.errors,
       });
@@ -388,9 +401,10 @@ export const send = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    const err = error as Error & { status?: number };
-    if (err.status) {
-      return res.status(err.status).json({ message: err.message });
+    const err = error as HttpLikeError;
+    const status = getErrorStatus(error);
+    if (status) {
+      return res.status(status).json({ message: err.message });
     }
 
     return res
@@ -447,9 +461,10 @@ export const reminder = async (req: Request, res: Response) => {
       data: { invoiceId: invoice.id, email: recipientEmail },
     });
   } catch (error) {
-    const err = error as Error & { status?: number };
-    if (err.status) {
-      return res.status(err.status).json({ message: err.message });
+    const err = error as HttpLikeError;
+    const status = getErrorStatus(error);
+    if (status) {
+      return res.status(status).json({ message: err.message });
     }
 
     return res.status(500).json({ message: "Unable to send payment reminder" });
