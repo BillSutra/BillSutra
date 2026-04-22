@@ -873,6 +873,7 @@ const invoiceItemSchema = z.object({
   quantity: z.coerce.number().int().positive(),
   price: z.coerce.number().positive(),
   tax_rate: z.coerce.number().nonnegative().optional(),
+  gst_type: z.enum(["CGST_SGST", "IGST", "NONE"]).optional(),
 });
 
 export const invoiceCreateSchema = z.object({

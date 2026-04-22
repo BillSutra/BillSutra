@@ -694,13 +694,18 @@ export type Invoice = {
   due_date?: string | null;
   status: string;
   subtotal: string;
+  total_base?: string | null;
   tax: string;
   tax_mode?: "CGST_SGST" | "IGST" | "NONE" | null;
+  total_cgst?: string | null;
+  total_sgst?: string | null;
+  total_igst?: string | null;
   discount: string;
   discount_type?: "PERCENTAGE" | "FIXED" | null;
   discount_value?: string | null;
   discount_calculated?: string | null;
   total: string;
+  grand_total?: string | null;
   notes?: string | null;
   customer?: Customer | null;
   payments: Array<{
@@ -723,6 +728,12 @@ export type Invoice = {
     quantity: number;
     price: string;
     tax_rate?: string | null;
+    gst_type?: "CGST_SGST" | "IGST" | "NONE" | null;
+    base_amount?: string | null;
+    gst_amount?: string | null;
+    cgst_amount?: string | null;
+    sgst_amount?: string | null;
+    igst_amount?: string | null;
     total: string;
   }>;
 };
@@ -760,6 +771,7 @@ export type InvoiceInput = {
     quantity: number;
     price: number;
     tax_rate?: number | null;
+    gst_type?: "CGST_SGST" | "IGST" | "NONE" | null;
   }>;
 };
 

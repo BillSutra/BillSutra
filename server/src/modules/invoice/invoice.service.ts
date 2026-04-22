@@ -154,6 +154,25 @@ const toAbsoluteBackendAssetUrl = (value: string | null | undefined) => {
   return `${baseUrl}${normalizedPath}`;
 };
 
+type InvoiceGstMetadataRow = {
+  id: number;
+  total_base: Prisma.Decimal | number | null;
+  total_cgst: Prisma.Decimal | number | null;
+  total_sgst: Prisma.Decimal | number | null;
+  total_igst: Prisma.Decimal | number | null;
+  grand_total: Prisma.Decimal | number | null;
+};
+
+type InvoiceItemGstMetadataRow = {
+  id: number;
+  gst_type: string | null;
+  base_amount: Prisma.Decimal | number | null;
+  gst_amount: Prisma.Decimal | number | null;
+  cgst_amount: Prisma.Decimal | number | null;
+  sgst_amount: Prisma.Decimal | number | null;
+  igst_amount: Prisma.Decimal | number | null;
+};
+
 const buildDiscountLabel = ({
   discountType,
   discountValue,
@@ -422,6 +441,56 @@ const formatDate = (value: Date | null | undefined) => {
     month: "short",
     year: "numeric",
   });
+};
+
+const attachInvoiceGstMetadata = async <
+  T extends
+    | (Prisma.InvoiceGetPayload<{ include: { customer: true; items: true; payments: true } }> & {
+        [key: string]: unknown;
+      })
+    | null,
+>(invoice: T) => {
+  if (!invoice) {
+    return invoice;
+  }
+
+  const [invoiceRows, itemRows] = await Promise.all([
+    prisma.$queryRaw<InvoiceGstMetadataRow[]>(Prisma.sql`
+      SELECT id, total_base, total_cgst, total_sgst, total_igst, grand_total
+      FROM "invoices"
+      WHERE id = ${invoice.id}
+      LIMIT 1
+    `),
+    prisma.$queryRaw<InvoiceItemGstMetadataRow[]>(Prisma.sql`
+      SELECT id, gst_type, base_amount, gst_amount, cgst_amount, sgst_amount, igst_amount
+      FROM "invoice_items"
+      WHERE invoice_id = ${invoice.id}
+    `),
+  ]);
+
+  const invoiceRow = invoiceRows[0];
+  const itemMetaById = new Map(itemRows.map((row) => [row.id, row]));
+
+  return {
+    ...invoice,
+    total_base: invoiceRow?.total_base ?? null,
+    total_cgst: invoiceRow?.total_cgst ?? null,
+    total_sgst: invoiceRow?.total_sgst ?? null,
+    total_igst: invoiceRow?.total_igst ?? null,
+    grand_total: invoiceRow?.grand_total ?? null,
+    items: invoice.items.map((item) => {
+      const meta = itemMetaById.get(item.id);
+      return {
+        ...item,
+        gst_type: meta?.gst_type ?? null,
+        base_amount: meta?.base_amount ?? null,
+        gst_amount: meta?.gst_amount ?? null,
+        cgst_amount: meta?.cgst_amount ?? null,
+        sgst_amount: meta?.sgst_amount ?? null,
+        igst_amount: meta?.igst_amount ?? null,
+      };
+    }),
+  } as T;
 };
 
 const escapeHtml = (text: unknown) =>
@@ -1010,11 +1079,13 @@ export const listInvoices = async (
     };
   }
 
-  return prisma.invoice.findMany({
+  const invoices = await prisma.invoice.findMany({
     where,
     include: { customer: true, items: true, payments: true },
     orderBy: { createdAt: "desc" },
   });
+
+  return Promise.all(invoices.map((invoice) => attachInvoiceGstMetadata(invoice)));
 };
 
 export const getInvoiceBootstrap = async (userId: number) => {
@@ -1137,6 +1208,7 @@ export const createInvoice = async (
           quantity: item.quantity,
           price: item.price,
           tax_rate: item.tax_rate ?? undefined,
+          gst_type: item.gst_type,
         }));
 
     const itemPayload = resolvedItems.map((item, index) => ({
@@ -1146,6 +1218,15 @@ export const createInvoice = async (
       price: item.price,
       tax_rate: item.tax_rate ?? undefined,
       total: totals.items[index]?.total ?? item.quantity * item.price,
+    }));
+
+    const itemMetadata = resolvedItems.map((item, index) => ({
+      gstType: totals.items[index]?.gst_type ?? item.gst_type ?? taxMode,
+      baseAmount: totals.items[index]?.baseAmount ?? item.quantity * item.price,
+      gstAmount: totals.items[index]?.lineTax ?? 0,
+      cgstAmount: totals.items[index]?.cgst ?? 0,
+      sgstAmount: totals.items[index]?.sgst ?? 0,
+      igstAmount: totals.items[index]?.igst ?? 0,
     }));
 
     if (syncSales) {
@@ -1177,6 +1258,39 @@ export const createInvoice = async (
       },
       include: { items: true, payments: true },
     });
+
+    await tx.$executeRaw(Prisma.sql`
+      UPDATE "invoices"
+      SET
+        "total_base" = ${totals.totalBase},
+        "total_cgst" = ${totals.cgst},
+        "total_sgst" = ${totals.sgst},
+        "total_igst" = ${totals.igst},
+        "grand_total" = ${totals.total}
+      WHERE "id" = ${invoice.id}
+    `);
+
+    const persistedItems = await tx.invoiceItem.findMany({
+      where: { invoice_id: invoice.id },
+      orderBy: { id: "asc" },
+      select: { id: true },
+    });
+
+    await Promise.all(
+      persistedItems.map((item, index) =>
+        tx.$executeRaw(Prisma.sql`
+          UPDATE "invoice_items"
+          SET
+            "gst_type" = ${itemMetadata[index]?.gstType ?? "NONE"},
+            "base_amount" = ${itemMetadata[index]?.baseAmount ?? 0},
+            "gst_amount" = ${itemMetadata[index]?.gstAmount ?? 0},
+            "cgst_amount" = ${itemMetadata[index]?.cgstAmount ?? 0},
+            "sgst_amount" = ${itemMetadata[index]?.sgstAmount ?? 0},
+            "igst_amount" = ${itemMetadata[index]?.igstAmount ?? 0}
+          WHERE "id" = ${item.id}
+        `),
+      ),
+    );
 
     if (paymentState.paidAmount > 0 && paymentState.paymentMethod) {
       await tx.payment.create({
@@ -1238,10 +1352,12 @@ export const createInvoice = async (
 export const getInvoice = async (userId: number, id: number) => {
   await syncOverdueInvoices(userId);
 
-  return prisma.invoice.findFirst({
+  const invoice = await prisma.invoice.findFirst({
     where: { id, user_id: userId },
     include: { customer: true, items: true, payments: true },
   });
+
+  return attachInvoiceGstMetadata(invoice);
 };
 
 export const getPublicInvoice = async (reference: string) => {

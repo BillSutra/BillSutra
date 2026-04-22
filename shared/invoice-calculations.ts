@@ -9,6 +9,7 @@ export type InvoiceCalculationItemInput = {
   quantity: NumericInput;
   price: NumericInput;
   tax_rate?: NumericInput;
+  gst_type?: InvoiceTaxMode | null;
 };
 
 export type InvoiceCalculatedItem = {
@@ -17,8 +18,13 @@ export type InvoiceCalculatedItem = {
   quantity: number;
   price: number;
   tax_rate?: number;
+  gst_type: InvoiceTaxMode;
+  baseAmount: number;
   lineSubtotal: number;
   lineTax: number;
+  cgst: number;
+  sgst: number;
+  igst: number;
   lineTotal: number;
 };
 
@@ -27,6 +33,7 @@ export type InvoiceCalculationResult = {
   tax: number;
   discount: number;
   total: number;
+  totalBase: number;
   cgst: number;
   sgst: number;
   igst: number;
@@ -119,11 +126,18 @@ export const calculateInvoiceTotals = ({
     const quantity = Math.max(0, toFiniteNumber(item.quantity));
     const price = Math.max(0, toFiniteNumber(item.price));
     const taxRate = Math.max(0, toFiniteNumber(item.tax_rate));
+    const itemTaxMode =
+      item.gst_type == null ? safeTaxMode : normalizeTaxMode(item.gst_type);
     const lineSubtotal = roundCurrency(quantity * price);
     const lineTax =
-      safeTaxMode === "NONE"
+      itemTaxMode === "NONE"
         ? 0
         : roundCurrency((lineSubtotal * taxRate) / 100);
+    const cgst =
+      itemTaxMode === "CGST_SGST" ? roundCurrency(lineTax / 2) : 0;
+    const sgst =
+      itemTaxMode === "CGST_SGST" ? roundCurrency(lineTax - cgst) : 0;
+    const igst = itemTaxMode === "IGST" ? lineTax : 0;
 
     return {
       product_id: item.product_id == null ? null : Number(item.product_id),
@@ -131,8 +145,13 @@ export const calculateInvoiceTotals = ({
       quantity,
       price,
       tax_rate: item.tax_rate == null ? undefined : taxRate,
+      gst_type: itemTaxMode,
+      baseAmount: lineSubtotal,
       lineSubtotal,
       lineTax,
+      cgst,
+      sgst,
+      igst,
       lineTotal: roundCurrency(lineSubtotal + lineTax),
     };
   });
@@ -149,17 +168,22 @@ export const calculateInvoiceTotals = ({
     discountType: normalizeDiscountType(discountType),
   });
   const total = roundCurrency(Math.max(0, subtotal - safeDiscount + tax));
-  const igst = safeTaxMode === "IGST" ? tax : 0;
-  const cgst =
-    safeTaxMode === "CGST_SGST" ? roundCurrency(tax / 2) : 0;
-  const sgst =
-    safeTaxMode === "CGST_SGST" ? roundCurrency(tax - cgst) : 0;
+  const cgst = roundCurrency(
+    computedItems.reduce((sum, item) => sum + item.cgst, 0),
+  );
+  const sgst = roundCurrency(
+    computedItems.reduce((sum, item) => sum + item.sgst, 0),
+  );
+  const igst = roundCurrency(
+    computedItems.reduce((sum, item) => sum + item.igst, 0),
+  );
 
   return {
     subtotal,
     tax,
     discount: safeDiscount,
     total,
+    totalBase: subtotal,
     cgst,
     sgst,
     igst,

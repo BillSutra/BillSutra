@@ -183,6 +183,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     if (!data || !paymentSnapshot) return null;
 
     const tax = Number(data.tax ?? 0);
+    const cgst = Number(data.total_cgst ?? 0);
+    const sgst = Number(data.total_sgst ?? 0);
+    const igst = Number(data.total_igst ?? 0);
     const invoiceCurrency = businessProfile?.currency ?? "INR";
     const businessName = businessProfile?.business_name || "BillSutra";
     const businessState =
@@ -196,13 +199,17 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
       data.customer?.state ||
       "";
     const taxMode =
-      data.tax_mode === "IGST" || data.tax_mode === "CGST_SGST"
-        ? data.tax_mode
-        : tax <= 0
-          ? "NONE"
-          : businessState && customerState && businessState !== customerState
-            ? "IGST"
-            : "CGST_SGST";
+      igst > 0 && cgst === 0 && sgst === 0
+        ? "IGST"
+        : cgst > 0 || sgst > 0
+          ? "CGST_SGST"
+          : data.tax_mode === "IGST" || data.tax_mode === "CGST_SGST"
+            ? data.tax_mode
+            : tax <= 0
+              ? "NONE"
+              : businessState && customerState && businessState !== customerState
+                ? "IGST"
+                : "CGST_SGST";
     const latestPaymentMethod =
       paymentHistory[0]?.method ? formatLocalizedPaymentMethod(paymentHistory[0].method) : "";
     const discountType =
@@ -268,20 +275,37 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
       },
       items: data.items?.map((item) => ({
         name: item.name,
-        description: "",
+        description:
+          item.gst_type === "IGST"
+            ? `IGST ${Number(item.tax_rate ?? 0)}%`
+            : item.gst_type === "CGST_SGST"
+              ? `CGST ${Number(item.tax_rate ?? 0) / 2}% + SGST ${Number(item.tax_rate ?? 0) / 2}%`
+              : "",
         quantity: Number(item.quantity) || 0,
         unitPrice: Number(item.price) || 0,
         taxRate: item.tax_rate ? Number(item.tax_rate) : 0,
+        gstType:
+          item.gst_type === "IGST" || item.gst_type === "CGST_SGST"
+            ? item.gst_type
+            : undefined,
+        baseAmount: Number(item.base_amount ?? 0) || undefined,
+        gstAmount: Number(item.gst_amount ?? 0) || undefined,
+        cgstAmount: Number(item.cgst_amount ?? 0) || undefined,
+        sgstAmount: Number(item.sgst_amount ?? 0) || undefined,
+        igstAmount: Number(item.igst_amount ?? 0) || undefined,
+        taxableValue: Number(item.base_amount ?? 0) || undefined,
         amount: Number(item.total ?? 0),
       })),
       totals: {
         subtotal: Number(data.subtotal ?? 0),
+        totalBase: Number(data.total_base ?? data.subtotal ?? 0),
         tax,
         discount: Number(data.discount ?? 0),
         total: Number(data.total ?? 0),
-        cgst: taxMode === "CGST_SGST" && tax > 0 ? tax / 2 : 0,
-        sgst: taxMode === "CGST_SGST" && tax > 0 ? tax / 2 : 0,
-        igst: taxMode === "IGST" ? tax : 0,
+        cgst,
+        sgst,
+        igst,
+        grandTotal: Number(data.grand_total ?? data.total ?? 0),
         roundOff: 0,
       },
       discount: {

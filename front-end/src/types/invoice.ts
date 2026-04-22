@@ -37,6 +37,7 @@ export type InvoiceItemForm = {
   quantity: string;
   price: string;
   tax_rate: string;
+  gst_type?: TaxMode;
 };
 
 export type InvoiceItemError = {
@@ -45,10 +46,12 @@ export type InvoiceItemError = {
   quantity?: string;
   price?: string;
   tax_rate?: string;
+  gst_type?: string;
 };
 
 export type InvoiceTotals = {
   subtotal: number;
+  totalBase?: number;
   tax: number;
   cgst: number;
   sgst: number;
@@ -61,8 +64,13 @@ export type InvoiceTotals = {
     quantity: number;
     price: number;
     tax_rate?: number;
+    gst_type?: TaxMode;
+    baseAmount: number;
     lineSubtotal: number;
     lineTax: number;
+    cgst: number;
+    sgst: number;
+    igst: number;
     lineTotal: number;
   }>;
 };
@@ -81,17 +89,25 @@ export type InvoiceTemplateItem = {
   quantity: number;
   price: number;
   tax_rate?: number | null;
+  gst_type?: TaxMode | null;
+  base_amount?: number | null;
+  gst_amount?: number | null;
+  cgst_amount?: number | null;
+  sgst_amount?: number | null;
+  igst_amount?: number | null;
   total: number;
 };
 
 export type InvoiceTemplateTotals = {
   subtotal: number;
+  total_base?: number;
   tax: number;
   discount?: number;
   total: number;
   cgst?: number;
   sgst?: number;
   igst?: number;
+  grand_total?: number;
 };
 
 export type InvoicePdfItem = {
@@ -99,17 +115,25 @@ export type InvoicePdfItem = {
   quantity: number;
   price: number;
   tax_rate?: number | null;
+  gst_type?: TaxMode | null;
+  base_amount?: number | null;
+  gst_amount?: number | null;
+  cgst_amount?: number | null;
+  sgst_amount?: number | null;
+  igst_amount?: number | null;
   total: number;
 };
 
 export type InvoicePdfTotals = {
   subtotal: number;
+  total_base?: number;
   tax: number;
   discount?: number;
   total: number;
   cgst?: number;
   sgst?: number;
   igst?: number;
+  grand_total?: number;
 };
 
 export type InvoicePdfCustomer = {
