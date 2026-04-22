@@ -673,7 +673,9 @@ const TemplateIndianGst = ({
                 </div>
                 {totals.discount > 0 ? (
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-neutral-600">Discount</span>
+                    <span className="text-neutral-600">
+                      {data.discount?.label ?? "Discount"}
+                    </span>
                     <span className="font-semibold text-neutral-950">
                       -{formatCurrency(totals.discount, data.business.currency)}
                     </span>

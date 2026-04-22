@@ -34,7 +34,7 @@ const Header = ({ data, theme }: InvoiceSectionProps) => {
       >
         <div>
           <p className="text-[0.72em] font-semibold uppercase tracking-[0.26em] text-slate-500">
-            Tax invoice
+            {data.invoiceTitle || "Invoice"}
           </p>
           <h1 className="mt-1 text-[1.5em] font-semibold text-slate-950">
             {data.business.businessName}

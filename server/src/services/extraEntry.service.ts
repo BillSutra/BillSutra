@@ -1,8 +1,27 @@
+import { randomUUID } from "node:crypto";
 import { Prisma } from "@prisma/client";
-import prisma from "../config/db.config.js";
 import type { EntryType } from "@prisma/client";
+import prisma from "../config/db.config.js";
+import { ensureExtraEntriesTable } from "../lib/schemaCompatibility.js";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
+
+type ExtraEntryRow = {
+  id: string;
+  title: string;
+  amount: Prisma.Decimal | number;
+  type: EntryType;
+  date: Date;
+  notes: string | null;
+  user_id: number;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type ExtraEntryAggregateRow = {
+  type: EntryType;
+  amount: Prisma.Decimal | number;
+};
 
 export type ExtraEntryRecord = {
   id: string;
@@ -16,27 +35,93 @@ export type ExtraEntryRecord = {
   updatedAt: Date;
 };
 
-const mapRow = (row: {
-  id: string;
-  title: string;
-  amount: unknown;
-  type: EntryType;
-  date: Date;
-  notes: string | null;
-  userId: number;
-  createdAt: Date;
-  updatedAt: Date;
-}): ExtraEntryRecord => ({
+const selectEntryColumns = Prisma.sql`
+  "id",
+  "title",
+  "amount",
+  "type",
+  "date",
+  "notes",
+  "user_id",
+  "created_at",
+  "updated_at"
+`;
+
+const mapRow = (row: ExtraEntryRow): ExtraEntryRecord => ({
   id: row.id,
   title: row.title,
   amount: toNumber(row.amount),
   type: row.type,
   date: row.date,
   notes: row.notes,
-  userId: row.userId,
-  createdAt: row.createdAt,
-  updatedAt: row.updatedAt,
+  userId: row.user_id,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
 });
+
+const buildWhereClause = (params: {
+  userId: number;
+  from?: Date;
+  to?: Date;
+  type?: EntryType;
+}) => {
+  const conditions: Prisma.Sql[] = [Prisma.sql`"user_id" = ${params.userId}`];
+
+  if (params.from) {
+    conditions.push(Prisma.sql`"date" >= ${params.from}`);
+  }
+
+  if (params.to) {
+    conditions.push(Prisma.sql`"date" <= ${params.to}`);
+  }
+
+  if (params.type) {
+    conditions.push(Prisma.sql`"type" = ${params.type}::"EntryType"`);
+  }
+
+  return Prisma.sql`WHERE ${Prisma.join(conditions, Prisma.sql` AND `)}`;
+};
+
+const queryExtraEntries = async (params: {
+  userId: number;
+  from?: Date;
+  to?: Date;
+  type?: EntryType;
+  order?: "asc" | "desc";
+  skip?: number;
+  take?: number;
+}) => {
+  await ensureExtraEntriesTable();
+
+  const whereClause = buildWhereClause(params);
+  const orderByClause =
+    params.order === "asc"
+      ? Prisma.sql`ORDER BY "date" ASC`
+      : Prisma.sql`ORDER BY "date" DESC`;
+  const paginationClause =
+    params.skip === undefined || params.take === undefined
+      ? Prisma.empty
+      : Prisma.sql`OFFSET ${params.skip} LIMIT ${params.take}`;
+
+  return prisma.$queryRaw<ExtraEntryRow[]>(Prisma.sql`
+    SELECT ${selectEntryColumns}
+    FROM "extra_entries"
+    ${whereClause}
+    ${orderByClause}
+    ${paginationClause}
+  `);
+};
+
+export const listExtraEntriesInRange = async (params: {
+  userId: number;
+  from?: Date;
+  to?: Date;
+  type?: EntryType;
+  order?: "asc" | "desc";
+}) => {
+  const rows = await queryExtraEntries(params);
+  return rows.map(mapRow);
+};
 
 export const listExtraEntries = async (params: {
   userId: number;
@@ -48,24 +133,28 @@ export const listExtraEntries = async (params: {
 }) => {
   const { userId, from, to, type, page = 1, limit = 50 } = params;
   const skip = (page - 1) * limit;
-
-  const where: Prisma.ExtraEntryWhereInput = { userId };
-  if (from || to) {
-    where.date = {};
-    if (from) where.date.gte = from;
-    if (to) where.date.lte = to;
-  }
-  if (type) where.type = type;
-
-  const [rows, total] = await Promise.all([
-    prisma.extraEntry.findMany({
-      where,
-      orderBy: { date: "desc" },
+  const [rows, totalRows] = await Promise.all([
+    queryExtraEntries({
+      userId,
+      from,
+      to,
+      type,
+      order: "desc",
       skip,
       take: limit,
     }),
-    prisma.extraEntry.count({ where }),
+    (async () => {
+      await ensureExtraEntriesTable();
+      const whereClause = buildWhereClause({ userId, from, to, type });
+      return prisma.$queryRaw<Array<{ count: bigint | number }>>(Prisma.sql`
+        SELECT COUNT(*) AS "count"
+        FROM "extra_entries"
+        ${whereClause}
+      `);
+    })(),
   ]);
+
+  const total = Number(totalRows[0]?.count ?? 0);
 
   return {
     entries: rows.map(mapRow),
@@ -80,10 +169,17 @@ export const getExtraEntryById = async (params: {
   id: string;
   userId: number;
 }) => {
-  const entry = await prisma.extraEntry.findFirst({
-    where: { id: params.id, userId: params.userId },
-  });
-  return entry ? mapRow(entry) : null;
+  await ensureExtraEntriesTable();
+
+  const rows = await prisma.$queryRaw<ExtraEntryRow[]>(Prisma.sql`
+    SELECT ${selectEntryColumns}
+    FROM "extra_entries"
+    WHERE "id" = ${params.id}
+      AND "user_id" = ${params.userId}
+    LIMIT 1
+  `);
+
+  return rows[0] ? mapRow(rows[0]) : null;
 };
 
 export const createExtraEntry = async (params: {
@@ -94,16 +190,30 @@ export const createExtraEntry = async (params: {
   date: Date;
   notes?: string | null;
 }) => {
-  const entry = await prisma.extraEntry.create({
-    data: {
-      userId: params.userId,
-      title: params.title,
-      amount: params.amount,
-      type: params.type,
-      date: params.date,
-      notes: params.notes ?? null,
-    },
-  });
+  await ensureExtraEntriesTable();
+
+  const [entry] = await prisma.$queryRaw<ExtraEntryRow[]>(Prisma.sql`
+    INSERT INTO "extra_entries" (
+      "id",
+      "title",
+      "amount",
+      "type",
+      "date",
+      "notes",
+      "user_id"
+    )
+    VALUES (
+      ${randomUUID()},
+      ${params.title},
+      ${params.amount},
+      ${params.type}::"EntryType",
+      ${params.date},
+      ${params.notes ?? null},
+      ${params.userId}
+    )
+    RETURNING ${selectEntryColumns}
+  `);
+
   return mapRow(entry);
 };
 
@@ -116,35 +226,46 @@ export const updateExtraEntry = async (params: {
   date?: Date;
   notes?: string | null;
 }) => {
-  const existing = await prisma.extraEntry.findFirst({
-    where: { id: params.id, userId: params.userId },
+  const existing = await getExtraEntryById({
+    id: params.id,
+    userId: params.userId,
   });
+
   if (!existing) return null;
 
-  const entry = await prisma.extraEntry.update({
-    where: { id: params.id },
-    data: {
-      title: params.title ?? existing.title,
-      amount: params.amount ?? existing.amount,
-      type: params.type ?? existing.type,
-      date: params.date ?? existing.date,
-      notes: params.notes === undefined ? existing.notes : params.notes,
-    },
-  });
-  return mapRow(entry);
+  const [entry] = await prisma.$queryRaw<ExtraEntryRow[]>(Prisma.sql`
+    UPDATE "extra_entries"
+    SET
+      "title" = ${params.title ?? existing.title},
+      "amount" = ${params.amount ?? existing.amount},
+      "type" = ${(params.type ?? existing.type) as EntryType}::"EntryType",
+      "date" = ${params.date ?? existing.date},
+      "notes" = ${
+        params.notes === undefined ? existing.notes : (params.notes ?? null)
+      },
+      "updated_at" = CURRENT_TIMESTAMP
+    WHERE "id" = ${params.id}
+      AND "user_id" = ${params.userId}
+    RETURNING ${selectEntryColumns}
+  `);
+
+  return entry ? mapRow(entry) : null;
 };
 
 export const deleteExtraEntry = async (params: {
   id: string;
   userId: number;
 }) => {
-  const existing = await prisma.extraEntry.findFirst({
-    where: { id: params.id, userId: params.userId },
-  });
-  if (!existing) return false;
+  await ensureExtraEntriesTable();
 
-  await prisma.extraEntry.delete({ where: { id: params.id } });
-  return true;
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    DELETE FROM "extra_entries"
+    WHERE "id" = ${params.id}
+      AND "user_id" = ${params.userId}
+    RETURNING "id"
+  `);
+
+  return rows.length > 0;
 };
 
 export type ExtraEntryMonthStat = {
@@ -160,13 +281,15 @@ export const getExtraEntryStats = async (params: {
   from: Date;
   to: Date;
 }): Promise<ExtraEntryMonthStat> => {
-  const rows = await prisma.extraEntry.findMany({
-    where: {
-      userId: params.userId,
-      date: { gte: params.from, lte: params.to },
-    },
-    select: { type: true, amount: true },
-  });
+  await ensureExtraEntriesTable();
+
+  const rows = await prisma.$queryRaw<ExtraEntryAggregateRow[]>(Prisma.sql`
+    SELECT "type", "amount"
+    FROM "extra_entries"
+    WHERE "user_id" = ${params.userId}
+      AND "date" >= ${params.from}
+      AND "date" <= ${params.to}
+  `);
 
   let income = 0;
   let expense = 0;

@@ -145,7 +145,9 @@ const TaxSection = ({ data, theme }: InvoiceSectionProps) => {
           </div>
           {discount > 0 ? (
             <div className="flex items-center justify-between">
-              <span className="text-slate-600">{t("invoicePreview.discount")}</span>
+              <span className="text-slate-600">
+                {data.discount?.label ?? t("invoicePreview.discount")}
+              </span>
               <span className="font-medium text-slate-900">
                 -{formatCurrency(discount, data.business.currency)}
               </span>

@@ -11,6 +11,7 @@ import puppeteer from "puppeteer";
 import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
 import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
+import { normalizeTaxMode } from "../../../../shared/invoice-calculations.js";
 import {
   buildPublicInvoiceReference,
   buildPublicInvoiceUrl,
@@ -41,7 +42,11 @@ export type PublicInvoiceViewData = {
   amount: number;
   subtotal: number;
   tax: number;
+  tax_mode: "CGST_SGST" | "IGST" | "NONE";
   discount: number;
+  discount_type: "PERCENTAGE" | "FIXED";
+  discount_value: number;
+  discount_calculated: number;
   currency: string;
   status: InvoiceStatus;
   date: string;
@@ -110,6 +115,80 @@ const toNumber = (value: unknown) => Number(value ?? 0);
 const roundCurrencyAmount = (value: number) =>
   Math.round((value + Number.EPSILON) * 100) / 100;
 
+const normalizeDiscountType = (value: unknown): "PERCENTAGE" | "FIXED" =>
+  value === "PERCENTAGE" ? "PERCENTAGE" : "FIXED";
+
+const normalizeInvoiceTaxMode = (
+  value: unknown,
+): "CGST_SGST" | "IGST" | "NONE" =>
+  normalizeTaxMode(typeof value === "string" ? value : undefined);
+
+const toAbsoluteBackendAssetUrl = (value: string | null | undefined) => {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (
+    /^https?:\/\//i.test(trimmed) ||
+    trimmed.startsWith("data:") ||
+    trimmed.startsWith("blob:")
+  ) {
+    return trimmed;
+  }
+
+  const baseUrl = (
+    process.env.BACKEND_URL ??
+    process.env.APP_URL ??
+    process.env.SERVER_URL ??
+    `http://127.0.0.1:${process.env.PORT ?? 4000}`
+  )
+    .trim()
+    .replace(/\/$/, "");
+
+  if (!baseUrl) {
+    return null;
+  }
+
+  const normalizedPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return `${baseUrl}${normalizedPath}`;
+};
+
+type InvoiceGstMetadataRow = {
+  id: number;
+  total_base: Prisma.Decimal | number | null;
+  total_cgst: Prisma.Decimal | number | null;
+  total_sgst: Prisma.Decimal | number | null;
+  total_igst: Prisma.Decimal | number | null;
+  grand_total: Prisma.Decimal | number | null;
+};
+
+type InvoiceItemGstMetadataRow = {
+  id: number;
+  gst_type: string | null;
+  base_amount: Prisma.Decimal | number | null;
+  gst_amount: Prisma.Decimal | number | null;
+  cgst_amount: Prisma.Decimal | number | null;
+  sgst_amount: Prisma.Decimal | number | null;
+  igst_amount: Prisma.Decimal | number | null;
+};
+
+const buildDiscountLabel = ({
+  discountType,
+  discountValue,
+  currency,
+}: {
+  discountType: "PERCENTAGE" | "FIXED";
+  discountValue: number;
+  currency: string;
+}) => {
+  if (discountType === "PERCENTAGE") {
+    return `Discount (${roundCurrencyAmount(discountValue).toFixed(2)}%)`;
+  }
+
+  return `Discount (${formatCurrency(discountValue, currency)})`;
+};
+
 const normalizeStatusLabel = (value: string) =>
   value
     .replaceAll("_", " ")
@@ -127,6 +206,46 @@ const createInvoiceValidationError = (
   error.status = 422;
   error.errors = errors;
   return error;
+};
+
+const validateDiscountInput = ({
+  subtotal,
+  discountValue,
+  discountType,
+}: {
+  subtotal: number;
+  discountValue: number;
+  discountType: "PERCENTAGE" | "FIXED";
+}) => {
+  if (discountValue < 0) {
+    throw createInvoiceValidationError("Discount cannot be negative.", {
+      discount: ["Discount cannot be negative."],
+    });
+  }
+
+  if (subtotal <= 0 && discountValue > 0) {
+    throw createInvoiceValidationError("Add items first to apply a discount.", {
+      discount: ["Add items first to apply a discount."],
+    });
+  }
+
+  if (discountType === "PERCENTAGE" && discountValue > 100) {
+    throw createInvoiceValidationError(
+      "Discount percentage cannot exceed 100%.",
+      {
+        discount: ["Discount percentage cannot exceed 100%."],
+      },
+    );
+  }
+
+  if (discountType === "FIXED" && discountValue > subtotal) {
+    throw createInvoiceValidationError(
+      "Discount cannot exceed subtotal.",
+      {
+        discount: ["Discount cannot exceed subtotal."],
+      },
+    );
+  }
 };
 
 const resolveRequestedInvoicePaymentStatus = (
@@ -324,6 +443,56 @@ const formatDate = (value: Date | null | undefined) => {
   });
 };
 
+const attachInvoiceGstMetadata = async <
+  T extends
+    | (Prisma.InvoiceGetPayload<{ include: { customer: true; items: true; payments: true } }> & {
+        [key: string]: unknown;
+      })
+    | null,
+>(invoice: T) => {
+  if (!invoice) {
+    return invoice;
+  }
+
+  const [invoiceRows, itemRows] = await Promise.all([
+    prisma.$queryRaw<InvoiceGstMetadataRow[]>(Prisma.sql`
+      SELECT id, total_base, total_cgst, total_sgst, total_igst, grand_total
+      FROM "invoices"
+      WHERE id = ${invoice.id}
+      LIMIT 1
+    `),
+    prisma.$queryRaw<InvoiceItemGstMetadataRow[]>(Prisma.sql`
+      SELECT id, gst_type, base_amount, gst_amount, cgst_amount, sgst_amount, igst_amount
+      FROM "invoice_items"
+      WHERE invoice_id = ${invoice.id}
+    `),
+  ]);
+
+  const invoiceRow = invoiceRows[0];
+  const itemMetaById = new Map(itemRows.map((row) => [row.id, row]));
+
+  return {
+    ...invoice,
+    total_base: invoiceRow?.total_base ?? null,
+    total_cgst: invoiceRow?.total_cgst ?? null,
+    total_sgst: invoiceRow?.total_sgst ?? null,
+    total_igst: invoiceRow?.total_igst ?? null,
+    grand_total: invoiceRow?.grand_total ?? null,
+    items: invoice.items.map((item) => {
+      const meta = itemMetaById.get(item.id);
+      return {
+        ...item,
+        gst_type: meta?.gst_type ?? null,
+        base_amount: meta?.base_amount ?? null,
+        gst_amount: meta?.gst_amount ?? null,
+        cgst_amount: meta?.cgst_amount ?? null,
+        sgst_amount: meta?.sgst_amount ?? null,
+        igst_amount: meta?.igst_amount ?? null,
+      };
+    }),
+  } as T;
+};
+
 const escapeHtml = (text: unknown) =>
   String(text ?? "")
     .replaceAll("&", "&amp;")
@@ -430,7 +599,10 @@ const buildInvoicePdfHtml = (
     notes: string | null;
     subtotal: unknown;
     tax: unknown;
+    tax_mode: unknown;
     discount: unknown;
+    discount_type: unknown;
+    discount_value: unknown;
     total: unknown;
     customer: {
       name: string;
@@ -460,6 +632,7 @@ const buildInvoicePdfHtml = (
     pincode: string | null;
     phone: string | null;
     email: string | null;
+    logo_url: string | null;
     tax_id: string | null;
     currency: string;
   } | null,
@@ -467,6 +640,15 @@ const buildInvoicePdfHtml = (
 ) => {
   const currency = company?.currency ?? "INR";
   const totalAmount = toNumber(invoice.total);
+  const taxMode = normalizeInvoiceTaxMode(invoice.tax_mode);
+  const discountType = normalizeDiscountType(invoice.discount_type);
+  const discountValue = toNumber(invoice.discount_value);
+  const discountLabel = buildDiscountLabel({
+    discountType,
+    discountValue,
+    currency,
+  });
+  const companyLogoUrl = toAbsoluteBackendAssetUrl(company?.logo_url);
   const paidFromPayments = invoice.payments.reduce(
     (sum, payment) => sum + toNumber(payment.amount),
     0,
@@ -582,6 +764,28 @@ const buildInvoicePdfHtml = (
             border: 1px solid #e5e7eb;
             border-radius: 8px;
           }
+          .company-block {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+          }
+          .logo-box {
+            width: 64px;
+            height: 64px;
+            border-radius: 16px;
+            border: 1px solid #e5e7eb;
+            background: #f9fafb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            overflow: hidden;
+          }
+          .logo-box img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+          }
         </style>
       </head>
       <body>
@@ -597,13 +801,24 @@ const buildInvoicePdfHtml = (
           </div>
           <div>
             <h2>Company Details</h2>
-            <div>${escapeHtml(company?.business_name ?? "Your Business")}</div>
-            ${companyAddressLines
-              .map((line) => `<div class="muted">${escapeHtml(line)}</div>`)
-              .join("")}
-            <div class="muted">${escapeHtml(company?.phone ?? "")}</div>
-            <div class="muted">${escapeHtml(company?.email ?? "")}</div>
-            <div class="muted">Tax ID: ${escapeHtml(company?.tax_id ?? "-")}</div>
+            <div class="company-block">
+              <div class="logo-box">
+                ${
+                  companyLogoUrl
+                    ? `<img src="${escapeHtml(companyLogoUrl)}" alt="${escapeHtml(company?.business_name ?? "Business")} logo" />`
+                    : `<span class="muted">Logo</span>`
+                }
+              </div>
+              <div>
+                <div>${escapeHtml(company?.business_name ?? "Your Business")}</div>
+                ${companyAddressLines
+                  .map((line) => `<div class="muted">${escapeHtml(line)}</div>`)
+                  .join("")}
+                <div class="muted">${escapeHtml(company?.phone ?? "")}</div>
+                <div class="muted">${escapeHtml(company?.email ?? "")}</div>
+                <div class="muted">Tax ID: ${escapeHtml(company?.tax_id ?? "-")}</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -647,9 +862,30 @@ const buildInvoicePdfHtml = (
               <td>Tax</td>
               <td>${formatCurrency(invoice.tax, currency)}</td>
             </tr>
+            ${
+              taxMode === "CGST_SGST"
+                ? `
             <tr>
-              <td>Discount</td>
-              <td>${formatCurrency(invoice.discount, currency)}</td>
+              <td>CGST</td>
+              <td>${formatCurrency(roundCurrencyAmount(toNumber(invoice.tax) / 2), currency)}</td>
+            </tr>
+            <tr>
+              <td>SGST</td>
+              <td>${formatCurrency(roundCurrencyAmount(toNumber(invoice.tax) / 2), currency)}</td>
+            </tr>
+            `
+                : taxMode === "IGST"
+                  ? `
+            <tr>
+              <td>IGST</td>
+              <td>${formatCurrency(invoice.tax, currency)}</td>
+            </tr>
+            `
+                  : ""
+            }
+            <tr>
+              <td>${discountLabel}</td>
+              <td>-${formatCurrency(invoice.discount, currency)}</td>
             </tr>
             <tr class="final">
               <td>Grand Total</td>
@@ -717,7 +953,11 @@ const mapPublicInvoice = (
     notes: string | null;
     subtotal: unknown;
     tax: unknown;
+    tax_mode: unknown;
     discount: unknown;
+    discount_type: unknown;
+    discount_value: unknown;
+    discount_calculated: unknown;
     total: unknown;
     customer: {
       name: string;
@@ -781,7 +1021,11 @@ const mapPublicInvoice = (
     amount: toNumber(invoice.total),
     subtotal: toNumber(invoice.subtotal),
     tax: toNumber(invoice.tax),
+    tax_mode: normalizeInvoiceTaxMode(invoice.tax_mode),
     discount: toNumber(invoice.discount),
+    discount_type: normalizeDiscountType(invoice.discount_type),
+    discount_value: toNumber(invoice.discount_value),
+    discount_calculated: toNumber(invoice.discount_calculated),
     currency,
     status: invoice.status,
     date: invoice.date.toISOString(),
@@ -835,11 +1079,13 @@ export const listInvoices = async (
     };
   }
 
-  return prisma.invoice.findMany({
+  const invoices = await prisma.invoice.findMany({
     where,
     include: { customer: true, items: true, payments: true },
     orderBy: { createdAt: "desc" },
   });
+
+  return Promise.all(invoices.map((invoice) => attachInvoiceGstMetadata(invoice)));
 };
 
 export const getInvoiceBootstrap = async (userId: number) => {
@@ -890,6 +1136,7 @@ export const createInvoice = async (
     due_date?: Date | string | null;
     discount?: number | null;
     discount_type?: "PERCENTAGE" | "FIXED" | null;
+    tax_mode?: "CGST_SGST" | "IGST" | "NONE" | null;
     status?: InvoiceStatus;
     payment_status?: InvoicePaymentStatusInput;
     amount_paid?: number | null;
@@ -901,6 +1148,20 @@ export const createInvoice = async (
     items: InvoiceCalcItem[];
   },
 ) => {
+  const discountType = normalizeDiscountType(payload.discount_type);
+  const taxMode = normalizeInvoiceTaxMode(payload.tax_mode);
+  const discountValue = Math.max(0, Number(payload.discount ?? 0));
+  const subtotalBeforeDiscount = payload.items.reduce(
+    (sum, item) => sum + item.quantity * item.price,
+    0,
+  );
+
+  validateDiscountInput({
+    subtotal: roundCurrencyAmount(subtotalBeforeDiscount),
+    discountValue,
+    discountType,
+  });
+
   const latest = await prisma.invoice.findFirst({
     where: { user_id: userId },
     orderBy: { createdAt: "desc" },
@@ -910,8 +1171,9 @@ export const createInvoice = async (
   const invoiceNumber = generateInvoiceNumber(latest?.invoice_number);
   const totals = calculateTotals(
     payload.items,
-    payload.discount ?? 0,
-    payload.discount_type ?? "FIXED",
+    discountValue,
+    discountType,
+    taxMode,
   );
 
   const syncSales =
@@ -946,6 +1208,7 @@ export const createInvoice = async (
           quantity: item.quantity,
           price: item.price,
           tax_rate: item.tax_rate ?? undefined,
+          gst_type: item.gst_type,
         }));
 
     const itemPayload = resolvedItems.map((item, index) => ({
@@ -955,6 +1218,15 @@ export const createInvoice = async (
       price: item.price,
       tax_rate: item.tax_rate ?? undefined,
       total: totals.items[index]?.total ?? item.quantity * item.price,
+    }));
+
+    const itemMetadata = resolvedItems.map((item, index) => ({
+      gstType: totals.items[index]?.gst_type ?? item.gst_type ?? taxMode,
+      baseAmount: totals.items[index]?.baseAmount ?? item.quantity * item.price,
+      gstAmount: totals.items[index]?.lineTax ?? 0,
+      cgstAmount: totals.items[index]?.cgst ?? 0,
+      sgstAmount: totals.items[index]?.sgst ?? 0,
+      igstAmount: totals.items[index]?.igst ?? 0,
     }));
 
     if (syncSales) {
@@ -975,13 +1247,50 @@ export const createInvoice = async (
         status: paymentState.invoiceStatus,
         subtotal: totals.subtotal,
         tax: totals.tax,
+        tax_mode: taxMode,
         discount: totals.discount,
+        discount_type: discountType,
+        discount_value: discountValue,
+        discount_calculated: totals.discount,
         total: totals.total,
         notes: payload.notes ?? undefined,
         items: { create: itemPayload },
       },
       include: { items: true, payments: true },
     });
+
+    await tx.$executeRaw(Prisma.sql`
+      UPDATE "invoices"
+      SET
+        "total_base" = ${totals.totalBase},
+        "total_cgst" = ${totals.cgst},
+        "total_sgst" = ${totals.sgst},
+        "total_igst" = ${totals.igst},
+        "grand_total" = ${totals.total}
+      WHERE "id" = ${invoice.id}
+    `);
+
+    const persistedItems = await tx.invoiceItem.findMany({
+      where: { invoice_id: invoice.id },
+      orderBy: { id: "asc" },
+      select: { id: true },
+    });
+
+    await Promise.all(
+      persistedItems.map((item, index) =>
+        tx.$executeRaw(Prisma.sql`
+          UPDATE "invoice_items"
+          SET
+            "gst_type" = ${itemMetadata[index]?.gstType ?? "NONE"},
+            "base_amount" = ${itemMetadata[index]?.baseAmount ?? 0},
+            "gst_amount" = ${itemMetadata[index]?.gstAmount ?? 0},
+            "cgst_amount" = ${itemMetadata[index]?.cgstAmount ?? 0},
+            "sgst_amount" = ${itemMetadata[index]?.sgstAmount ?? 0},
+            "igst_amount" = ${itemMetadata[index]?.igstAmount ?? 0}
+          WHERE "id" = ${item.id}
+        `),
+      ),
+    );
 
     if (paymentState.paidAmount > 0 && paymentState.paymentMethod) {
       await tx.payment.create({
@@ -1043,10 +1352,12 @@ export const createInvoice = async (
 export const getInvoice = async (userId: number, id: number) => {
   await syncOverdueInvoices(userId);
 
-  return prisma.invoice.findFirst({
+  const invoice = await prisma.invoice.findFirst({
     where: { id, user_id: userId },
     include: { customer: true, items: true, payments: true },
   });
+
+  return attachInvoiceGstMetadata(invoice);
 };
 
 export const getPublicInvoice = async (reference: string) => {
@@ -1213,7 +1524,11 @@ export const duplicateInvoice = async (userId: number, id: number) => {
         due_date: source.due_date,
         subtotal: source.subtotal,
         tax: source.tax,
+        tax_mode: source.tax_mode,
         discount: source.discount,
+        discount_type: source.discount_type,
+        discount_value: source.discount_value,
+        discount_calculated: source.discount_calculated,
         total: source.total,
         notes: source.notes,
         items: {
@@ -1261,6 +1576,7 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
       pincode: true,
       phone: true,
       email: true,
+      logo_url: true,
       tax_id: true,
       currency: true,
     },

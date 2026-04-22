@@ -23,6 +23,8 @@ const ServiceItemsTable = ({ data, theme }: InvoiceSectionProps) => {
         {data.items.map((item, index) => {
           const lineTotal = item.quantity * item.unitPrice;
           const taxAmount = lineTotal * ((item.taxRate ?? 0) / 100);
+          const displayedAmount =
+            typeof item.amount === "number" ? item.amount : lineTotal + taxAmount;
           return (
             <div
               key={`${item.name}-${index}`}
@@ -48,10 +50,7 @@ const ServiceItemsTable = ({ data, theme }: InvoiceSectionProps) => {
                     className="mt-2 font-semibold"
                     style={{ color: theme.primaryColor }}
                   >
-                    {formatCurrency(
-                      lineTotal + taxAmount,
-                      data.business.currency,
-                    )}
+                    {formatCurrency(displayedAmount, data.business.currency)}
                   </p>
                 </div>
               </div>

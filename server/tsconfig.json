@@ -7,12 +7,12 @@
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "types": ["node"],
-    "rootDir": "src",
+    "rootDir": "..",
     "outDir": ".build",
     "jsx": "react-jsx",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true
   },
-  "include": ["src/**/*", "src/custom-types.d.ts"],
+  "include": ["src/**/*", "src/custom-types.d.ts", "../shared/**/*.ts"],
   "exclude": ["node_modules", "dist", ".build"]
 }

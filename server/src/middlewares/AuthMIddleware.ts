@@ -9,6 +9,7 @@ import { setObservabilityUser } from "../lib/observability.js";
 const workerAllowedRoutes = [
   { prefix: "/sales" },
   { prefix: "/invoices" },
+  { prefix: "/worker" },
   { prefix: "/customers", methods: ["GET", "POST"] },
   { prefix: "/clients", methods: ["GET", "POST"] },
   { prefix: "/products", methods: ["GET"] },

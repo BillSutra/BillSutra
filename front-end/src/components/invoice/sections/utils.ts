@@ -1,4 +1,5 @@
 import type { InvoiceLineItem } from "@/types/invoice-template";
+import { calculateInvoiceTotals } from "../../../../../shared/invoice-calculations";
 
 const DEFAULT_CURRENCY_CODE = "INR";
 
@@ -192,19 +193,19 @@ export const calculateTaxBreakdown = (
 };
 
 export const calculateTotals = (items: InvoiceLineItem[]) => {
-  const subtotal = roundCurrencyValue(
-    items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
-  );
-  const tax = roundCurrencyValue(
-    items.reduce((sum, item) => {
-      const rate = item.taxRate ?? 0;
-      return sum + item.quantity * item.unitPrice * (rate / 100);
-    }, 0),
-  );
+  const totals = calculateInvoiceTotals({
+    items: items.map((item) => ({
+      name: item.name,
+      quantity: item.quantity,
+      price: item.unitPrice,
+      tax_rate: item.taxRate ?? 0,
+    })),
+  });
+
   return {
-    subtotal,
-    tax,
+    subtotal: totals.subtotal,
+    tax: totals.tax,
     discount: 0,
-    total: roundCurrencyValue(subtotal + tax),
+    total: totals.total,
   };
 };
