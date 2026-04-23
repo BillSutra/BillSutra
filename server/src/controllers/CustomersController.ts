@@ -14,6 +14,7 @@ import {
   parseLegacyBusinessAddress,
 } from "../lib/indianAddress.js";
 import { normalizeGstin } from "../lib/gstin.js";
+import { launchPuppeteerBrowser } from "../lib/launchPuppeteerBrowser.js";
 import { createNotification } from "../services/notification.service.js";
 
 type CustomerCreateInput = z.infer<typeof customerCreateSchema>;
@@ -524,6 +525,352 @@ const buildCustomerLedger = (
   };
 };
 
+const formatLedgerDate = (value: Date | string | null | undefined) => {
+  if (!value) return "-";
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return typeof value === "string" ? value : "-";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(parsed);
+};
+
+const formatLedgerCurrency = (value: number) =>
+  new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value || 0);
+
+const escapeLedgerHtml = (value: string) =>
+  value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+
+const buildLedgerPdfHtml = (
+  ledger: ReturnType<typeof buildCustomerLedger>,
+  businessName: string | null,
+) => {
+  const customerName =
+    ledger.customer.display_name ||
+    ledger.customer.businessName ||
+    ledger.customer.business_name ||
+    ledger.customer.name;
+  const customerAddress =
+    formatBusinessAddress(
+      normalizeBusinessAddressDraft({
+        addressLine1: ledger.customer.address_line1 ?? undefined,
+        city: ledger.customer.city ?? undefined,
+        state: ledger.customer.state ?? undefined,
+        pincode: ledger.customer.pincode ?? undefined,
+      }),
+      ledger.customer.address,
+    ) || "No address";
+
+  const generatedOn = formatLedgerDate(new Date());
+  const rows =
+    ledger.entries.length > 0
+      ? ledger.entries
+          .map(
+            (entry) => `
+              <tr>
+                <td>${escapeLedgerHtml(formatLedgerDate(entry.date))}</td>
+                <td>${escapeLedgerHtml(entry.description)}</td>
+                <td>${escapeLedgerHtml(entry.note ?? "-")}</td>
+                <td class="amount">${escapeLedgerHtml(formatLedgerCurrency(entry.debit))}</td>
+                <td class="amount">${escapeLedgerHtml(formatLedgerCurrency(entry.credit))}</td>
+                <td class="amount">${escapeLedgerHtml(formatLedgerCurrency(entry.balance))}</td>
+              </tr>
+            `,
+          )
+          .join("")
+      : `
+          <tr>
+            <td colspan="6" class="empty-state">No transactions found</td>
+          </tr>
+        `;
+
+  return `
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>${escapeLedgerHtml(customerName)} ledger statement</title>
+        <style>
+          @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+          @page {
+            size: A4;
+            margin: 20mm 15mm;
+          }
+
+          * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            color: #111827;
+            font-family: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.5;
+          }
+
+          .page {
+            width: 100%;
+          }
+
+          .header {
+            margin-bottom: 20px;
+          }
+
+          .eyebrow {
+            margin: 0 0 6px;
+            color: #8a6d56;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.16em;
+            text-transform: uppercase;
+          }
+
+          .title {
+            margin: 0;
+            font-size: 24px;
+            line-height: 1.2;
+            font-weight: 700;
+            color: #111827;
+          }
+
+          .subtitle {
+            margin: 8px 0 0;
+            color: #4b5563;
+            font-size: 12px;
+          }
+
+          .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
+          }
+
+          .meta-card {
+            border: 1px solid #e5ded3;
+            border-radius: 12px;
+            padding: 14px 16px;
+            background: #fffdfa;
+          }
+
+          .meta-label {
+            margin: 0 0 6px;
+            color: #8a6d56;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+          }
+
+          .meta-value {
+            margin: 0;
+            color: #111827;
+            font-size: 13px;
+            font-weight: 500;
+            word-break: break-word;
+          }
+
+          .summary {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+            border-spacing: 10px 0;
+            margin: 0 -10px 20px;
+          }
+
+          .summary-card {
+            display: table-cell;
+            width: 33.333%;
+            border: 1px solid #e7ded1;
+            border-radius: 14px;
+            background: #fcfaf6;
+            padding: 14px 16px;
+            vertical-align: top;
+          }
+
+          .summary-label {
+            margin: 0;
+            color: #8a6d56;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+          }
+
+          .summary-value {
+            margin: 10px 0 0;
+            font-size: 24px;
+            line-height: 1.2;
+            font-weight: 700;
+            color: #172033;
+          }
+
+          .table-wrap {
+            border: 1px solid #eadfce;
+            border-radius: 14px;
+            overflow: hidden;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            font-size: 12px;
+          }
+
+          thead {
+            display: table-header-group;
+          }
+
+          tr {
+            page-break-inside: avoid;
+          }
+
+          th, td {
+            border-bottom: 1px solid #ece4d8;
+            padding: 10px 12px;
+            vertical-align: top;
+            word-break: break-word;
+          }
+
+          th {
+            background: #f8f2e8;
+            color: #6b5442;
+            font-size: 11px;
+            font-weight: 700;
+            text-align: left;
+          }
+
+          tbody tr:nth-child(even) {
+            background: #fffdfa;
+          }
+
+          tbody tr:last-child td {
+            border-bottom: none;
+          }
+
+          .amount {
+            text-align: right;
+            white-space: nowrap;
+            font-variant-numeric: tabular-nums;
+          }
+
+          .empty-state {
+            padding: 20px 12px;
+            text-align: center;
+            color: #6b7280;
+          }
+
+          .footer {
+            margin-top: 18px;
+            text-align: center;
+            color: #9ca3af;
+            font-size: 10px;
+          }
+        </style>
+      </head>
+      <body>
+        <main class="page">
+          <section class="header">
+            <p class="eyebrow">Customer Ledger Statement</p>
+            <h1 class="title">${escapeLedgerHtml(customerName)}</h1>
+            <p class="subtitle">${escapeLedgerHtml(
+              businessName
+                ? `Prepared by ${businessName}`
+                : "Prepared for account review",
+            )}</p>
+          </section>
+
+          <section class="meta-grid">
+            <div class="meta-card">
+              <p class="meta-label">Customer Contact</p>
+              <p class="meta-value">${escapeLedgerHtml(
+                ledger.customer.phone || "No phone",
+              )}</p>
+            </div>
+            <div class="meta-card">
+              <p class="meta-label">Generated On</p>
+              <p class="meta-value">${escapeLedgerHtml(generatedOn)}</p>
+            </div>
+            <div class="meta-card">
+              <p class="meta-label">Address</p>
+              <p class="meta-value">${escapeLedgerHtml(customerAddress)}</p>
+            </div>
+            <div class="meta-card">
+              <p class="meta-label">Status</p>
+              <p class="meta-value">${escapeLedgerHtml(
+                ledger.summary.settled
+                  ? "Settled"
+                  : `${ledger.summary.openInvoiceCount} open invoice(s)`,
+              )}</p>
+            </div>
+          </section>
+
+          <section class="summary" aria-label="Ledger summary">
+            <div class="summary-card">
+              <p class="summary-label">Total Due</p>
+              <p class="summary-value">${escapeLedgerHtml(
+                formatLedgerCurrency(ledger.summary.outstandingBalance),
+              )}</p>
+            </div>
+            <div class="summary-card">
+              <p class="summary-label">Total Billed</p>
+              <p class="summary-value">${escapeLedgerHtml(
+                formatLedgerCurrency(ledger.summary.totalBilled),
+              )}</p>
+            </div>
+            <div class="summary-card">
+              <p class="summary-label">Total Paid</p>
+              <p class="summary-value">${escapeLedgerHtml(
+                formatLedgerCurrency(ledger.summary.totalPaid),
+              )}</p>
+            </div>
+          </section>
+
+          <section class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 16%;">Date</th>
+                  <th style="width: 28%;">Description</th>
+                  <th style="width: 22%;">Note</th>
+                  <th style="width: 11%;">Debit</th>
+                  <th style="width: 11%;">Credit</th>
+                  <th style="width: 12%;">Balance</th>
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </section>
+
+          <p class="footer">Customer ledger statement</p>
+        </main>
+      </body>
+    </html>
+  `;
+};
+
 class CustomersController {
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
@@ -784,6 +1131,99 @@ class CustomersController {
     return sendResponse(res, 200, {
       data: buildCustomerLedger(customer, extendedMap.get(customer.id)),
     });
+  }
+
+  static async ledgerPdf(req: Request, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    const id = Number(req.params.id);
+    const customer = await prisma.customer.findFirst({
+      where: { id, user_id: userId },
+      select: {
+        ...customerBaseSelect,
+        invoices: {
+          orderBy: { date: "asc" },
+          select: {
+            id: true,
+            invoice_number: true,
+            date: true,
+            due_date: true,
+            status: true,
+            total: true,
+            payments: {
+              orderBy: { paid_at: "asc" },
+              select: {
+                id: true,
+                amount: true,
+                method: true,
+                reference: true,
+                paid_at: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!customer) {
+      return sendResponse(res, 404, { message: "Customer not found" });
+    }
+
+    const [extendedMap, businessProfile] = await Promise.all([
+      loadExtendedCustomerFields(userId, [customer.id]),
+      prisma.businessProfile.findUnique({
+        where: { user_id: userId },
+        select: { business_name: true },
+      }),
+    ]);
+
+    const ledger = buildCustomerLedger(customer, extendedMap.get(customer.id));
+    const html = buildLedgerPdfHtml(ledger, businessProfile?.business_name ?? null);
+
+    try {
+      const browser = await launchPuppeteerBrowser();
+      try {
+        const page = await browser.newPage();
+        await page.setContent(html, { waitUntil: "networkidle0" });
+
+        const pdfBuffer = await page.pdf({
+          format: "A4",
+          printBackground: true,
+          preferCSSPageSize: true,
+          margin: {
+            top: "20mm",
+            right: "15mm",
+            bottom: "20mm",
+            left: "15mm",
+          },
+        });
+
+        const fileName = `${customer.name || "customer"}-ledger-statement.pdf`
+          .replace(/[^a-z0-9._-]+/gi, "-")
+          .replace(/-+/g, "-")
+          .replace(/^-|-$/g, "")
+          .toLowerCase();
+
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${fileName || "customer-ledger-statement.pdf"}"`,
+        );
+        return res.status(200).send(Buffer.from(pdfBuffer));
+      } finally {
+        await browser.close();
+      }
+    } catch (error) {
+      return sendResponse(res, 503, {
+        message:
+          error instanceof Error
+            ? `PDF generator is unavailable: ${error.message}`
+            : "PDF generator is unavailable.",
+      });
+    }
   }
 
   static async update(req: Request, res: Response) {

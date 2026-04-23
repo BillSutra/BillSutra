@@ -3,11 +3,11 @@ import {
   Prisma,
 } from "@prisma/client";
 import type { InvoiceStatus, PaymentMethod, PaymentStatus, SaleStatus } from "@prisma/client";
-import puppeteer from "puppeteer";
 import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
 import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
 import { normalizeTaxMode } from "../../utils/invoiceCalculations.js";
+import { launchPuppeteerBrowser } from "../../lib/launchPuppeteerBrowser.js";
 import {
   buildPublicInvoiceReference,
   buildPublicInvoiceUrl,
@@ -1804,10 +1804,7 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
 
   const html = buildInvoicePdfHtml(invoice, company, customerProfile);
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  const browser = await launchPuppeteerBrowser();
 
   try {
     const page = await browser.newPage();
