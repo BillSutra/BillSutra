@@ -1074,7 +1074,13 @@ export type AccessPaymentRecord = {
   status: "pending" | "approved" | "rejected" | "success";
   name?: string | null;
   utr?: string | null;
+  proofUrl?: string | null;
+  proofMimeType?: string | null;
+  proofOriginalName?: string | null;
+  proofSize?: number | null;
+  proofUploadedAt?: string | null;
   screenshotUrl?: string | null;
+  adminNote?: string | null;
   paymentId?: string | null;
   orderId?: string | null;
   provider?: string | null;
@@ -1216,6 +1222,14 @@ export type AccessPaymentStatusResponse = {
 export type CreateAccessRazorpayOrderInput = {
   plan_id: "pro" | "pro-plus";
   billing_cycle: "monthly" | "yearly";
+};
+
+export type UploadAccessPaymentProofInput = {
+  planId: "pro" | "pro-plus";
+  billingCycle: "monthly" | "yearly";
+  name?: string;
+  utr?: string;
+  paymentProof: File;
 };
 
 export type CreateAccessRazorpayOrderResponse = {
@@ -2551,6 +2565,36 @@ export const submitAccessUpiPayment = async (
   const response = await apiClient.post("/submit-upi", payload, {
     headers: { "Content-Type": "multipart/form-data" },
   });
+  return response.data.data as AccessPaymentRecord;
+};
+
+export const uploadAccessPaymentProof = async (
+  payload: UploadAccessPaymentProofInput,
+  options?: {
+    onUploadProgress?: (progressPercent: number) => void;
+  },
+): Promise<AccessPaymentRecord> => {
+  const formData = new FormData();
+  formData.append("plan_id", payload.planId);
+  formData.append("billing_cycle", payload.billingCycle);
+  if (payload.name?.trim()) {
+    formData.append("name", payload.name.trim());
+  }
+  if (payload.utr?.trim()) {
+    formData.append("utr", payload.utr.trim().toUpperCase());
+  }
+  formData.append("paymentProof", payload.paymentProof);
+
+  const response = await apiClient.post("/payments/upload-proof", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (event) => {
+      if (!options?.onUploadProgress) return;
+      if (!event.total || event.total <= 0) return;
+      const progressPercent = Math.round((event.loaded / event.total) * 100);
+      options.onUploadProgress(progressPercent);
+    },
+  });
+
   return response.data.data as AccessPaymentRecord;
 };
 

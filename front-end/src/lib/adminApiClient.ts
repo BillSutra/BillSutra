@@ -106,7 +106,13 @@ export type AdminAccessPaymentRecord = {
   status: "pending" | "approved" | "rejected" | "success";
   name?: string | null;
   utr?: string | null;
+  proofUrl?: string | null;
+  proofMimeType?: string | null;
+  proofOriginalName?: string | null;
+  proofSize?: number | null;
+  proofUploadedAt?: string | null;
   screenshotUrl?: string | null;
+  adminNote?: string | null;
   provider?: string | null;
   providerReference?: string | null;
   reviewedByAdminId?: string | null;
@@ -114,11 +120,11 @@ export type AdminAccessPaymentRecord = {
   reviewedAt?: string | null;
   createdAt: string;
   updatedAt: string;
-  user: {
+  user?: {
     id: number;
     name: string;
     email: string;
-  };
+  } | null;
 };
 
 const adminApiClient = axios.create({
@@ -175,10 +181,24 @@ export const fetchAdminPayments = async () => {
   return response.data.data as AdminAccessPaymentRecord[];
 };
 
-export const verifyAdminPayment = async (payload: {
+export const approveAdminPayment = async (payload: {
   paymentId: string;
-  status: "approved" | "rejected";
+  adminNote?: string;
 }) => {
-  const response = await adminApiClient.post("/admin/verify", payload);
+  const response = await adminApiClient.patch(
+    `/admin/payments/${payload.paymentId}/approve`,
+    payload.adminNote?.trim() ? { adminNote: payload.adminNote.trim() } : {},
+  );
+  return response.data.data as AdminAccessPaymentRecord;
+};
+
+export const rejectAdminPayment = async (payload: {
+  paymentId: string;
+  adminNote?: string;
+}) => {
+  const response = await adminApiClient.patch(
+    `/admin/payments/${payload.paymentId}/reject`,
+    payload.adminNote?.trim() ? { adminNote: payload.adminNote.trim() } : {},
+  );
   return response.data.data as AdminAccessPaymentRecord;
 };

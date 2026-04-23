@@ -7,6 +7,7 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg",
   "image/jpg",
   "image/webp",
+  "application/pdf",
 ]);
 
 const upload = multer({
@@ -20,7 +21,7 @@ const upload = multer({
 
     cb(
       Object.assign(
-        new Error("Only PNG, JPG, and WEBP screenshots are allowed."),
+        new Error("Only JPG, JPEG, PNG, WEBP, and PDF payment proofs are allowed."),
         {
           status: 400,
         },
@@ -34,8 +35,18 @@ export const paymentProofUploadMiddleware = (
   res: Response,
   next: NextFunction,
 ) => {
-  upload.single("screenshot")(req, res, (err: unknown) => {
+  upload.fields([
+    { name: "paymentProof", maxCount: 1 },
+    { name: "screenshot", maxCount: 1 },
+  ])(req, res, (err: unknown) => {
     if (!err) {
+      const files = req.files as
+        | Record<string, Express.Multer.File[]>
+        | undefined;
+      const paymentProof = files?.paymentProof?.[0] ?? files?.screenshot?.[0];
+      if (paymentProof) {
+        (req as Request & { file?: Express.Multer.File }).file = paymentProof;
+      }
       next();
       return;
     }
@@ -43,7 +54,7 @@ export const paymentProofUploadMiddleware = (
     if (err instanceof multer.MulterError) {
       if (err.code === "LIMIT_FILE_SIZE") {
         sendResponse(res, 400, {
-          message: "Screenshot size must not exceed 5MB.",
+          message: "Payment proof size must not exceed 5MB.",
         });
         return;
       }
@@ -54,7 +65,7 @@ export const paymentProofUploadMiddleware = (
 
     const status = (err as { status?: number }).status ?? 400;
     const message =
-      err instanceof Error ? err.message : "Invalid screenshot upload.";
+      err instanceof Error ? err.message : "Invalid payment proof upload.";
 
     sendResponse(res, status, { message });
   });

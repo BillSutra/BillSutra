@@ -1008,9 +1008,42 @@ export const accessUpiSubmitSchema = z.object({
   utr: z.string().trim().min(8).max(22),
 });
 
+export const accessPaymentProofUploadSchema = z
+  .object({
+    plan_id: accessPlanSchema.optional(),
+    planId: accessPlanSchema.optional(),
+    billing_cycle: accessBillingCycleSchema.optional(),
+    billingCycle: accessBillingCycleSchema.optional(),
+    name: z.preprocess(emptyToUndefined, z.string().trim().min(2).max(191).optional()),
+    utr: z.preprocess(emptyToUndefined, z.string().trim().min(8).max(22).optional()),
+    userId: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional()),
+  })
+  .transform((value) => ({
+    plan_id: value.plan_id ?? value.planId,
+    billing_cycle: value.billing_cycle ?? value.billingCycle ?? "monthly",
+    name: value.name,
+    utr: value.utr,
+    userId: value.userId,
+  }))
+  .refine((value) => Boolean(value.plan_id), {
+    message: "Plan is required",
+    path: ["plan_id"],
+  });
+
 export const adminAccessPaymentVerifySchema = z.object({
   paymentId: z.string().trim().min(1),
   status: z.enum(["approved", "rejected"]),
+  adminNote: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().max(500).optional(),
+  ),
+});
+
+export const adminAccessPaymentReviewNoteSchema = z.object({
+  adminNote: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().max(500).optional(),
+  ),
 });
 
 const purchaseItemSchema = z.object({

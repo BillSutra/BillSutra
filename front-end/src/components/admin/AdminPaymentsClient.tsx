@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Clock3,
   ExternalLink,
+  FileText,
   RefreshCw,
   Search,
   XCircle,
@@ -25,8 +26,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { clearAdminToken } from "@/lib/adminAuth";
 import {
+  approveAdminPayment,
   fetchAdminPayments,
-  verifyAdminPayment,
+  rejectAdminPayment,
   type AdminAccessPaymentRecord,
 } from "@/lib/adminApiClient";
 
@@ -48,6 +50,11 @@ const formatCurrency = (value: number) =>
     minimumFractionDigits: 0,
   }).format(value);
 
+const formatFileSize = (value?: number | null) => {
+  if (!value || Number.isNaN(value)) return null;
+  return `${(value / (1024 * 1024)).toFixed(2)} MB`;
+};
+
 const statusBadgeVariant = (
   status: AdminAccessPaymentRecord["status"],
 ): "default" | "paid" | "pending" | "overdue" => {
@@ -56,6 +63,18 @@ const statusBadgeVariant = (
   if (status === "rejected") return "overdue";
   return "default";
 };
+
+const getProofUrl = (payment: AdminAccessPaymentRecord) =>
+  payment.proofUrl ?? payment.screenshotUrl ?? null;
+
+const isImageProof = (payment: AdminAccessPaymentRecord) =>
+  payment.proofMimeType?.startsWith("image/") ?? false;
+
+const getPaymentUserName = (payment: AdminAccessPaymentRecord) =>
+  payment.user?.name?.trim() || payment.name?.trim() || "Unknown user";
+
+const getPaymentUserEmail = (payment: AdminAccessPaymentRecord) =>
+  payment.user?.email?.trim() || "Email unavailable";
 
 export default function AdminPaymentsClient() {
   const router = useRouter();
@@ -66,6 +85,7 @@ export default function AdminPaymentsClient() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [activePaymentId, setActivePaymentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
 
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
@@ -110,8 +130,8 @@ export default function AdminPaymentsClient() {
     return payments.filter((payment) => {
       const matchesFilter = filter === "all" || payment.status === filter;
       const haystack = [
-        payment.user.name,
-        payment.user.email,
+        getPaymentUserName(payment),
+        getPaymentUserEmail(payment),
         payment.planId,
         payment.billingCycle,
         payment.utr ?? "",
@@ -142,10 +162,18 @@ export default function AdminPaymentsClient() {
     try {
       setActivePaymentId(paymentId);
       setError(null);
-      const updated = await verifyAdminPayment({ paymentId, status });
+      const adminNote = adminNotes[paymentId]?.trim() || undefined;
+      const updated =
+        status === "approved"
+          ? await approveAdminPayment({ paymentId, adminNote })
+          : await rejectAdminPayment({ paymentId, adminNote });
       setPayments((current) =>
         current.map((payment) => (payment.id === updated.id ? updated : payment)),
       );
+      setAdminNotes((current) => ({
+        ...current,
+        [paymentId]: "",
+      }));
     } catch (reviewError) {
       if (
         isAxiosError(reviewError) &&
@@ -204,7 +232,11 @@ export default function AdminPaymentsClient() {
               </div>
 
               <div className="flex flex-wrap gap-3">
-                <Button asChild variant="secondary" className="bg-white text-slate-950 hover:bg-blue-50">
+                <Button
+                  asChild
+                  variant="secondary"
+                  className="bg-white text-slate-950 hover:bg-blue-50"
+                >
                   <Link href="/admin/dashboard">
                     <ArrowLeft className="size-4" />
                     Back to dashboard
@@ -263,7 +295,8 @@ export default function AdminPaymentsClient() {
               <div>
                 <CardTitle>Manual UPI queue</CardTitle>
                 <CardDescription className="whitespace-normal">
-                  Search by user, email, plan, or UTR and process each request with one click.
+                  Search by user, email, plan, or UTR and process each request
+                  with one click.
                 </CardDescription>
               </div>
 
@@ -297,6 +330,12 @@ export default function AdminPaymentsClient() {
             {filteredPayments.length ? (
               filteredPayments.map((payment) => {
                 const isWorking = activePaymentId === payment.id;
+                const proofUrl = getProofUrl(payment);
+                const noteValue = adminNotes[payment.id] ?? "";
+                const fileSize = formatFileSize(payment.proofSize);
+                const userName = getPaymentUserName(payment);
+                const userEmail = getPaymentUserEmail(payment);
+
                 return (
                   <div
                     key={payment.id}
@@ -306,7 +345,7 @@ export default function AdminPaymentsClient() {
                       <div className="space-y-3">
                         <div className="flex flex-wrap items-center gap-3">
                           <p className="text-lg font-semibold text-slate-950">
-                            {payment.user.name}
+                            {userName}
                           </p>
                           <Badge variant={statusBadgeVariant(payment.status)}>
                             {payment.status}
@@ -318,34 +357,128 @@ export default function AdminPaymentsClient() {
                         </div>
 
                         <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-2 xl:grid-cols-4">
-                          <p>Email: {payment.user.email}</p>
+                          <p>Email: {userEmail}</p>
                           <p>UTR: {payment.utr ?? "N/A"}</p>
                           <p>Amount: {formatCurrency(payment.amount)}</p>
                           <p>Created: {formatDateTime(payment.createdAt)}</p>
                         </div>
 
-                        <div className="flex flex-wrap gap-3 text-sm text-slate-600">
-                          {payment.screenshotUrl ? (
-                            <a
-                              href={payment.screenshotUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 font-medium text-slate-700 hover:border-slate-300"
-                            >
-                              Open proof
-                              <ExternalLink className="size-3.5" />
-                            </a>
-                          ) : (
-                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">
-                              No screenshot attached
-                            </span>
-                          )}
+                        <div className="grid gap-4 xl:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+                          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                            <p className="text-sm font-medium text-slate-800">
+                              Payment proof
+                            </p>
 
-                          {payment.reviewedAt ? (
-                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">
-                              Reviewed {formatDateTime(payment.reviewedAt)}
-                            </span>
-                          ) : null}
+                            {proofUrl ? (
+                              <>
+                                {isImageProof(payment) ? (
+                                  <a
+                                    href={proofUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="mt-3 block overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"
+                                  >
+                                    <img
+                                      src={proofUrl}
+                                      alt={`Payment proof for ${userName}`}
+                                      className="h-48 w-full object-contain"
+                                    />
+                                  </a>
+                                ) : (
+                                  <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                                    <FileText className="size-4" />
+                                    PDF proof attached
+                                  </div>
+                                )}
+
+                                <div className="mt-3 flex flex-wrap gap-2 text-sm text-slate-600">
+                                  {payment.proofOriginalName ? (
+                                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
+                                      {payment.proofOriginalName}
+                                    </span>
+                                  ) : null}
+                                  {fileSize ? (
+                                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
+                                      {fileSize}
+                                    </span>
+                                  ) : null}
+                                  {payment.proofUploadedAt ? (
+                                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
+                                      Uploaded {formatDateTime(payment.proofUploadedAt)}
+                                    </span>
+                                  ) : null}
+                                </div>
+
+                                <a
+                                  href={proofUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:border-slate-300"
+                                >
+                                  View proof
+                                  <ExternalLink className="size-3.5" />
+                                </a>
+                              </>
+                            ) : (
+                              <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                                No payment proof uploaded.
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4">
+                            <div className="flex flex-wrap gap-3 text-sm text-slate-600">
+                              {payment.reviewedAt ? (
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
+                                  Reviewed {formatDateTime(payment.reviewedAt)}
+                                </span>
+                              ) : (
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
+                                  Awaiting admin review
+                                </span>
+                              )}
+                              {payment.reviewedByAdminEmail ? (
+                                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5">
+                                  Reviewer {payment.reviewedByAdminEmail}
+                                </span>
+                              ) : null}
+                            </div>
+
+                            {payment.adminNote ? (
+                              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                                <span className="font-medium text-slate-900">
+                                  Latest note:
+                                </span>{" "}
+                                {payment.adminNote}
+                              </div>
+                            ) : null}
+
+                            <div>
+                              <label
+                                htmlFor={`admin-note-${payment.id}`}
+                                className="text-sm font-medium text-slate-800"
+                              >
+                                Admin note
+                              </label>
+                              <textarea
+                                id={`admin-note-${payment.id}`}
+                                value={noteValue}
+                                onChange={(event) =>
+                                  setAdminNotes((current) => ({
+                                    ...current,
+                                    [payment.id]: event.target.value,
+                                  }))
+                                }
+                                rows={3}
+                                maxLength={500}
+                                placeholder="Optional note for approval or rejection"
+                                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-100"
+                              />
+                              <p className="mt-2 text-xs text-slate-500">
+                                {noteValue.trim().length}/500 characters
+                              </p>
+                            </div>
+                          </div>
                         </div>
                       </div>
 

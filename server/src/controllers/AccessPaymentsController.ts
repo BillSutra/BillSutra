@@ -6,6 +6,7 @@ import {
   handleRazorpayWebhook,
   reviewAdminUpiPayment,
   submitAccessUpiPayment,
+  uploadAccessPaymentProof,
   verifyAccessRazorpayPayment,
   listAdminUpiPayments,
 } from "../services/accessPayments.service.js";
@@ -70,11 +71,32 @@ class AccessPaymentsController {
       billingCycle: req.body.billing_cycle,
       name: req.body.name,
       utr: req.body.utr,
-      screenshot: req.file,
+      paymentProof: req.file,
     });
 
     return sendResponse(res, 201, {
       message: "UPI proof submitted successfully",
+      data,
+    });
+  }
+
+  static async uploadProof(req: Request, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    const data = await uploadAccessPaymentProof({
+      userId,
+      planId: req.body.plan_id,
+      billingCycle: req.body.billing_cycle,
+      name: req.body.name,
+      utr: req.body.utr,
+      paymentProof: req.file,
+    });
+
+    return sendResponse(res, 201, {
+      message: "Proof uploaded. Awaiting approval.",
       data,
     });
   }
@@ -93,10 +115,47 @@ class AccessPaymentsController {
       admin: req.admin,
       paymentId: req.body.paymentId,
       status: req.body.status,
+      adminNote: req.body.adminNote,
     });
 
     return sendResponse(res, 200, {
       message: `Payment ${req.body.status}`,
+      data,
+    });
+  }
+
+  static async approvePayment(req: Request, res: Response) {
+    if (!req.admin) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    const data = await reviewAdminUpiPayment({
+      admin: req.admin,
+      paymentId: req.params.id,
+      status: "approved",
+      adminNote: req.body.adminNote,
+    });
+
+    return sendResponse(res, 200, {
+      message: "Payment approved",
+      data,
+    });
+  }
+
+  static async rejectPayment(req: Request, res: Response) {
+    if (!req.admin) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    const data = await reviewAdminUpiPayment({
+      admin: req.admin,
+      paymentId: req.params.id,
+      status: "rejected",
+      adminNote: req.body.adminNote,
+    });
+
+    return sendResponse(res, 200, {
+      message: "Payment rejected",
       data,
     });
   }

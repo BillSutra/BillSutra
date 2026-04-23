@@ -4,12 +4,14 @@ import Script from "next/script";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
+import { isAxiosError } from "axios";
 import {
   CheckCircle2,
   Clock3,
   Copy,
   CreditCard,
   ExternalLink,
+  FileText,
   QrCode,
   ShieldCheck,
   Upload,
@@ -29,9 +31,9 @@ import { Input } from "@/components/ui/input";
 import {
   createAccessRazorpayOrder,
   fetchAccessPaymentStatus,
-  submitAccessUpiPayment,
   type AccessPaymentRecord,
   type AccessPaymentStatusResponse,
+  uploadAccessPaymentProof,
   verifyAccessRazorpayPayment,
 } from "@/lib/apiClient";
 
@@ -123,6 +125,8 @@ export default function PaymentAccessClient({
   const [name, setName] = useState(userName);
   const [utr, setUtr] = useState("");
   const [screenshot, setScreenshot] = useState<File | null>(null);
+  const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [banner, setBanner] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, startLoadingTransition] = useTransition();
@@ -151,9 +155,49 @@ export default function PaymentAccessClient({
     loadStatus();
   }, []);
 
+  useEffect(() => {
+    if (!screenshot || !screenshot.type.startsWith("image/")) {
+      setProofPreviewUrl((current) => {
+        if (current) {
+          URL.revokeObjectURL(current);
+        }
+        return null;
+      });
+      return;
+    }
+
+    const nextUrl = URL.createObjectURL(screenshot);
+    setProofPreviewUrl((current) => {
+      if (current) {
+        URL.revokeObjectURL(current);
+      }
+      return nextUrl;
+    });
+
+    return () => {
+      URL.revokeObjectURL(nextUrl);
+    };
+  }, [screenshot]);
+
   const selectedPlan = useMemo(
     () => statusData?.plans.find((plan) => plan.id === selectedPlanId) ?? null,
     [selectedPlanId, statusData],
+  );
+  const selectedPlanPaymentHistory = useMemo(
+    () =>
+      statusData?.payments.filter(
+        (payment) =>
+          payment.method === "upi" &&
+          payment.planId === selectedPlanId &&
+          payment.billingCycle === billingCycle,
+      ) ?? [],
+    [billingCycle, selectedPlanId, statusData?.payments],
+  );
+  const selectedPendingManualPayment = selectedPlanPaymentHistory.find(
+    (payment) => payment.status === "pending",
+  );
+  const selectedRejectedManualPayment = selectedPlanPaymentHistory.find(
+    (payment) => payment.status === "rejected",
   );
 
   const currentStatus = statusData?.activePayment?.status ?? statusData?.payments[0]?.status ?? "none";
@@ -250,34 +294,73 @@ export default function PaymentAccessClient({
       return;
     }
 
+    if (!screenshot) {
+      setError("Upload a payment proof file before submitting.");
+      return;
+    }
+
+    if (selectedPendingManualPayment) {
+      setError("A payment proof for this plan is already pending review.");
+      return;
+    }
+
     startUpiTransition(() => {
       void (async () => {
         try {
           setError(null);
           setBanner(null);
+          setUploadProgress(0);
 
-          const formData = new FormData();
-          formData.append("plan_id", selectedPlan.id);
-          formData.append("billing_cycle", billingCycle);
-          formData.append("name", name);
-          formData.append("utr", utr.trim().toUpperCase());
+          let uploaded: AccessPaymentRecord | null = null;
+          let lastError: unknown = null;
 
-          if (screenshot) {
-            formData.append("screenshot", screenshot);
+          for (let attempt = 1; attempt <= 2; attempt += 1) {
+            try {
+              uploaded = await uploadAccessPaymentProof(
+                {
+                  planId: selectedPlan.id,
+                  billingCycle,
+                  name,
+                  utr,
+                  paymentProof: screenshot,
+                },
+                {
+                  onUploadProgress: (progressPercent) =>
+                    setUploadProgress(progressPercent),
+                },
+              );
+              break;
+            } catch (submitError) {
+              lastError = submitError;
+              const retryable =
+                isAxiosError(submitError) &&
+                ((submitError.response?.status ?? 0) >= 500 ||
+                  submitError.code === "ERR_NETWORK");
+
+              if (!retryable || attempt === 2) {
+                throw submitError;
+              }
+            }
           }
 
-          await submitAccessUpiPayment(formData);
+          if (!uploaded) {
+            throw lastError instanceof Error
+              ? lastError
+              : new Error("Upload failed.");
+          }
 
-          setBanner("UPI proof submitted. An admin will review it shortly.");
+          setBanner("Proof uploaded. Awaiting approval.");
           setUtr("");
           setScreenshot(null);
+          setUploadProgress(100);
           loadStatus();
         } catch (submitError) {
           setError(
             submitError instanceof Error
               ? submitError.message
-              : "Unable to submit UPI proof.",
+              : "Unable to upload payment proof.",
           );
+          setUploadProgress(0);
         }
       })();
     });
@@ -481,12 +564,26 @@ export default function PaymentAccessClient({
                 <div>
                   <CardTitle>Manual UPI payment</CardTitle>
                   <CardDescription className="whitespace-normal">
-                    Pay in any UPI app, then submit the UTR and optional screenshot.
+                    Pay in any UPI app, then upload the payment proof for admin review.
                   </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-6">
+              {selectedPendingManualPayment ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  A proof for this plan is already pending review. Wait for admin action before uploading another.
+                </div>
+              ) : null}
+
+              {selectedRejectedManualPayment ? (
+                <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {selectedRejectedManualPayment.adminNote?.trim()
+                    ? `Previous proof was rejected: ${selectedRejectedManualPayment.adminNote}`
+                    : "Your previous proof was rejected. Upload a fresh proof to try again."}
+                </div>
+              ) : null}
+
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
                   <p className="text-sm text-slate-500">UPI ID</p>
@@ -582,30 +679,77 @@ export default function PaymentAccessClient({
 
                   <div>
                     <label className="text-sm font-medium text-slate-800" htmlFor="manual-upi-proof">
-                      Screenshot proof
+                      Payment proof
                     </label>
                     <Input
                       id="manual-upi-proof"
                       type="file"
-                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      accept="image/png,image/jpeg,image/jpg,application/pdf"
                       className="mt-2"
-                      onChange={(event) =>
-                        setScreenshot(event.target.files?.[0] ?? null)
-                      }
+                      onChange={(event) => {
+                        setUploadProgress(0);
+                        setScreenshot(event.target.files?.[0] ?? null);
+                      }}
                     />
                     <p className="mt-2 text-xs text-slate-500">
-                      Optional. Upload PNG, JPG, or WEBP up to 5 MB.
+                      Required. Upload JPG, JPEG, PNG, or PDF up to 5 MB.
                     </p>
                   </div>
+
+                  {screenshot ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-medium text-slate-800">
+                        Selected proof
+                      </p>
+                      <p className="mt-2 text-sm text-slate-600">
+                        {screenshot.name}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {(screenshot.size / (1024 * 1024)).toFixed(2)} MB
+                      </p>
+                      {proofPreviewUrl ? (
+                        <img
+                          src={proofPreviewUrl}
+                          alt="Payment proof preview"
+                          className="mt-3 max-h-52 rounded-2xl border border-slate-200 object-contain"
+                        />
+                      ) : (
+                        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
+                          <FileText className="size-4" />
+                          Preview unavailable for this file type
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {isSubmittingUpi && uploadProgress > 0 ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex items-center justify-between text-sm text-slate-700">
+                        <span>Uploading proof...</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200">
+                        <div
+                          className="h-full rounded-full bg-blue-600 transition-[width] duration-200"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  ) : null}
 
                   <Button
                     type="button"
                     className="w-full"
                     onClick={handleUpiSubmit}
-                    disabled={isSubmittingUpi || !name.trim() || !utr.trim() || !selectedPlan}
+                    disabled={
+                      isSubmittingUpi ||
+                      !selectedPlan ||
+                      !screenshot ||
+                      Boolean(selectedPendingManualPayment)
+                    }
                   >
                     <Upload className="size-4" />
-                    {isSubmittingUpi ? "Submitting proof..." : "Submit UPI proof"}
+                    {isSubmittingUpi ? "Uploading proof..." : "Upload payment proof"}
                   </Button>
                 </div>
               </div>
@@ -647,6 +791,20 @@ export default function PaymentAccessClient({
                       <span>{formatCurrency(payment.amount)}</span>
                       <span>•</span>
                       <span>{formatDateTime(payment.createdAt)}</span>
+                      {payment.proofUrl ? (
+                        <>
+                          <span>•</span>
+                          <a
+                            href={payment.proofUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 font-medium text-slate-700 underline-offset-4 hover:underline"
+                          >
+                            View proof
+                            <ExternalLink className="size-3.5" />
+                          </a>
+                        </>
+                      ) : null}
                     </div>
 
                     {payment.reviewedAt ? (
@@ -655,6 +813,11 @@ export default function PaymentAccessClient({
                         {payment.reviewedByAdminEmail
                           ? ` by ${payment.reviewedByAdminEmail}`
                           : ""}
+                      </p>
+                    ) : null}
+                    {payment.adminNote ? (
+                      <p className="mt-3 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600">
+                        Admin note: {payment.adminNote}
                       </p>
                     ) : null}
                   </div>

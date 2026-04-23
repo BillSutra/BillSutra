@@ -76,33 +76,86 @@ const getRazorpayWebhookSecret = () => {
 const normalizeStatus = (status: AccessPaymentStatus) => status.toLowerCase();
 const normalizeMethod = (method: AccessPaymentMethod) => method.toLowerCase();
 
+const normalizeAdminNote = (value?: string | null) => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+};
+
 const toAbsoluteUploadUrl = (value?: string | null) => {
   if (!value) return null;
   if (/^https?:\/\//i.test(value)) return value;
   return `${getBackendAppUrl()}${value.startsWith("/") ? value : `/${value}`}`;
 };
 
-const serializePayment = (payment: AccessPayment) => ({
-  id: payment.id,
-  userId: payment.user_id,
-  planId: payment.plan_id,
-  billingCycle: payment.billing_cycle,
-  method: normalizeMethod(payment.method),
-  amount: Number(payment.amount),
-  status: normalizeStatus(payment.status),
-  name: payment.name,
-  utr: payment.utr,
-  screenshotUrl: toAbsoluteUploadUrl(payment.screenshot_url),
-  paymentId: payment.provider_payment_id,
-  orderId: payment.provider_order_id,
-  provider: payment.provider,
-  providerReference: payment.provider_reference,
-  reviewedByAdminId: payment.reviewed_by_admin_id,
-  reviewedByAdminEmail: payment.reviewed_by_admin_email,
-  reviewedAt: payment.reviewed_at?.toISOString() ?? null,
-  createdAt: payment.created_at.toISOString(),
-  updatedAt: payment.updated_at.toISOString(),
-});
+const getPaymentMetadata = (payment: AccessPayment) =>
+  typeof payment.metadata === "object" && payment.metadata
+    ? (payment.metadata as Record<string, unknown>)
+    : {};
+
+const getProofMetadata = (payment: AccessPayment) => {
+  const metadata = getPaymentMetadata(payment);
+  const proof =
+    typeof metadata.proof === "object" && metadata.proof
+      ? (metadata.proof as Record<string, unknown>)
+      : {};
+
+  return {
+    mimeType:
+      typeof proof.mimeType === "string" ? proof.mimeType : null,
+    originalName:
+      typeof proof.originalName === "string" ? proof.originalName : null,
+    size:
+      typeof proof.size === "number" ? proof.size : null,
+    uploadedAt:
+      typeof proof.uploadedAt === "string" ? proof.uploadedAt : null,
+  };
+};
+
+const getReviewMetadata = (payment: AccessPayment) => {
+  const metadata = getPaymentMetadata(payment);
+  const review =
+    typeof metadata.review === "object" && metadata.review
+      ? (metadata.review as Record<string, unknown>)
+      : {};
+
+  return {
+    adminNote:
+      typeof review.adminNote === "string" ? review.adminNote : null,
+  };
+};
+
+const serializePayment = (payment: AccessPayment) => {
+  const proof = getProofMetadata(payment);
+  const review = getReviewMetadata(payment);
+
+  return {
+    id: payment.id,
+    userId: payment.user_id,
+    planId: payment.plan_id,
+    billingCycle: payment.billing_cycle,
+    method: normalizeMethod(payment.method),
+    amount: Number(payment.amount),
+    status: normalizeStatus(payment.status),
+    name: payment.name,
+    utr: payment.utr,
+    proofUrl: toAbsoluteUploadUrl(payment.screenshot_url),
+    proofMimeType: proof.mimeType,
+    proofOriginalName: proof.originalName,
+    proofSize: proof.size,
+    proofUploadedAt: proof.uploadedAt,
+    screenshotUrl: toAbsoluteUploadUrl(payment.screenshot_url),
+    adminNote: review.adminNote,
+    paymentId: payment.provider_payment_id,
+    orderId: payment.provider_order_id,
+    provider: payment.provider,
+    providerReference: payment.provider_reference,
+    reviewedByAdminId: payment.reviewed_by_admin_id,
+    reviewedByAdminEmail: payment.reviewed_by_admin_email,
+    reviewedAt: payment.reviewed_at?.toISOString() ?? null,
+    createdAt: payment.created_at.toISOString(),
+    updatedAt: payment.updated_at.toISOString(),
+  };
+};
 
 const safeCompareSignature = (expected: string, received: string) => {
   const expectedBuffer = Buffer.from(expected);
@@ -385,59 +438,159 @@ export const submitAccessUpiPayment = async ({
   userId,
   planId,
   billingCycle,
-  name,
   utr,
-  screenshot,
+  name,
+  paymentProof,
 }: {
   userId: number;
   planId: AccessPlanId;
   billingCycle: AccessBillingCycle;
-  name: string;
-  utr: string;
-  screenshot?: Express.Multer.File;
+  name?: string;
+  utr?: string;
+  paymentProof?: Express.Multer.File;
 }) => {
-  const normalizedUtr = utr.trim().toUpperCase();
+  if (!paymentProof) {
+    throw new AppError("Payment proof file is required.", 422);
+  }
 
-  if (!UTR_REGEX.test(normalizedUtr)) {
+  const normalizedName = name?.trim() || null;
+  const normalizedUtr = utr?.trim().toUpperCase() || null;
+
+  if (normalizedUtr && !UTR_REGEX.test(normalizedUtr)) {
     throw new AppError(
       "Enter a valid UTR number with 8 to 22 letters or digits.",
       422,
     );
   }
 
-  const existingPayment = await prisma.accessPayment.findFirst({
-    where: { utr: normalizedUtr },
-    select: { id: true },
-  });
-
-  if (existingPayment) {
-    throw new AppError("This UTR number has already been submitted.", 409);
-  }
-
-  const quote = resolveAccessPlanQuote(planId, billingCycle);
-  const proof = screenshot
-    ? await paymentProofStorage.save(userId, screenshot)
-    : null;
-
-  const payment = await prisma.accessPayment.create({
-    data: {
+  const pendingPayment = await prisma.accessPayment.findFirst({
+    where: {
       user_id: userId,
       plan_id: planId,
       billing_cycle: billingCycle,
       method: AccessPaymentMethod.UPI,
-      amount: quote.amount,
       status: AccessPaymentStatus.PENDING,
-      name: name.trim(),
-      utr: normalizedUtr,
-      screenshot_url: proof?.url,
-      screenshot_path: proof?.filePath,
-      provider: "manual_upi",
-      provider_reference: normalizedUtr,
     },
+    select: { id: true },
   });
+
+  if (pendingPayment) {
+    throw new AppError(
+      "A payment proof for this plan is already pending review.",
+      409,
+    );
+  }
+
+  if (normalizedUtr) {
+    const existingPayment = await prisma.accessPayment.findFirst({
+      where: { utr: normalizedUtr },
+      select: { id: true, user_id: true, status: true },
+    });
+
+    if (
+      existingPayment &&
+      !(
+        existingPayment.user_id === userId &&
+        existingPayment.status === AccessPaymentStatus.REJECTED
+      )
+    ) {
+      throw new AppError("This UTR number has already been submitted.", 409);
+    }
+  }
+
+  const quote = resolveAccessPlanQuote(planId, billingCycle);
+  const proof = await paymentProofStorage.save(userId, paymentProof);
+  const proofMetadata = {
+    proof: {
+      mimeType: paymentProof.mimetype,
+      originalName: paymentProof.originalname,
+      size: paymentProof.size,
+      uploadedAt: new Date().toISOString(),
+    },
+  };
+
+  console.info("[payments] proof uploaded", {
+    userId,
+    planId,
+    billingCycle,
+    mimeType: paymentProof.mimetype,
+    size: paymentProof.size,
+  });
+
+  const rejectedPayment = await prisma.accessPayment.findFirst({
+    where: {
+      user_id: userId,
+      plan_id: planId,
+      billing_cycle: billingCycle,
+      method: AccessPaymentMethod.UPI,
+      status: AccessPaymentStatus.REJECTED,
+    },
+    orderBy: { updated_at: "desc" },
+  });
+
+  let payment: AccessPayment;
+  try {
+    payment = rejectedPayment
+      ? await prisma.$transaction(async (tx) => {
+          await paymentProofStorage.delete(rejectedPayment.screenshot_path);
+
+          return tx.accessPayment.update({
+            where: { id: rejectedPayment.id },
+            data: {
+              amount: quote.amount,
+              status: AccessPaymentStatus.PENDING,
+              name: normalizedName,
+              utr: normalizedUtr,
+              screenshot_url: proof.url,
+              screenshot_path: proof.filePath,
+              provider: "manual_upi",
+              provider_reference: normalizedUtr,
+              reviewed_at: null,
+              reviewed_by_admin_id: null,
+              reviewed_by_admin_email: null,
+              metadata: {
+                ...getPaymentMetadata(rejectedPayment),
+                ...proofMetadata,
+                review: {
+                  adminNote: null,
+                },
+              },
+            },
+          });
+        })
+      : await prisma.accessPayment.create({
+          data: {
+            user_id: userId,
+            plan_id: planId,
+            billing_cycle: billingCycle,
+            method: AccessPaymentMethod.UPI,
+            amount: quote.amount,
+            status: AccessPaymentStatus.PENDING,
+            name: normalizedName,
+            utr: normalizedUtr,
+            screenshot_url: proof.url,
+            screenshot_path: proof.filePath,
+            provider: "manual_upi",
+            provider_reference: normalizedUtr,
+            metadata: proofMetadata,
+          },
+        });
+  } catch (error) {
+    await paymentProofStorage.delete(proof.filePath);
+    throw error;
+  }
+
+  if (rejectedPayment) {
+    console.info("[payments] proof re-uploaded after rejection", {
+      paymentId: rejectedPayment.id,
+      userId,
+    });
+  }
 
   return serializePayment(payment);
 };
+
+export const uploadAccessPaymentProof = submitAccessUpiPayment;
 
 export const listAdminUpiPayments = async () => {
   const payments = await prisma.accessPayment.findMany({
@@ -464,10 +617,12 @@ export const reviewAdminUpiPayment = async ({
   admin,
   paymentId,
   status,
+  adminNote,
 }: {
   admin: AdminAuthUser;
   paymentId: string;
   status: "approved" | "rejected";
+  adminNote?: string;
 }) => {
   const payment = await prisma.accessPayment.findFirst({
     where: {
@@ -494,14 +649,61 @@ export const reviewAdminUpiPayment = async ({
       ? AccessPaymentStatus.APPROVED
       : AccessPaymentStatus.REJECTED;
 
-  const updated = await prisma.accessPayment.update({
-    where: { id: payment.id },
-    data: {
-      status: nextStatus,
-      reviewed_at: new Date(),
-      reviewed_by_admin_id: admin.adminId,
-      reviewed_by_admin_email: admin.email,
-    },
+  const normalizedAdminNote = normalizeAdminNote(adminNote);
+  const existingReview = getReviewMetadata(payment);
+  const baseUpdateData = {
+    status: nextStatus,
+    reviewed_at: new Date(),
+    reviewed_by_admin_id: admin.adminId,
+    reviewed_by_admin_email: admin.email,
+  };
+  const shouldUpdateReviewMetadata =
+    (nextStatus === AccessPaymentStatus.REJECTED &&
+      normalizedAdminNote !== null) ||
+    (nextStatus === AccessPaymentStatus.APPROVED &&
+      existingReview.adminNote !== null);
+
+  let updated: AccessPayment;
+
+  try {
+    updated = await prisma.accessPayment.update({
+      where: { id: payment.id },
+      data: shouldUpdateReviewMetadata
+        ? {
+            ...baseUpdateData,
+            metadata: {
+              ...getPaymentMetadata(payment),
+              review: {
+                adminNote:
+                  nextStatus === AccessPaymentStatus.REJECTED
+                    ? normalizedAdminNote
+                    : null,
+              },
+            },
+          }
+        : baseUpdateData,
+    });
+  } catch (error) {
+    if (!shouldUpdateReviewMetadata) {
+      throw error;
+    }
+
+    console.warn("[payments] review metadata update failed; retrying without note", {
+      paymentId: payment.id,
+      reviewer: admin.email,
+      error: error instanceof Error ? error.message : error,
+    });
+
+    updated = await prisma.accessPayment.update({
+      where: { id: payment.id },
+      data: baseUpdateData,
+    });
+  }
+
+  console.info("[payments] admin reviewed payment", {
+    paymentId: payment.id,
+    reviewer: admin.email,
+    status: nextStatus,
   });
 
   if (nextStatus === AccessPaymentStatus.APPROVED) {
