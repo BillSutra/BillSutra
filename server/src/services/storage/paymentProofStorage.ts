@@ -12,13 +12,14 @@ const ALLOWED_EXTENSIONS: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/jpg": ".jpg",
   "image/webp": ".webp",
+  "application/pdf": ".pdf",
 };
 
 export const paymentProofStorage = {
   async save(userId: number, file: Express.Multer.File) {
     const ext = ALLOWED_EXTENSIONS[file.mimetype];
     if (!ext) {
-      throw Object.assign(new Error("Only PNG, JPG, and WEBP screenshots are allowed."), {
+      throw Object.assign(new Error("Only JPG, JPEG, PNG, WEBP, and PDF proofs are allowed."), {
         status: 400,
       });
     }
@@ -35,5 +36,18 @@ export const paymentProofStorage = {
       url: `/uploads/payment-proofs/${userId}/${uniqueName}`,
       filePath,
     };
+  },
+  async delete(filePath?: string | null) {
+    if (!filePath) {
+      return;
+    }
+
+    try {
+      await fs.promises.unlink(filePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
   },
 };

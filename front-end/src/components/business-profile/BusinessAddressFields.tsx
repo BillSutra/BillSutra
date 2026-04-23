@@ -1,10 +1,15 @@
 import { ValidationField } from "@/components/ui/ValidationField";
 import { INDIAN_STATES, type BusinessAddressInput } from "@/lib/indianAddress";
 import {
-  validateIndianPincode,
-  validateIndianState,
-  validateRequired,
-} from "@/lib/validation";
+  sanitizeBusinessAddressLine,
+  sanitizeBusinessCity,
+  sanitizeBusinessPincode,
+  sanitizeBusinessState,
+  validateBusinessAddressLine,
+  validateBusinessCity,
+  validateBusinessPincode,
+  validateBusinessState,
+} from "@/lib/businessProfileValidation";
 import { useI18n } from "@/providers/LanguageProvider";
 
 type AutofillStatus = {
@@ -15,9 +20,11 @@ type AutofillStatus = {
 type BusinessAddressFieldsProps = {
   value: BusinessAddressInput;
   onFieldChange: (field: keyof BusinessAddressInput, value: string) => void;
+  onFieldBlur?: (field: keyof BusinessAddressInput) => void;
   onAddressPaste?: (rawText: string) => void;
   autofillStatus?: AutofillStatus | null;
   autofillPending?: boolean;
+  forceTouched?: boolean;
 };
 
 const statusToneClassName: Record<AutofillStatus["tone"], string> = {
@@ -29,9 +36,11 @@ const statusToneClassName: Record<AutofillStatus["tone"], string> = {
 const BusinessAddressFields = ({
   value,
   onFieldChange,
+  onFieldBlur,
   onAddressPaste,
   autofillStatus,
   autofillPending = false,
+  forceTouched = false,
 }: BusinessAddressFieldsProps) => {
   const { t } = useI18n();
 
@@ -48,10 +57,14 @@ const BusinessAddressFields = ({
             const pastedText = event.clipboardData?.getData("text") ?? "";
             onAddressPaste(pastedText);
           }}
-          validate={validateRequired}
+          onBlur={() => onFieldBlur?.("addressLine1")}
+          normalizeOnBlur={sanitizeBusinessAddressLine}
+          validate={validateBusinessAddressLine}
           required
           placeholder={t("businessProfilePage.placeholders.addressLine1")}
           success
+          forceTouched={forceTouched}
+          maxLength={200}
           autoComplete="street-address"
           className="mb-0"
         />
@@ -62,10 +75,14 @@ const BusinessAddressFields = ({
             label={t("businessProfilePage.fields.city")}
             value={value.city}
             onChange={(next) => onFieldChange("city", next)}
-            validate={validateRequired}
+            onBlur={() => onFieldBlur?.("city")}
+            normalizeOnBlur={sanitizeBusinessCity}
+            validate={validateBusinessCity}
             required
             placeholder={t("businessProfilePage.placeholders.city")}
             success
+            forceTouched={forceTouched}
+            maxLength={100}
             autoComplete="address-level2"
             className="mb-0"
           />
@@ -76,9 +93,12 @@ const BusinessAddressFields = ({
             as="select"
             value={value.state}
             onChange={(next) => onFieldChange("state", next)}
-            validate={validateIndianState}
+            onBlur={() => onFieldBlur?.("state")}
+            normalizeOnBlur={sanitizeBusinessState}
+            validate={validateBusinessState}
             required
             success
+            forceTouched={forceTouched}
             autoComplete="address-level1"
             className="mb-0"
           >
@@ -96,10 +116,13 @@ const BusinessAddressFields = ({
           label={t("businessProfilePage.fields.pincode")}
           value={value.pincode}
           onChange={(next) => onFieldChange("pincode", next)}
-          validate={validateIndianPincode}
+          onBlur={() => onFieldBlur?.("pincode")}
+          normalizeOnBlur={sanitizeBusinessPincode}
+          validate={validateBusinessPincode}
           required
           placeholder={t("businessProfilePage.placeholders.pincode")}
           success
+          forceTouched={forceTouched}
           autoComplete="postal-code"
           inputMode="numeric"
           maxLength={6}

@@ -400,7 +400,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
               </div>
               <div className="flex w-full max-w-md items-center gap-2">
                 <Input
-                  placeholder={t("invoiceHistory.searchPlaceholder")}
+                  placeholder="Search invoice number"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                 />
@@ -593,7 +593,7 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
                       ),
                     };
                   })}
-                  searchPlaceholder={t("invoiceHistory.tableSearchPlaceholder")}
+                  searchPlaceholder="Search for customer name"
                   searchKeys={["invoice_number", "customer", "date"]}
                   columns={[
                     {

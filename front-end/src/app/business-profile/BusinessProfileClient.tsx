@@ -34,13 +34,24 @@ import {
   toBusinessAddressInput,
 } from "@/lib/indianAddress";
 import {
-  validateEmail,
-  validateIndianPincode,
-  validateIndianState,
-  validateName,
-  validatePhone,
-  validateRequired,
-} from "@/lib/validation";
+  getBusinessProfileValidationErrors,
+  getFirstBusinessProfileInvalidField,
+  isBusinessProfileRequiredFieldsValid,
+  sanitizeBusinessCurrency,
+  sanitizeBusinessEmail,
+  sanitizeBusinessName,
+  sanitizeBusinessNameDraft,
+  sanitizeBusinessPhone,
+  sanitizeBusinessProfileInput,
+  sanitizeBusinessTaxId,
+  sanitizeBusinessWebsite,
+  validateBusinessCurrency,
+  validateBusinessEmail,
+  validateBusinessName,
+  validateBusinessPhone,
+  validateBusinessTaxId,
+  validateBusinessWebsite,
+} from "@/lib/businessProfileValidation";
 import {
   fetchBusinessProfile,
   fetchTemplates,
@@ -92,7 +103,7 @@ const BusinessProfileClient = ({
     showPaymentQr: false,
   });
   const [profileLoaded, setProfileLoaded] = useState(false);
-  const [profileTouched, setProfileTouched] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
   const steps = [
     {
@@ -158,24 +169,26 @@ const BusinessProfileClient = ({
         parsedLegacyAddress.pincode,
     });
 
-    setProfile((prev) => ({
-      ...prev,
-      businessName: businessProfileRecord.business_name,
-      address: formatBusinessAddress(
-        normalizedBusinessAddress,
-        businessProfileRecord.address,
-      ),
-      businessAddress: normalizedBusinessAddress,
-      phone: businessProfileRecord.phone ?? "",
-      email: businessProfileRecord.email ?? "",
-      website: businessProfileRecord.website ?? "",
-      logoUrl: businessProfileRecord.logo_url ?? "",
-      taxId: businessProfileRecord.tax_id ?? "",
-      currency: businessProfileRecord.currency ?? prev.currency,
-      showLogoOnInvoice: businessProfileRecord.show_logo_on_invoice,
-      showTaxNumber: businessProfileRecord.show_tax_number,
-      showPaymentQr: businessProfileRecord.show_payment_qr,
-    }));
+    setProfile((prev) =>
+      sanitizeBusinessProfileInput({
+        ...prev,
+        businessName: businessProfileRecord.business_name,
+        address: formatBusinessAddress(
+          normalizedBusinessAddress,
+          businessProfileRecord.address,
+        ),
+        businessAddress: normalizedBusinessAddress,
+        phone: businessProfileRecord.phone ?? "",
+        email: businessProfileRecord.email ?? "",
+        website: businessProfileRecord.website ?? "",
+        logoUrl: businessProfileRecord.logo_url ?? "",
+        taxId: businessProfileRecord.tax_id ?? "",
+        currency: businessProfileRecord.currency ?? prev.currency,
+        showLogoOnInvoice: businessProfileRecord.show_logo_on_invoice,
+        showTaxNumber: businessProfileRecord.show_tax_number,
+        showPaymentQr: businessProfileRecord.show_payment_qr,
+      }),
+    );
     setProfileLoaded(true);
   }, [businessProfileRecord, profileLoaded]);
 
@@ -303,6 +316,15 @@ const BusinessProfileClient = ({
     [profile],
   );
 
+  const businessProfileErrors = useMemo(
+    () => getBusinessProfileValidationErrors(profile),
+    [profile],
+  );
+  const isBusinessDetailsStepValid = useMemo(
+    () => isBusinessProfileRequiredFieldsValid(businessProfileErrors),
+    [businessProfileErrors],
+  );
+
   const handleBusinessTypeChange = (value: string) => {
     setBusinessTypeId(value);
     const matched = BUSINESS_TYPES.find((type) => type.id === value);
@@ -315,9 +337,18 @@ const BusinessProfileClient = ({
     field: keyof BusinessProfileInput,
     value: string | boolean,
   ) => {
+    const nextValue =
+      typeof value === "string"
+        ? field === "businessName"
+          ? sanitizeBusinessNameDraft(value)
+          : field === "phone"
+            ? sanitizeBusinessPhone(value)
+            : value
+        : value;
+
     setProfile((prev) => ({
       ...prev,
-      [field]: value,
+      [field]: nextValue,
     }));
   };
 
@@ -379,49 +410,58 @@ const BusinessProfileClient = ({
     setAutofillStatus(null);
   };
 
-  const validateAll = () =>
-    !validateName(profile.businessName) &&
-    !validatePhone(profile.phone) &&
-    !validateEmail(profile.email) &&
-    !validateRequired(profile.businessAddress?.addressLine1 ?? "") &&
-    !validateRequired(profile.businessAddress?.city ?? "") &&
-    !validateIndianState(profile.businessAddress?.state ?? "") &&
-    !validateIndianPincode(profile.businessAddress?.pincode ?? "") &&
-    !validateRequired(profile.currency);
+  const focusFirstInvalidBusinessProfileField = () => {
+    const firstInvalidFieldId =
+      getFirstBusinessProfileInvalidField(businessProfileErrors);
+    if (!firstInvalidFieldId) {
+      return;
+    }
+
+    const field = document.getElementById(firstInvalidFieldId);
+    if (field instanceof HTMLElement) {
+      field.focus();
+    }
+  };
 
   const handleFinish = async () => {
-    setProfileTouched(true);
-    if (!validateAll()) return;
+    setSubmitAttempted(true);
+    if (!isBusinessDetailsStepValid) {
+      focusFirstInvalidBusinessProfileField();
+      return;
+    }
+
+    const sanitizedProfile = sanitizeBusinessProfileInput(profile);
+    setProfile(sanitizedProfile);
 
     const normalizedBusinessAddress = toBusinessAddressInput(
-      profile.businessAddress,
+      sanitizedProfile.businessAddress,
     );
 
     const legacyAddress = formatBusinessAddress(
       normalizedBusinessAddress,
-      profile.address,
+      sanitizedProfile.address,
     );
 
     try {
       await saveProfileMutation.mutateAsync({
-        business_name: profile.businessName,
+        business_name: sanitizedProfile.businessName,
         businessAddress: normalizedBusinessAddress,
         address_line1: normalizedBusinessAddress.addressLine1,
         city: normalizedBusinessAddress.city,
         state: normalizedBusinessAddress.state,
         pincode: normalizedBusinessAddress.pincode,
         address: legacyAddress,
-        phone: profile.phone,
-        email: profile.email,
-        website: profile.website,
-        logo_url: profile.logoUrl,
-        tax_id: profile.taxId,
-        currency: profile.currency,
-        show_logo_on_invoice: profile.showLogoOnInvoice,
-        show_tax_number: profile.showTaxNumber,
-        show_payment_qr: profile.showPaymentQr,
+        phone: sanitizedProfile.phone,
+        email: sanitizedProfile.email,
+        website: sanitizedProfile.website,
+        logo_url: sanitizedProfile.logoUrl,
+        tax_id: sanitizedProfile.taxId,
+        currency: sanitizedProfile.currency,
+        show_logo_on_invoice: sanitizedProfile.showLogoOnInvoice,
+        show_tax_number: sanitizedProfile.showTaxNumber,
+        show_payment_qr: sanitizedProfile.showPaymentQr,
       });
-      setProfileTouched(false);
+      setSubmitAttempted(false);
     } catch {
       // Toasts are handled in mutation callbacks.
     }
@@ -596,10 +636,13 @@ const BusinessProfileClient = ({
             label={t("businessProfilePage.fields.businessName")}
             value={profile.businessName}
             onChange={(value) => updateProfile("businessName", value)}
-            validate={validateName}
+            normalizeOnBlur={sanitizeBusinessName}
+            validate={validateBusinessName}
             required
             placeholder={t("businessProfilePage.placeholders.businessName")}
             success
+            forceTouched={submitAttempted}
+            maxLength={100}
             className="mb-0"
           />
           <ValidationField
@@ -607,28 +650,39 @@ const BusinessProfileClient = ({
             label={t("businessProfilePage.fields.phone")}
             value={profile.phone}
             onChange={(value) => updateProfile("phone", value)}
-            validate={validatePhone}
+            normalizeOnBlur={sanitizeBusinessPhone}
+            validate={validateBusinessPhone}
             required
             placeholder={t("businessProfilePage.placeholders.phone")}
             success
+            forceTouched={submitAttempted}
+            inputMode="tel"
+            maxLength={10}
             className="mb-0"
           />
           <BusinessAddressFields
             value={toBusinessAddressInput(profile.businessAddress)}
             onFieldChange={updateBusinessAddressField}
+            onFieldBlur={() => undefined}
             onAddressPaste={handleAddressPaste}
             autofillStatus={autofillStatus}
             autofillPending={autofillPending}
+            forceTouched={submitAttempted}
           />
           <ValidationField
             id="email"
             label={t("businessProfilePage.fields.email")}
             value={profile.email}
             onChange={(value) => updateProfile("email", value)}
-            validate={validateEmail}
+            normalizeOnBlur={sanitizeBusinessEmail}
+            validate={validateBusinessEmail}
             required
             placeholder={t("businessProfilePage.placeholders.email")}
             success
+            forceTouched={submitAttempted}
+            type="email"
+            inputMode="email"
+            maxLength={254}
             className="mb-0"
           />
           <ValidationField
@@ -636,9 +690,14 @@ const BusinessProfileClient = ({
             label={t("businessProfilePage.fields.website")}
             value={profile.website}
             onChange={(value) => updateProfile("website", value)}
-            validate={() => ""}
+            normalizeOnBlur={sanitizeBusinessWebsite}
+            validate={validateBusinessWebsite}
             placeholder={t("businessProfilePage.placeholders.website")}
             success
+            forceTouched={submitAttempted}
+            type="url"
+            inputMode="url"
+            maxLength={2048}
             className="mb-0"
           />
           <ValidationField
@@ -646,9 +705,12 @@ const BusinessProfileClient = ({
             label={t("businessProfilePage.fields.taxId")}
             value={profile.taxId}
             onChange={(value) => updateProfile("taxId", value)}
-            validate={() => ""}
+            normalizeOnBlur={sanitizeBusinessTaxId}
+            validate={validateBusinessTaxId}
             placeholder={t("businessProfilePage.placeholders.taxId")}
             success
+            forceTouched={submitAttempted}
+            maxLength={15}
             className="mb-0"
           />
           <ValidationField
@@ -656,10 +718,13 @@ const BusinessProfileClient = ({
             label={t("businessProfilePage.fields.currency")}
             value={profile.currency}
             onChange={(value) => updateProfile("currency", value)}
-            validate={validateRequired}
+            normalizeOnBlur={sanitizeBusinessCurrency}
+            validate={validateBusinessCurrency}
             required
             placeholder={t("businessProfilePage.placeholders.currency")}
             success
+            forceTouched={submitAttempted}
+            maxLength={3}
             className="mb-0"
           />
         </div>
@@ -794,7 +859,8 @@ const BusinessProfileClient = ({
 
   const actionDisabled =
     saveProfileMutation.isPending ||
-    (currentStep === 3 && profileTouched && !validateAll());
+    (currentStep === 2 && !isBusinessDetailsStepValid) ||
+    (currentStep === 3 && !isBusinessDetailsStepValid);
 
   return (
     <DashboardLayout
@@ -885,6 +951,11 @@ const BusinessProfileClient = ({
                 type="button"
                 className="rounded-full px-6"
                 onClick={async () => {
+                  if (currentStep === 2 && !isBusinessDetailsStepValid) {
+                    setSubmitAttempted(true);
+                    focusFirstInvalidBusinessProfileField();
+                    return;
+                  }
                   if (currentStep === 3) {
                     await handleFinish();
                     return;

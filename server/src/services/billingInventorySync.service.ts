@@ -2,7 +2,9 @@ import { Prisma } from "@prisma/client";
 import { applyInventoryDelta } from "./inventoryValidation.service.js";
 
 type TransactionClient = Prisma.TransactionClient;
-type BillingProductRecord = Awaited<ReturnType<TransactionClient["product"]["create"]>>;
+type BillingProductRecord = Awaited<
+  ReturnType<TransactionClient["product"]["findMany"]>
+>[number];
 
 export type BillingInventoryItemInput = {
   product_id?: number | null;
@@ -14,17 +16,36 @@ export type BillingInventoryItemInput = {
 };
 
 export type BillingInventoryResolvedItem = {
-  product_id: number;
+  product_id?: number | null;
   name: string;
   quantity: number;
   price: number;
+  nonInventoryItem: boolean;
   tax_rate?: number | null;
   gst_type?: "CGST_SGST" | "IGST" | "NONE" | null;
 };
 
+export type BillingInventorySettings = {
+  allowNegativeStock: boolean;
+};
+
+export type BillingInventorySchemaSupport = {
+  allowNegativeStockPreference: boolean;
+  invoiceItemNonInventoryFlag: boolean;
+  saleItemNonInventoryFlag: boolean;
+};
+
 const DEFAULT_WAREHOUSE_NAME = "Main Warehouse";
 const DEFAULT_WAREHOUSE_LOCATION = "Auto-created for billing sync";
-const DEFAULT_GST_RATE = 18;
+export const DEFAULT_BILLING_INVENTORY_SETTINGS: BillingInventorySettings = {
+  allowNegativeStock: true,
+};
+
+const DEFAULT_BILLING_INVENTORY_SCHEMA_SUPPORT: BillingInventorySchemaSupport = {
+  allowNegativeStockPreference: false,
+  invoiceItemNonInventoryFlag: false,
+  saleItemNonInventoryFlag: false,
+};
 
 const normalizeName = (value: string) =>
   value.trim().replace(/\s+/g, " ").toLowerCase();
@@ -35,54 +56,77 @@ const createAppError = (message: string, status = 400) => {
   return error;
 };
 
-const buildAutoSku = (name: string, attempt: number) => {
-  const base = name
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 12);
-  const timestamp = Date.now().toString(36).toUpperCase().slice(-6);
-  const suffix =
-    attempt === 0
-      ? timestamp
-      : `${timestamp}${String(attempt).padStart(2, "0")}`;
-
-  return `AUTO-${base || "ITEM"}-${suffix}`.slice(0, 191);
-};
-
-const createAutoProduct = async (
-  tx: TransactionClient,
-  userId: number,
-  item: BillingInventoryItemInput,
-) => {
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    try {
-      return await tx.product.create({
-        data: {
-          user_id: userId,
-          name: item.name.trim(),
-          sku: buildAutoSku(item.name, attempt),
-          price: item.price,
-          cost: item.price,
-          gst_rate: item.tax_rate ?? DEFAULT_GST_RATE,
-          stock_on_hand: 0,
-          reorder_level: 0,
-        },
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        continue;
-      }
-
-      throw error;
-    }
+const toBilledQuantity = (value: unknown) => {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed)) {
+    return 0;
   }
 
-  throw createAppError("Unable to auto-create product for billing.", 500);
+  return Math.trunc(parsed);
+};
+
+const logMissingBillingProduct = (params: {
+  userId: number;
+  itemName: string;
+  requestedProductId?: number | null;
+}) => {
+  console.warn("[BillingInventorySync] Missing product referenced in billing", {
+    userId: params.userId,
+    itemName: params.itemName,
+    requestedProductId: params.requestedProductId ?? null,
+  });
+};
+
+export const getBillingInventorySettings = async (
+  tx: TransactionClient,
+  userId: number,
+): Promise<BillingInventorySettings> => {
+  const schemaSupport = await getBillingInventorySchemaSupport(tx);
+  if (!schemaSupport.allowNegativeStockPreference) {
+    return { ...DEFAULT_BILLING_INVENTORY_SETTINGS };
+  }
+
+  const preference = await tx.userPreference.findUnique({
+    where: { user_id: userId },
+    select: { allowNegativeStock: true },
+  });
+
+  return {
+    allowNegativeStock:
+      preference?.allowNegativeStock ??
+      DEFAULT_BILLING_INVENTORY_SETTINGS.allowNegativeStock,
+  };
+};
+
+export const getBillingInventorySchemaSupport = async (
+  tx: TransactionClient,
+): Promise<BillingInventorySchemaSupport> => {
+  const rows = await tx.$queryRaw<
+    Array<{ table_name: string; column_name: string }>
+  >(Prisma.sql`
+    SELECT table_name, column_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND (
+        (table_name = 'user_preferences' AND column_name = 'allow_negative_stock')
+        OR (table_name = 'invoice_items' AND column_name = 'non_inventory_item')
+        OR (table_name = 'sale_items' AND column_name = 'non_inventory_item')
+      )
+  `);
+
+  const availableColumns = new Set(
+    rows.map((row) => `${row.table_name}.${row.column_name}`),
+  );
+
+  return {
+    allowNegativeStockPreference: availableColumns.has(
+      "user_preferences.allow_negative_stock",
+    ),
+    invoiceItemNonInventoryFlag: availableColumns.has(
+      "invoice_items.non_inventory_item",
+    ),
+    saleItemNonInventoryFlag: availableColumns.has("sale_items.non_inventory_item"),
+  };
 };
 
 export const resolveBillingWarehouse = async (
@@ -124,11 +168,7 @@ export const resolveBillingProducts = async (
   tx: TransactionClient,
   userId: number,
   items: BillingInventoryItemInput[],
-  options?: {
-    autoCreateProducts?: boolean;
-  },
 ): Promise<BillingInventoryResolvedItem[]> => {
-  const autoCreateProducts = options?.autoCreateProducts !== false;
   const productIdSet = new Set<number>();
   items.forEach((item) => {
     const value = item.product_id;
@@ -183,8 +223,6 @@ export const resolveBillingProducts = async (
     });
   }
 
-  const createdByName = new Map<string, BillingProductRecord>();
-
   const resolvedItems: BillingInventoryResolvedItem[] = [];
 
   for (const item of items) {
@@ -193,31 +231,44 @@ export const resolveBillingProducts = async (
       throw createAppError("Item name is required for billing inventory sync.", 422);
     }
 
+    const billedQuantity = toBilledQuantity(item.quantity);
+    if (billedQuantity <= 0) {
+      throw createAppError(
+        `Invalid billed quantity for "${trimmedName}".`,
+        422,
+      );
+    }
+
     let product =
       (item.product_id ? productsById.get(item.product_id) : undefined) ??
       existingByName.get(normalizeName(trimmedName));
 
     if (!product) {
-      if (!autoCreateProducts) {
-        throw createAppError(`Product "${trimmedName}" not found.`, 404);
-      }
+      logMissingBillingProduct({
+        userId,
+        itemName: trimmedName,
+        requestedProductId: item.product_id,
+      });
 
-      const cacheKey = normalizeName(trimmedName);
-      product = createdByName.get(cacheKey);
-      if (!product) {
-        product = await createAutoProduct(tx, userId, {
-          ...item,
-          name: trimmedName,
-        });
-        createdByName.set(cacheKey, product);
-      }
+      resolvedItems.push({
+        product_id: null,
+        name: trimmedName,
+        quantity: billedQuantity,
+        price: item.price,
+        nonInventoryItem: true,
+        tax_rate: item.tax_rate ?? undefined,
+        gst_type: item.gst_type ?? undefined,
+      });
+
+      continue;
     }
 
     resolvedItems.push({
       product_id: product.id,
       name: trimmedName || product.name,
-      quantity: item.quantity,
+      quantity: billedQuantity,
       price: item.price,
+      nonInventoryItem: false,
       tax_rate: item.tax_rate ?? undefined,
       gst_type: item.gst_type ?? undefined,
     });
@@ -230,20 +281,77 @@ export const applyBillingSaleInventoryAdjustments = async (params: {
   tx: TransactionClient;
   warehouseId: number;
   items: BillingInventoryResolvedItem[];
+  allowNegativeStock?: boolean;
+  referenceId: number | string;
+  referenceType: "invoice" | "sale";
+}) => {
+  const {
+    tx,
+    warehouseId,
+    items,
+    allowNegativeStock = DEFAULT_BILLING_INVENTORY_SETTINGS.allowNegativeStock,
+    referenceId,
+    referenceType,
+  } = params;
+
+  for (const item of items) {
+    if (!item.product_id || item.nonInventoryItem) {
+      continue;
+    }
+
+    try {
+      await applyInventoryDelta({
+        tx,
+        productId: item.product_id,
+        warehouseId,
+        delta: -item.quantity,
+        allowNegativeStock,
+        reason: "SALE",
+        note: JSON.stringify({
+          type: "sale",
+          warehouseId,
+          referenceType,
+          referenceId,
+          quantity: item.quantity,
+        }),
+      });
+    } catch (error) {
+      if (
+        !allowNegativeStock &&
+        error instanceof Error &&
+        ("statusCode" in error || "status" in error)
+      ) {
+        throw createAppError(`Insufficient stock for "${item.name}".`, 409);
+      }
+
+      throw error;
+    }
+  }
+};
+
+export const restoreBillingSaleInventoryAdjustments = async (params: {
+  tx: TransactionClient;
+  warehouseId: number;
+  items: BillingInventoryResolvedItem[];
   referenceId: number | string;
   referenceType: "invoice" | "sale";
 }) => {
   const { tx, warehouseId, items, referenceId, referenceType } = params;
 
   for (const item of items) {
+    if (!item.product_id || item.nonInventoryItem) {
+      continue;
+    }
+
     await applyInventoryDelta({
       tx,
       productId: item.product_id,
       warehouseId,
-      delta: -item.quantity,
-      reason: "SALE",
+      delta: item.quantity,
+      allowNegativeStock: true,
+      reason: "RETURN",
       note: JSON.stringify({
-        type: "sale",
+        type: "stock_restore",
         warehouseId,
         referenceType,
         referenceId,

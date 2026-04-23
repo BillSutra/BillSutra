@@ -17,7 +17,6 @@ import {
   Palette,
   Save,
   Shield,
-  Trash2,
   Upload,
   Users,
 } from "lucide-react";
@@ -26,21 +25,10 @@ import PasskeySettingsCard from "@/components/profile/PasskeySettingsCard";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import { ValidationField } from "@/components/ui/ValidationField";
 import {
   cancelSubscription,
   createWorker,
-  deleteUserAccount,
   deleteWorker,
   fetchBusinessProfile,
   fetchLogoUrl,
@@ -64,6 +52,7 @@ import {
   uploadLogo,
   type Worker,
 } from "@/lib/apiClient";
+import { isValidIndianState } from "@/lib/indianAddress";
 import { useI18n } from "@/providers/LanguageProvider";
 
 type SettingsControlCenterProps = {
@@ -103,6 +92,17 @@ type BackupPrefs = {
   autoBackupEnabled: boolean;
 };
 
+type SettingsBusinessFieldId =
+  | "businessName"
+  | "ownerName"
+  | "gstin"
+  | "addressLine1"
+  | "city"
+  | "state"
+  | "pincode";
+
+type SettingsBusinessErrors = Record<SettingsBusinessFieldId, string>;
+
 const DEFAULT_APP_PREFS: AppPrefs = {
   currency: "INR",
   dateFormat: "DD/MM/YYYY",
@@ -123,6 +123,125 @@ const DEFAULT_BRANDING_PREFS: BrandingPrefs = {
 
 const DEFAULT_BACKUP_PREFS: BackupPrefs = {
   autoBackupEnabled: false,
+};
+
+const SETTINGS_BUSINESS_NAME_PATTERN = /^(?!\s*$)[A-Za-z .&-]{2,100}$/;
+const SETTINGS_OWNER_NAME_PATTERN = /^[A-Za-z ]+$/;
+const SETTINGS_CITY_PATTERN = /^[A-Za-z ]+$/;
+const SETTINGS_GSTIN_PATTERN =
+  /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/;
+const SETTINGS_PINCODE_PATTERN = /^\d{6}$/;
+const SETTINGS_FIELD_ORDER: SettingsBusinessFieldId[] = [
+  "businessName",
+  "ownerName",
+  "gstin",
+  "addressLine1",
+  "city",
+  "state",
+  "pincode",
+];
+
+const sanitizeSettingsText = (value: string | null | undefined) =>
+  String(value ?? "")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/[<>]/g, "")
+    .trim();
+
+const sanitizeSettingsTextDraft = (value: string | null | undefined) =>
+  String(value ?? "")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/[<>]/g, "");
+
+const sanitizeSettingsBusinessName = (value: string | null | undefined) =>
+  sanitizeSettingsText(value).replace(/\d+/g, "");
+
+const sanitizeSettingsBusinessNameDraft = (
+  value: string | null | undefined,
+) => sanitizeSettingsTextDraft(value).replace(/\d+/g, "");
+
+const sanitizeSettingsOwnerName = (value: string | null | undefined) =>
+  sanitizeSettingsText(value).replace(/\s+/g, " ");
+
+const sanitizeSettingsOwnerNameDraft = (value: string | null | undefined) =>
+  sanitizeSettingsTextDraft(value).replace(/[^A-Za-z ]+/g, "");
+
+const sanitizeSettingsGstin = (value: string | null | undefined) =>
+  sanitizeSettingsText(value).toUpperCase();
+
+const sanitizeSettingsAddressLine = (value: string | null | undefined) =>
+  sanitizeSettingsText(value);
+
+const sanitizeSettingsCity = (value: string | null | undefined) =>
+  sanitizeSettingsText(value).replace(/\s+/g, " ");
+
+const sanitizeSettingsCityDraft = (value: string | null | undefined) =>
+  sanitizeSettingsTextDraft(value).replace(/[^A-Za-z ]+/g, "");
+
+const sanitizeSettingsState = (value: string | null | undefined) =>
+  sanitizeSettingsText(value);
+
+const sanitizeSettingsPincode = (value: string | null | undefined) =>
+  String(value ?? "")
+    .replace(/\D+/g, "")
+    .slice(0, 6);
+
+const validateSettingsBusinessName = (value: string) => {
+  const sanitized = sanitizeSettingsBusinessName(value);
+  if (!sanitized) return "Business name is required";
+  if (!SETTINGS_BUSINESS_NAME_PATTERN.test(sanitized)) {
+    return "Use 2-100 letters, spaces, ., &, or -";
+  }
+  return "";
+};
+
+const validateSettingsOwnerName = (value: string) => {
+  const sanitized = sanitizeSettingsOwnerName(value);
+  if (!sanitized) return "Owner name is required";
+  if (sanitized.length < 2) return "Owner name must be at least 2 characters";
+  if (!SETTINGS_OWNER_NAME_PATTERN.test(sanitized)) {
+    return "Owner name can contain letters and spaces only";
+  }
+  return "";
+};
+
+const validateSettingsGstin = (value: string) => {
+  const sanitized = sanitizeSettingsGstin(value);
+  if (!sanitized) return "";
+  if (!SETTINGS_GSTIN_PATTERN.test(sanitized)) return "Enter a valid GSTIN";
+  return "";
+};
+
+const validateSettingsAddressLine = (value: string) => {
+  const sanitized = sanitizeSettingsAddressLine(value);
+  if (!sanitized) return "Address line is required";
+  if (sanitized.length < 5) return "Address line must be at least 5 characters";
+  return "";
+};
+
+const validateSettingsCity = (value: string) => {
+  const sanitized = sanitizeSettingsCity(value);
+  if (!sanitized) return "City is required";
+  if (sanitized.length < 2) return "City must be at least 2 characters";
+  if (!SETTINGS_CITY_PATTERN.test(sanitized)) {
+    return "City can contain letters and spaces only";
+  }
+  return "";
+};
+
+const validateSettingsState = (value: string) => {
+  const sanitized = sanitizeSettingsState(value);
+  if (!sanitized) return "State is required";
+  if (!isValidIndianState(sanitized)) return "Select a valid Indian state";
+  return "";
+};
+
+const validateSettingsPincode = (value: string) => {
+  const sanitized = sanitizeSettingsPincode(value);
+  if (!sanitized) return "Pincode is required";
+  if (!SETTINGS_PINCODE_PATTERN.test(sanitized)) {
+    return "Pincode must be exactly 6 digits";
+  }
+  return "";
 };
 
 const SectionCard = ({
@@ -258,6 +377,7 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
   const [city, setCity] = useState("");
   const [state, setState] = useState("");
   const [pincode, setPincode] = useState("");
+  const [businessSubmitAttempted, setBusinessSubmitAttempted] = useState(false);
 
   const [currentLogoUrl, setCurrentLogoUrl] = useState<string | null>(null);
 
@@ -369,26 +489,66 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     }
   }, [templates, brandingPrefs.templateId]);
 
+  const settingsBusinessErrors = useMemo<SettingsBusinessErrors>(
+    () => ({
+      businessName: validateSettingsBusinessName(businessName),
+      ownerName: validateSettingsOwnerName(ownerName),
+      gstin: validateSettingsGstin(gstin),
+      addressLine1: validateSettingsAddressLine(addressLine1),
+      city: validateSettingsCity(city),
+      state: validateSettingsState(state),
+      pincode: validateSettingsPincode(pincode),
+    }),
+    [addressLine1, businessName, city, gstin, ownerName, pincode, state],
+  );
+
+  const isSettingsBusinessProfileValid = useMemo(
+    () => SETTINGS_FIELD_ORDER.every((field) => !settingsBusinessErrors[field]),
+    [settingsBusinessErrors],
+  );
+
+  const focusFirstInvalidSettingsField = () => {
+    const firstInvalidField = SETTINGS_FIELD_ORDER.find(
+      (field) => settingsBusinessErrors[field],
+    );
+
+    if (!firstInvalidField) return;
+
+    const element = document.getElementById(firstInvalidField);
+    if (element instanceof HTMLElement) {
+      element.focus();
+    }
+  };
+
   const toggleSection = (id: SectionKey) => {
     setSections((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
   const saveBusinessMutation = useMutation({
     mutationFn: async () => {
-      await updateUserProfile({ name: ownerName.trim() });
+      const sanitizedOwnerName = sanitizeSettingsOwnerName(ownerName);
+      const sanitizedBusinessName = sanitizeSettingsBusinessName(businessName);
+      const sanitizedGstin = sanitizeSettingsGstin(gstin);
+      const sanitizedAddressLine1 = sanitizeSettingsAddressLine(addressLine1);
+      const sanitizedCity = sanitizeSettingsCity(city);
+      const sanitizedState = sanitizeSettingsState(state);
+      const sanitizedPincode = sanitizeSettingsPincode(pincode);
+
+      await updateUserProfile({ name: sanitizedOwnerName });
       await saveBusinessProfile({
-        business_name: businessName.trim(),
-        tax_id: gstin.trim() || undefined,
+        business_name: sanitizedBusinessName,
+        tax_id: sanitizedGstin || undefined,
         businessAddress: {
-          addressLine1: addressLine1.trim(),
-          city: city.trim(),
-          state: state.trim(),
-          pincode: pincode.trim(),
+          addressLine1: sanitizedAddressLine1,
+          city: sanitizedCity,
+          state: sanitizedState,
+          pincode: sanitizedPincode,
         },
         currency: appPrefs.currency,
       });
     },
     onSuccess: () => {
+      setBusinessSubmitAttempted(false);
       toast.success("Business profile updated.");
       void queryClient.invalidateQueries({
         queryKey: ["settings", "business-profile"],
@@ -573,22 +733,6 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     },
   });
 
-  const deleteAccountMutation = useMutation({
-    mutationFn: deleteUserAccount,
-    onSuccess: async () => {
-      toast.success("Account deleted.");
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem("token");
-      }
-      await signOut({ callbackUrl: "/register" });
-    },
-    onError: (error) => {
-      toast.error(
-        error instanceof Error ? error.message : "Unable to delete account.",
-      );
-    },
-  });
-
   const logoutAllDevicesMutation = useMutation({
     mutationFn: logoutAllDevices,
     onSuccess: async () => {
@@ -723,61 +867,123 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
           onToggle={toggleSection}
         >
           <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Business Name
-              </label>
-              <Input
-                value={businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Owner Name
-              </label>
-              <Input
-                value={ownerName}
-                onChange={(e) => setOwnerName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">GSTIN</label>
-              <Input
-                value={gstin}
-                onChange={(e) => setGstin(e.target.value.toUpperCase())}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">
-                Address Line
-              </label>
-              <Input
-                value={addressLine1}
-                onChange={(e) => setAddressLine1(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">City</label>
-              <Input value={city} onChange={(e) => setCity(e.target.value)} />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">State</label>
-              <Input value={state} onChange={(e) => setState(e.target.value)} />
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Pincode</label>
-              <Input
-                value={pincode}
-                onChange={(e) => setPincode(e.target.value)}
-                maxLength={6}
-              />
-            </div>
+            <ValidationField
+              id="businessName"
+              label="Business Name"
+              value={businessName}
+              onChange={(value) => setBusinessName(sanitizeSettingsBusinessNameDraft(value))}
+              onBlur={(value) => setBusinessName(sanitizeSettingsBusinessName(value))}
+              normalizeOnBlur={sanitizeSettingsBusinessName}
+              validate={validateSettingsBusinessName}
+              required
+              success
+              forceTouched={businessSubmitAttempted}
+              maxLength={100}
+              className="mb-0"
+            />
+            <ValidationField
+              id="ownerName"
+              label="Owner Name"
+              value={ownerName}
+              onChange={(value) => setOwnerName(sanitizeSettingsOwnerNameDraft(value))}
+              onBlur={(value) => setOwnerName(sanitizeSettingsOwnerName(value))}
+              normalizeOnBlur={sanitizeSettingsOwnerName}
+              validate={validateSettingsOwnerName}
+              required
+              success
+              forceTouched={businessSubmitAttempted}
+              maxLength={100}
+              className="mb-0"
+            />
+            <ValidationField
+              id="gstin"
+              label="GSTIN"
+              value={gstin}
+              onChange={(value) => setGstin(sanitizeSettingsGstin(value))}
+              onBlur={(value) => setGstin(sanitizeSettingsGstin(value))}
+              normalizeOnBlur={sanitizeSettingsGstin}
+              validate={validateSettingsGstin}
+              success
+              forceTouched={businessSubmitAttempted}
+              maxLength={15}
+              className="mb-0"
+            />
+            <ValidationField
+              id="addressLine1"
+              label="Address Line"
+              value={addressLine1}
+              onChange={setAddressLine1}
+              onBlur={(value) => setAddressLine1(sanitizeSettingsAddressLine(value))}
+              normalizeOnBlur={sanitizeSettingsAddressLine}
+              validate={validateSettingsAddressLine}
+              required
+              success
+              forceTouched={businessSubmitAttempted}
+              maxLength={200}
+              className="mb-0"
+            />
+            <ValidationField
+              id="city"
+              label="City"
+              value={city}
+              onChange={(value) => setCity(sanitizeSettingsCityDraft(value))}
+              onBlur={(value) => setCity(sanitizeSettingsCity(value))}
+              normalizeOnBlur={sanitizeSettingsCity}
+              validate={validateSettingsCity}
+              required
+              success
+              forceTouched={businessSubmitAttempted}
+              maxLength={100}
+              className="mb-0"
+            />
+            <ValidationField
+              id="state"
+              label="State"
+              value={state}
+              onChange={setState}
+              onBlur={(value) => setState(sanitizeSettingsState(value))}
+              normalizeOnBlur={sanitizeSettingsState}
+              validate={validateSettingsState}
+              required
+              success
+              forceTouched={businessSubmitAttempted}
+              maxLength={100}
+              className="mb-0"
+            />
+            <ValidationField
+              id="pincode"
+              label="Pincode"
+              value={pincode}
+              onChange={(value) => setPincode(sanitizeSettingsPincode(value))}
+              onBlur={(value) => setPincode(sanitizeSettingsPincode(value))}
+              normalizeOnBlur={sanitizeSettingsPincode}
+              validate={validateSettingsPincode}
+              required
+              success
+              forceTouched={businessSubmitAttempted}
+              inputMode="numeric"
+              maxLength={6}
+              className="mb-0"
+            />
           </div>
           <div className="mt-4 flex justify-end">
             <Button
-              onClick={() => saveBusinessMutation.mutate()}
-              disabled={saveBusinessMutation.isPending}
+              onClick={() => {
+                setBusinessSubmitAttempted(true);
+                if (!isSettingsBusinessProfileValid) {
+                  focusFirstInvalidSettingsField();
+                  return;
+                }
+                setBusinessName(sanitizeSettingsBusinessName(businessName));
+                setOwnerName(sanitizeSettingsOwnerName(ownerName));
+                setGstin(sanitizeSettingsGstin(gstin));
+                setAddressLine1(sanitizeSettingsAddressLine(addressLine1));
+                setCity(sanitizeSettingsCity(city));
+                setState(sanitizeSettingsState(state));
+                setPincode(sanitizeSettingsPincode(pincode));
+                saveBusinessMutation.mutate();
+              }}
+              disabled={saveBusinessMutation.isPending || !isSettingsBusinessProfileValid}
             >
               <Save className="size-4" /> Save profile
             </Button>
@@ -1033,7 +1239,7 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
         <SectionCard
           id="data-backup"
           title="Data & Backup"
-          description="Export critical records, set backup preference, and protect account ownership."
+          description="Export critical records and set backup preferences for safer retention."
           icon={<Database className="size-4" />}
           open={sections["data-backup"]}
           onToggle={toggleSection}
@@ -1085,39 +1291,6 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
             />
           </div>
 
-          <div className="mt-4 rounded-xl border border-red-200 bg-red-50/60 p-4">
-            <p className="text-sm font-semibold text-red-700">Danger zone</p>
-            <p className="mt-1 text-xs text-red-700/90">
-              Permanently delete your account and all related billing data.
-            </p>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="destructive" className="mt-3">
-                  <Trash2 className="size-4" /> Delete account
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>
-                    Delete account permanently?
-                  </AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This action cannot be undone. All billing records, workers,
-                    and settings will be removed.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    onClick={() => deleteAccountMutation.mutate()}
-                    className="bg-red-600 hover:bg-red-700"
-                  >
-                    Delete permanently
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          </div>
         </SectionCard>
 
         <SectionCard

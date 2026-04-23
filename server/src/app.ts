@@ -53,11 +53,12 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Serve uploaded files (logos, etc.) as static assets.
-// URL pattern: GET /uploads/logos/<userId>/<filename>
+// Serve uploaded files (logos, payment proofs, etc.) as static assets.
+// Storage services write to <server-root>/uploads, so the static root needs
+// to resolve there in both tsx dev mode and compiled dist mode.
 app.use(
   "/uploads",
-  express.static(path.resolve(__dirname, "../../uploads")),
+  express.static(path.resolve(__dirname, "../uploads")),
 );
 
 app.get("/", (_req: Request, res: Response) => {

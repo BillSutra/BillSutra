@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import { signOut } from "next-auth/react";
@@ -23,6 +23,7 @@ import {
   fetchSubscriptionStatus,
   fetchUserPermissions,
   fetchUserProfile,
+  apiClient,
   updateUserPassword,
   updateUserProfile,
   type UserProfile,
@@ -38,6 +39,7 @@ import FaceRegistrationModal from "@/components/auth/FaceRegistrationModal";
 import PlanManagementCard from "@/components/pricing/PlanManagementCard";
 import ProfileOverviewStat from "@/components/profile/ProfileOverviewStat";
 import { useI18n } from "@/providers/LanguageProvider";
+import { normalizeFaceError } from "@/utils/faceErrorHandler";
 import {
   Building2,
   CalendarClock,
@@ -60,6 +62,15 @@ type ProfileClientProps = {
     productCount?: number;
     securityActivity?: SecurityActivityEvent[];
   };
+};
+
+type ProfileFaceData = {
+  image: string | null;
+  name?: string | null;
+  email?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  faceRegistered: boolean;
 };
 
 const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
@@ -173,6 +184,10 @@ const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [isFaceRegistrationOpen, setIsFaceRegistrationOpen] = useState(false);
+  const [faceData, setFaceData] = useState<ProfileFaceData | null>(null);
+  const [faceError, setFaceError] = useState<string | null>(null);
+  const [faceMessage, setFaceMessage] = useState<string | null>(null);
+  const [faceLoading, setFaceLoading] = useState(false);
   const [deleteDataOpen, setDeleteDataOpen] = useState(false);
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [deleteDataConfirmation, setDeleteDataConfirmation] = useState("");
@@ -449,6 +464,117 @@ const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
     return fallback;
   };
 
+  const fetchFaceData = useCallback(
+    async (options?: { preserveMessage?: boolean }) => {
+      try {
+        setFaceLoading(true);
+        setFaceError(null);
+        if (!options?.preserveMessage) {
+          setFaceMessage(null);
+        }
+
+        const response = await apiClient.get("/face");
+        const payload =
+          response.data?.data && typeof response.data.data === "object"
+            ? response.data.data
+            : response.data;
+
+        setFaceData({
+          image:
+            typeof payload?.image === "string" && payload.image.trim().length > 0
+              ? payload.image
+              : null,
+          name: typeof payload?.name === "string" ? payload.name : null,
+          email: typeof payload?.email === "string" ? payload.email : null,
+          createdAt:
+            typeof payload?.createdAt === "string" ? payload.createdAt : null,
+          updatedAt:
+            typeof payload?.updatedAt === "string" ? payload.updatedAt : null,
+          faceRegistered: true,
+        });
+        return true;
+      } catch (err) {
+        const normalized = normalizeFaceError(err);
+        if (
+          normalized.code === "FACE_NOT_FOUND" ||
+          normalized.code === "NO_FACE_REGISTERED"
+        ) {
+          setFaceData(null);
+          setFaceError(null);
+          return true;
+        }
+
+        setFaceData(null);
+        setFaceMessage(null);
+        setFaceError(normalized.message);
+        return false;
+      } finally {
+        setFaceLoading(false);
+      }
+    },
+    [],
+  );
+
+  const handleFaceDelete = useCallback(async () => {
+    if (!window.confirm("Are you sure you want to delete your face data?")) {
+      return;
+    }
+
+    try {
+      setFaceLoading(true);
+      setFaceError(null);
+      setFaceMessage(null);
+
+      const response = await apiClient.delete("/face");
+      const payload =
+        response.data?.data && typeof response.data.data === "object"
+          ? response.data.data
+          : response.data;
+
+      if (!response.data?.success) {
+        throw new Error(
+          typeof payload?.message === "string"
+            ? payload.message
+            : response.data?.message || "Unable to delete face data.",
+        );
+      }
+
+      setFaceData(null);
+      setFaceMessage(
+        typeof response.data?.message === "string"
+          ? response.data.message
+          : "Face deleted successfully.",
+      );
+    } catch (err) {
+      const normalized = normalizeFaceError(err);
+      setFaceMessage(null);
+      setFaceError(normalized.message);
+    } finally {
+      setFaceLoading(false);
+    }
+  }, []);
+
+  const handleFaceRegistrationSuccess = useCallback(async () => {
+    const synced = await fetchFaceData({ preserveMessage: true });
+    if (synced) {
+      setFaceError(null);
+      setFaceMessage("Face registered successfully.");
+    }
+    setIsFaceRegistrationOpen(false);
+  }, [fetchFaceData]);
+
+  useEffect(() => {
+    if (previewData) {
+      return;
+    }
+    void fetchFaceData();
+  }, [fetchFaceData, previewData]);
+
+  const facePreviewInitial = useMemo(() => {
+    const source = faceData?.name || profile.name || "U";
+    return source.trim().charAt(0).toUpperCase() || "U";
+  }, [faceData?.name, profile.name]);
+
   const handleProfileSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setProfileMessage(null);
@@ -573,7 +699,7 @@ const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
       <FaceRegistrationModal 
         isOpen={isFaceRegistrationOpen} 
         onClose={() => setIsFaceRegistrationOpen(false)}
-        onSuccess={() => toast.success("Face registered successfully")}
+        onSuccess={() => void handleFaceRegistrationSuccess()}
       />
       <div className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-6">
         <header className="rounded-3xl border border-[#eadccf] bg-white/90 p-6 shadow-[0_30px_80px_-60px_rgba(31,27,22,0.35)] sm:p-8">
@@ -916,13 +1042,96 @@ const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
                   Facial Recognition
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {faceError ? (
+                  <div className="rounded-xl border border-red-300 bg-red-100 p-3 text-sm text-red-600">
+                    {faceError}
+                  </div>
+                ) : null}
+
+                {faceMessage ? (
+                  <div className="rounded-xl border border-green-300 bg-green-50 p-3 text-sm text-green-700">
+                    {faceMessage}
+                  </div>
+                ) : null}
+
+                {faceLoading ? (
+                  <p className="text-sm text-[#6b5442]">Processing...</p>
+                ) : null}
+
                 <div className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-4 text-sm text-[#5c4b3b]">
                   <p className="font-semibold text-[#1f1b16]">Face Login</p>
-                  <p className="mt-1 mb-4">Register your face to enable secure and fast login without a password.</p>
-                  <Button onClick={() => setIsFaceRegistrationOpen(true)}>
-                    Register Face
-                  </Button>
+                  <p className="mt-1 mb-4">
+                    Register your face to enable secure and fast login without a password.
+                  </p>
+
+                  {faceData ? (
+                    <div className="flex flex-col items-center gap-3 rounded-xl border border-[#ead7c6] bg-white p-4 text-center">
+                      {faceData.image ? (
+                        <img
+                          src={faceData.image}
+                          alt="Registered Face"
+                          className="h-32 w-32 rounded-lg border border-[#ead7c6] object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-32 w-32 items-center justify-center rounded-lg border border-[#ead7c6] bg-[#f6ede2] text-4xl font-semibold text-[#8a6d56]">
+                          {facePreviewInitial}
+                        </div>
+                      )}
+
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-green-700">
+                          Face already registered
+                        </p>
+                        <p className="text-xs text-[#6b5442]">
+                          {faceData.updatedAt
+                            ? `Last updated ${formatDateTime(faceData.updatedAt)}`
+                            : "Face registered successfully"}
+                        </p>
+                      </div>
+
+                      <div className="flex w-full flex-col gap-2 sm:flex-row">
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            setFaceError(null);
+                            setFaceMessage(null);
+                            setIsFaceRegistrationOpen(true);
+                          }}
+                          disabled={faceLoading}
+                          className="flex-1"
+                        >
+                          Replace Face
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void handleFaceDelete()}
+                          disabled={faceLoading}
+                          className="flex-1 border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                        >
+                          Delete Face
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <p className="text-sm text-[#6b5442]">
+                        No face registered yet
+                      </p>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          setFaceError(null);
+                          setFaceMessage(null);
+                          setIsFaceRegistrationOpen(true);
+                        }}
+                        disabled={faceLoading}
+                      >
+                        Register Face
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

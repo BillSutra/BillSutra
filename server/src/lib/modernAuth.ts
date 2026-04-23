@@ -114,6 +114,37 @@ export const getClientIpAddress = (req: Request) => {
   return req.ip || null;
 };
 
+let supportedAuthMethodsPromise: Promise<Set<string> | null> | null = null;
+
+const loadSupportedAuthMethods = async () => {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ value: string }>>(
+      Prisma.sql`SELECT unnest(enum_range(NULL::"AuthMethod"))::text AS value`,
+    );
+
+    return new Set(
+      rows
+        .map((row) => row.value?.trim())
+        .filter((value): value is string => Boolean(value)),
+    );
+  } catch {
+    return null;
+  }
+};
+
+const isAuthMethodSupportedByDatabase = async (method: AuthMethod) => {
+  if (!supportedAuthMethodsPromise) {
+    supportedAuthMethodsPromise = loadSupportedAuthMethods();
+  }
+
+  const supportedMethods = await supportedAuthMethodsPromise;
+  if (!supportedMethods) {
+    return true;
+  }
+
+  return supportedMethods.has(String(method));
+};
+
 export const recordAuthEvent = async ({
   req,
   userId,
@@ -130,6 +161,11 @@ export const recordAuthEvent = async ({
   metadata?: Record<string, unknown>;
 }) => {
   try {
+    const isSupported = await isAuthMethodSupportedByDatabase(method);
+    if (!isSupported) {
+      return;
+    }
+
     await prisma.authEvent.create({
       data: {
         user_id: userId ?? undefined,

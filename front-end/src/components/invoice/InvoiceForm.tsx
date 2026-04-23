@@ -14,6 +14,13 @@ export type InvoiceFormProps = {
   form: InvoiceFormState;
   customers: Array<{ id: number; name: string; email?: string | null }>;
   warehouses: Array<{ id: number; name: string }>;
+  businessSummary?: {
+    businessName: string;
+    taxId?: string | null;
+    phone?: string | null;
+    email?: string | null;
+  } | null;
+  invoiceNumberPreview: string;
   subtotalAmount: number;
   totalAmount: number;
   taxMode: TaxMode;
@@ -32,6 +39,8 @@ const InvoiceForm = ({
   form,
   customers,
   warehouses,
+  businessSummary,
+  invoiceNumberPreview,
   subtotalAmount,
   totalAmount,
   taxMode,
@@ -91,6 +100,34 @@ const InvoiceForm = ({
         </div>
       </div>
       <div className="grid gap-5 sm:grid-cols-2">
+        <div className="sm:col-span-2 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+          <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 dark:border-slate-700 dark:bg-slate-900/70">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Business details
+            </p>
+            <div className="mt-3 grid gap-1 text-sm text-slate-600 dark:text-slate-300">
+              <p className="text-base font-semibold text-slate-950 dark:text-slate-100">
+                {businessSummary?.businessName || "BillSutra"}
+              </p>
+              {businessSummary?.taxId ? <p>GST: {businessSummary.taxId}</p> : null}
+              {businessSummary?.phone ? <p>Phone: {businessSummary.phone}</p> : null}
+              {businessSummary?.email ? <p>Email: {businessSummary.email}</p> : null}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white/80 p-4 dark:border-slate-700 dark:bg-slate-900/70">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Invoice number
+            </p>
+            <p className="mt-3 text-lg font-semibold text-slate-950 dark:text-slate-100">
+              {invoiceNumberPreview}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Generated automatically when you save.
+            </p>
+          </div>
+        </div>
+
         <FirstTimeHint
           id="invoice-customer-field"
           message="Pick the customer here first. It makes the rest of the bill easier."

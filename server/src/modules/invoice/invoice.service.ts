@@ -18,6 +18,9 @@ import {
 } from "../../lib/indianAddress.js";
 import {
   applyBillingSaleInventoryAdjustments,
+  getBillingInventorySchemaSupport,
+  getBillingInventorySettings,
+  restoreBillingSaleInventoryAdjustments,
   resolveBillingProducts,
   resolveBillingWarehouse,
 } from "../../services/billingInventorySync.service.js";
@@ -222,6 +225,31 @@ const createInvoiceValidationError = (
   error.errors = errors;
   return error;
 };
+
+const hasUnknownPrismaArgument = (error: unknown, argument: string) => {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes(`Unknown argument \`${argument}\``);
+};
+
+const buildSyncedSaleNote = (
+  invoiceNumber: string,
+  warehouseId?: number | null,
+  notes?: string | null,
+) => {
+  const warehouseSuffix = warehouseId ? `, Warehouse ${warehouseId}` : "";
+  const syncDescriptor = `Synced from invoice ${invoiceNumber}${warehouseSuffix}`;
+
+  return notes?.trim()
+    ? `${notes.trim()} (${syncDescriptor})`
+    : syncDescriptor;
+};
+
+const findSyncedSalesWhereClause = (userId: number, invoiceNumber: string) => ({
+  user_id: userId,
+  notes: {
+    contains: `Synced from invoice ${invoiceNumber}`,
+  },
+});
 
 const validateDiscountInput = ({
   subtotal,
@@ -1139,6 +1167,7 @@ export const getInvoiceBootstrap = async (userId: number) => {
       invoiceDate: today,
       dueDate: today,
       taxMode: "CGST_SGST",
+      invoiceNumberPreview: generateInvoiceNumber(null),
     },
   };
 };
@@ -1192,7 +1221,9 @@ export const createInvoice = async (
   );
 
   const syncSales =
-    payload.status !== INVOICE_STATUS.DRAFT && payload.status !== INVOICE_STATUS.VOID;
+    payload.sync_sales === true &&
+    payload.status !== INVOICE_STATUS.DRAFT &&
+    payload.status !== INVOICE_STATUS.VOID;
   const paymentState = resolveInvoicePaymentState({
     total: totals.total,
     status: payload.status,
@@ -1210,18 +1241,27 @@ export const createInvoice = async (
         : PAYMENT_STATUS.UNPAID;
 
   return prisma.$transaction(async (tx) => {
+    const schemaSupport = syncSales
+      ? await getBillingInventorySchemaSupport(tx)
+      : {
+          allowNegativeStockPreference: false,
+          invoiceItemNonInventoryFlag: false,
+          saleItemNonInventoryFlag: false,
+        };
+    const inventorySettings = syncSales
+      ? await getBillingInventorySettings(tx, userId)
+      : null;
     const warehouse = syncSales
       ? await resolveBillingWarehouse(tx, userId, payload.warehouse_id)
       : null;
     const resolvedItems = syncSales
-      ? await resolveBillingProducts(tx, userId, totals.items, {
-          autoCreateProducts: true,
-        })
+      ? await resolveBillingProducts(tx, userId, totals.items)
       : totals.items.map((item) => ({
           product_id: item.product_id as number,
           name: item.name,
           quantity: item.quantity,
           price: item.price,
+          nonInventoryItem: false,
           tax_rate: item.tax_rate ?? undefined,
           gst_type: item.gst_type,
         }));
@@ -1230,6 +1270,9 @@ export const createInvoice = async (
       product_id: syncSales ? item.product_id : totals.items[index]?.product_id ?? undefined,
       name: item.name,
       quantity: item.quantity,
+      ...(schemaSupport.invoiceItemNonInventoryFlag
+        ? { nonInventoryItem: item.nonInventoryItem }
+        : {}),
       price: item.price,
       tax_rate: item.tax_rate ?? undefined,
       total: totals.items[index]?.total ?? item.quantity * item.price,
@@ -1252,27 +1295,70 @@ export const createInvoice = async (
       }
     }
 
-    const invoice = await tx.invoice.create({
-      data: {
-        user_id: userId,
-        customer_id: payload.customer_id,
-        invoice_number: invoiceNumber,
-        date: payload.date ?? undefined,
-        due_date: payload.due_date ?? undefined,
-        status: paymentState.invoiceStatus,
-        subtotal: totals.subtotal,
-        tax: totals.tax,
-        tax_mode: taxMode,
-        discount: totals.discount,
-        discount_type: discountType,
-        discount_value: discountValue,
-        discount_calculated: totals.discount,
-        total: totals.total,
-        notes: payload.notes ?? undefined,
-        items: { create: itemPayload },
-      },
-      include: { items: true, payments: true },
-    });
+    const invoiceCreateData = {
+      user_id: userId,
+      customer_id: payload.customer_id,
+      invoice_number: invoiceNumber,
+      warehouse_id: warehouse?.id ?? payload.warehouse_id ?? undefined,
+      stock_applied: syncSales,
+      date: payload.date ?? undefined,
+      due_date: payload.due_date ?? undefined,
+      status: paymentState.invoiceStatus,
+      subtotal: totals.subtotal,
+      tax: totals.tax,
+      tax_mode: taxMode,
+      discount: totals.discount,
+      discount_type: discountType,
+      discount_value: discountValue,
+      discount_calculated: totals.discount,
+      total: totals.total,
+      notes: payload.notes ?? undefined,
+      items: { create: itemPayload },
+    };
+
+    let invoice;
+    try {
+      invoice = await tx.invoice.create({
+        data: invoiceCreateData,
+        include: { items: true, payments: true },
+      });
+    } catch (error) {
+      const shouldRetryWithoutInvoiceInventoryFields =
+        hasUnknownPrismaArgument(error, "warehouse_id") ||
+        hasUnknownPrismaArgument(error, "stock_applied");
+      const shouldRetryWithoutItemInventoryFlag = hasUnknownPrismaArgument(
+        error,
+        "nonInventoryItem",
+      );
+
+      if (
+        !shouldRetryWithoutInvoiceInventoryFields &&
+        !shouldRetryWithoutItemInventoryFlag
+      ) {
+        throw error;
+      }
+
+      const fallbackItemPayload = itemPayload.map((item) => {
+        const { nonInventoryItem, ...rest } = item as typeof item & {
+          nonInventoryItem?: boolean;
+        };
+        return rest;
+      });
+
+      const {
+        warehouse_id: _warehouseId,
+        stock_applied: _stockApplied,
+        ...fallbackInvoiceCreateData
+      } = invoiceCreateData;
+
+      invoice = await tx.invoice.create({
+        data: {
+          ...fallbackInvoiceCreateData,
+          items: { create: fallbackItemPayload },
+        },
+        include: { items: true, payments: true },
+      });
+    }
 
     await tx.$executeRaw(Prisma.sql`
       UPDATE "invoices"
@@ -1285,6 +1371,16 @@ export const createInvoice = async (
       WHERE "id" = ${invoice.id}
     `);
 
+    if (warehouse?.id || syncSales) {
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE "invoices"
+        SET
+          "warehouse_id" = ${warehouse?.id ?? payload.warehouse_id ?? null},
+          "stock_applied" = ${syncSales}
+        WHERE "id" = ${invoice.id}
+      `);
+    }
+
     const persistedItems = await tx.invoiceItem.findMany({
       where: { invoice_id: invoice.id },
       orderBy: { id: "asc" },
@@ -1296,6 +1392,7 @@ export const createInvoice = async (
         tx.$executeRaw(Prisma.sql`
           UPDATE "invoice_items"
           SET
+            "non_inventory_item" = ${resolvedItems[index]?.nonInventoryItem ?? false},
             "gst_type" = ${itemMetadata[index]?.gstType ?? "NONE"},
             "base_amount" = ${itemMetadata[index]?.baseAmount ?? 0},
             "gst_amount" = ${itemMetadata[index]?.gstAmount ?? 0},
@@ -1324,37 +1421,72 @@ export const createInvoice = async (
         product_id: item.product_id,
         name: item.name,
         quantity: item.quantity,
+        ...(schemaSupport.saleItemNonInventoryFlag
+          ? { nonInventoryItem: item.nonInventoryItem }
+          : {}),
         unit_price: item.price,
         tax_rate: item.tax_rate ?? undefined,
         line_total: totals.items[index]?.total ?? item.quantity * item.price,
       }));
 
-      await tx.sale.create({
-        data: {
-          user_id: userId,
-          customer_id: payload.customer_id,
-          sale_date: payload.date ?? undefined,
-          status: SALE_STATUS.COMPLETED,
-          subtotal: totals.subtotal,
-          tax: totals.tax,
-          total: totals.total,
-          totalAmount: totals.total,
-          paidAmount: paymentState.paidAmount,
-          pendingAmount: paymentState.remainingAmount,
-          paymentStatus: syncedSalePaymentStatus,
-          paymentDate: paymentState.paymentDate ?? undefined,
-          paymentMethod: paymentState.paymentMethod ?? undefined,
-          notes: payload.notes
-            ? `${payload.notes} (Synced from invoice ${invoiceNumber}, Warehouse ${warehouse?.id})`
-            : `Synced from invoice ${invoiceNumber} (Warehouse ${warehouse?.id})`,
-          items: { create: saleItems },
-        },
-      });
+      try {
+        await tx.sale.create({
+          data: {
+            user_id: userId,
+            customer_id: payload.customer_id,
+            sale_date: payload.date ?? undefined,
+            status: SALE_STATUS.COMPLETED,
+            subtotal: totals.subtotal,
+            tax: totals.tax,
+            total: totals.total,
+            totalAmount: totals.total,
+            paidAmount: paymentState.paidAmount,
+            pendingAmount: paymentState.remainingAmount,
+            paymentStatus: syncedSalePaymentStatus,
+            paymentDate: paymentState.paymentDate ?? undefined,
+            paymentMethod: paymentState.paymentMethod ?? undefined,
+            notes: buildSyncedSaleNote(invoiceNumber, warehouse?.id, payload.notes),
+            items: { create: saleItems },
+          },
+        });
+      } catch (error) {
+        if (!hasUnknownPrismaArgument(error, "nonInventoryItem")) {
+          throw error;
+        }
+
+        await tx.sale.create({
+          data: {
+            user_id: userId,
+            customer_id: payload.customer_id,
+            sale_date: payload.date ?? undefined,
+            status: SALE_STATUS.COMPLETED,
+            subtotal: totals.subtotal,
+            tax: totals.tax,
+            total: totals.total,
+            totalAmount: totals.total,
+            paidAmount: paymentState.paidAmount,
+            pendingAmount: paymentState.remainingAmount,
+            paymentStatus: syncedSalePaymentStatus,
+            paymentDate: paymentState.paymentDate ?? undefined,
+            paymentMethod: paymentState.paymentMethod ?? undefined,
+            notes: buildSyncedSaleNote(invoiceNumber, warehouse?.id, payload.notes),
+            items: {
+              create: saleItems.map((item) => {
+                const { nonInventoryItem, ...rest } = item as typeof item & {
+                  nonInventoryItem?: boolean;
+                };
+                return rest;
+              }),
+            },
+          },
+        });
+      }
 
       await applyBillingSaleInventoryAdjustments({
         tx,
         warehouseId: warehouse?.id as number,
         items: resolvedItems,
+        allowNegativeStock: inventorySettings?.allowNegativeStock,
         referenceId: invoice.id,
         referenceType: "invoice",
       });
@@ -1496,13 +1628,81 @@ export const updateInvoice = async (
     notes?: string | null;
   },
 ) => {
-  return prisma.invoice.updateMany({
+  const currentInvoice = await prisma.invoice.findFirst({
     where: { id, user_id: userId },
-    data: {
-      status: payload.status,
-      due_date: payload.due_date ?? undefined,
-      notes: payload.notes,
-    },
+    include: { items: true },
+  });
+
+  if (!currentInvoice) {
+    return { count: 0 };
+  }
+
+  if (
+    currentInvoice.status === INVOICE_STATUS.VOID &&
+    payload.status &&
+    payload.status !== INVOICE_STATUS.VOID
+  ) {
+    throw createInvoiceValidationError(
+      "Cancelled invoices cannot be reopened from this workflow.",
+      {
+        status: ["Create a duplicate invoice instead of reopening a cancelled invoice."],
+      },
+    );
+  }
+
+  const shouldRestoreInventory =
+    payload.status === INVOICE_STATUS.VOID &&
+    currentInvoice.status !== INVOICE_STATUS.VOID &&
+    currentInvoice.stock_applied &&
+    Number.isInteger(currentInvoice.warehouse_id) &&
+    (currentInvoice.warehouse_id ?? 0) > 0;
+
+  if (!shouldRestoreInventory) {
+    return prisma.invoice.updateMany({
+      where: { id, user_id: userId },
+      data: {
+        status: payload.status,
+        due_date: payload.due_date ?? undefined,
+        notes: payload.notes,
+      },
+    });
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await restoreBillingSaleInventoryAdjustments({
+      tx,
+      warehouseId: currentInvoice.warehouse_id as number,
+      items: currentInvoice.items.map((item) => ({
+        product_id: item.product_id,
+        name: item.name,
+        quantity: item.quantity,
+        price: Number(item.price),
+        nonInventoryItem: item.nonInventoryItem,
+        tax_rate: item.tax_rate == null ? undefined : Number(item.tax_rate),
+        gst_type:
+          item.gst_type === "CGST_SGST" ||
+          item.gst_type === "IGST" ||
+          item.gst_type === "NONE"
+            ? item.gst_type
+            : undefined,
+      })),
+      referenceId: currentInvoice.id,
+      referenceType: "invoice",
+    });
+
+    await tx.sale.deleteMany({
+      where: findSyncedSalesWhereClause(userId, currentInvoice.invoice_number),
+    });
+
+    return tx.invoice.updateMany({
+      where: { id, user_id: userId },
+      data: {
+        status: payload.status,
+        due_date: payload.due_date ?? undefined,
+        notes: payload.notes,
+        stock_applied: false,
+      },
+    });
   });
 };
 
@@ -1634,5 +1834,47 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
 };
 
 export const deleteInvoice = async (userId: number, id: number) => {
-  return prisma.invoice.deleteMany({ where: { id, user_id: userId } });
+  const existingInvoice = await prisma.invoice.findFirst({
+    where: { id, user_id: userId },
+    include: { items: true },
+  });
+
+  if (!existingInvoice) {
+    return { count: 0 };
+  }
+
+  return prisma.$transaction(async (tx) => {
+    if (
+      existingInvoice.stock_applied &&
+      Number.isInteger(existingInvoice.warehouse_id) &&
+      (existingInvoice.warehouse_id ?? 0) > 0
+    ) {
+      await restoreBillingSaleInventoryAdjustments({
+        tx,
+        warehouseId: existingInvoice.warehouse_id as number,
+        items: existingInvoice.items.map((item) => ({
+          product_id: item.product_id,
+          name: item.name,
+          quantity: item.quantity,
+          price: Number(item.price),
+          nonInventoryItem: item.nonInventoryItem,
+          tax_rate: item.tax_rate == null ? undefined : Number(item.tax_rate),
+          gst_type:
+            item.gst_type === "CGST_SGST" ||
+            item.gst_type === "IGST" ||
+            item.gst_type === "NONE"
+              ? item.gst_type
+              : undefined,
+        })),
+        referenceId: existingInvoice.id,
+        referenceType: "invoice",
+      });
+
+      await tx.sale.deleteMany({
+        where: findSyncedSalesWhereClause(userId, existingInvoice.invoice_number),
+      });
+    }
+
+    return tx.invoice.deleteMany({ where: { id, user_id: userId } });
+  });
 };

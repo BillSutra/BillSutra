@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { apiClient } from "@/lib/apiClient";
+import { normalizeFaceError } from "@/utils/faceErrorHandler";
 
 interface UseWebcamOptions {
   autoStart?: boolean;
@@ -33,9 +34,6 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
 
   const startCamera = useCallback(async () => {
     try {
-      console.log("[Webcam] Requesting camera access");
-
-      // Request camera permission with specific constraints for optimal quality
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 640 },
@@ -45,14 +43,10 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
         audio: false,
       });
 
-      console.log("[Webcam] Camera access granted");
-
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        // Wait for video to load before setting isActive
         videoRef.current.onloadedmetadata = () => {
           setIsActive(true);
-          console.log("[Webcam] Video stream is active");
         };
       }
 
@@ -68,19 +62,15 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
               : `Camera error: ${error.message}`
           : "Failed to access camera";
 
-      console.error("[Webcam] Error:", errorMessage, error);
       onErrorRef.current?.(errorMessage);
       setIsActive(false);
     }
   }, []);
 
   const stopCamera = useCallback(() => {
-    console.log("[Webcam] Stopping camera");
-
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => {
         track.stop();
-        console.log(`[Webcam] Stopped ${track.kind} track`);
       });
       streamRef.current = null;
     }
@@ -95,15 +85,11 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
 
   const captureImage = useCallback(async (): Promise<Blob | null> => {
     if (!videoRef.current || !isActive) {
-      console.error("[Webcam] Cannot capture: video not ready");
-      onError?.("Camera is not ready. Please wait a moment.");
+      onErrorRef.current?.("Camera is not ready. Please wait a moment.");
       return null;
     }
 
     try {
-      console.log("[Webcam] Capturing image");
-
-      // Create canvas from video frame
       const canvas = document.createElement("canvas");
       canvas.width = videoRef.current.videoWidth;
       canvas.height = videoRef.current.videoHeight;
@@ -113,45 +99,31 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
         throw new Error("Could not get canvas context");
       }
 
-      // Draw current video frame to canvas
       ctx.drawImage(videoRef.current, 0, 0);
 
-      // Convert canvas to blob (JPEG format for better compatibility)
       return new Promise((resolve) => {
         canvas.toBlob(
           (blob) => {
-            if (blob) {
-              console.log(
-                `[Webcam] Image captured successfully. Size: ${blob.size} bytes`
-              );
-            } else {
-              console.error("[Webcam] Failed to create image blob");
-            }
             resolve(blob);
           },
           "image/jpeg",
-          0.9
+          0.9,
         );
       });
     } catch (error) {
       const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to capture image";
-      console.error("[Webcam] Capture error:", errorMessage, error);
+        error instanceof Error ? error.message : "Failed to capture image";
       onErrorRef.current?.(`Image capture failed: ${errorMessage}`);
       return null;
     }
   }, [isActive]);
 
-  // Auto-start camera if requested
   useEffect(() => {
     if (autoStart) {
       startCamera();
     }
 
     return () => {
-      // Cleanup: stop camera when component unmounts
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
@@ -170,76 +142,272 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
 };
 
 /**
+ * Structured error info for debugging
+ */
+interface ErrorInfo {
+  message: string;
+  status?: number;
+  code?: string;
+  responseData?: unknown;
+  isServerError: boolean;
+  details?: unknown;
+}
+
+function toLoggableError(err: unknown) {
+  if (err instanceof Error) {
+    const errorWithCode = err as unknown as { code?: unknown };
+    const errorWithResponse = err as unknown as {
+      response?: { status?: number; data?: unknown };
+    };
+
+    return {
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+      ...(typeof errorWithCode.code === "string"
+        ? { code: errorWithCode.code }
+        : {}),
+      ...(errorWithResponse.response
+        ? {
+            response: {
+              status: errorWithResponse.response.status,
+              data: errorWithResponse.response.data,
+            },
+          }
+        : {}),
+    };
+  }
+
+  if (typeof err === "object" && err !== null) {
+    return {
+      ...err,
+      keys: Object.keys(err),
+    };
+  }
+
+  return { value: err };
+}
+
+const FRIENDLY_ERROR_BY_CODE: Record<string, string> = {
+  FACE_NOT_DETECTED:
+    "No face detected. Please keep your face centered and try again.",
+  NO_FACE_DETECTED:
+    "No face detected. Please keep your face centered and try again.",
+  MULTIPLE_FACES_DETECTED:
+    "Multiple faces found. Please ensure only your face is visible.",
+  NO_FILE_UPLOADED:
+    "No image was captured. Please capture your face and retry.",
+  FILE_TOO_LARGE: "Captured image is too large. Please try again.",
+  DATABASE_ERROR: "Server error, try again.",
+  INVALID_RESPONSE:
+    "Face recognition service returned an invalid response. Please try again.",
+  SERVICE_UNAVAILABLE:
+    "Face recognition service is temporarily unavailable. Please try again.",
+};
+
+/**
+ * Extract structured error info from various error sources
+ */
+function extractErrorInfo(err: any): ErrorInfo {
+  const result: ErrorInfo = {
+    message: "An unexpected error occurred. Please try again.",
+    isServerError: true,
+  };
+
+  // Case 1: Axios error with response
+  if (err?.response) {
+    result.status = err.response.status;
+    result.responseData = err.response.data;
+    result.details = err.response.data?.details;
+    result.isServerError = (result.status ?? 0) >= 500;
+
+    const data = err.response.data;
+    const errorMessage =
+      data?.error ||
+      data?.message ||
+      data?.data?.error ||
+      err.message ||
+      "Unknown error";
+    if (typeof data?.code === "string") {
+      result.code = data.code;
+    }
+
+    if (typeof data === "string" && data) {
+      result.message = data;
+    } else if (
+      typeof errorMessage === "string" &&
+      errorMessage.trim().length > 0
+    ) {
+      result.message = errorMessage;
+    }
+
+    if (result.code && FRIENDLY_ERROR_BY_CODE[result.code]) {
+      result.message = FRIENDLY_ERROR_BY_CODE[result.code];
+    }
+
+    // Status-based fallbacks
+    if (!result.message || result.message === "An unexpected error occurred") {
+      switch (result.status) {
+        case 400:
+          result.message = "Invalid request. Please check your image.";
+          break;
+        case 401:
+          result.message = "Authentication failed. Please login again.";
+          break;
+        case 403:
+          result.message = "Access denied.";
+          break;
+        case 404:
+          result.message = "Service not found.";
+          break;
+        case 503:
+          result.message =
+            "Face recognition service is temporarily unavailable.";
+          break;
+      }
+    }
+    return result;
+  }
+
+  // Case 2: Network errors
+  if (err?.code) {
+    result.code = err.code;
+    if (err.code === "ECONNREFUSED") {
+      result.message =
+        "Cannot connect to face recognition service. Please try again later.";
+      result.isServerError = true;
+    } else if (err.code === "ETIMEDOUT" || err.code === "ECONNABORTED") {
+      result.message = "Request timed out. Please try again.";
+      result.isServerError = true;
+    }
+    return result;
+  }
+
+  // Case 3: Error with message property
+  if (err instanceof Error) {
+    result.message = err.message;
+    result.isServerError = false;
+    return result;
+  }
+
+  // Case 4: Plain string error
+  if (typeof err === "string" && err) {
+    result.message = err;
+    result.isServerError = false;
+    return result;
+  }
+
+  // Case 5: Unknown error
+  console.warn("[extractErrorInfo] Unknown error format:", err);
+  return result;
+}
+
+/**
  * Hook for managing face registration state and API calls
  */
 export const useFaceRegistration = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<Record<string, any> | null>(null);
 
   const registerFace = useCallback(
-    async (imageBlob: Blob): Promise<boolean> => {
+    async (
+      imageBlob: Blob,
+    ): Promise<{ success: boolean; error?: string; code?: string }> => {
+      setIsLoading(true);
+      setError(null);
+      setSuccess(false);
+
+      const maxAttempts = 2;
+      let attempt = 0;
+
       try {
-        setIsLoading(true);
-        setError(null);
-        setSuccess(false);
-
-        console.log("[Face Register] Starting registration", {
-          imageSize: imageBlob.size,
-          imageType: imageBlob.type,
-        });
-
-        // Create FormData for file upload
         const formData = new FormData();
         formData.append("image", imageBlob, "face.jpg");
 
-        const response = await apiClient.post("/face/register", formData, {
-            headers: { "Content-Type": "multipart/form-data" }
-        });
-        const data = response.data;
+        while (attempt < maxAttempts) {
+          attempt += 1;
 
-        console.log("[Face Register] Success");
-        setSuccess(true);
-        setError(null);
-        return true;
-      } catch (err: any) {
-        let errorMessage = "An unexpected error occurred";
-        if (err.response) {
-            errorMessage = err.response.data?.message || `Face registration failed with status ${err.response.status}`;
-            setDebugInfo({
-                errorCode: err.response.data?.error_code,
-                message: err.response.data?.debug_error,
+          try {
+            const response = await apiClient.post("/face/register", formData, {
+              headers: { "Content-Type": "multipart/form-data" },
             });
-        } else if (err instanceof Error) {
-            errorMessage = err.message;
+
+            const data = response.data;
+            const payload = data?.data;
+
+            if (!data?.success || !payload) {
+              const normalizedError = normalizeFaceError({
+                message: data?.message,
+                error: data?.error,
+                code: data?.code,
+                status:
+                  typeof response.status === "number"
+                    ? response.status
+                    : undefined,
+              });
+              setError(normalizedError.message);
+              return {
+                success: false,
+                error: normalizedError.message,
+                code: normalizedError.code,
+              };
+            }
+
+            setSuccess(true);
+
+            return { success: true };
+          } catch (err) {
+            const errorInfo = extractErrorInfo(err);
+            const shouldRetry =
+              attempt < maxAttempts &&
+              (errorInfo.status === 503 ||
+                errorInfo.status === 504 ||
+                errorInfo.code === "REQUEST_TIMEOUT" ||
+                errorInfo.isServerError);
+
+            if (!shouldRetry) {
+              const normalizedError = normalizeFaceError(err);
+              setError(normalizedError.message);
+              return {
+                success: false,
+                error: normalizedError.message,
+                code: normalizedError.code,
+              };
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, 500));
+          }
         }
-        const status = Number(err.response?.status ?? 0);
-        if (status > 0 && status < 500) {
-          console.warn("[Face Register] Failed:", errorMessage);
-        } else {
-          console.error("[Face Register] Exception:", errorMessage, err);
-        }
-        setError(`Error: ${errorMessage}`);
-        return false;
+
+        return { success: false, error: "Face registration failed." };
+      } catch (err) {
+        const errorInfo = normalizeFaceError(err);
+        setError(errorInfo.message);
+
+        return {
+          success: false,
+          error: errorInfo.message,
+          code: errorInfo.code,
+        };
       } finally {
         setIsLoading(false);
       }
     },
-    []
+    [],
   );
+
+  const reset = useCallback(() => {
+    setError(null);
+    setSuccess(false);
+  }, []);
 
   return {
     registerFace,
     isLoading,
     error,
     success,
-    debugInfo,
-    reset: () => {
-      setError(null);
-      setSuccess(false);
-      setDebugInfo(null);
-    },
+    reset,
   };
 };
 
@@ -249,23 +417,24 @@ export const useFaceRegistration = () => {
 export const useFaceAuthentication = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<Record<string, any> | null>(null);
 
   const authenticateFace = useCallback(
     async (
       email: string,
-      imageBlob: Blob
-    ): Promise<{ success: boolean; user?: any; token?: string; error?: string }> => {
+      imageBlob: Blob,
+    ): Promise<{
+      success: boolean;
+      user?: any;
+      token?: string;
+      error?: string;
+      code?: string;
+      status?: number;
+      details?: unknown;
+    }> => {
+      setIsLoading(true);
+      setError(null);
+
       try {
-        setIsLoading(true);
-        setError(null);
-
-        console.log("[Face Auth] Starting authentication", {
-          email,
-          imageSize: imageBlob.size,
-        });
-
-        // Convert image to base64
         const reader = new FileReader();
         const imageBase64 = await new Promise<string>((resolve, reject) => {
           reader.onload = () => resolve(reader.result as string);
@@ -274,72 +443,82 @@ export const useFaceAuthentication = () => {
         });
 
         const response = await apiClient.post("/face/authenticate", {
-            email,
-            imageData: imageBase64.split(",")[1],
+          email,
+          imageData: imageBase64.split(",")[1],
         });
-        const data = response.data;
-        const payload = data?.data ?? data;
 
-        if (!payload?.user || typeof payload?.token !== "string" || !payload.token.trim()) {
-          const mismatchMessage =
-            "Face authentication response was incomplete.";
-          console.warn("[Face Auth] Missing user in successful response");
-          setError(mismatchMessage);
-          setDebugInfo({
-            ...payload?.debug_info,
+        const data = response.data;
+
+        if (!data?.success || !data?.data) {
+          const normalizedError = normalizeFaceError({
+            message: data?.message,
+            error: data?.error,
+            code: data?.code,
+            status:
+              typeof response.status === "number" ? response.status : undefined,
           });
+          setError(normalizedError.message);
           return {
             success: false,
-            error: mismatchMessage,
+            error: normalizedError.message,
+            code: normalizedError.code,
+            status: normalizedError.status,
           };
         }
 
-        console.log("[Face Auth] Success");
-        setError(null);
+        const payload = data.data;
+
+        if (
+          !payload?.user ||
+          typeof payload?.token !== "string" ||
+          !payload.token.trim()
+        ) {
+          const normalizedError = normalizeFaceError({
+            message: "Face authentication response was incomplete.",
+            code: "INVALID_RESPONSE",
+            status:
+              typeof response.status === "number" ? response.status : undefined,
+          });
+          setError(normalizedError.message);
+          return {
+            success: false,
+            error: normalizedError.message,
+            code: normalizedError.code,
+            status: normalizedError.status,
+          };
+        }
+
         return {
           success: true,
           user: payload.user,
           token: payload.token,
         };
       } catch (err: any) {
-        let errorMessage = "An unexpected error occurred";
-        if (err.response) {
-            errorMessage = err.response.data?.message || `Face authentication failed with status ${err.response.status}`;
-            setDebugInfo({
-                errorCode: err.response.data?.error_code,
-                message: err.response.data?.debug_error,
-                ...err.response.data?.debug_info,
-            });
-        } else if (err instanceof Error) {
-            errorMessage = err.message;
-        }
-        const status = Number(err.response?.status ?? 0);
-        if (status > 0 && status < 500) {
-          console.warn("[Face Auth] Failed:", errorMessage);
-        } else {
-          console.error("[Face Auth] Exception:", errorMessage, err);
-        }
-        setError(`Error: ${errorMessage}`);
+        const errorInfo = normalizeFaceError(err);
+        setError(errorInfo.message);
+
         return {
           success: false,
-          error: `Error: ${errorMessage}`,
+          error: errorInfo.message,
+          code: errorInfo.code,
+          status: errorInfo.status,
         };
       } finally {
         setIsLoading(false);
       }
     },
-    []
+    [],
   );
+
+  const reset = useCallback(() => {
+    setError(null);
+  }, []);
 
   return {
     authenticateFace,
     isLoading,
     error,
-    debugInfo,
-    reset: () => {
-      setError(null);
-      setDebugInfo(null);
-    },
+    reset,
   };
 };
 
@@ -352,16 +531,26 @@ export const useFaceCheckStatus = () => {
   const [error, setError] = useState<string | null>(null);
 
   const checkStatus = useCallback(async () => {
-    try {
-      setIsChecking(true);
-      setError(null);
+    setIsChecking(true);
+    setError(null);
 
+    try {
       const response = await apiClient.get("/face/check");
       const data = response.data;
-      setFaceRegistered(data.faceRegistered || false);
+      if (!data?.success) {
+        throw new Error(
+          data?.error ||
+            data?.message ||
+            "Failed to check face registration status.",
+        );
+      }
+
+      setFaceRegistered(Boolean(data?.data?.faceRegistered));
     } catch (err: any) {
-      const errorMessage = err.response?.data?.message || (err instanceof Error ? err.message : "Unknown error");
-      setError(errorMessage);
+      const errorInfo = extractErrorInfo(err);
+      console.error("[Face Check] Error:", errorInfo);
+      setError(errorInfo.message);
+      setFaceRegistered(false);
     } finally {
       setIsChecking(false);
     }

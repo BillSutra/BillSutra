@@ -1,6 +1,7 @@
 export type BillingCycle = "monthly" | "yearly";
 
 export const PRICING_CURRENCY = "INR";
+export const FREE_PLAN_ID = "free" as const;
 
 export type PricingPlan = {
   id: "free" | "pro" | "pro-plus";
@@ -29,6 +30,10 @@ export const FREE_PLAN_LIMITS = {
   products: 100,
   customers: 100,
 } as const;
+
+export const isFreePlanId = (
+  planId?: PricingPlan["id"] | null,
+): planId is typeof FREE_PLAN_ID => planId === FREE_PLAN_ID;
 
 export const pricingPlans: PricingPlan[] = [
   {

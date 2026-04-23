@@ -1,6 +1,7 @@
 import prisma from "../config/db.config.js";
 
 let extraEntriesTablePromise: Promise<void> | null = null;
+let faceDataTablePromise: Promise<void> | null = null;
 let schemaCompatibilityPromise: Promise<void> | null = null;
 
 const ensureInvoiceDiscountMetadataColumnsInternal = async () => {
@@ -227,6 +228,104 @@ const ensureExtraEntriesTableInternal = async () => {
   `);
 };
 
+const ensureFaceDataTableInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "face_data" (
+      "id" SERIAL NOT NULL,
+      "user_id" INTEGER NOT NULL,
+      "face_encoding" TEXT NOT NULL,
+      "face_encoding_json" TEXT NOT NULL DEFAULT '[]',
+      "is_enabled" BOOLEAN NOT NULL DEFAULT true,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+      CONSTRAINT "face_data_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "face_data"
+      ADD COLUMN IF NOT EXISTS "face_encoding" TEXT,
+      ADD COLUMN IF NOT EXISTS "face_encoding_json" TEXT,
+      ADD COLUMN IF NOT EXISTS "is_enabled" BOOLEAN NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE "face_data"
+    SET
+      "face_encoding" = COALESCE(NULLIF("face_encoding", ''), '[]'),
+      "face_encoding_json" = COALESCE(NULLIF("face_encoding_json", ''), "face_encoding", '[]'),
+      "is_enabled" = COALESCE("is_enabled", true)
+    WHERE
+      "face_encoding" IS NULL
+      OR "face_encoding_json" IS NULL
+      OR "is_enabled" IS NULL;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "face_data"
+      ALTER COLUMN "face_encoding" SET NOT NULL,
+      ALTER COLUMN "face_encoding_json" SET NOT NULL;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "face_data_user_id_key"
+    ON "face_data"("user_id");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "face_data_user_id_idx"
+    ON "face_data"("user_id");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'face_data_user_id_fkey'
+          AND table_name = 'face_data'
+      ) THEN
+        ALTER TABLE "face_data"
+        ADD CONSTRAINT "face_data_user_id_fkey"
+        FOREIGN KEY ("user_id") REFERENCES "users"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+};
+
+const ensureBillingInventoryCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "user_preferences"
+      ADD COLUMN IF NOT EXISTS "allow_negative_stock" BOOLEAN NOT NULL DEFAULT true;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "invoice_items"
+      ADD COLUMN IF NOT EXISTS "non_inventory_item" BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "sale_items"
+      ADD COLUMN IF NOT EXISTS "non_inventory_item" BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "invoices"
+      ADD COLUMN IF NOT EXISTS "warehouse_id" INTEGER,
+      ADD COLUMN IF NOT EXISTS "stock_applied" BOOLEAN NOT NULL DEFAULT false;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "invoices_warehouse_id_idx"
+    ON "invoices"("warehouse_id");
+  `);
+};
+
 export const ensureExtraEntriesTable = async () => {
   if (!extraEntriesTablePromise) {
     extraEntriesTablePromise = ensureExtraEntriesTableInternal().catch(
@@ -240,11 +339,24 @@ export const ensureExtraEntriesTable = async () => {
   await extraEntriesTablePromise;
 };
 
+export const ensureFaceDataTable = async () => {
+  if (!faceDataTablePromise) {
+    faceDataTablePromise = ensureFaceDataTableInternal().catch((error) => {
+      faceDataTablePromise = null;
+      throw error;
+    });
+  }
+
+  await faceDataTablePromise;
+};
+
 export const ensureSchemaCompatibility = async () => {
   if (!schemaCompatibilityPromise) {
     schemaCompatibilityPromise = (async () => {
       await ensureInvoiceDiscountMetadataColumnsInternal();
+      await ensureBillingInventoryCompatibilityInternal();
       await ensureExtraEntriesTable();
+      await ensureFaceDataTable();
     })().catch((error) => {
       schemaCompatibilityPromise = null;
       throw error;

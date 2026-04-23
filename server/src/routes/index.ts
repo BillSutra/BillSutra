@@ -45,9 +45,11 @@ import {
 import validate from "../middlewares/validate.js";
 import {
   accessRazorpayOrderSchema,
+  accessPaymentProofUploadSchema,
   accessRazorpayVerifySchema,
   accessUpiSubmitSchema,
   adminAccessPaymentVerifySchema,
+  adminAccessPaymentReviewNoteSchema,
   idParamSchema,
   stringIdParamSchema,
   invoiceIdParamSchema,
@@ -184,6 +186,26 @@ router.post(
   adminPaymentRateLimiter,
   validate({ body: adminAccessPaymentVerifySchema }),
   AccessPaymentsController.verifyAdminPayment,
+);
+router.patch(
+  "/admin/payments/:id/approve",
+  AdminAuthMiddleware,
+  adminPaymentRateLimiter,
+  validate({
+    params: stringIdParamSchema,
+    body: adminAccessPaymentReviewNoteSchema,
+  }),
+  AccessPaymentsController.approvePayment,
+);
+router.patch(
+  "/admin/payments/:id/reject",
+  AdminAuthMiddleware,
+  adminPaymentRateLimiter,
+  validate({
+    params: stringIdParamSchema,
+    body: adminAccessPaymentReviewNoteSchema,
+  }),
+  AccessPaymentsController.rejectPayment,
 );
 
 // Auth routes
@@ -738,6 +760,14 @@ router.post(
 router.post(
   "/payments/access/webhooks/razorpay",
   AccessPaymentsController.razorpayWebhook,
+);
+router.post(
+  "/payments/upload-proof",
+  AuthMiddleware,
+  paymentRateLimiter,
+  paymentProofUploadMiddleware,
+  validate({ body: accessPaymentProofUploadSchema }),
+  AccessPaymentsController.uploadProof,
 );
 router.post(
   "/submit-upi",

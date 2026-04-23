@@ -16,6 +16,7 @@ import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
 import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
 import {
   applyBillingSaleInventoryAdjustments,
+  getBillingInventorySettings,
   resolveBillingWarehouse,
 } from "../services/billingInventorySync.service.js";
 import {
@@ -161,6 +162,7 @@ class SalesController {
     let sale;
     try {
       sale = await prisma.$transaction(async (tx) => {
+        const inventorySettings = await getBillingInventorySettings(tx, userId);
         const warehouse = await resolveBillingWarehouse(
           tx,
           userId,
@@ -197,8 +199,10 @@ class SalesController {
             name: item.name,
             quantity: item.quantity,
             price: item.unit_price,
+            nonInventoryItem: false,
             tax_rate: item.tax_rate ?? undefined,
           })),
+          allowNegativeStock: inventorySettings.allowNegativeStock,
           referenceId: created.id,
           referenceType: "sale",
         });
