@@ -7,10 +7,12 @@ import { cn } from "@/lib/utils";
 import {
   FREE_PLAN_LIMITS,
   getUpgradeUrgency,
+  isFreePlanId,
   getUsageProgress,
 } from "@/lib/pricingPlans";
 
 type DashboardPlanCardProps = {
+  planId?: "free" | "pro" | "pro-plus" | null;
   monthlyInvoiceCount: number;
   productCount: number;
 };
@@ -87,9 +89,14 @@ const UsageBar = ({
 };
 
 const DashboardPlanCard = ({
+  planId,
   monthlyInvoiceCount,
   productCount,
 }: DashboardPlanCardProps) => {
+  if (!isFreePlanId(planId)) {
+    return null;
+  }
+
   const invoiceProgress = getUsageProgress(
     monthlyInvoiceCount,
     FREE_PLAN_LIMITS.invoicesPerMonth,

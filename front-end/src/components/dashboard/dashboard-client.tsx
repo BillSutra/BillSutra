@@ -16,6 +16,7 @@ import {
   fetchDashboardOverview,
   fetchInvoices,
   fetchProducts,
+  fetchSubscriptionStatus,
 } from "@/lib/apiClient";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import MetricCard from "@/components/dashboard/metric-card";
@@ -167,6 +168,11 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   const { data: businessProfile } = useQuery({
     queryKey: ["business-profile"],
     queryFn: fetchBusinessProfile,
+    enabled: hydrated && hasValidSessionToken,
+  });
+  const { data: subscription } = useQuery({
+    queryKey: ["subscription-status"],
+    queryFn: fetchSubscriptionStatus,
     enabled: hydrated && hasValidSessionToken,
   });
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
@@ -1176,6 +1182,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           <QuickActions className="w-full self-auto" />
           <div className="mt-5">
             <DashboardPlanCard
+              planId={subscription?.planId}
               monthlyInvoiceCount={monthlyInvoiceCount}
               productCount={productCount}
             />
@@ -1281,6 +1288,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           </div>
 
           <DashboardPlanCard
+            planId={subscription?.planId}
             monthlyInvoiceCount={monthlyInvoiceCount}
             productCount={productCount}
           />

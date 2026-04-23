@@ -8,11 +8,8 @@ import { Download, Plus, Printer, ReceiptText, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
-import {
-  DesignConfigProvider,
-  normalizeDesignConfig,
-} from "@/components/invoice/DesignConfigContext";
-import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
+import { normalizeDesignConfig } from "@/components/invoice/DesignConfigContext";
+import InvoicePrint from "@/components/invoice/InvoicePrint";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -754,28 +751,19 @@ const ExistingInvoicePreview = ({
   }
 
   return (
-    <DesignConfigProvider
-      value={{
-        designConfig,
-        updateSection: () => {},
-        resetSection: () => {},
-        resetAll: () => {},
-      }}
-    >
-      <div className="min-w-0 overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none">
-        <A4PreviewStack key={stackKey} stackKey={stackKey}>
-          <TemplatePreviewRenderer
-            key={`${templateRenderKey}-${previewKey}`}
-            templateId={templateId}
-            templateName={templateName}
-            data={data}
-            enabledSections={enabledSections}
-            sectionOrder={sectionOrder}
-            theme={theme}
-          />
-        </A4PreviewStack>
-      </div>
-    </DesignConfigProvider>
+    <div className="min-w-0 overflow-hidden rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none">
+      <A4PreviewStack key={stackKey} stackKey={stackKey}>
+        <InvoicePrint
+          data={data}
+          templateId={templateId}
+          templateName={templateName}
+          enabledSections={enabledSections}
+          sectionOrder={sectionOrder}
+          theme={theme}
+          designConfig={designConfig}
+        />
+      </A4PreviewStack>
+    </div>
   );
 };
 
@@ -2157,7 +2145,8 @@ const SimpleBillClient = ({
       title={copy.pageTitle}
       subtitle={copy.pageSubtitle}
     >
-      <div className="mx-auto grid w-full max-w-5xl gap-5">
+      <>
+      <div className="no-print mx-auto grid w-full max-w-5xl gap-5">
         <section className="rounded-2xl bg-card/92 p-5 ring-1 ring-border/55">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
             <div>
@@ -3246,6 +3235,24 @@ const SimpleBillClient = ({
           </form>
         </Modal>
       </div>
+      <div
+        id="print-area"
+        aria-hidden="true"
+        className="print-document fixed left-[-200vw] top-0 w-[210mm] bg-white print:absolute print:left-0 print:top-0 print:w-[210mm]"
+      >
+        <div className="printable">
+          <InvoicePrint
+            data={invoicePreviewData}
+            templateId={activeTemplate.templateId}
+            templateName={activeTemplate.templateName}
+            enabledSections={activeEnabledSections}
+            sectionOrder={activeSectionOrder}
+            theme={activeTheme}
+            designConfig={activeDesignConfig}
+          />
+        </div>
+      </div>
+      </>
     </DashboardLayout>
   );
 };

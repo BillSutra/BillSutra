@@ -10,6 +10,18 @@ import {
   parseBusinessAddressText,
   toBusinessAddressInput,
 } from "./indianAddress";
+import {
+  sanitizeBusinessAddressLine,
+  sanitizeBusinessCity,
+  sanitizeBusinessCurrency,
+  sanitizeBusinessEmail,
+  sanitizeBusinessName,
+  sanitizeBusinessPhone,
+  sanitizeBusinessPincode,
+  sanitizeBusinessState,
+  sanitizeBusinessTaxId,
+  sanitizeBusinessWebsite,
+} from "./businessProfileValidation";
 import { normalizeListResponse } from "./normalizeListResponse";
 import { captureApiFailure } from "./observability/shared";
 import { normalizeGstin } from "./gstin";
@@ -726,6 +738,7 @@ export type Invoice = {
     product_id?: number | null;
     name: string;
     quantity: number;
+    nonInventoryItem?: boolean;
     price: string;
     tax_rate?: string | null;
     gst_type?: "CGST_SGST" | "IGST" | "NONE" | null;
@@ -736,6 +749,24 @@ export type Invoice = {
     igst_amount?: string | null;
     total: string;
   }>;
+};
+
+export type InvoiceBootstrap = {
+  customers: Array<{
+    id: number;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    address?: string | null;
+  }>;
+  products: Product[];
+  warehouses: Warehouse[];
+  defaults: {
+    invoiceDate: string;
+    dueDate: string;
+    taxMode: "CGST_SGST" | "IGST" | "NONE";
+    invoiceNumberPreview: string;
+  };
 };
 
 export type InvoiceInput = {
@@ -1116,6 +1147,9 @@ export type UserSettingsPreferences = {
     language: "en" | "hi";
     currency: "INR" | "USD";
     dateFormat: "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
+  };
+  inventory: {
+    allowNegativeStock: boolean;
   };
   notifications: {
     paymentReminders: boolean;
@@ -2454,6 +2488,11 @@ export const fetchInvoice = async (invoiceId: number): Promise<Invoice> => {
   return response.data.data as Invoice;
 };
 
+export const fetchInvoiceBootstrap = async (): Promise<InvoiceBootstrap> => {
+  const response = await apiClient.get("/invoices/bootstrap");
+  return response.data.data as InvoiceBootstrap;
+};
+
 export const createInvoice = async (
   payload: InvoiceInput,
 ): Promise<Invoice> => {
@@ -3157,29 +3196,30 @@ export const saveBusinessProfile = async (payload: {
   );
 
   const normalizedPayload = {
-    business_name: payload.business_name.trim(),
+    business_name: sanitizeBusinessName(payload.business_name),
     businessAddress: hasStructuredBusinessAddress
-      ? normalizedBusinessAddress
+      ? {
+          addressLine1: sanitizeBusinessAddressLine(
+            normalizedBusinessAddress.addressLine1,
+          ),
+          city: sanitizeBusinessCity(normalizedBusinessAddress.city),
+          state: sanitizeBusinessState(normalizedBusinessAddress.state),
+          pincode: sanitizeBusinessPincode(normalizedBusinessAddress.pincode),
+        }
       : undefined,
     address_line1: hasStructuredBusinessAddress
-      ? normalizedBusinessAddress.addressLine1
+      ? sanitizeBusinessAddressLine(normalizedBusinessAddress.addressLine1)
       : undefined,
-    city: hasStructuredBusinessAddress
-      ? normalizedBusinessAddress.city
-      : undefined,
-    state: hasStructuredBusinessAddress
-      ? normalizedBusinessAddress.state
-      : undefined,
-    pincode: hasStructuredBusinessAddress
-      ? normalizedBusinessAddress.pincode
-      : undefined,
+    city: hasStructuredBusinessAddress ? sanitizeBusinessCity(normalizedBusinessAddress.city) : undefined,
+    state: hasStructuredBusinessAddress ? sanitizeBusinessState(normalizedBusinessAddress.state) : undefined,
+    pincode: hasStructuredBusinessAddress ? sanitizeBusinessPincode(normalizedBusinessAddress.pincode) : undefined,
     address: toOptional(legacyAddress),
-    phone: toOptional(payload.phone),
-    email: toOptional(payload.email),
-    website: toOptional(payload.website),
+    phone: toOptional(sanitizeBusinessPhone(payload.phone)),
+    email: toOptional(sanitizeBusinessEmail(payload.email)),
+    website: toOptional(sanitizeBusinessWebsite(payload.website)),
     logo_url: toOptional(payload.logo_url),
-    tax_id: toOptional(payload.tax_id),
-    currency: payload.currency.trim() || "INR",
+    tax_id: toOptional(sanitizeBusinessTaxId(payload.tax_id)),
+    currency: sanitizeBusinessCurrency(payload.currency) || "INR",
     show_logo_on_invoice: payload.show_logo_on_invoice,
     show_tax_number: payload.show_tax_number,
     show_payment_qr: payload.show_payment_qr,

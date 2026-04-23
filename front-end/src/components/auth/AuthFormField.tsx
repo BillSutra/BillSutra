@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { InputHTMLAttributes, ReactNode } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,7 @@ type AuthFormFieldProps = {
   onChange: (value: string) => void;
   onBlur?: () => void;
   autoComplete?: string;
-  inputMode?: React.ComponentProps<typeof Input>["inputMode"];
+  inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
   autoFocus?: boolean;
   disabled?: boolean;
   error?: string;

@@ -20,6 +20,7 @@ import {
   fetchSales,
   fetchInvoices,
   fetchInvoice,
+  fetchInvoiceBootstrap,
   createInvoice,
   updateInvoice,
   deleteInvoice,
@@ -333,6 +334,13 @@ export const useInvoiceQuery = (invoiceId?: number) =>
     queryKey: ["invoices", invoiceId],
     queryFn: () => fetchInvoice(invoiceId ?? 0),
     enabled: Number.isFinite(invoiceId) && (invoiceId ?? 0) > 0,
+  });
+
+export const useInvoiceBootstrapQuery = () =>
+  useQuery({
+    queryKey: ["invoices", "bootstrap"],
+    queryFn: fetchInvoiceBootstrap,
+    ...defaultListQueryOptions,
   });
 
 export const useCreateInvoiceMutation = () => {

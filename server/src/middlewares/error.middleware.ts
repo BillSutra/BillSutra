@@ -37,29 +37,36 @@ const mapPrismaKnownError = (
 const errorMiddleware: ErrorRequestHandler = (err, req, res, _next) => {
   let statusCode = 500;
   let message = "Internal Server Error";
+  let code = "INTERNAL_SERVER_ERROR";
   let data: Record<string, unknown> | undefined;
 
   if (err instanceof AppError) {
     statusCode = err.statusCode;
     message = err.message;
+    code = statusCode === 404 ? "NOT_FOUND" : "APPLICATION_ERROR";
   } else if (err instanceof Prisma.PrismaClientKnownRequestError) {
     const mapped = mapPrismaKnownError(err);
     statusCode = mapped.statusCode;
     message = mapped.message;
+    code = "DATABASE_ERROR";
   } else if (err instanceof Prisma.PrismaClientValidationError) {
     statusCode = 400;
     message = "Invalid database input";
+    code = "DATABASE_VALIDATION_ERROR";
   } else if (err instanceof Prisma.PrismaClientInitializationError) {
     statusCode = 503;
     message = "Database connection failed";
+    code = "DATABASE_CONNECTION_FAILED";
   } else if (err instanceof ZodError) {
     statusCode = 422;
     message = "Validation failed";
+    code = "VALIDATION_ERROR";
     data = { errors: err.flatten().fieldErrors };
   } else if (err instanceof Error) {
     const appLikeError = err as ErrorWithStatus;
     statusCode = appLikeError.statusCode ?? appLikeError.status ?? 500;
     message = err.message || message;
+    code = statusCode >= 500 ? "INTERNAL_SERVER_ERROR" : "REQUEST_ERROR";
   }
 
   const isProd = process.env.NODE_ENV === "production";
@@ -83,20 +90,22 @@ const errorMiddleware: ErrorRequestHandler = (err, req, res, _next) => {
 
   const response: {
     success: false;
-    message: string;
-    data?: Record<string, unknown>;
+    error: string;
+    code: string;
+    details?: Record<string, unknown>;
   } = {
     success: false,
-    message,
+    error: message,
+    code,
   };
 
   if (data && Object.keys(data).length > 0) {
-    response.data = data;
+    response.details = data;
   }
 
   if (!isProd && err instanceof Error) {
-    response.data = {
-      ...(response.data ?? {}),
+    response.details = {
+      ...(response.details ?? {}),
       stack: err.stack,
     };
   }

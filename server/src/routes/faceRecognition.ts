@@ -2,9 +2,75 @@ import { Router } from "express";
 import * as FaceRecognitionController from "../controllers/FaceRecognitionController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
 import multer from "multer";
+import type { NextFunction, Request, Response } from "express";
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowedMimeTypes = new Set(["image/jpeg", "image/jpg", "image/png"]);
+    if (allowedMimeTypes.has(file.mimetype)) {
+      cb(null, true);
+      return;
+    }
+
+    cb(new multer.MulterError("LIMIT_UNEXPECTED_FILE", "image"));
+  },
+});
+
+const wrap =
+  (
+    handler: (
+      req: Request,
+      res: Response,
+      next?: NextFunction,
+    ) => Promise<unknown> | unknown,
+  ) =>
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      await handler(req, res, next);
+    } catch (error) {
+      return next(error);
+    }
+  };
+
+const uploadImage = (req: Request, res: Response, next: NextFunction) => {
+  upload.single("image")(req, res, (err: unknown) => {
+    if (!err) {
+      return next();
+    }
+
+    if (err instanceof multer.MulterError) {
+      const fileSizeError = err.code === "LIMIT_FILE_SIZE";
+      const invalidFileTypeError = err.code === "LIMIT_UNEXPECTED_FILE";
+      return res.status(fileSizeError ? 413 : 400).json({
+        success: false,
+        error: fileSizeError
+          ? "Image is too large. Please use an image smaller than 5MB."
+          : invalidFileTypeError
+            ? "Invalid file type. Please upload a JPG or PNG image."
+            : err.message,
+        code: fileSizeError
+          ? "FILE_TOO_LARGE"
+          : invalidFileTypeError
+            ? "INVALID_FILE_TYPE"
+            : "INVALID_REQUEST",
+      });
+    }
+
+    console.error("[Face Route] Upload middleware error", {
+      message: (err as Error)?.message,
+      stack: (err as Error)?.stack,
+    });
+
+    return res.status(400).json({
+      success: false,
+      error: "Invalid upload request.",
+      code: "INVALID_REQUEST",
+    });
+  });
+};
 
 /**
  * Face Registration
@@ -12,27 +78,40 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 *
  * Requires: Authentication
  * Body: Image file or base64 image data
  */
-router.post("/register", AuthMiddleware, upload.single("image"), FaceRecognitionController.registerFace);
+router.post(
+  "/register",
+  AuthMiddleware,
+  uploadImage,
+  wrap(FaceRecognitionController.registerFace),
+);
 
 /**
  * Face Authentication (Login)
  * POST /api/face/authenticate
  * Body: { email, imageData (base64) }
  */
-router.post("/authenticate", FaceRecognitionController.authenticateFace);
+router.post("/authenticate", wrap(FaceRecognitionController.authenticateFace));
 
 /**
  * Check Face Registration Status
  * GET /api/face/check
  * Requires: Authentication
  */
-router.get("/check", AuthMiddleware, FaceRecognitionController.checkFaceRegistration);
+router.get(
+  "/check",
+  AuthMiddleware,
+  wrap(FaceRecognitionController.checkFaceRegistration),
+);
 
 /**
  * Delete Face Data
  * POST /api/face/delete
  * Requires: Authentication
  */
-router.post("/delete", AuthMiddleware, FaceRecognitionController.deleteFaceData);
+router.post(
+  "/delete",
+  AuthMiddleware,
+  wrap(FaceRecognitionController.deleteFaceData),
+);
 
 export default router;

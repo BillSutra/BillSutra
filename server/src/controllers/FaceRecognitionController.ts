@@ -1,479 +1,783 @@
 import type { Request, Response } from "express";
 import axios, { AxiosError } from "axios";
+import { Prisma, AuthMethod } from "@prisma/client";
+
 import prisma from "../config/db.config.js";
-import { sendResponse } from "../utils/sendResponse.js";
-import { recordAuthEvent } from "../lib/modernAuth.js";
-import { AuthMethod } from "@prisma/client";
 import { buildOwnerAuthUser, createAuthBearerToken } from "../lib/authSession.js";
+import { recordAuthEvent } from "../lib/modernAuth.js";
+import { sendResponse } from "../utils/sendResponse.js";
 
-// Configuration for Face Recognition Service
 const FACE_SERVICE_URL = process.env.FACE_SERVICE_URL || "http://localhost:5001";
-const FACE_RECOGNITION_TIMEOUT = 30000; // 30 seconds
+const FACE_RECOGNITION_TIMEOUT = Number(process.env.FACE_RECOGNITION_TIMEOUT_MS || 15000);
+const DEBUG_MODE = process.env.DEBUG === "true";
+const prismaUnsafe = prisma as any;
+const FACE_RECOGNITION_METHOD = "FACE_RECOGNITION" as unknown as AuthMethod;
 
-// Error types for debugging
 enum FaceAuthError {
-  NO_FACE_DETECTED = "NO_FACE_DETECTED",
-  MULTIPLE_FACES = "MULTIPLE_FACES_DETECTED",
-  FACE_NOT_CLEAR = "FACE_NOT_CLEAR",
-  FACE_TOO_SMALL = "FACE_TOO_SMALL",
-  FACE_TOO_LARGE = "FACE_TOO_LARGE",
-  INVALID_IMAGE = "IMAGE_INVALID",
-  IMAGE_TOO_LARGE = "IMAGE_TOO_LARGE",
-  ENCODING_FAILED = "ENCODING_FAILED",
-  MATCH_LOW_CONFIDENCE = "MATCH_LOW_CONFIDENCE",
-  NO_MATCH = "NO_MATCH_FOUND",
-  SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE",
-  INVALID_REQUEST = "INVALID_REQUEST",
   DATABASE_ERROR = "DATABASE_ERROR",
-  INTERNAL_ERROR = "INTERNAL_ERROR",
+  FACE_NOT_DETECTED = "FACE_NOT_DETECTED",
+  FILE_TOO_LARGE = "FILE_TOO_LARGE",
+  IMAGE_PROCESSING_ERROR = "IMAGE_PROCESSING_ERROR",
+  INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR",
+  INVALID_CONTENT_TYPE = "INVALID_CONTENT_TYPE",
+  INVALID_FILE_TYPE = "INVALID_FILE_TYPE",
+  INVALID_IMAGE_DATA = "INVALID_IMAGE_DATA",
+  INVALID_REQUEST = "INVALID_REQUEST",
+  INVALID_RESPONSE = "INVALID_RESPONSE",
+  MISSING_IMAGE_FIELD = "MISSING_IMAGE_FIELD",
+  MULTIPLE_FACES_DETECTED = "MULTIPLE_FACES_DETECTED",
+  NO_FACE_REGISTERED = "NO_FACE_REGISTERED",
+  NO_FILE_UPLOADED = "NO_FILE_UPLOADED",
+  NO_MATCH_FOUND = "NO_MATCH_FOUND",
+  REQUEST_TIMEOUT = "REQUEST_TIMEOUT",
+  SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE",
+  USER_NOT_FOUND = "USER_NOT_FOUND",
 }
 
-// Error messages for client
-const ERROR_MESSAGES: Record<FaceAuthError, string> = {
-  [FaceAuthError.NO_FACE_DETECTED]:
-    "No face detected in the image. Please ensure your face is clearly visible and well-lit.",
-  [FaceAuthError.MULTIPLE_FACES]:
-    "Multiple faces detected. Please ensure only your face is in the frame.",
-  [FaceAuthError.FACE_NOT_CLEAR]:
-    "Please capture your full face clearly inside the frame (including mouth and chin) with good lighting.",
-  [FaceAuthError.FACE_TOO_SMALL]:
-    "Your face is too small in the image. Please move closer to the camera (12-18 inches).",
-  [FaceAuthError.FACE_TOO_LARGE]:
-    "Your face is too large in the image. Please move away from the camera slightly.",
-  [FaceAuthError.INVALID_IMAGE]:
-    "The image format is invalid or the image is corrupted. Please try with a different image.",
-  [FaceAuthError.IMAGE_TOO_LARGE]:
-    "The image file is too large. Please use an image smaller than 5MB.",
-  [FaceAuthError.ENCODING_FAILED]:
-    "Failed to process your face. Please try again with a clearer image.",
-  [FaceAuthError.MATCH_LOW_CONFIDENCE]:
-    "Face match confidence is too low. Please align your full face in the guide box and try again.",
-  [FaceAuthError.NO_MATCH]:
-    "Your face does not match the registered face. Please try again.",
-  [FaceAuthError.SERVICE_UNAVAILABLE]:
-    "The facial recognition service is temporarily unavailable. Please try again later.",
-  [FaceAuthError.INVALID_REQUEST]:
-    "Invalid request. Please ensure you've provided a valid image.",
-  [FaceAuthError.DATABASE_ERROR]:
-    "Database error occurred. Please contact support.",
-  [FaceAuthError.INTERNAL_ERROR]:
-    "An internal error occurred. Please try again later.",
+const ERROR_CODE_ALIASES: Record<string, string> = {
+  NO_FACE_DETECTED: FaceAuthError.FACE_NOT_DETECTED,
+  INTERNAL_ERROR: FaceAuthError.INTERNAL_SERVER_ERROR,
+  IMAGE_TOO_LARGE: FaceAuthError.FILE_TOO_LARGE,
+  MISSING_IMAGE: FaceAuthError.MISSING_IMAGE_FIELD,
+  NO_IMAGE_DATA: FaceAuthError.NO_FILE_UPLOADED,
+  INVALID_ENCODING: FaceAuthError.INVALID_IMAGE_DATA,
 };
 
-interface FaceServiceResponse {
-  success?: boolean;
-  encoding?: number[];
-  matched?: boolean;
-  confidence?: number;
-  distance?: number;
+const ERROR_MESSAGES: Record<string, string> = {
+  [FaceAuthError.DATABASE_ERROR]: "Server error, try again.",
+  [FaceAuthError.FACE_NOT_DETECTED]:
+    "No face detected. Please keep your face centered and try again.",
+  [FaceAuthError.FILE_TOO_LARGE]: "Captured image is too large. Please try again.",
+  [FaceAuthError.IMAGE_PROCESSING_ERROR]:
+    "The image could not be processed. Please capture a clearer photo and retry.",
+  [FaceAuthError.INTERNAL_SERVER_ERROR]: "Server error, try again.",
+  [FaceAuthError.INVALID_CONTENT_TYPE]: "Invalid request format. Please send a supported image.",
+  [FaceAuthError.INVALID_FILE_TYPE]: "Invalid file type. Please upload a JPG or PNG image.",
+  [FaceAuthError.INVALID_IMAGE_DATA]: "The image data is invalid or corrupted.",
+  [FaceAuthError.INVALID_REQUEST]: "Invalid request. Please verify the required fields and try again.",
+  [FaceAuthError.INVALID_RESPONSE]: "Face recognition service returned an invalid response.",
+  [FaceAuthError.MISSING_IMAGE_FIELD]: "Image is required.",
+  [FaceAuthError.MULTIPLE_FACES_DETECTED]:
+    "Multiple faces detected. Please ensure only your face is visible.",
+  [FaceAuthError.NO_FACE_REGISTERED]:
+    "No face is registered for this account. Please register first.",
+  [FaceAuthError.NO_FILE_UPLOADED]: "No image was captured. Please capture your face and retry.",
+  [FaceAuthError.NO_MATCH_FOUND]: "Face not recognized. Please try again.",
+  [FaceAuthError.REQUEST_TIMEOUT]: "Face recognition service timed out. Please try again.",
+  [FaceAuthError.SERVICE_UNAVAILABLE]:
+    "Face recognition service is temporarily unavailable. Please try again.",
+  [FaceAuthError.USER_NOT_FOUND]: "User not found or face is not registered for this account.",
+};
+
+type FaceServiceSuccess<T extends object = Record<string, unknown>> = {
+  success: true;
+  data: T;
   message?: string;
+};
+
+type FaceServiceError = {
+  success: false;
+  error: string;
+  code: string;
+  details?: unknown;
+};
+
+type FaceServiceResponse<T extends object = Record<string, unknown>> =
+  | FaceServiceSuccess<T>
+  | FaceServiceError;
+
+type LegacyFaceServiceSuccess<T extends object = Record<string, unknown>> = T & {
+  success: true;
+  message?: string;
+};
+
+type LegacyFaceServiceError = {
+  success: false;
+  message?: string;
+  error?: string;
   error_code?: string;
+  code?: string;
+  details?: unknown;
+};
+
+type FaceRegisterPayload = {
+  encoding: number[];
+  faces_detected: number;
+  processing_time_ms?: number;
+};
+
+type FaceAuthenticatePayload = {
+  matched: boolean;
+  confidence: number;
+  distance: number;
+  processing_time_ms?: number;
+  code?: string | null;
+};
+
+type FaceErrorMeta = {
+  context?: Record<string, unknown>;
+  details?: unknown;
+  stack?: string;
+};
+
+const serviceEndpoint = (path: string) => `${FACE_SERVICE_URL}${path}`;
+
+function logFace(level: "log" | "warn" | "error", event: string, payload: Record<string, unknown>) {
+  console[level](
+    `[Face Recognition] ${event}`,
+    JSON.stringify(
+      {
+        timestamp: new Date().toISOString(),
+        event,
+        ...payload,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
-/**
- * Register a face for the authenticated user
- * POST /api/face/register
- */
+function getErrorMessage(code?: string, fallback?: string) {
+  const normalizedCode = code ? ERROR_CODE_ALIASES[code] || code : undefined;
+
+  if (normalizedCode && ERROR_MESSAGES[normalizedCode]) {
+    return ERROR_MESSAGES[normalizedCode];
+  }
+  if (fallback && fallback.trim()) {
+    return fallback;
+  }
+  return ERROR_MESSAGES[FaceAuthError.INTERNAL_SERVER_ERROR];
+}
+
+function normalizeErrorCode(code?: string) {
+  if (!code) {
+    return FaceAuthError.INTERNAL_SERVER_ERROR;
+  }
+
+  return ERROR_CODE_ALIASES[code] || code;
+}
+
+function buildErrorResponse(code: string, fallbackMessage?: string, meta?: FaceErrorMeta) {
+  const body: Record<string, unknown> = {
+    success: false,
+    error: getErrorMessage(code, fallbackMessage),
+    code,
+  };
+
+  if (DEBUG_MODE) {
+    body.details = {
+      ...(meta?.details !== undefined ? { details: meta.details } : {}),
+      ...(meta?.context ? { context: meta.context } : {}),
+      ...(meta?.stack ? { stack: meta.stack } : {}),
+    };
+  }
+
+  return body;
+}
+
+function sendFaceError(
+  res: Response,
+  status: number,
+  code: string,
+  fallbackMessage?: string,
+  meta?: FaceErrorMeta,
+) {
+  return res.status(status).json(buildErrorResponse(code, fallbackMessage, meta));
+}
+
+function resolveUserId(req: Request): number | null {
+  const authUserId = Number((req as Request & { user?: { id?: number | string } }).user?.id);
+  const bodyUserId = req.body?.userId ? Number(req.body.userId) : null;
+
+  if (Number.isFinite(authUserId) && authUserId > 0) {
+    if (bodyUserId && bodyUserId !== authUserId) {
+      return -1;
+    }
+    return authUserId;
+  }
+
+  if (bodyUserId && Number.isFinite(bodyUserId) && bodyUserId > 0) {
+    return bodyUserId;
+  }
+
+  return null;
+}
+
+function decodeBase64Image(raw: string): Buffer {
+  const normalized = raw.includes(",") ? raw.split(",")[1] : raw;
+  return Buffer.from(normalized, "base64");
+}
+
+function validateEncoding(encoding: unknown): encoding is number[] {
+  return (
+    Array.isArray(encoding) &&
+    encoding.length === 128 &&
+    encoding.every((value) => typeof value === "number" && Number.isFinite(value))
+  );
+}
+
+function validateAndSerializeEncoding(encoding: unknown): string {
+  if (!validateEncoding(encoding)) {
+    throw new Error("Encoding must be an array of 128 finite numeric values.");
+  }
+
+  return JSON.stringify(encoding);
+}
+
+function isStructuredSuccess<T extends object>(payload: unknown): payload is FaceServiceSuccess<T> {
+  return Boolean(
+    payload &&
+      typeof payload === "object" &&
+      (payload as FaceServiceSuccess<T>).success === true &&
+      typeof (payload as FaceServiceSuccess<T>).data === "object",
+  );
+}
+
+function isStructuredError(payload: unknown): payload is FaceServiceError {
+  return Boolean(
+    payload &&
+      typeof payload === "object" &&
+      (payload as FaceServiceError).success === false &&
+      typeof (payload as FaceServiceError).code === "string" &&
+      typeof (payload as FaceServiceError).error === "string",
+  );
+}
+
+function isLegacySuccess(payload: unknown): payload is LegacyFaceServiceSuccess {
+  return Boolean(
+    payload &&
+      typeof payload === "object" &&
+      (payload as LegacyFaceServiceSuccess).success === true &&
+      !("data" in (payload as Record<string, unknown>)),
+  );
+}
+
+function isLegacyError(payload: unknown): payload is LegacyFaceServiceError {
+  return Boolean(
+    payload &&
+      typeof payload === "object" &&
+      (payload as LegacyFaceServiceError).success === false &&
+      (typeof (payload as LegacyFaceServiceError).error_code === "string" ||
+        typeof (payload as LegacyFaceServiceError).code === "string" ||
+        typeof (payload as LegacyFaceServiceError).message === "string" ||
+        typeof (payload as LegacyFaceServiceError).error === "string"),
+  );
+}
+
+function normalizeLegacySuccess<T extends object>(
+  payload: LegacyFaceServiceSuccess<T>,
+): FaceServiceSuccess<T> {
+  const { success: _success, message, ...data } = payload;
+  return {
+    success: true,
+    message,
+    data: data as T,
+  };
+}
+
+function normalizeLegacyError(payload: LegacyFaceServiceError): FaceServiceError {
+  const code = normalizeErrorCode(
+    payload.code ||
+      payload.error_code ||
+      FaceAuthError.INTERNAL_SERVER_ERROR,
+  );
+
+  return {
+    success: false,
+    code,
+    error: payload.error || payload.message || getErrorMessage(code),
+    details: payload.details,
+  };
+}
+
+function extractServiceError(error: unknown): {
+  status: number;
+  code: string;
+  message: string;
+  details?: unknown;
+} {
+  const axiosError = error as AxiosError<FaceServiceResponse>;
+
+  if (axiosError.code === "ECONNABORTED") {
+    return {
+      status: 504,
+      code: FaceAuthError.REQUEST_TIMEOUT,
+      message: ERROR_MESSAGES[FaceAuthError.REQUEST_TIMEOUT],
+      details: { axiosCode: axiosError.code },
+    };
+  }
+
+  if (axiosError.code === "ECONNREFUSED" || axiosError.code === "ENOTFOUND") {
+    return {
+      status: 503,
+      code: FaceAuthError.SERVICE_UNAVAILABLE,
+      message: ERROR_MESSAGES[FaceAuthError.SERVICE_UNAVAILABLE],
+      details: { axiosCode: axiosError.code },
+    };
+  }
+
+  const serviceData = axiosError.response?.data;
+  if (serviceData && isStructuredError(serviceData)) {
+    const normalizedCode = normalizeErrorCode(serviceData.code);
+    return {
+      status:
+        normalizedCode === FaceAuthError.FACE_NOT_DETECTED ||
+        normalizedCode === FaceAuthError.MULTIPLE_FACES_DETECTED
+          ? 422
+          : axiosError.response?.status && axiosError.response.status >= 400
+            ? axiosError.response.status
+            : 502,
+      code: normalizedCode,
+      message: getErrorMessage(normalizedCode, serviceData.error),
+      details: serviceData.details,
+    };
+  }
+
+  return {
+    status: 503,
+    code: FaceAuthError.SERVICE_UNAVAILABLE,
+    message: ERROR_MESSAGES[FaceAuthError.SERVICE_UNAVAILABLE],
+    details: { axiosMessage: axiosError.message },
+  };
+}
+
+function mapPrismaError(error: unknown): { status: number; code: string; message: string; details?: unknown } {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      return {
+        status: 409,
+        code: FaceAuthError.DATABASE_ERROR,
+        message: "Face data already exists for this user.",
+        details: { prismaCode: error.code, meta: error.meta },
+      };
+    }
+
+    return {
+      status: 500,
+      code: FaceAuthError.DATABASE_ERROR,
+      message: ERROR_MESSAGES[FaceAuthError.DATABASE_ERROR],
+      details: { prismaCode: error.code, meta: error.meta },
+    };
+  }
+
+  if (error instanceof Prisma.PrismaClientValidationError) {
+    return {
+      status: 500,
+      code: FaceAuthError.DATABASE_ERROR,
+      message: "Face data schema validation failed.",
+    };
+  }
+
+  if (error instanceof Prisma.PrismaClientInitializationError) {
+    return {
+      status: 503,
+      code: FaceAuthError.DATABASE_ERROR,
+      message: "Database connection failed while storing face data.",
+    };
+  }
+
+  return {
+    status: 500,
+    code: FaceAuthError.DATABASE_ERROR,
+    message: ERROR_MESSAGES[FaceAuthError.DATABASE_ERROR],
+  };
+}
+
+async function postToFaceService<T extends object>(
+  path: string,
+  body: unknown,
+  headers: Record<string, string>,
+): Promise<FaceServiceSuccess<T>> {
+  const response = await axios.post<FaceServiceResponse<T>>(serviceEndpoint(path), body, {
+    headers,
+    timeout: FACE_RECOGNITION_TIMEOUT,
+    validateStatus: () => true,
+  });
+
+  logFace("log", "service.response_received", {
+    path,
+    status: response.status,
+    success: response.data?.success,
+  });
+
+  if (isStructuredSuccess<T>(response.data)) {
+    return response.data;
+  }
+
+  if (isLegacySuccess(response.data)) {
+    return normalizeLegacySuccess<T>(response.data);
+  }
+
+  if (isStructuredError(response.data)) {
+    const structuredError = new Error(response.data.error || "Face service request failed.");
+    (
+      structuredError as Error & {
+        response?: { status: number; data: FaceServiceError };
+      }
+    ).response = {
+      status: response.status,
+      data: response.data,
+    };
+    throw structuredError;
+  }
+
+  if (isLegacyError(response.data)) {
+    const normalizedError = normalizeLegacyError(response.data);
+    const structuredError = new Error(normalizedError.error);
+    (
+      structuredError as Error & {
+        response?: { status: number; data: FaceServiceError };
+      }
+    ).response = {
+      status: response.status,
+      data: normalizedError,
+    };
+    throw structuredError;
+  }
+
+  const invalidShapeError = new Error("Invalid face service response shape.");
+  (
+    invalidShapeError as Error & {
+      response?: { status: number; data: unknown };
+    }
+  ).response = {
+    status: response.status,
+    data: response.data,
+  };
+  throw invalidShapeError;
+}
+
 export const registerFace = async (req: Request, res: Response) => {
+  const startedAt = Date.now();
+  const userId = resolveUserId(req);
+
+  logFace("log", "register.request_received", {
+    userId,
+    bodyUserId: req.body?.userId,
+    hasFile: Boolean(req.file),
+    hasImageData: Boolean(req.body?.imageData),
+    contentType: req.headers["content-type"],
+    ip: req.ip,
+  });
+
   try {
-    const userId = (req as any).user?.id;
+    if (userId === -1) {
+      return sendFaceError(res, 400, FaceAuthError.INVALID_REQUEST, "Authenticated user and payload userId do not match.");
+    }
 
     if (!userId) {
-      return sendResponse(res, 401, {
-        success: false,
-        message: "Unauthorized. Please login first.",
-        error_code: FaceAuthError.INVALID_REQUEST,
-      });
+      return sendFaceError(res, 400, FaceAuthError.INVALID_REQUEST, "userId is required.");
     }
 
-    // Validate image data
-    if (!req.file && !req.body?.imageData) {
-      return sendResponse(res, 400, {
-        success: false,
-        message: ERROR_MESSAGES[FaceAuthError.INVALID_REQUEST],
-        error_code: FaceAuthError.INVALID_REQUEST,
-      });
+    let imageBuffer: Buffer | null = null;
+
+    if (req.file?.buffer?.length) {
+      imageBuffer = req.file.buffer;
+    } else if (typeof req.body?.imageData === "string" && req.body.imageData.trim()) {
+      imageBuffer = decodeBase64Image(req.body.imageData);
     }
 
-    const imageBuffer = req.file
-      ? req.file.buffer
-      : Buffer.from(req.body.imageData, "base64");
-
-    if (!imageBuffer || imageBuffer.length === 0) {
-      return sendResponse(res, 400, {
-        success: false,
-        message: "No image data provided.",
-        error_code: FaceAuthError.INVALID_REQUEST,
-      });
+    if (!imageBuffer?.length) {
+      return sendFaceError(res, 400, FaceAuthError.MISSING_IMAGE_FIELD);
     }
 
-    console.log(
-      `[Face Register] User ${userId}: Image size: ${imageBuffer.length} bytes`
-    );
-
-    // Call Python face recognition service
-    let faceResponse: FaceServiceResponse;
+    let faceServiceResponse: FaceServiceSuccess<FaceRegisterPayload>;
     try {
-      const axiosResponse = await axios.post(
-        `${FACE_SERVICE_URL}/api/face/register`,
+      faceServiceResponse = await postToFaceService<FaceRegisterPayload>(
+        "/api/face/register",
         imageBuffer,
-        {
-          headers: {
-            "Content-Type": "application/octet-stream",
-          },
-          timeout: FACE_RECOGNITION_TIMEOUT,
-        }
+        { "Content-Type": "application/octet-stream" },
       );
-      faceResponse = axiosResponse.data;
     } catch (error) {
-      console.error(
-        `[Face Register] Service error for user ${userId}:`,
-        error instanceof AxiosError ? error.message : error
-      );
-
-      if (error instanceof AxiosError && error.code === "ECONNREFUSED") {
-        return sendResponse(res, 503, {
-          success: false,
-          message: ERROR_MESSAGES[FaceAuthError.SERVICE_UNAVAILABLE],
-          error_code: FaceAuthError.SERVICE_UNAVAILABLE,
+      if (error instanceof Error && error.message === "Invalid face service response shape.") {
+        logFace("error", "register.invalid_service_response", {
+          userId,
+          message: error.message,
+          rawResponse: (error as Error & { response?: { status?: number; data?: unknown } }).response,
         });
+        return sendFaceError(
+          res,
+          502,
+          FaceAuthError.INVALID_RESPONSE,
+          "Face recognition service returned an invalid response.",
+          {
+            details: (error as Error & { response?: { status?: number; data?: unknown } }).response,
+            stack: error.stack,
+          },
+        );
       }
 
-      if (error instanceof AxiosError && error.response?.data) {
-        const serviceError = error.response.data as FaceServiceResponse;
-        return sendResponse(res, 400, {
-          success: false,
-          message:
-            ERROR_MESSAGES[serviceError.error_code as FaceAuthError] ||
-            ERROR_MESSAGES[FaceAuthError.INTERNAL_ERROR],
-          error_code: serviceError.error_code,
-          debug_error: serviceError.message,
-        });
-      }
-
-      return sendResponse(res, 500, {
-        success: false,
-        message: ERROR_MESSAGES[FaceAuthError.INTERNAL_ERROR],
-        error_code: FaceAuthError.INTERNAL_ERROR,
+      const serviceError = extractServiceError(error);
+      logFace("error", "register.face_service_failed", {
+        userId,
+        serviceError,
+        stack: (error as Error)?.stack,
+      });
+      return sendFaceError(res, serviceError.status, serviceError.code, serviceError.message, {
+        details: serviceError.details,
+        stack: (error as Error)?.stack,
       });
     }
 
-    // Check if face registration was successful
-    if (!faceResponse.success || !faceResponse.encoding) {
-      console.log(
-        `[Face Register] Failed for user ${userId}: ${faceResponse.error_code}`
-      );
-
-      return sendResponse(res, 400, {
-        success: false,
-        message:
-          ERROR_MESSAGES[faceResponse.error_code as FaceAuthError] ||
-          ERROR_MESSAGES[FaceAuthError.INTERNAL_ERROR],
-        error_code: faceResponse.error_code,
-      });
-    }
-
-    // Store face encoding in database
+    const payload = faceServiceResponse.data;
+    let serializedEncoding: string;
     try {
-      const existingFaceData = await prisma.faceData.findUnique({
+      serializedEncoding = validateAndSerializeEncoding(payload.encoding);
+    } catch (error) {
+      logFace("error", "register.invalid_encoding_payload", {
+        userId,
+        message: (error as Error).message,
+      });
+      return sendFaceError(res, 502, FaceAuthError.INVALID_RESPONSE, "Face service produced invalid encoding data.");
+    }
+
+    try {
+      const dbResult = await prismaUnsafe.faceData.upsert({
         where: { user_id: userId },
+        update: {
+          face_encoding: serializedEncoding,
+          face_encoding_json: serializedEncoding,
+          is_enabled: true,
+          updated_at: new Date(),
+        },
+        create: {
+          user_id: userId,
+          face_encoding: serializedEncoding,
+          face_encoding_json: serializedEncoding,
+          is_enabled: true,
+        },
+        select: {
+          id: true,
+          user_id: true,
+          is_enabled: true,
+          created_at: true,
+          updated_at: true,
+        },
       });
 
-      if (existingFaceData) {
-        // Update existing face data
-        await prisma.faceData.update({
-          where: { user_id: userId },
-          data: {
-            face_encoding: JSON.stringify(faceResponse.encoding),
-            face_encoding_json: JSON.stringify(faceResponse.encoding),
-            updated_at: new Date(),
-          },
-        });
-        console.log(`[Face Register] Updated face data for user ${userId}`);
-      } else {
-        // Create new face data
-        await prisma.faceData.create({
-          data: {
-            user_id: userId,
-            face_encoding: JSON.stringify(faceResponse.encoding),
-            face_encoding_json: JSON.stringify(faceResponse.encoding),
-            is_enabled: true,
-          },
-        });
-        console.log(`[Face Register] Created new face data for user ${userId}`);
-      }
-
-      // Record auth event
-      await recordAuthEvent({
-        req,
+      logFace("log", "register.db_upsert_success", {
         userId,
-        method: AuthMethod.FACE_RECOGNITION,
-        success: true,
-        actorType: "user",
-        metadata: { action: "face_registration" },
+        dbResult,
       });
-
-      return sendResponse(res, 200, {
-        success: true,
-        message: "Face registered successfully. You can now use facial recognition to login.",
-        error_code: null,
+    } catch (error) {
+      const dbError = mapPrismaError(error);
+      logFace("error", "register.db_upsert_failed", {
+        userId,
+        dbError,
+        stack: (error as Error)?.stack,
       });
-    } catch (dbError) {
-      console.error(
-        `[Face Register] Database error for user ${userId}:`,
-        dbError
-      );
 
       await recordAuthEvent({
         req,
         userId,
-        method: AuthMethod.FACE_RECOGNITION,
+        method: FACE_RECOGNITION_METHOD,
         success: false,
         actorType: "user",
-        metadata: { action: "face_registration", error: "database_error" },
+        metadata: { action: "face_registration", error: dbError.code },
       });
 
-      return sendResponse(res, 500, {
-        success: false,
-        message: ERROR_MESSAGES[FaceAuthError.DATABASE_ERROR],
-        error_code: FaceAuthError.DATABASE_ERROR,
+      return sendFaceError(res, dbError.status, dbError.code, dbError.message, {
+        details: dbError.details,
+        stack: (error as Error)?.stack,
       });
     }
-  } catch (error) {
-    console.error("[Face Register] Unexpected error:", error);
 
-    return sendResponse(res, 500, {
-      success: false,
-      message: ERROR_MESSAGES[FaceAuthError.INTERNAL_ERROR],
-      error_code: FaceAuthError.INTERNAL_ERROR,
+    await recordAuthEvent({
+      req,
+      userId,
+      method: FACE_RECOGNITION_METHOD,
+      success: true,
+      actorType: "user",
+      metadata: {
+        action: "face_registration",
+        faces_detected: payload.faces_detected,
+      },
+    });
+
+    return sendResponse(res, 200, {
+      success: true,
+      message: faceServiceResponse.message || "Face registered successfully.",
+      data: {
+        faces_detected: payload.faces_detected,
+        processing_time_ms: payload.processing_time_ms ?? Date.now() - startedAt,
+      },
+    });
+  } catch (error) {
+    logFace("error", "register.unexpected_error", {
+      userId,
+      message: (error as Error)?.message,
+      stack: (error as Error)?.stack,
+    });
+
+    return sendFaceError(res, 500, FaceAuthError.INTERNAL_SERVER_ERROR, undefined, {
+      stack: (error as Error)?.stack,
     });
   }
 };
 
-/**
- * Authenticate user with face recognition
- * POST /api/face/authenticate
- */
 export const authenticateFace = async (req: Request, res: Response) => {
-  try {
-    const { email, imageData } = req.body;
+  const startedAt = Date.now();
+  const { email, imageData } = req.body ?? {};
 
-    if (!email || !imageData) {
-      return sendResponse(res, 400, {
-        success: false,
-        message: ERROR_MESSAGES[FaceAuthError.INVALID_REQUEST],
-        error_code: FaceAuthError.INVALID_REQUEST,
-      });
+  logFace("log", "authenticate.request_received", {
+    email,
+    hasImageData: Boolean(imageData),
+    ip: req.ip,
+  });
+
+  try {
+    if (typeof email !== "string" || !email.trim()) {
+      return sendFaceError(res, 400, FaceAuthError.INVALID_REQUEST, "email is required.");
     }
 
-    console.log(`[Face Auth] Attempt for email: ${email}`);
+    if (typeof imageData !== "string" || !imageData.trim()) {
+      return sendFaceError(res, 400, FaceAuthError.MISSING_IMAGE_FIELD);
+    }
 
-    // Find user by email
     const user = await prisma.user.findUnique({
       where: { email },
-      include: { face_data: true },
     });
 
-    if (!user) {
-      console.log(`[Face Auth] User not found: ${email}`);
+    const faceData = user
+      ? await prismaUnsafe.faceData.findUnique({
+          where: { user_id: user.id },
+        })
+      : null;
 
+    if (!user) {
       await recordAuthEvent({
         req,
-        method: AuthMethod.FACE_RECOGNITION,
+        method: FACE_RECOGNITION_METHOD,
         success: false,
         actorType: "user",
         metadata: { email, error: "user_not_found" },
       });
-
-      return sendResponse(res, 401, {
-        success: false,
-        message: "User not found or face not registered.",
-        error_code: "USER_NOT_FOUND",
-      });
+      return sendFaceError(res, 404, FaceAuthError.USER_NOT_FOUND);
     }
 
-    if (!user.face_data || !user.face_data.is_enabled) {
-      console.log(`[Face Auth] No face data registered for user: ${user.id}`);
-
+    if (!faceData?.is_enabled) {
       await recordAuthEvent({
         req,
         userId: user.id,
-        method: AuthMethod.FACE_RECOGNITION,
+        method: FACE_RECOGNITION_METHOD,
         success: false,
         actorType: "user",
         metadata: { error: "no_face_registered" },
       });
-
-      return sendResponse(res, 400, {
-        success: false,
-        message: "No face registered for this account. Please register a face first.",
-        error_code: "NO_FACE_REGISTERED",
-      });
+      return sendFaceError(res, 400, FaceAuthError.NO_FACE_REGISTERED);
     }
 
-    // Convert image data to buffer
-    const imageBuffer = Buffer.from(imageData, "base64");
-
-    if (!imageBuffer || imageBuffer.length === 0) {
-      return sendResponse(res, 400, {
-        success: false,
-        message: ERROR_MESSAGES[FaceAuthError.INVALID_REQUEST],
-        error_code: FaceAuthError.INVALID_REQUEST,
-      });
+    const imageBuffer = decodeBase64Image(imageData);
+    if (!imageBuffer.length) {
+      return sendFaceError(res, 400, FaceAuthError.NO_FILE_UPLOADED);
     }
 
-    console.log(
-      `[Face Auth] User ${user.id}: Image size: ${imageBuffer.length} bytes`
-    );
-
-    // Parse stored encoding
-    let storedEncoding: number[];
+    let storedEncoding: unknown;
     try {
-      storedEncoding = JSON.parse(user.face_data.face_encoding_json);
-    } catch (parseError) {
-      console.error(
-        `[Face Auth] Failed to parse stored encoding for user ${user.id}:`,
-        parseError
-      );
-
-      return sendResponse(res, 500, {
-        success: false,
-        message: ERROR_MESSAGES[FaceAuthError.DATABASE_ERROR],
-        error_code: FaceAuthError.DATABASE_ERROR,
+      storedEncoding = JSON.parse(faceData.face_encoding_json);
+    } catch (error) {
+      logFace("error", "authenticate.encoding_parse_failed", {
+        userId: user.id,
+        message: (error as Error).message,
+        stack: (error as Error).stack,
+      });
+      return sendFaceError(res, 500, FaceAuthError.DATABASE_ERROR, "Stored face encoding is corrupted.", {
+        stack: (error as Error).stack,
       });
     }
 
-    // Call Python face recognition service
-    let faceResponse: FaceServiceResponse;
+    if (!validateEncoding(storedEncoding)) {
+      return sendFaceError(res, 500, FaceAuthError.DATABASE_ERROR, "Stored face encoding is invalid.");
+    }
+
+    let faceServiceResponse: FaceServiceSuccess<FaceAuthenticatePayload>;
     try {
-      const axiosResponse = await axios.post(
-        `${FACE_SERVICE_URL}/api/face/authenticate`,
+      faceServiceResponse = await postToFaceService<FaceAuthenticatePayload>(
+        "/api/face/authenticate",
         {
           image: imageBuffer.toString("base64"),
           encoding: storedEncoding,
         },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-          timeout: FACE_RECOGNITION_TIMEOUT,
-        }
+        { "Content-Type": "application/json" },
       );
-      faceResponse = axiosResponse.data;
     } catch (error) {
-      console.error(
-        `[Face Auth] Service error for user ${user.id}:`,
-        error instanceof AxiosError ? error.message : error
-      );
+      if (error instanceof Error && error.message === "Invalid face service response shape.") {
+        return sendFaceError(
+          res,
+          502,
+          FaceAuthError.INVALID_RESPONSE,
+          "Face recognition service returned an invalid response.",
+          {
+            details: (error as Error & { response?: { status?: number; data?: unknown } }).response,
+            stack: error.stack,
+          },
+        );
+      }
 
+      const serviceError = extractServiceError(error);
       await recordAuthEvent({
         req,
         userId: user.id,
-        method: AuthMethod.FACE_RECOGNITION,
+        method: FACE_RECOGNITION_METHOD,
         success: false,
         actorType: "user",
-        metadata: { error: "service_error" },
+        metadata: { error: serviceError.code },
       });
 
-      if (error instanceof AxiosError && error.code === "ECONNREFUSED") {
-        return sendResponse(res, 503, {
-          success: false,
-          message: ERROR_MESSAGES[FaceAuthError.SERVICE_UNAVAILABLE],
-          error_code: FaceAuthError.SERVICE_UNAVAILABLE,
-        });
-      }
-
-      if (error instanceof AxiosError && error.response?.data) {
-        const serviceError = error.response.data as FaceServiceResponse;
-        return sendResponse(res, 400, {
-          success: false,
-          message:
-            ERROR_MESSAGES[serviceError.error_code as FaceAuthError] ||
-            ERROR_MESSAGES[FaceAuthError.INTERNAL_ERROR],
-          error_code: serviceError.error_code,
-          debug_error: serviceError.message,
-        });
-      }
-
-      return sendResponse(res, 500, {
-        success: false,
-        message: ERROR_MESSAGES[FaceAuthError.INTERNAL_ERROR],
-        error_code: FaceAuthError.INTERNAL_ERROR,
+      return sendFaceError(res, serviceError.status, serviceError.code, serviceError.message, {
+        details: serviceError.details,
+        stack: (error as Error)?.stack,
       });
     }
 
-    // Check if face authentication was successful
-    if (!faceResponse.success) {
-      console.log(
-        `[Face Auth] Service error for user ${user.id}: ${faceResponse.error_code}`
-      );
+    const payload = faceServiceResponse.data;
+    logFace("log", "authenticate.face_service_payload", {
+      userId: user.id,
+      matched: payload.matched,
+      confidence: payload.confidence,
+      distance: payload.distance,
+      processing_time_ms: payload.processing_time_ms,
+    });
 
+    if (!payload.matched) {
       await recordAuthEvent({
         req,
         userId: user.id,
-        method: AuthMethod.FACE_RECOGNITION,
-        success: false,
-        actorType: "user",
-        metadata: {
-          error: faceResponse.error_code,
-          distance: faceResponse.distance,
-          confidence: faceResponse.confidence,
-        },
-      });
-
-      return sendResponse(res, 400, {
-        success: false,
-        message:
-          ERROR_MESSAGES[faceResponse.error_code as FaceAuthError] ||
-          ERROR_MESSAGES[FaceAuthError.INTERNAL_ERROR],
-        error_code: faceResponse.error_code,
-      });
-    }
-
-    if (!faceResponse.matched) {
-      console.log(
-        `[Face Auth] Face not matched for user ${user.id}. Distance: ${faceResponse.distance}, Confidence: ${faceResponse.confidence}`
-      );
-
-      await recordAuthEvent({
-        req,
-        userId: user.id,
-        method: AuthMethod.FACE_RECOGNITION,
+        method: FACE_RECOGNITION_METHOD,
         success: false,
         actorType: "user",
         metadata: {
           matched: false,
-          distance: faceResponse.distance,
-          confidence: faceResponse.confidence,
+          distance: payload.distance,
+          confidence: payload.confidence,
+          code: payload.code || FaceAuthError.NO_MATCH_FOUND,
         },
       });
 
-      return sendResponse(res, 401, {
-        success: false,
-        message: ERROR_MESSAGES[FaceAuthError.NO_MATCH],
-        error_code: FaceAuthError.NO_MATCH,
-        debug_info: {
-          distance: faceResponse.distance,
-          confidence: faceResponse.confidence,
+      return sendFaceError(
+        res,
+        401,
+        payload.code || FaceAuthError.NO_MATCH_FOUND,
+        faceServiceResponse.message || ERROR_MESSAGES[FaceAuthError.NO_MATCH_FOUND],
+        {
+          details: {
+            distance: payload.distance,
+            confidence: payload.confidence,
+          },
         },
-      });
+      );
     }
 
-    console.log(
-      `[Face Auth] Successful for user ${user.id}. Confidence: ${faceResponse.confidence}`
-    );
-
-    // Record successful auth event
     await recordAuthEvent({
       req,
       userId: user.id,
-      method: AuthMethod.FACE_RECOGNITION,
+      method: FACE_RECOGNITION_METHOD,
       success: true,
       actorType: "user",
       metadata: {
         matched: true,
-        distance: faceResponse.distance,
-        confidence: faceResponse.confidence,
+        distance: payload.distance,
+        confidence: payload.confidence,
       },
     });
 
@@ -484,95 +788,109 @@ export const authenticateFace = async (req: Request, res: Response) => {
     });
     const token = createAuthBearerToken(authUser);
 
-    // Return user data for NextAuth integration
     return sendResponse(res, 200, {
       success: true,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        image: user.image,
-        provider: "face_recognition",
-      },
-      token,
-      message: "Face authenticated successfully",
-      debug_info: {
-        confidence: faceResponse.confidence,
-        distance: faceResponse.distance,
+      message: faceServiceResponse.message || "Face authenticated successfully.",
+      data: {
+        user: {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          provider: "face_recognition",
+        },
+        token,
+        matched: true,
+        confidence: payload.confidence,
+        distance: payload.distance,
+        processing_time_ms: payload.processing_time_ms ?? Date.now() - startedAt,
       },
     });
   } catch (error) {
-    console.error("[Face Auth] Unexpected error:", error);
-
-    return sendResponse(res, 500, {
-      success: false,
-      message: ERROR_MESSAGES[FaceAuthError.INTERNAL_ERROR],
-      error_code: FaceAuthError.INTERNAL_ERROR,
+    logFace("error", "authenticate.unexpected_error", {
+      message: (error as Error)?.message,
+      stack: (error as Error)?.stack,
+    });
+    return sendFaceError(res, 500, FaceAuthError.INTERNAL_SERVER_ERROR, undefined, {
+      stack: (error as Error)?.stack,
     });
   }
 };
 
-/**
- * Check if user has face data registered
- * GET /api/face/check
- */
 export const checkFaceRegistration = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.id;
+    const userId = resolveUserId(req);
 
-    if (!userId) {
-      return sendResponse(res, 401, {
-        success: false,
-        message: "Unauthorized",
-      });
+    if (!userId || userId < 0) {
+      return sendFaceError(res, 400, FaceAuthError.INVALID_REQUEST, "userId is required.");
     }
 
-    const faceData = await prisma.faceData.findUnique({
+    const faceData = await prismaUnsafe.faceData.findUnique({
       where: { user_id: userId },
+      select: {
+        is_enabled: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+
+    logFace("log", "check.face_registration_result", {
+      userId,
+      faceRegistered: Boolean(faceData?.is_enabled),
     });
 
     return sendResponse(res, 200, {
       success: true,
-      faceRegistered: !!faceData && faceData.is_enabled,
-      created_at: faceData?.created_at,
-      updated_at: faceData?.updated_at,
+      message: "Face registration status fetched successfully.",
+      data: {
+        faceRegistered: Boolean(faceData?.is_enabled),
+        created_at: faceData?.created_at ?? null,
+        updated_at: faceData?.updated_at ?? null,
+      },
     });
   } catch (error) {
-    console.error("[Face Check] Error:", error);
-
-    return sendResponse(res, 500, {
-      success: false,
-      message: "Error checking face registration status",
+    logFace("error", "check.unexpected_error", {
+      message: (error as Error)?.message,
+      stack: (error as Error)?.stack,
+    });
+    return sendFaceError(res, 500, FaceAuthError.INTERNAL_SERVER_ERROR, undefined, {
+      stack: (error as Error)?.stack,
     });
   }
 };
 
-/**
- * Delete/disable face data for user
- * POST /api/face/delete
- */
 export const deleteFaceData = async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).user?.id;
+    const userId = resolveUserId(req);
 
-    if (!userId) {
-      return sendResponse(res, 401, {
-        success: false,
-        message: "Unauthorized",
-      });
+    if (!userId || userId < 0) {
+      return sendFaceError(res, 400, FaceAuthError.INVALID_REQUEST, "userId is required.");
     }
 
-    await prisma.faceData.update({
+    const existing = await prismaUnsafe.faceData.findUnique({
       where: { user_id: userId },
-      data: { is_enabled: false },
+      select: { id: true, is_enabled: true },
     });
 
-    console.log(`[Face Delete] Disabled face data for user ${userId}`);
+    if (!existing) {
+      return sendFaceError(res, 404, FaceAuthError.NO_FACE_REGISTERED);
+    }
+
+    const result = await prismaUnsafe.faceData.update({
+      where: { user_id: userId },
+      data: { is_enabled: false },
+      select: { id: true, user_id: true, is_enabled: true, updated_at: true },
+    });
+
+    logFace("log", "delete.db_update_success", {
+      userId,
+      result,
+    });
 
     await recordAuthEvent({
       req,
       userId,
-      method: AuthMethod.FACE_RECOGNITION,
+      method: FACE_RECOGNITION_METHOD,
       success: true,
       actorType: "user",
       metadata: { action: "face_data_deleted" },
@@ -580,14 +898,21 @@ export const deleteFaceData = async (req: Request, res: Response) => {
 
     return sendResponse(res, 200, {
       success: true,
-      message: "Face data removed successfully",
+      message: "Face data removed successfully.",
+      data: {
+        removed: true,
+        updated_at: result.updated_at,
+      },
     });
   } catch (error) {
-    console.error("[Face Delete] Error:", error);
-
-    return sendResponse(res, 500, {
-      success: false,
-      message: "Error removing face data",
+    const dbError = mapPrismaError(error);
+    logFace("error", "delete.unexpected_error", {
+      dbError,
+      stack: (error as Error)?.stack,
+    });
+    return sendFaceError(res, dbError.status, dbError.code, dbError.message, {
+      details: dbError.details,
+      stack: (error as Error)?.stack,
     });
   }
 };

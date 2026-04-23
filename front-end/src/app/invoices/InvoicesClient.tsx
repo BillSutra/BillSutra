@@ -28,7 +28,11 @@ import FirstTimeHint from "@/components/ui/FirstTimeHint";
 import Modal from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { fetchBusinessProfile, sendInvoiceEmail } from "@/lib/apiClient";
+import {
+  fetchBusinessProfile,
+  fetchUserSettingsPreferences,
+  sendInvoiceEmail,
+} from "@/lib/apiClient";
 import {
   buildSmartSuggestions,
   rankRecentProducts,
@@ -74,6 +78,7 @@ import {
   useCreateInvoiceMutation,
   useCreateProductMutation,
   useCustomersQuery,
+  useInvoiceBootstrapQuery,
   useInvoicesQuery,
   useProductsQuery,
   useWarehousesQuery,
@@ -228,6 +233,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     refetch: refetchProducts,
   } = useProductsQuery({ limit: 1000 });
   const { data: invoices = [], refetch: refetchInvoices } = useInvoicesQuery();
+  const { data: invoiceBootstrap } = useInvoiceBootstrapQuery();
   const {
     data: warehouses = [],
     isLoading: warehousesLoading,
@@ -237,6 +243,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const { data: businessProfile } = useQuery({
     queryKey: ["business-profile"],
     queryFn: fetchBusinessProfile,
+  });
+  const { data: userSettingsPreferences } = useQuery({
+    queryKey: ["settings", "preferences"],
+    queryFn: fetchUserSettingsPreferences,
   });
   const sendInvoiceEmailMutation = useMutation({
     mutationFn: ({ invoiceId, email }: { invoiceId: number; email: string }) =>
@@ -359,11 +369,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         discountType: form.discount_type,
         discountValue: form.discount,
         formatCurrency: (value) =>
-          formatCurrency(value, businessProfile?.currency ?? "INR"),
+        formatCurrency(value, businessProfile?.currency ?? "INR"),
       }),
     [businessProfile?.currency, form.discount, form.discount_type, formatCurrency],
   );
-  const validation = useInvoiceValidation(form, items, totals.total);
   const fallbackActiveTemplate = useMemo(
     () => ({
       templateId: "indian-gst-template",
@@ -382,7 +391,60 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     : activeTemplate.enabledSections;
   const activeTheme = activeTemplate.theme;
   const activeDesignConfig = activeTemplate.designConfig;
+  const productLookup = useMemo(
+    () =>
+      Object.fromEntries(products.map((product) => [product.id, product])) as Record<
+        number,
+        Product
+      >,
+    [products],
+  );
+  const allowNegativeStock =
+    userSettingsPreferences?.inventory.allowNegativeStock ?? true;
+  const validation = useInvoiceValidation(form, items, totals.total, {
+    productLookup,
+    allowNegativeStock,
+  });
+  const invoiceNumberPreview = useMemo(
+    () =>
+      lastCreatedInvoiceNumber ??
+      invoiceBootstrap?.defaults.invoiceNumberPreview ??
+      `INV-${new Date().getFullYear()}-AUTO`,
+    [invoiceBootstrap?.defaults.invoiceNumberPreview, lastCreatedInvoiceNumber],
+  );
+  const businessSummary = useMemo(
+    () =>
+      businessProfile
+        ? {
+            businessName: businessProfile.business_name,
+            taxId: businessProfile.tax_id,
+            phone: businessProfile.phone,
+            email: businessProfile.email,
+          }
+        : null,
+    [businessProfile],
+  );
   const autoFocusProductSearch = searchParams.get("quickAction") === "new-bill";
+  useEffect(() => {
+    if (!invoiceBootstrap?.defaults) {
+      return;
+    }
+
+    setForm((current) => {
+      const nextDate = current.date || invoiceBootstrap.defaults.invoiceDate;
+      const nextDueDate = current.due_date || invoiceBootstrap.defaults.dueDate;
+
+      if (nextDate === current.date && nextDueDate === current.due_date) {
+        return current;
+      }
+
+      return {
+        ...current,
+        date: nextDate,
+        due_date: nextDueDate,
+      };
+    });
+  }, [invoiceBootstrap?.defaults]);
   const isMacShortcutPlatform = useMemo(() => {
     if (typeof navigator === "undefined") return false;
     return /Mac|iPhone|iPad/i.test(navigator.platform);
@@ -1827,6 +1889,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               form={form}
               customers={customers}
               warehouses={warehouses}
+              businessSummary={businessSummary}
+              invoiceNumberPreview={invoiceNumberPreview}
               subtotalAmount={totals.subtotal}
               totalAmount={totals.total}
               taxMode={taxMode}
@@ -1899,6 +1963,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               <InvoiceTable
                 items={items}
                 errors={itemErrors}
+                productLookup={productLookup}
                 quickEntryProduct={quickEntryProduct}
                 quickEntryRef={quickEntryRef}
                 autoFocusProductSearch={autoFocusProductSearch}

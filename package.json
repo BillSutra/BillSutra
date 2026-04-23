@@ -10,6 +10,7 @@
     "build": "npm run build --workspace front-end",
     "start": "npm run start --workspace front-end",
     "lint": "npm run lint --workspace front-end",
-    "server": "npm start --workspace server"
+    "server": "npm start --workspace server",
+    "face-service": "powershell -ExecutionPolicy Bypass -File .\\face_recognition_service\\start.ps1"
   }
 }

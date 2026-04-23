@@ -739,27 +739,103 @@ export const customerUpdateSchema = addCustomerSchemaRules(
 );
 
 const businessAddressSchema = z.object({
-  addressLine1: z.string().trim().min(2).max(191),
-  city: z.string().trim().min(2).max(191),
+  addressLine1: z
+    .string()
+    .trim()
+    .min(5, "Address line 1 is required")
+    .max(200, "Address line 1 is required"),
+  city: z
+    .string()
+    .trim()
+    .min(2, "City is required")
+    .max(100, "City is required")
+    .regex(/^[\p{L}\s]+$/u, "City is required"),
   state: requiredIndianStateString,
   pincode: requiredIndianPincodeString,
 });
 
+const sanitizeBusinessProfileText = (value: unknown) =>
+  typeof value === "string"
+    ? value.replace(/[<>]/g, "").replace(/\s+/g, " ").trim()
+    : value;
+
+const sanitizeBusinessPhone = (value: unknown) =>
+  typeof value === "string" ? value.replace(/\s+/g, "").trim() : value;
+
+const sanitizeBusinessEmail = (value: unknown) =>
+  typeof value === "string"
+    ? value.replace(/[<>]/g, "").trim().toLowerCase()
+    : value;
+
+const sanitizeBusinessWebsite = (value: unknown) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.replace(/[<>]/g, "").trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+};
+
+const sanitizeBusinessTaxId = (value: unknown) =>
+  typeof value === "string"
+    ? (() => {
+        const normalized = value.replace(/[<>]/g, "").trim().toUpperCase();
+        return normalized ? normalized : undefined;
+      })()
+    : value;
+
+const sanitizeBusinessCurrency = (value: unknown) =>
+  typeof value === "string"
+    ? value.replace(/[<>]/g, "").trim().toUpperCase()
+    : value;
+
 export const businessProfileUpsertSchema = z
   .object({
-    business_name: z.string().min(2),
+    business_name: z.preprocess(
+      sanitizeBusinessProfileText,
+      z
+        .string()
+        .min(2)
+        .max(100)
+        .regex(/^[\p{L}\p{N}&.\-\s]+$/u, "Business name is invalid"),
+    ),
     address: optionalTrimmedString,
     businessAddress: businessAddressSchema.optional(),
     address_line1: optionalAddressLineString,
     city: optionalAddressLineString,
     state: optionalIndianStateString,
     pincode: optionalIndianPincodeString,
-    phone: optionalTrimmedString,
-    email: optionalEmailString,
-    website: optionalTrimmedString,
+    phone: z.preprocess(
+      sanitizeBusinessPhone,
+      z.string().regex(/^[6-9]\d{9}$/, "Enter a valid phone number"),
+    ),
+    email: z.preprocess(
+      sanitizeBusinessEmail,
+      z.string().email("Enter a valid email address"),
+    ),
+    website: z.preprocess(
+      sanitizeBusinessWebsite,
+      z.string().url("Enter a valid website URL").optional(),
+    ),
     logo_url: optionalUrlString,
-    tax_id: optionalTrimmedString,
-    currency: z.string().min(1),
+    tax_id: z.preprocess(
+      sanitizeBusinessTaxId,
+      z
+        .string()
+        .regex(
+          /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/,
+          "Enter a valid GSTIN",
+        )
+        .optional(),
+    ),
+    currency: z.preprocess(
+      sanitizeBusinessCurrency,
+      z.string().regex(/^[A-Z]{3}$/, "Enter a valid currency code"),
+    ),
     show_logo_on_invoice: z.boolean().optional(),
     show_tax_number: z.boolean().optional(),
     show_payment_qr: z.boolean().optional(),
@@ -1060,6 +1136,11 @@ export const settingsPreferencesUpsertSchema = z.object({
       language: z.enum(["en", "hi"]),
       currency: z.enum(["INR", "USD"]),
       dateFormat: z.enum(["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD"]),
+    })
+    .optional(),
+  inventory: z
+    .object({
+      allowNegativeStock: z.boolean(),
     })
     .optional(),
   notifications: z

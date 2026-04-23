@@ -4,8 +4,14 @@ import AppError from "../utils/AppError.js";
 
 type TransactionClient = Prisma.TransactionClient;
 
-const toSafeQuantity = (value: unknown) =>
-  Math.max(0, Math.trunc(Number(value ?? 0)));
+const toWholeQuantity = (value: unknown) => {
+  const parsed = Number(value ?? 0);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+
+  return Math.trunc(parsed);
+};
 
 const lockProductRow = async (tx: TransactionClient, productId: number) => {
   const rows = await tx.$queryRaw<Array<{ id: number; stock_on_hand: number }>>(
@@ -53,10 +59,19 @@ export const applyInventoryDelta = async (params: {
   productId: number;
   warehouseId?: number | null;
   delta: number;
+  allowNegativeStock?: boolean;
   reason: StockReason;
   note?: string | null;
 }) => {
-  const { tx, productId, warehouseId, delta, reason, note } = params;
+  const {
+    tx,
+    productId,
+    warehouseId,
+    delta,
+    allowNegativeStock = false,
+    reason,
+    note,
+  } = params;
 
   if (!Number.isInteger(delta) || delta === 0) {
     throw new AppError("Quantity change must be a non-zero whole number.", 400);
@@ -67,10 +82,10 @@ export const applyInventoryDelta = async (params: {
     throw new AppError("Product not found", 404);
   }
 
-  const currentProductQuantity = toSafeQuantity(productRow.stock_on_hand);
+  const currentProductQuantity = toWholeQuantity(productRow.stock_on_hand);
   const nextProductQuantity = currentProductQuantity + delta;
 
-  if (nextProductQuantity < 0) {
+  if (!allowNegativeStock && nextProductQuantity < 0) {
     throw new AppError("Not enough quantity available", 409);
   }
 
@@ -78,10 +93,10 @@ export const applyInventoryDelta = async (params: {
 
   if (warehouseId) {
     const inventoryRow = await lockInventoryRow(tx, warehouseId, productId);
-    const currentInventoryQuantity = toSafeQuantity(inventoryRow?.quantity ?? 0);
+    const currentInventoryQuantity = toWholeQuantity(inventoryRow?.quantity ?? 0);
     nextInventoryQuantity = currentInventoryQuantity + delta;
 
-    if (nextInventoryQuantity < 0) {
+    if (!allowNegativeStock && nextInventoryQuantity < 0) {
       throw new AppError("Not enough stock available", 409);
     }
 
@@ -105,7 +120,7 @@ export const applyInventoryDelta = async (params: {
 
   await tx.product.update({
     where: { id: productId },
-    data: { stock_on_hand: Math.max(0, nextProductQuantity) },
+    data: { stock_on_hand: nextProductQuantity },
   });
 
   await tx.stockMovement.create({
@@ -118,7 +133,7 @@ export const applyInventoryDelta = async (params: {
   });
 
   return {
-    stockOnHand: Math.max(0, nextProductQuantity),
+    stockOnHand: nextProductQuantity,
     inventoryQuantity: nextInventoryQuantity,
   };
 };

@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/providers/LanguageProvider";
@@ -10,7 +10,8 @@ interface ValidationFieldProps {
   value: string;
   onChange: (value: string) => void;
   onPaste?: (event: React.ClipboardEvent<HTMLInputElement>) => void;
-  onBlur?: () => void;
+  onBlur?: (value?: string) => void;
+  normalizeOnBlur?: (value: string) => string;
   as?: "input" | "select";
   type?: string;
   placeholder?: string;
@@ -25,6 +26,7 @@ interface ValidationFieldProps {
   maxLength?: number;
   pattern?: string;
   disabled?: boolean;
+  forceTouched?: boolean;
   className?: string;
   children?: React.ReactNode;
 }
@@ -36,6 +38,7 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
   onChange,
   onPaste,
   onBlur,
+  normalizeOnBlur,
   as = "input",
   type = "text",
   placeholder,
@@ -50,32 +53,41 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
   maxLength,
   pattern,
   disabled = false,
+  forceTouched = false,
   className,
   children,
 }) => {
   const { t } = useI18n();
+  const [dirty, setDirty] = useState(false);
   const [touched, setTouched] = useState(false);
-  const [error, setError] = useState("");
+
+  const currentError = useMemo(() => validate(value), [validate, value]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       onChange(e.target.value);
-      setTouched(true);
-      setTimeout(() => {
-        setError(validate(e.target.value));
-      }, 200);
+      setDirty(true);
     },
-    [onChange, validate],
+    [onChange],
   );
 
   const handleBlur = () => {
+    const normalizedValue = normalizeOnBlur ? normalizeOnBlur(value) : value;
+    if (normalizedValue !== value) {
+      onChange(normalizedValue);
+    }
+    setDirty(true);
     setTouched(true);
-    setError(validate(value));
-    onBlur?.();
+    onBlur?.(normalizedValue);
   };
 
-  const showError = touched && !!error;
-  const showSuccess = touched && !error && value.length > 0 && success;
+  const shouldShowValidation = touched || forceTouched;
+  const showError = shouldShowValidation && !!currentError;
+  const showSuccess =
+    success &&
+    dirty &&
+    !currentError &&
+    value.trim().length > 0;
 
   return (
     <div className={cn("mb-2", className)}>
@@ -141,7 +153,7 @@ export const ValidationField: React.FC<ValidationFieldProps> = ({
           className="mt-1 block text-xs text-red-600 dark:text-red-400"
           role="alert"
         >
-          {translateValidationMessage(t, error)}
+          {translateValidationMessage(t, currentError)}
         </span>
       )}
       {showSuccess && (

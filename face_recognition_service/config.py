@@ -7,38 +7,56 @@ from pathlib import Path
 # Service Configuration
 SERVICE_PORT = int(os.getenv("FACE_SERVICE_PORT", 5001))
 SERVICE_HOST = os.getenv("FACE_SERVICE_HOST", "localhost")
-DEBUG_MODE = os.getenv("DEBUG_MODE", "True").lower() == "true"
+DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
+REQUEST_TIMEOUT = 30  # seconds for request processing timeout
 
 # Face Recognition Parameters
-FACE_RECOGNITION_DISTANCE_THRESHOLD = 0.45  # Stricter matching to reduce partial-face accepts
-MIN_CONFIDENCE_LEVEL = 0.82  # Higher confidence requirement for successful auth
-MAX_FACE_DETECTION_ATTEMPTS = 5  # Max attempts to detect a face
-FACE_DETECTION_TIMEOUT = 30  # Timeout in seconds for face detection
+FACE_RECOGNITION_DISTANCE_THRESHOLD = 0.45
+MIN_CONFIDENCE_LEVEL = 0.82
+MAX_FACE_DETECTION_ATTEMPTS = 5
+FACE_DETECTION_TIMEOUT = 30
 
 # Image/Webcam Configuration
 MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB max image size
-SUPPORTED_IMAGE_FORMATS = ["image/jpeg", "image/png", "image/jpg"]
-WEBCAM_RESOLUTION = (640, 480)  # Standard webcam resolution
-WEBCAM_FPS = 30  # Frames per second
+SUPPORTED_IMAGE_FORMATS = ["jpg", "jpeg", "png"]
+MAX_FACES_DEFAULT = 1  # For authentication, expect single face
+MAX_FACES_REGISTRATION = 10  # Higher limit for registration
+
+# Logging Configuration
+LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s'
+LOG_DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+
+# Error Codes - Standardized error codes for API responses
+class ErrorCode:
+    INVALID_FILE_TYPE = "INVALID_FILE_TYPE"
+    FILE_TOO_LARGE = "FILE_TOO_LARGE"
+    NO_FILE_UPLOADED = "NO_FILE_UPLOADED"
+    IMAGE_PROCESSING_ERROR = "IMAGE_PROCESSING_ERROR"
+    FACE_NOT_DETECTED = "FACE_NOT_DETECTED"
+    MULTIPLE_FACES_DETECTED = "MULTIPLE_FACES_DETECTED"
+    INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR"
+    INVALID_CONTENT_TYPE = "INVALID_CONTENT_TYPE"
+    MISSING_IMAGE_FIELD = "MISSING_IMAGE_FIELD"
+    INVALID_IMAGE_DATA = "INVALID_IMAGE_DATA"
+
+# Error messages mapped to error codes
+ERROR_MESSAGES = {
+    ErrorCode.INVALID_FILE_TYPE: "Invalid file type. Only JPG, JPEG, and PNG formats are allowed.",
+    ErrorCode.FILE_TOO_LARGE: f"File size exceeds maximum allowed size of {MAX_IMAGE_SIZE // (1024*1024)}MB.",
+    ErrorCode.NO_FILE_UPLOADED: "No file was uploaded in the request.",
+    ErrorCode.IMAGE_PROCESSING_ERROR: "Failed to process the image. The file may be corrupted or invalid.",
+    ErrorCode.FACE_NOT_DETECTED: "No face was detected in the image. Please ensure your face is clearly visible.",
+    ErrorCode.MULTIPLE_FACES_DETECTED: "Multiple faces detected. Please ensure only one face is in the frame.",
+    ErrorCode.INTERNAL_SERVER_ERROR: "An internal server error occurred. Please try again later.",
+    ErrorCode.INVALID_CONTENT_TYPE: "Invalid content type. Use multipart/form-data or application/json.",
+    ErrorCode.MISSING_IMAGE_FIELD: "Missing 'image' field in the request.",
+    ErrorCode.INVALID_IMAGE_DATA: "Invalid or corrupted image data.",
+}
 
 # Storage Configuration
 DATA_DIR = Path(__file__).parent / "data"
 FACE_ENCODINGS_DIR = DATA_DIR / "face_encodings"
 
-# Error messages for debugging
-ERROR_MESSAGES = {
-    "NO_FACE_DETECTED": "Could not detect any face in the image. Please ensure your face is clearly visible.",
-    "MULTIPLE_FACES_DETECTED": "Multiple faces detected. Please ensure only one face is in the frame.",
-    "FACE_NOT_CLEAR": "Face image is not clear enough. Please adjust lighting and camera angle.",
-    "FACE_TOO_SMALL": "Face is too small in the image. Please move closer to the camera.",
-    "FACE_TOO_LARGE": "Face is too large in the image. Please move away from the camera.",
-    "IMAGE_INVALID": "Invalid image format or corrupted image data.",
-    "IMAGE_TOO_LARGE": "Image size exceeds maximum allowed size.",
-    "ENCODING_FAILED": "Failed to generate face encoding. Please try again.",
-    "NO_MATCH_FOUND": "Face does not match any registered faces. Please try again.",
-    "MATCH_LOW_CONFIDENCE": "Face match confidence is too low. Please try again.",
-    "WEBCAM_ACCESS_DENIED": "Cannot access webcam. Please check permissions.",
-    "WEBCAM_NOT_AVAILABLE": "No webcam detected on this device.",
-    "SERVICE_ERROR": "Face recognition service encountered an error. Please try again.",
-    "DATABASE_ERROR": "Database error occurred. Please contact support.",
-}
+# Ensure directories exist
+DATA_DIR.mkdir(exist_ok=True)
+FACE_ENCODINGS_DIR.mkdir(exist_ok=True)

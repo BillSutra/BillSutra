@@ -19,6 +19,7 @@ import { useI18n } from "@/providers/LanguageProvider";
 export type InvoiceTableProps = {
   items: InvoiceItemForm[];
   errors: InvoiceItemError[];
+  productLookup?: Record<number, Product>;
   quickEntryProduct: Product | null;
   quickEntryRef?: React.Ref<AsyncProductSelectHandle>;
   autoFocusProductSearch?: boolean;
@@ -51,6 +52,7 @@ const quantityButtonClassName =
 const InvoiceTable = ({
   items,
   errors,
+  productLookup = {},
   quickEntryProduct,
   quickEntryRef,
   autoFocusProductSearch = false,
@@ -74,6 +76,29 @@ const InvoiceTable = ({
     (count, item) => count + Math.max(0, Number(item.quantity) || 0),
     0,
   );
+  const getStockTone = (stockOnHand: number, reorderLevel: number) => {
+    if (stockOnHand <= 0) {
+      return {
+        label: "Out of stock",
+        className:
+          "bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-200",
+      };
+    }
+
+    if (stockOnHand <= reorderLevel) {
+      return {
+        label: "Low stock",
+        className:
+          "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-200",
+      };
+    }
+
+    return {
+      label: "In stock",
+      className:
+        "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200",
+    };
+  };
 
   return (
     <section className="grid gap-5 xl:grid-cols-[minmax(380px,0.9fr)_minmax(0,1.1fr)] 2xl:grid-cols-[minmax(420px,0.84fr)_minmax(0,1.16fr)]">
@@ -267,6 +292,19 @@ const InvoiceTable = ({
               const lineTotal = quantity * unitPrice;
               const isSelected = selectedItemIndex === index;
               const isRecent = recentProductId === item.product_id;
+              const linkedProductId = Number(item.product_id || 0);
+              const linkedProduct =
+                Number.isInteger(linkedProductId) && linkedProductId > 0
+                  ? productLookup[linkedProductId]
+                  : undefined;
+              const stockOnHand = linkedProduct?.stock_on_hand ?? null;
+              const reorderLevel = linkedProduct?.reorder_level ?? 0;
+              const stockTone =
+                stockOnHand === null
+                  ? null
+                  : getStockTone(stockOnHand, reorderLevel);
+              const stockWarning =
+                stockOnHand !== null && quantity > stockOnHand;
 
               return (
                 <div
@@ -301,6 +339,26 @@ const InvoiceTable = ({
                           number: formatNumber(index + 1),
                         })}
                       </p>
+                      {stockOnHand !== null ? (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-medium text-slate-600 dark:text-slate-300">
+                            Available: {formatNumber(stockOnHand)}
+                          </span>
+                          <span
+                            className={cn(
+                              "rounded-full px-2.5 py-1 font-semibold uppercase tracking-[0.14em]",
+                              stockTone?.className,
+                            )}
+                          >
+                            {stockTone?.label}
+                          </span>
+                        </div>
+                      ) : null}
+                      {stockWarning ? (
+                        <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-200">
+                          Requested quantity is above current stock.
+                        </p>
+                      ) : null}
                     </div>
                     <Button
                       type="button"

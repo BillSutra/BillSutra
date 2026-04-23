@@ -10,6 +10,9 @@ type SettingsPayload = {
     currency?: "INR" | "USD";
     dateFormat?: "DD/MM/YYYY" | "MM/DD/YYYY" | "YYYY-MM-DD";
   };
+  inventory?: {
+    allowNegativeStock?: boolean;
+  };
   notifications?: {
     paymentReminders?: boolean;
     lowStockAlerts?: boolean;
@@ -36,6 +39,7 @@ const mapPreferenceResponse = (pref: {
   language: string;
   currency: string;
   date_format: string;
+  allowNegativeStock: boolean;
   notification_payment_reminders: boolean;
   notification_low_stock_alerts: boolean;
   notification_due_invoice_alerts: boolean;
@@ -49,6 +53,9 @@ const mapPreferenceResponse = (pref: {
     language: pref.language,
     currency: pref.currency,
     dateFormat: pref.date_format,
+  },
+  inventory: {
+    allowNegativeStock: pref.allowNegativeStock,
   },
   notifications: {
     paymentReminders: pref.notification_payment_reminders,
@@ -107,6 +114,7 @@ class SettingsController {
         language: body.appPreferences?.language,
         currency: body.appPreferences?.currency,
         date_format: body.appPreferences?.dateFormat,
+        allowNegativeStock: body.inventory?.allowNegativeStock,
         notification_payment_reminders: body.notifications?.paymentReminders,
         notification_low_stock_alerts: body.notifications?.lowStockAlerts,
         notification_due_invoice_alerts: body.notifications?.dueInvoiceAlerts,
@@ -121,6 +129,7 @@ class SettingsController {
         language: body.appPreferences?.language ?? "en",
         currency: body.appPreferences?.currency ?? "INR",
         date_format: body.appPreferences?.dateFormat ?? "DD/MM/YYYY",
+        allowNegativeStock: body.inventory?.allowNegativeStock ?? true,
         notification_payment_reminders:
           body.notifications?.paymentReminders ?? true,
         notification_low_stock_alerts:

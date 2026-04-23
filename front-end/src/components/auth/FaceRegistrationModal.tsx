@@ -74,15 +74,18 @@ export const FaceRegistrationModal: React.FC<FaceRegistrationModalProps> = ({
 
       // Register the face
       console.log("[FaceRegistration] Registering face");
-      const success = await registerFace(imageBlob);
+      const result = await registerFace(imageBlob);
 
-      if (success) {
+      if (result.success) {
         console.log("[FaceRegistration] Face registered successfully");
         setStep("success");
         onSuccess?.();
       } else {
-        console.error("[FaceRegistration] Registration failed:", error);
+        const failureMessage =
+          result.error || "Face registration failed. Please try again.";
+        console.error("[FaceRegistration] Registration failed:", failureMessage);
         setStep("error");
+        onError?.(failureMessage);
       }
     } catch (err) {
       console.error("[FaceRegistration] Capture/Register error:", err);
@@ -96,7 +99,6 @@ export const FaceRegistrationModal: React.FC<FaceRegistrationModalProps> = ({
     registerFace,
     stopCamera,
     retryCount,
-    error,
     onError,
     onSuccess,
   ]);
