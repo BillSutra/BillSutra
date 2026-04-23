@@ -22,6 +22,7 @@ import { useI18n } from "@/providers/LanguageProvider";
 import { useHydrated } from "@/hooks/useHydrated";
 import AuthFormField from "@/components/auth/AuthFormField";
 import FaceLoginModal from "./FaceLoginModal";
+import ErrorBoundary from "@/components/shared/ErrorBoundary";
 import {
   requestOtpLoginCode,
   requestPasskeyAuthenticationOptions,
@@ -601,14 +602,35 @@ export default function Login({
         </Button>
       </form>
 
-      <FaceLoginModal 
-        isOpen={isFaceLoginOpen} 
-        onClose={() => setIsFaceLoginOpen(false)} 
-        onSuccess={(auth) => {
-          void completeTokenLogin(auth.token);
-        }}
-        email={identifier}
-      />
+      <ErrorBoundary
+        fallback={
+          isFaceLoginOpen ? (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+              <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+                <p className="text-sm text-red-600">
+                  Face system error. Try again.
+                </p>
+                <Button
+                  type="button"
+                  className="mt-4 w-full"
+                  onClick={() => setIsFaceLoginOpen(false)}
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          ) : null
+        }
+      >
+        <FaceLoginModal
+          isOpen={isFaceLoginOpen}
+          onClose={() => setIsFaceLoginOpen(false)}
+          onSuccess={(auth) => {
+            void completeTokenLogin(auth.token);
+          }}
+          email={identifier}
+        />
+      </ErrorBoundary>
 
       {!isWorkerMode ? (
         <div className="mt-6 space-y-4">

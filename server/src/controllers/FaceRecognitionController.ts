@@ -15,6 +15,7 @@ const FACE_RECOGNITION_METHOD = "FACE_RECOGNITION" as unknown as AuthMethod;
 
 enum FaceAuthError {
   DATABASE_ERROR = "DATABASE_ERROR",
+  FACE_NOT_FOUND = "FACE_NOT_FOUND",
   FACE_NOT_DETECTED = "FACE_NOT_DETECTED",
   FILE_TOO_LARGE = "FILE_TOO_LARGE",
   IMAGE_PROCESSING_ERROR = "IMAGE_PROCESSING_ERROR",
@@ -45,6 +46,7 @@ const ERROR_CODE_ALIASES: Record<string, string> = {
 
 const ERROR_MESSAGES: Record<string, string> = {
   [FaceAuthError.DATABASE_ERROR]: "Server error, try again.",
+  [FaceAuthError.FACE_NOT_FOUND]: "No registered face found.",
   [FaceAuthError.FACE_NOT_DETECTED]:
     "No face detected. Please keep your face centered and try again.",
   [FaceAuthError.FILE_TOO_LARGE]: "Captured image is too large. Please try again.",
@@ -158,9 +160,11 @@ function normalizeErrorCode(code?: string) {
 }
 
 function buildErrorResponse(code: string, fallbackMessage?: string, meta?: FaceErrorMeta) {
+  const message = getErrorMessage(code, fallbackMessage);
   const body: Record<string, unknown> = {
     success: false,
-    error: getErrorMessage(code, fallbackMessage),
+    error: message,
+    message,
     code,
   };
 
@@ -859,6 +863,67 @@ export const checkFaceRegistration = async (req: Request, res: Response) => {
   }
 };
 
+export const getFaceData = async (req: Request, res: Response) => {
+  try {
+    const userId = resolveUserId(req);
+
+    if (!userId || userId < 0) {
+      return sendFaceError(
+        res,
+        400,
+        FaceAuthError.INVALID_REQUEST,
+        "userId is required.",
+      );
+    }
+
+    const faceData = await prismaUnsafe.faceData.findUnique({
+      where: { user_id: userId },
+      select: {
+        is_enabled: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+
+    if (!faceData?.is_enabled) {
+      return sendFaceError(res, 404, FaceAuthError.FACE_NOT_FOUND);
+    }
+
+    const user = await prismaUnsafe.user.findUnique({
+      where: { id: userId },
+      select: {
+        image: true,
+        name: true,
+        email: true,
+      },
+    });
+
+    return res.status(200).json({
+      success: true,
+      image: user?.image ?? null,
+      name: user?.name ?? null,
+      email: user?.email ?? null,
+      createdAt: faceData.created_at,
+      updatedAt: faceData.updated_at,
+      faceRegistered: true,
+    });
+  } catch (error) {
+    logFace("error", "face_profile.unexpected_error", {
+      message: (error as Error)?.message,
+      stack: (error as Error)?.stack,
+    });
+    return sendFaceError(
+      res,
+      500,
+      FaceAuthError.INTERNAL_SERVER_ERROR,
+      undefined,
+      {
+        stack: (error as Error)?.stack,
+      },
+    );
+  }
+};
+
 export const deleteFaceData = async (req: Request, res: Response) => {
   try {
     const userId = resolveUserId(req);
@@ -872,8 +937,8 @@ export const deleteFaceData = async (req: Request, res: Response) => {
       select: { id: true, is_enabled: true },
     });
 
-    if (!existing) {
-      return sendFaceError(res, 404, FaceAuthError.NO_FACE_REGISTERED);
+    if (!existing?.is_enabled) {
+      return sendFaceError(res, 404, FaceAuthError.FACE_NOT_FOUND);
     }
 
     const result = await prismaUnsafe.faceData.update({
@@ -896,13 +961,9 @@ export const deleteFaceData = async (req: Request, res: Response) => {
       metadata: { action: "face_data_deleted" },
     });
 
-    return sendResponse(res, 200, {
+    return res.status(200).json({
       success: true,
-      message: "Face data removed successfully.",
-      data: {
-        removed: true,
-        updated_at: result.updated_at,
-      },
+      message: "Face deleted successfully",
     });
   } catch (error) {
     const dbError = mapPrismaError(error);

@@ -3,6 +3,7 @@
 import React, { useState, useCallback } from "react";
 import { Camera, X, Check, AlertCircle, Loader } from "lucide-react";
 import { useWebcam, useFaceRegistration } from "@/hooks/useFaceRecognition";
+import { getFriendlyFaceErrorMessage } from "@/utils/faceErrorHandler";
 
 interface FaceRegistrationModalProps {
   isOpen: boolean;
@@ -19,50 +20,50 @@ export const FaceRegistrationModal: React.FC<FaceRegistrationModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
-  onError,
+  onError: _onError,
 }) => {
   const [step, setStep] = useState<"instruction" | "capture" | "success" | "error">("instruction");
   const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [faceError, setFaceError] = useState<string | null>(null);
   const MAX_RETRIES = 3;
 
   const { videoRef, isActive, startCamera, stopCamera, captureImage } =
     useWebcam({
       onError: (error) => {
-        console.error("[FaceRegistration] Webcam error:", error);
+        setFaceError(error);
         setStep("error");
-        onError?.(error);
       },
     });
 
-  const { registerFace, isLoading, error, debugInfo, reset } =
-    useFaceRegistration();
+  const { registerFace, isLoading, reset } = useFaceRegistration();
 
   const handleStartCapture = useCallback(async () => {
     try {
-      console.log("[FaceRegistration] Starting camera");
+      setFaceError(null);
       setStep("capture");
       setRetryCount(0);
       setCapturedImageUrl(null);
       reset();
       await startCamera();
     } catch (err) {
-      console.error("[FaceRegistration] Failed to start camera:", err);
+      setFaceError(
+        err instanceof Error ? err.message : "Unable to start the camera.",
+      );
       setStep("error");
     }
   }, [startCamera, reset]);
 
   const handleCapture = useCallback(async () => {
     try {
-      console.log("[FaceRegistration] Capturing image");
+      setFaceError(null);
       const imageBlob = await captureImage();
 
       if (!imageBlob) {
-        console.error("[FaceRegistration] Failed to capture image");
         setRetryCount((prev) => prev + 1);
         if (retryCount >= MAX_RETRIES) {
+          setFaceError("Failed to capture image after multiple attempts.");
           setStep("error");
-          onError?.("Failed to capture image after multiple attempts");
         }
         return;
       }
@@ -72,45 +73,52 @@ export const FaceRegistrationModal: React.FC<FaceRegistrationModalProps> = ({
       setCapturedImageUrl(previewUrl);
       stopCamera();
 
-      // Register the face
-      console.log("[FaceRegistration] Registering face");
       const result = await registerFace(imageBlob);
 
       if (result.success) {
-        console.log("[FaceRegistration] Face registered successfully");
+        setFaceError(null);
         setStep("success");
         onSuccess?.();
       } else {
-        const failureMessage =
-          result.error || "Face registration failed. Please try again.";
-        console.error("[FaceRegistration] Registration failed:", failureMessage);
+        const failureMessage = getFriendlyFaceErrorMessage(
+          result.error || "Face registration failed. Please try again.",
+          result.code,
+        );
+        setFaceError(failureMessage);
         setStep("error");
-        onError?.(failureMessage);
       }
     } catch (err) {
-      console.error("[FaceRegistration] Capture/Register error:", err);
       setStep("error");
-      const errorMessage =
-        err instanceof Error ? err.message : "An unknown error occurred";
-      onError?.(errorMessage);
+      setFaceError(
+        err instanceof Error ? err.message : "An unknown error occurred",
+      );
     }
   }, [
     captureImage,
     registerFace,
     stopCamera,
     retryCount,
-    onError,
     onSuccess,
   ]);
 
   const handleRetry = useCallback(async () => {
-    setCapturedImageUrl(null);
-    reset();
-    await startCamera();
+    try {
+      setFaceError(null);
+      setCapturedImageUrl(null);
+      setStep("capture");
+      reset();
+      await startCamera();
+    } catch (err) {
+      setFaceError(
+        err instanceof Error ? err.message : "Unable to restart the camera.",
+      );
+      setStep("error");
+    }
   }, [startCamera, reset]);
 
   const handleClose = useCallback(() => {
     stopCamera();
+    setFaceError(null);
     setCapturedImageUrl(null);
     setStep("instruction");
     setRetryCount(0);
@@ -254,18 +262,8 @@ export const FaceRegistrationModal: React.FC<FaceRegistrationModalProps> = ({
                   Registration Failed
                 </h3>
                 <p className="text-sm text-gray-600 mb-3">
-                  {error || "An error occurred during face registration"}
+                  {faceError || "An error occurred during face registration"}
                 </p>
-                {debugInfo && (
-                  <details className="text-xs text-gray-500 bg-gray-100 p-2 rounded mb-3 max-h-24 overflow-y-auto">
-                    <summary className="cursor-pointer font-semibold mb-1">
-                      Debug Info
-                    </summary>
-                    <pre className="whitespace-pre-wrap break-words">
-                      {JSON.stringify(debugInfo, null, 2)}
-                    </pre>
-                  </details>
-                )}
               </div>
               <div className="flex gap-2">
                 <button

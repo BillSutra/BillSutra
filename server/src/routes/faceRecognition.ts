@@ -46,6 +46,11 @@ const uploadImage = (req: Request, res: Response, next: NextFunction) => {
       const invalidFileTypeError = err.code === "LIMIT_UNEXPECTED_FILE";
       return res.status(fileSizeError ? 413 : 400).json({
         success: false,
+        message: fileSizeError
+          ? "Image is too large. Please use an image smaller than 5MB."
+          : invalidFileTypeError
+            ? "Invalid file type. Please upload a JPG or PNG image."
+            : err.message,
         error: fileSizeError
           ? "Image is too large. Please use an image smaller than 5MB."
           : invalidFileTypeError
@@ -66,6 +71,7 @@ const uploadImage = (req: Request, res: Response, next: NextFunction) => {
 
     return res.status(400).json({
       success: false,
+      message: "Invalid upload request.",
       error: "Invalid upload request.",
       code: "INVALID_REQUEST",
     });
@@ -93,6 +99,13 @@ router.post(
 router.post("/authenticate", wrap(FaceRecognitionController.authenticateFace));
 
 /**
+ * Get registered face profile data
+ * GET /api/face
+ * Requires: Authentication
+ */
+router.get("/", AuthMiddleware, wrap(FaceRecognitionController.getFaceData));
+
+/**
  * Check Face Registration Status
  * GET /api/face/check
  * Requires: Authentication
@@ -102,6 +115,13 @@ router.get(
   AuthMiddleware,
   wrap(FaceRecognitionController.checkFaceRegistration),
 );
+
+/**
+ * Delete Face Data
+ * DELETE /api/face
+ * Requires: Authentication
+ */
+router.delete("/", AuthMiddleware, wrap(FaceRecognitionController.deleteFaceData));
 
 /**
  * Delete Face Data

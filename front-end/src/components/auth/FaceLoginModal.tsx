@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Camera, X, AlertCircle, Loader, ArrowLeft } from "lucide-react";
 import { useWebcam, useFaceAuthentication } from "@/hooks/useFaceRecognition";
+import { getFriendlyFaceErrorMessage } from "@/utils/faceErrorHandler";
 
 interface FaceLoginModalProps {
   isOpen: boolean;
@@ -12,27 +13,125 @@ interface FaceLoginModalProps {
   email?: string;
 }
 
-type FaceLoginStep = "email-input" | "instruction" | "capture" | "processing" | "success" | "error";
+type FaceLoginStep =
+  | "email-input"
+  | "instruction"
+  | "capture"
+  | "processing"
+  | "success"
+  | "error";
+
+type FaceFeedbackState =
+  | "detecting"
+  | "no-face-detected"
+  | "multiple-faces-detected"
+  | "low-light-warning"
+  | "retry-ready"
+  | "system-error"
+  | null;
+
 const GUIDE_WIDTH_RATIO = 0.62;
 const GUIDE_HEIGHT_RATIO = 0.78;
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_SECONDS = 30;
 
-/**
- * Face Authentication/Login Component
- * Allows users to login using facial recognition
- */
+const getFriendlyFaceFeedback = (
+  message?: string | null,
+  code?: string | null,
+): { faceError: string; faceFeedback: FaceFeedbackState } => {
+  const normalizedCode = code?.trim().toUpperCase() || "";
+  const normalizedMessage = getFriendlyFaceErrorMessage(message, code);
+  const lowerMessage = normalizedMessage.toLowerCase();
+
+  if (
+    normalizedCode === "FACE_NOT_DETECTED" ||
+    normalizedCode === "NO_FACE_DETECTED" ||
+    lowerMessage.includes("no face detected")
+  ) {
+    return {
+      faceError: "No face detected. Please keep your face centered.",
+      faceFeedback: "no-face-detected",
+    };
+  }
+
+  if (
+    normalizedCode === "MULTIPLE_FACES" ||
+    normalizedCode === "MULTIPLE_FACES_DETECTED" ||
+    lowerMessage.includes("multiple faces")
+  ) {
+    return {
+      faceError: "Multiple faces detected. Please ensure only your face is visible.",
+      faceFeedback: "multiple-faces-detected",
+    };
+  }
+
+  if (
+    normalizedCode === "LOW_LIGHT" ||
+    normalizedCode === "IMAGE_PROCESSING_ERROR" ||
+    lowerMessage.includes("clearer photo") ||
+    lowerMessage.includes("good lighting") ||
+    lowerMessage.includes("low light") ||
+    lowerMessage.includes("too dark")
+  ) {
+    return {
+      faceError:
+        "Low light warning: improve lighting and keep your face clearly visible.",
+      faceFeedback: "low-light-warning",
+    };
+  }
+
+  if (
+    normalizedCode === "REQUEST_TIMEOUT" ||
+    normalizedCode === "SERVICE_UNAVAILABLE" ||
+    normalizedCode === "INVALID_RESPONSE"
+  ) {
+    return {
+      faceError: normalizedMessage,
+      faceFeedback: "system-error",
+    };
+  }
+
+  return {
+    faceError: normalizedMessage,
+    faceFeedback: "retry-ready",
+  };
+};
+
+const getStatusCopy = (faceFeedback: FaceFeedbackState) => {
+  switch (faceFeedback) {
+    case "detecting":
+      return "Detecting face...";
+    case "no-face-detected":
+      return "No face detected";
+    case "multiple-faces-detected":
+      return "Multiple faces detected";
+    case "low-light-warning":
+      return "Low light warning";
+    case "retry-ready":
+      return "Please try again";
+    case "system-error":
+      return "Face system error";
+    default:
+      return null;
+  }
+};
+
 export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
-  onError,
+  onError: _onError,
   email: initialEmail,
 }) => {
-  const [step, setStep] = useState<FaceLoginStep>(initialEmail ? "instruction" : "email-input");
+  const [step, setStep] = useState<FaceLoginStep>(
+    initialEmail ? "instruction" : "email-input",
+  );
   const [email, setEmail] = useState(initialEmail || "");
   const [capturedImageUrl, setCapturedImageUrl] = useState<string | null>(null);
-  const [attemptsRemaining, setAttemptsRemaining] = useState(5);
-  const MAX_ATTEMPTS = 5;
-  const [inlineError, setInlineError] = useState<string | null>(null);
+  const [attemptsRemaining, setAttemptsRemaining] = useState(MAX_ATTEMPTS);
+  const [faceError, setFaceError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [faceFeedback, setFaceFeedback] = useState<FaceFeedbackState>(null);
   const [lockoutUntilMs, setLockoutUntilMs] = useState<number | null>(null);
   const [lockoutRemainingSec, setLockoutRemainingSec] = useState<number>(0);
   const lockoutWasActiveRef = useRef(false);
@@ -42,292 +141,362 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
   const isLockedOut =
     typeof lockoutUntilMs === "number" && Date.now() < lockoutUntilMs;
 
-  const normalizeInlineError = (value: unknown) => {
-    if (typeof value !== "string") return null;
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    return trimmed.startsWith("Error: ") ? trimmed.slice("Error: ".length) : trimmed;
-  };
+  const clearPreview = useCallback(() => {
+    setCapturedImageUrl((current) => {
+      if (current) {
+        URL.revokeObjectURL(current);
+      }
+      return null;
+    });
+  }, []);
+
+  const clearModalState = useCallback(() => {
+    setFaceError(null);
+    setFaceFeedback(null);
+    setLoading(false);
+  }, []);
+
+  const applyFaceFailure = useCallback(
+    (message?: string | null, code?: string | null) => {
+      const next = getFriendlyFaceFeedback(message, code);
+      setFaceError(next.faceError);
+      setFaceFeedback(next.faceFeedback);
+      setStep("error");
+    },
+    [],
+  );
 
   const { videoRef, isActive, startCamera, stopCamera, captureImage } =
     useWebcam({
       onError: (error) => {
-        console.warn("[FaceLogin] Webcam error:", error);
-        setInlineError(error);
-        setStep("error");
-        onError?.(error);
+        applyFaceFailure(error, "CAMERA_ERROR");
       },
     });
 
-  const { authenticateFace, isLoading, error, reset } =
-    useFaceAuthentication();
+  const { authenticateFace, reset } = useFaceAuthentication();
 
   const handleEmailSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
+      clearModalState();
 
       if (!email.trim()) {
-        onError?.("Please enter your email address");
+        setFaceError("Please enter your email address.");
+        setFaceFeedback("retry-ready");
         return;
       }
 
-      // Basic email validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email)) {
-        onError?.("Please enter a valid email address");
+      if (!emailRegex.test(email.trim())) {
+        setFaceError("Please enter a valid email address.");
+        setFaceFeedback("retry-ready");
         return;
       }
 
-      console.log("[FaceLogin] Email submitted:", email);
       setStep("instruction");
-      setInlineError(null);
       reset();
     },
-    [email, onError, reset]
+    [clearModalState, email, reset],
   );
 
   const handleStartCapture = useCallback(async () => {
     try {
-      if (isLockedOut) {
+      clearModalState();
+      clearPreview();
+      reset();
+
+      if (isLockedOut && lockoutUntilMs) {
         const remaining = Math.max(
           1,
-          Math.ceil((lockoutUntilMs! - Date.now()) / 1000),
+          Math.ceil((lockoutUntilMs - Date.now()) / 1000),
         );
-        setInlineError(
+        applyFaceFailure(
           `Too many failed attempts. Please wait ${remaining}s or use another login method.`,
+          "LOCKED_OUT",
         );
-        setStep("error");
         return;
       }
-      console.log("[FaceLogin] Starting camera");
+
       setStep("capture");
       setAttemptsRemaining(MAX_ATTEMPTS);
-      setCapturedImageUrl(null);
-      setInlineError(null);
-      reset();
       await startCamera();
-    } catch (err) {
-      console.error("[FaceLogin] Failed to start camera:", err);
-      setStep("error");
+    } catch (error) {
+      applyFaceFailure(
+        error instanceof Error ? error.message : "Unable to start the camera.",
+        "CAMERA_ERROR",
+      );
     }
-  }, [MAX_ATTEMPTS, isLockedOut, lockoutUntilMs, reset, startCamera]);
+  }, [
+    applyFaceFailure,
+    clearModalState,
+    clearPreview,
+    isLockedOut,
+    lockoutUntilMs,
+    reset,
+    startCamera,
+  ]);
+
+  const captureFromGuideBox = useCallback(async (): Promise<Blob | null> => {
+    if (
+      !videoRef.current ||
+      !isActive ||
+      !videoFrameRef.current ||
+      !guideBoxRef.current
+    ) {
+      return captureImage();
+    }
+
+    const video = videoRef.current;
+    const sourceWidth = video.videoWidth;
+    const sourceHeight = video.videoHeight;
+
+    if (!sourceWidth || !sourceHeight) {
+      return captureImage();
+    }
+
+    const frameRect = videoFrameRef.current.getBoundingClientRect();
+    const guideRect = guideBoxRef.current.getBoundingClientRect();
+    const frameWidth = frameRect.width;
+    const frameHeight = frameRect.height;
+
+    if (frameWidth <= 0 || frameHeight <= 0) {
+      return captureImage();
+    }
+
+    const coverScale = Math.max(
+      frameWidth / sourceWidth,
+      frameHeight / sourceHeight,
+    );
+    const renderedWidth = sourceWidth * coverScale;
+    const renderedHeight = sourceHeight * coverScale;
+    const overflowX = (renderedWidth - frameWidth) / 2;
+    const overflowY = (renderedHeight - frameHeight) / 2;
+
+    const guideXInFrame = guideRect.left - frameRect.left;
+    const guideYInFrame = guideRect.top - frameRect.top;
+    const guideWidth = guideRect.width;
+    const guideHeight = guideRect.height;
+
+    const sourceX = Math.max(
+      0,
+      Math.min(
+        sourceWidth - 1,
+        Math.floor((guideXInFrame + overflowX) / coverScale),
+      ),
+    );
+    const sourceY = Math.max(
+      0,
+      Math.min(
+        sourceHeight - 1,
+        Math.floor((guideYInFrame + overflowY) / coverScale),
+      ),
+    );
+    const cropWidth = Math.max(
+      1,
+      Math.min(sourceWidth - sourceX, Math.floor(guideWidth / coverScale)),
+    );
+    const cropHeight = Math.max(
+      1,
+      Math.min(sourceHeight - sourceY, Math.floor(guideHeight / coverScale)),
+    );
+
+    const canvas = document.createElement("canvas");
+    canvas.width = cropWidth;
+    canvas.height = cropHeight;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return captureImage();
+    }
+
+    context.drawImage(
+      video,
+      sourceX,
+      sourceY,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      cropWidth,
+      cropHeight,
+    );
+
+    return await new Promise<Blob | null>((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.9);
+    });
+  }, [captureImage, isActive, videoRef]);
 
   const handleCapture = useCallback(async () => {
-    const captureFromGuideBox = async (): Promise<Blob | null> => {
-      if (!videoRef.current || !isActive || !videoFrameRef.current || !guideBoxRef.current) {
-        return captureImage();
-      }
-
-      const video = videoRef.current;
-      const sourceWidth = video.videoWidth;
-      const sourceHeight = video.videoHeight;
-
-      if (!sourceWidth || !sourceHeight) {
-        return captureImage();
-      }
-
-      const frameRect = videoFrameRef.current.getBoundingClientRect();
-      const guideRect = guideBoxRef.current.getBoundingClientRect();
-      const frameWidth = frameRect.width;
-      const frameHeight = frameRect.height;
-
-      if (frameWidth <= 0 || frameHeight <= 0) {
-        return captureImage();
-      }
-
-      // Map the visual guide box to source pixels with object-cover math.
-      const coverScale = Math.max(frameWidth / sourceWidth, frameHeight / sourceHeight);
-      const renderedWidth = sourceWidth * coverScale;
-      const renderedHeight = sourceHeight * coverScale;
-      const overflowX = (renderedWidth - frameWidth) / 2;
-      const overflowY = (renderedHeight - frameHeight) / 2;
-
-      const guideXInFrame = guideRect.left - frameRect.left;
-      const guideYInFrame = guideRect.top - frameRect.top;
-      const guideWidth = guideRect.width;
-      const guideHeight = guideRect.height;
-
-      const sourceX = Math.max(
-        0,
-        Math.min(
-          sourceWidth - 1,
-          Math.floor((guideXInFrame + overflowX) / coverScale),
-        ),
-      );
-      const sourceY = Math.max(
-        0,
-        Math.min(
-          sourceHeight - 1,
-          Math.floor((guideYInFrame + overflowY) / coverScale),
-        ),
-      );
-      const cropWidth = Math.max(
-        1,
-        Math.min(
-          sourceWidth - sourceX,
-          Math.floor(guideWidth / coverScale),
-        ),
-      );
-      const cropHeight = Math.max(
-        1,
-        Math.min(
-          sourceHeight - sourceY,
-          Math.floor(guideHeight / coverScale),
-        ),
-      );
-
-      const canvas = document.createElement("canvas");
-      canvas.width = cropWidth;
-      canvas.height = cropHeight;
-
-      const context = canvas.getContext("2d");
-      if (!context) {
-        return captureImage();
-      }
-
-      context.drawImage(
-        video,
-        sourceX,
-        sourceY,
-        cropWidth,
-        cropHeight,
-        0,
-        0,
-        cropWidth,
-        cropHeight,
-      );
-
-      return await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.9);
-      });
-    };
+    if (loading) {
+      return;
+    }
 
     try {
-      console.log("[FaceLogin] Capturing image");
+      clearModalState();
+      setLoading(true);
+      setFaceFeedback("detecting");
+      setStep("processing");
+
       const imageBlob = await captureFromGuideBox();
 
       if (!imageBlob) {
-        console.warn("[FaceLogin] Failed to capture image");
-        setAttemptsRemaining((prev) => prev - 1);
-        if (attemptsRemaining <= 1) {
-          setStep("error");
-          onError?.("Failed to capture image after multiple attempts");
-        }
+        applyFaceFailure(
+          "No image was captured. Please capture your face again.",
+          "NO_FILE_UPLOADED",
+        );
+        setAttemptsRemaining((current) => Math.max(0, current - 1));
         return;
       }
 
-      // Create preview URL
-      const previewUrl = URL.createObjectURL(imageBlob);
-      setCapturedImageUrl(previewUrl);
-
-      // Start authentication
-      setStep("processing");
-      console.log("[FaceLogin] Authenticating face");
+      clearPreview();
+      setCapturedImageUrl(URL.createObjectURL(imageBlob));
       stopCamera();
-      const result = await authenticateFace(email, imageBlob);
+
+      const result = await authenticateFace(email.trim(), imageBlob);
 
       if (result.success && result.user && result.token) {
-        console.log("[FaceLogin] Authentication successful");
+        setFaceFeedback(null);
+        setFaceError(null);
         setStep("success");
         onSuccess?.({ user: result.user, token: result.token });
-      } else {
-        const authFailureMessage =
-          result.error || error || "Face authentication failed";
-        console.warn("[FaceLogin] Authentication failed:", authFailureMessage);
-        const displayMessage = normalizeInlineError(authFailureMessage);
-
-        const LOCKOUT_SECONDS = 30;
-        const remainingAttempts = attemptsRemaining - 1;
-        setAttemptsRemaining(Math.max(0, remainingAttempts));
-
-        if (remainingAttempts <= 0) {
-          const until = Date.now() + LOCKOUT_SECONDS * 1000;
-          setLockoutUntilMs(until);
-          setInlineError(
-            "Too many failed attempts. Please wait a moment or use another login method.",
-          );
-          setStep("error");
-          return;
-        }
-
-        // Go back to capture for retry (no more processing spinner)
-        setInlineError(
-          displayMessage ?? "Face could not be verified. Please try again.",
-        );
-        setCapturedImageUrl(null);
-        setStep("capture");
-        await startCamera();
+        return;
       }
-    } catch (err) {
-      console.error("[FaceLogin] Capture/Auth error:", err);
-      setStep("error");
-      const errorMessage =
-        err instanceof Error ? err.message : "An unknown error occurred";
-      setInlineError(errorMessage);
-      onError?.(errorMessage);
+
+      const remainingAttempts = attemptsRemaining - 1;
+      setAttemptsRemaining(Math.max(0, remainingAttempts));
+
+      if (remainingAttempts <= 0) {
+        setLockoutUntilMs(Date.now() + LOCKOUT_SECONDS * 1000);
+        applyFaceFailure(
+          "Too many failed attempts. Please wait a moment or use another login method.",
+          result.code || "LOCKED_OUT",
+        );
+        return;
+      }
+
+      const next = getFriendlyFaceFeedback(
+        result.error || "Face verification failed.",
+        result.code,
+      );
+      setFaceError(next.faceError);
+      setFaceFeedback(next.faceFeedback);
+      setStep("capture");
+
+      try {
+        await startCamera();
+      } catch (error) {
+        applyFaceFailure(
+          error instanceof Error ? error.message : next.faceError,
+          result.code || "CAMERA_ERROR",
+        );
+      }
+    } catch (error) {
+      applyFaceFailure(
+        error instanceof Error ? error.message : "Something went wrong.",
+        "INTERNAL_SERVER_ERROR",
+      );
+    } finally {
+      setLoading(false);
     }
   }, [
-    captureImage,
+    loading,
+    clearModalState,
+    captureFromGuideBox,
+    clearPreview,
+    stopCamera,
     authenticateFace,
     email,
-    attemptsRemaining,
-    error,
-    onError,
     onSuccess,
-    stopCamera,
+    attemptsRemaining,
+    applyFaceFailure,
     startCamera,
-    isActive,
-    videoRef,
   ]);
 
   const handleRetry = useCallback(async () => {
-    if (isLockedOut) {
-      const remaining = Math.max(
-        1,
-        Math.ceil((lockoutUntilMs! - Date.now()) / 1000),
+    try {
+      if (isLockedOut && lockoutUntilMs) {
+        const remaining = Math.max(
+          1,
+          Math.ceil((lockoutUntilMs - Date.now()) / 1000),
+        );
+        applyFaceFailure(
+          `Too many failed attempts. Please wait ${remaining}s or use another login method.`,
+          "LOCKED_OUT",
+        );
+        return;
+      }
+
+      clearModalState();
+      clearPreview();
+      reset();
+      setStep("capture");
+      await startCamera();
+    } catch (error) {
+      applyFaceFailure(
+        error instanceof Error ? error.message : "Unable to restart camera.",
+        "CAMERA_ERROR",
       );
-      setInlineError(
-        `Too many failed attempts. Please wait ${remaining}s or use another login method.`,
-      );
-      setStep("error");
-      return;
     }
-    setCapturedImageUrl(null);
-    setInlineError(null);
-    reset();
-    setStep("capture");
-    await startCamera();
-  }, [isLockedOut, lockoutUntilMs, reset, startCamera]);
+  }, [
+    applyFaceFailure,
+    clearModalState,
+    clearPreview,
+    isLockedOut,
+    lockoutUntilMs,
+    reset,
+    startCamera,
+  ]);
 
   const handleBackToEmail = useCallback(() => {
     stopCamera();
-    setCapturedImageUrl(null);
-    setInlineError(null);
+    clearPreview();
+    clearModalState();
     setStep("email-input");
     reset();
-  }, [stopCamera, reset]);
+  }, [clearModalState, clearPreview, reset, stopCamera]);
 
   const handleClose = useCallback(() => {
     stopCamera();
-    setCapturedImageUrl(null);
-    setInlineError(null);
+    clearPreview();
+    clearModalState();
     setStep(initialEmail ? "instruction" : "email-input");
     setEmail(initialEmail || "");
     setAttemptsRemaining(MAX_ATTEMPTS);
+    setLockoutUntilMs(null);
     reset();
     onClose();
-  }, [stopCamera, reset, onClose, initialEmail]);
+  }, [
+    stopCamera,
+    clearPreview,
+    clearModalState,
+    initialEmail,
+    reset,
+    onClose,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      clearPreview();
+    };
+  }, [clearPreview]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setEmail(initialEmail || "");
+      setStep(initialEmail ? "instruction" : "email-input");
+    }
+  }, [initialEmail, isOpen]);
 
   useEffect(() => {
     if (!isLockedOut || !lockoutUntilMs) {
       setLockoutRemainingSec(0);
       if (lockoutWasActiveRef.current) {
         lockoutWasActiveRef.current = false;
-        // Cooldown ended; return user to normal login options.
         handleClose();
       }
       return;
     }
+
     lockoutWasActiveRef.current = true;
 
     const update = () => {
@@ -344,9 +513,8 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
     update();
     const interval = window.setInterval(update, 250);
     return () => window.clearInterval(interval);
-  }, [isLockedOut, lockoutUntilMs]);
+  }, [handleClose, isLockedOut, lockoutUntilMs]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (isOpen === false) {
@@ -357,39 +525,55 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
 
   if (!isOpen) return null;
 
+  const statusCopy = getStatusCopy(faceFeedback);
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold flex items-center gap-2">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b p-6">
+          <h2 className="flex items-center gap-2 text-xl font-semibold">
             {step !== "email-input" && step !== "instruction" && (
               <button
                 onClick={handleBackToEmail}
-                className="p-1 hover:bg-gray-100 rounded-lg transition mr-1"
+                className="mr-1 rounded-lg p-1 transition hover:bg-gray-100"
                 aria-label="Back"
               >
-                <ArrowLeft className="w-4 h-4" />
+                <ArrowLeft className="h-4 w-4" />
               </button>
             )}
-            <Camera className="w-5 h-5" />
+            <Camera className="h-5 w-5" />
             Face Login
           </h2>
           <button
             onClick={handleClose}
-            className="p-1 hover:bg-gray-100 rounded-lg transition"
+            className="rounded-lg p-1 transition hover:bg-gray-100"
             aria-label="Close"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* Content */}
         <div className="p-6">
+          {faceError ? (
+            <div className="mb-4 rounded-md border border-red-200 bg-red-100 p-3 text-sm text-red-600">
+              {statusCopy ? <p className="mb-1 font-medium">{statusCopy}</p> : null}
+              <p>{faceError}</p>
+            </div>
+          ) : null}
+
+          {!faceError && statusCopy && step === "processing" ? (
+            <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-700">
+              {statusCopy}
+            </div>
+          ) : null}
+
           {step === "email-input" && (
             <form onSubmit={handleEmailSubmit} className="space-y-4">
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+                <label
+                  htmlFor="email"
+                  className="mb-2 block text-sm font-medium text-gray-700"
+                >
                   Email Address
                 </label>
                 <input
@@ -398,21 +582,21 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="your@email.com"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2 outline-none focus:border-transparent focus:ring-2 focus:ring-blue-500"
                   autoFocus
                 />
               </div>
               <button
                 type="submit"
-                className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center gap-2"
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 py-2 font-medium text-white transition hover:bg-blue-700"
               >
-                <Camera className="w-4 h-4" />
+                <Camera className="h-4 w-4" />
                 Continue with Face
               </button>
               <button
                 type="button"
                 onClick={handleClose}
-                className="w-full bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition font-medium"
+                className="w-full rounded-lg bg-gray-300 py-2 font-medium text-gray-700 transition hover:bg-gray-400"
               >
                 Cancel
               </button>
@@ -421,32 +605,34 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
 
           {step === "instruction" && (
             <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h3 className="font-semibold text-blue-900 mb-2">Get Ready</h3>
-                <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+                <h3 className="mb-2 font-semibold text-blue-900">Get Ready</h3>
+                <ul className="list-inside list-disc space-y-1 text-sm text-blue-800">
                   <li>Ensure good lighting on your face</li>
                   <li>Position your face 12-18 inches from camera</li>
                   <li>Keep your face straight and centered</li>
                   <li>Make sure your face matches your registration photo</li>
                 </ul>
               </div>
-              <div className="bg-gray-50 p-3 rounded-lg">
-                <p className="text-sm font-medium text-gray-900 mb-1">Logging in as:</p>
-                <p className="text-sm text-gray-600 break-all">{email}</p>
+              <div className="rounded-lg bg-gray-50 p-3">
+                <p className="mb-1 text-sm font-medium text-gray-900">
+                  Logging in as:
+                </p>
+                <p className="break-all text-sm text-gray-600">{email}</p>
               </div>
               <button
-                onClick={handleStartCapture}
+                onClick={() => void handleStartCapture()}
                 disabled={isLockedOut}
-                className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-medium flex items-center justify-center gap-2"
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 py-2 font-medium text-white transition hover:bg-green-700 disabled:bg-gray-400"
               >
-                <Camera className="w-4 h-4" />
+                <Camera className="h-4 w-4" />
                 {isLockedOut && lockoutRemainingSec > 0
                   ? `Locked (${lockoutRemainingSec}s)`
                   : "Start Camera"}
               </button>
               <button
                 onClick={handleBackToEmail}
-                className="w-full bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition font-medium"
+                className="w-full rounded-lg bg-gray-300 py-2 font-medium text-gray-700 transition hover:bg-gray-400"
               >
                 Use Different Email
               </button>
@@ -455,21 +641,15 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
 
           {step === "capture" && (
             <div className="space-y-4">
-              {inlineError ? (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  {inlineError}
-                </div>
-              ) : null}
-              {/* Video Feed */}
               <div
                 ref={videoFrameRef}
-                className="relative w-full aspect-video bg-black rounded-lg overflow-hidden"
+                className="relative aspect-video w-full overflow-hidden rounded-lg bg-black"
               >
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
-                  className="w-full h-full object-cover transform -scale-x-100"
+                  className="h-full w-full -scale-x-100 object-cover"
                 />
                 <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                   <div
@@ -483,42 +663,40 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
                 </div>
                 {!isActive && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                    <Loader className="w-8 h-8 text-white animate-spin" />
+                    <Loader className="h-8 w-8 animate-spin text-white" />
                   </div>
                 )}
               </div>
 
-              {/* Instructions */}
-              <p className="text-sm text-gray-600 text-center">
+              <p className="text-center text-sm text-gray-600">
                 Keep your full face inside the box, then click "Verify Face".
               </p>
 
-              <p className="text-xs text-gray-500 text-center">
+              <p className="text-center text-xs text-gray-500">
                 Attempts remaining: {attemptsRemaining}
               </p>
 
-              {/* Buttons */}
               <div className="flex flex-col gap-2">
                 <button
-                  onClick={handleCapture}
-                  disabled={!isActive || isLoading}
-                  className="w-full bg-green-600 text-white py-2 rounded-lg hover:bg-green-700 transition font-medium disabled:bg-gray-400 flex items-center justify-center gap-2"
+                  onClick={() => void handleCapture()}
+                  disabled={!isActive || loading}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-green-600 py-2 font-medium text-white transition hover:bg-green-700 disabled:bg-gray-400"
                 >
-                  {isLoading ? (
+                  {loading ? (
                     <>
-                      <Loader className="w-4 h-4 animate-spin" />
-                      Verifying...
+                      <Loader className="h-4 w-4 animate-spin" />
+                      Detecting face...
                     </>
                   ) : (
                     <>
-                      <Camera className="w-4 h-4" />
+                      <Camera className="h-4 w-4" />
                       Verify Face
                     </>
                   )}
                 </button>
                 <button
                   onClick={handleClose}
-                  className="w-full bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition font-medium"
+                  className="w-full rounded-lg bg-gray-300 py-2 font-medium text-gray-700 transition hover:bg-gray-400"
                 >
                   Cancel
                 </button>
@@ -527,31 +705,33 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
           )}
 
           {step === "processing" && (
-            <div className="space-y-4 text-center py-8">
-              <Loader className="w-12 h-12 text-blue-600 animate-spin mx-auto" />
+            <div className="space-y-4 py-8 text-center">
+              <Loader className="mx-auto h-12 w-12 animate-spin text-blue-600" />
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">Verifying Face</h3>
+                <h3 className="mb-1 font-semibold text-gray-900">
+                  Detecting face...
+                </h3>
                 <p className="text-sm text-gray-600">
-                  This should only take a few seconds...
+                  This should only take a few seconds.
                 </p>
               </div>
-              {capturedImageUrl && (
-                <div className="relative w-20 h-24 mx-auto rounded-lg overflow-hidden border-2 border-blue-600">
+              {capturedImageUrl ? (
+                <div className="relative mx-auto h-24 w-20 overflow-hidden rounded-lg border-2 border-blue-600">
                   <img
                     src={capturedImageUrl}
                     alt="Captured face"
-                    className="w-full h-full object-cover"
+                    className="h-full w-full object-cover"
                   />
                 </div>
-              )}
+              ) : null}
             </div>
           )}
 
           {step === "success" && (
-            <div className="space-y-4 text-center py-8">
-              <div className="text-4xl">✅</div>
+            <div className="space-y-4 py-8 text-center">
+              <div className="text-4xl">Success</div>
               <div>
-                <h3 className="font-semibold text-gray-900 mb-1">
+                <h3 className="mb-1 font-semibold text-gray-900">
                   Login Successful
                 </h3>
                 <p className="text-sm text-gray-600">
@@ -563,18 +743,17 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
 
           {step === "error" && (
             <div className="space-y-4">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto">
-                <AlertCircle className="w-6 h-6 text-red-600" />
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                <AlertCircle className="h-6 w-6 text-red-600" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900 mb-2">
+                <h3 className="mb-2 font-semibold text-gray-900">
                   {attemptsRemaining <= 0
                     ? "Maximum Attempts Reached"
-                    : "Face Not Recognized"}
+                    : "Face Verification Failed"}
                 </h3>
-                <p className="text-sm text-gray-600 mb-3">
-                  {inlineError ||
-                    error ||
+                <p className="mb-3 text-sm text-gray-600">
+                  {faceError ||
                     (attemptsRemaining <= 0
                       ? "You have exceeded the maximum number of attempts. Please try again later or use another login method."
                       : "Your face could not be verified. Please try again.")}
@@ -584,20 +763,24 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
                     You can try again in {lockoutRemainingSec}s.
                   </p>
                 ) : null}
-                {/* Debug info intentionally hidden in UI */}
+                {attemptsRemaining > 0 ? (
+                  <p className="text-xs text-gray-500">
+                    Attempts remaining: {attemptsRemaining}
+                  </p>
+                ) : null}
               </div>
               <div className="flex gap-2">
-                {attemptsRemaining > 0 && !isLockedOut && (
+                {attemptsRemaining > 0 && !isLockedOut ? (
                   <button
-                    onClick={handleRetry}
-                    className="flex-1 bg-yellow-600 text-white py-2 rounded-lg hover:bg-yellow-700 transition font-medium"
+                    onClick={() => void handleRetry()}
+                    className="flex-1 rounded-lg bg-yellow-600 py-2 font-medium text-white transition hover:bg-yellow-700"
                   >
                     Try Again
                   </button>
-                )}
+                ) : null}
                 <button
                   onClick={handleClose}
-                  className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition font-medium"
+                  className="flex-1 rounded-lg bg-gray-300 py-2 font-medium text-gray-700 transition hover:bg-gray-400"
                 >
                   Cancel
                 </button>

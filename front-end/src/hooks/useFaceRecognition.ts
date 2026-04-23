@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { apiClient } from "@/lib/apiClient";
+import { normalizeFaceError } from "@/utils/faceErrorHandler";
 
 interface UseWebcamOptions {
   autoStart?: boolean;
@@ -33,8 +34,6 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
 
   const startCamera = useCallback(async () => {
     try {
-      console.log("[Webcam] Requesting camera access");
-
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 640 },
@@ -44,13 +43,10 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
         audio: false,
       });
 
-      console.log("[Webcam] Camera access granted");
-
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
         videoRef.current.onloadedmetadata = () => {
           setIsActive(true);
-          console.log("[Webcam] Video stream is active");
         };
       }
 
@@ -66,19 +62,15 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
               : `Camera error: ${error.message}`
           : "Failed to access camera";
 
-      console.error("[Webcam] Error:", errorMessage, error);
       onErrorRef.current?.(errorMessage);
       setIsActive(false);
     }
   }, []);
 
   const stopCamera = useCallback(() => {
-    console.log("[Webcam] Stopping camera");
-
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => {
         track.stop();
-        console.log(`[Webcam] Stopped ${track.kind} track`);
       });
       streamRef.current = null;
     }
@@ -93,14 +85,11 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
 
   const captureImage = useCallback(async (): Promise<Blob | null> => {
     if (!videoRef.current || !isActive) {
-      console.error("[Webcam] Cannot capture: video not ready");
-      onError?.("Camera is not ready. Please wait a moment.");
+      onErrorRef.current?.("Camera is not ready. Please wait a moment.");
       return null;
     }
 
     try {
-      console.log("[Webcam] Capturing image");
-
       const canvas = document.createElement("canvas");
       canvas.width = videoRef.current.videoWidth;
       canvas.height = videoRef.current.videoHeight;
@@ -115,11 +104,6 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
       return new Promise((resolve) => {
         canvas.toBlob(
           (blob) => {
-            if (blob) {
-              console.log(`[Webcam] Image captured. Size: ${blob.size} bytes`);
-            } else {
-              console.error("[Webcam] Failed to create image blob");
-            }
             resolve(blob);
           },
           "image/jpeg",
@@ -129,7 +113,6 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to capture image";
-      console.error("[Webcam] Capture error:", errorMessage, error);
       onErrorRef.current?.(`Image capture failed: ${errorMessage}`);
       return null;
     }
@@ -326,28 +309,19 @@ export const useFaceRegistration = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(
-    null,
-  );
 
   const registerFace = useCallback(
     async (
       imageBlob: Blob,
-    ): Promise<{ success: boolean; error?: string }> => {
+    ): Promise<{ success: boolean; error?: string; code?: string }> => {
       setIsLoading(true);
       setError(null);
       setSuccess(false);
-      setDebugInfo(null);
 
       const maxAttempts = 2;
       let attempt = 0;
 
       try {
-        console.log("[Face Register] Starting registration", {
-          imageSize: imageBlob.size,
-          imageType: imageBlob.type,
-        });
-
         const formData = new FormData();
         formData.append("image", imageBlob, "face.jpg");
 
@@ -363,22 +337,27 @@ export const useFaceRegistration = () => {
             const payload = data?.data;
 
             if (!data?.success || !payload) {
-              throw new Error(
-                data?.error || data?.message || "Face registration failed.",
-              );
+              const normalizedError = normalizeFaceError({
+                message: data?.message,
+                error: data?.error,
+                code: data?.code,
+                status:
+                  typeof response.status === "number"
+                    ? response.status
+                    : undefined,
+              });
+              setError(normalizedError.message);
+              return {
+                success: false,
+                error: normalizedError.message,
+                code: normalizedError.code,
+              };
             }
 
-            console.log("[Face Register] Success:", data);
-
             setSuccess(true);
-            setDebugInfo({
-              faces_detected: payload?.faces_detected,
-              processing_time_ms: payload?.processing_time_ms,
-              code: data?.code,
-            });
 
             return { success: true };
-          } catch (err: any) {
+          } catch (err) {
             const errorInfo = extractErrorInfo(err);
             const shouldRetry =
               attempt < maxAttempts &&
@@ -387,13 +366,14 @@ export const useFaceRegistration = () => {
                 errorInfo.code === "REQUEST_TIMEOUT" ||
                 errorInfo.isServerError);
 
-            console.error(
-              "[Face Register] Attempt failed:",
-              toLoggableError(err),
-            );
-
             if (!shouldRetry) {
-              throw err;
+              const normalizedError = normalizeFaceError(err);
+              setError(normalizedError.message);
+              return {
+                success: false,
+                error: normalizedError.message,
+                code: normalizedError.code,
+              };
             }
 
             await new Promise((resolve) => setTimeout(resolve, 500));
@@ -401,35 +381,14 @@ export const useFaceRegistration = () => {
         }
 
         return { success: false, error: "Face registration failed." };
-      } catch (err: any) {
-        const errorInfo = extractErrorInfo(err);
-        const loggableError = toLoggableError(err);
-
-        console.error("[Face Register] Error:", {
-          extractedMessage: errorInfo.message,
-          status: errorInfo.status,
-          code: errorInfo.code,
-          responseData: errorInfo.responseData,
-          details: errorInfo.details,
-          isServerError: errorInfo.isServerError,
-          originalError: loggableError,
-        });
-
-        console.error("[Face Register] Full error:", loggableError);
-
+      } catch (err) {
+        const errorInfo = normalizeFaceError(err);
         setError(errorInfo.message);
-        setDebugInfo({
-          status: errorInfo.status,
-          code: errorInfo.code,
-          response: errorInfo.responseData,
-          details: errorInfo.details,
-          isServerError: errorInfo.isServerError,
-          originalMessage: err?.message,
-        });
 
         return {
           success: false,
           error: errorInfo.message,
+          code: errorInfo.code,
         };
       } finally {
         setIsLoading(false);
@@ -441,7 +400,6 @@ export const useFaceRegistration = () => {
   const reset = useCallback(() => {
     setError(null);
     setSuccess(false);
-    setDebugInfo(null);
   }, []);
 
   return {
@@ -449,7 +407,6 @@ export const useFaceRegistration = () => {
     isLoading,
     error,
     success,
-    debugInfo,
     reset,
   };
 };
@@ -460,9 +417,6 @@ export const useFaceRegistration = () => {
 export const useFaceAuthentication = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(
-    null,
-  );
 
   const authenticateFace = useCallback(
     async (
@@ -473,17 +427,14 @@ export const useFaceAuthentication = () => {
       user?: any;
       token?: string;
       error?: string;
+      code?: string;
+      status?: number;
+      details?: unknown;
     }> => {
       setIsLoading(true);
       setError(null);
-      setDebugInfo(null);
 
       try {
-        console.log("[Face Auth] Starting authentication", {
-          email,
-          imageSize: imageBlob.size,
-        });
-
         const reader = new FileReader();
         const imageBase64 = await new Promise<string>((resolve, reject) => {
           reader.onload = () => resolve(reader.result as string);
@@ -497,14 +448,22 @@ export const useFaceAuthentication = () => {
         });
 
         const data = response.data;
-        console.log("[Face Auth] Response:", data);
 
         if (!data?.success || !data?.data) {
-          const errorMsg =
-            data?.error || data?.message || "Face authentication failed.";
-          setError(errorMsg);
-          setDebugInfo({ response: data });
-          return { success: false, error: errorMsg };
+          const normalizedError = normalizeFaceError({
+            message: data?.message,
+            error: data?.error,
+            code: data?.code,
+            status:
+              typeof response.status === "number" ? response.status : undefined,
+          });
+          setError(normalizedError.message);
+          return {
+            success: false,
+            error: normalizedError.message,
+            code: normalizedError.code,
+            status: normalizedError.status,
+          };
         }
 
         const payload = data.data;
@@ -514,52 +473,35 @@ export const useFaceAuthentication = () => {
           typeof payload?.token !== "string" ||
           !payload.token.trim()
         ) {
-          const errorMsg = "Face authentication response was incomplete.";
-          console.warn("[Face Auth] Missing user/token in response");
-          setError(errorMsg);
-          setDebugInfo({ payload });
-          return { success: false, error: errorMsg };
+          const normalizedError = normalizeFaceError({
+            message: "Face authentication response was incomplete.",
+            code: "INVALID_RESPONSE",
+            status:
+              typeof response.status === "number" ? response.status : undefined,
+          });
+          setError(normalizedError.message);
+          return {
+            success: false,
+            error: normalizedError.message,
+            code: normalizedError.code,
+            status: normalizedError.status,
+          };
         }
 
-        setDebugInfo({
-          matched: payload.matched,
-          confidence: payload.confidence,
-          distance: payload.distance,
-        });
-
-        console.log("[Face Auth] Success");
         return {
           success: true,
           user: payload.user,
           token: payload.token,
         };
       } catch (err: any) {
-        const errorInfo = extractErrorInfo(err);
-
-        console.error(
-          "[Face Auth] Full error:",
-          toLoggableError(err),
-        );
-
-        console.error("[Face Auth] Error:", {
-          extractedMessage: errorInfo.message,
-          status: errorInfo.status,
-          code: errorInfo.code,
-          responseData: errorInfo.responseData,
-          originalError: err,
-        });
-
+        const errorInfo = normalizeFaceError(err);
         setError(errorInfo.message);
-        setDebugInfo({
-          status: errorInfo.status,
-          code: errorInfo.code,
-          response: errorInfo.responseData,
-          details: errorInfo.details,
-        });
 
         return {
           success: false,
           error: errorInfo.message,
+          code: errorInfo.code,
+          status: errorInfo.status,
         };
       } finally {
         setIsLoading(false);
@@ -570,14 +512,12 @@ export const useFaceAuthentication = () => {
 
   const reset = useCallback(() => {
     setError(null);
-    setDebugInfo(null);
   }, []);
 
   return {
     authenticateFace,
     isLoading,
     error,
-    debugInfo,
     reset,
   };
 };
