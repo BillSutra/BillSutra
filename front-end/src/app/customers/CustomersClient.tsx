@@ -32,13 +32,13 @@ import Modal from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { generateInvoicePdf } from "@/lib/pdf/generateInvoicePdf";
 import { cn } from "@/lib/utils";
 import type {
   Customer,
   CustomerLedger,
   CustomerPaymentTerms,
 } from "@/lib/apiClient";
+import { downloadCustomerLedgerPdf } from "@/lib/apiClient";
 import {
   INDIAN_STATES,
   formatBusinessAddress,
@@ -277,98 +277,6 @@ const getCustomerDisplayName = (customer: Customer) =>
       customer.display_name ||
       customer.name
     : customer.display_name || customer.name;
-
-const buildStatementHtml = ({
-  customer,
-  ledger,
-  formatCurrency,
-  formatDate,
-  t,
-}: {
-  customer: Customer;
-  ledger: CustomerLedger;
-  formatCurrency: ReturnType<typeof useI18n>["formatCurrency"];
-  formatDate: ReturnType<typeof useI18n>["formatDate"];
-  t: ReturnType<typeof useI18n>["t"];
-}) => {
-  const customerDisplayName = getCustomerDisplayName(customer);
-  const customerAddress =
-    formatCustomerAddressFromRecord(customer) ||
-    customer.address ||
-    t("customersPage.ledger.addressFallback");
-
-  const escapeHtml = (value: string) =>
-    value
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;")
-      .replaceAll("'", "&#39;");
-
-  const rows = ledger.entries
-    .map(
-      (entry) => `
-        <tr>
-          <td>${escapeHtml(formatActivityDate(entry.date, formatDate))}</td>
-          <td>${escapeHtml(entry.description)}</td>
-          <td>${escapeHtml(entry.note ?? "-")}</td>
-          <td>${escapeHtml(formatCurrency(entry.debit, "INR"))}</td>
-          <td>${escapeHtml(formatCurrency(entry.credit, "INR"))}</td>
-          <td>${escapeHtml(formatCurrency(entry.balance, "INR"))}</td>
-        </tr>
-      `,
-    )
-    .join("");
-
-  return `
-    <html>
-      <head>
-        <title>${escapeHtml(
-          t("customersPage.statement.documentTitle", {
-            name: customerDisplayName,
-          }),
-        )}</title>
-        <style>
-          body { font-family: Arial, sans-serif; padding: 32px; color: #1f1b16; }
-          h1, h2, p { margin: 0; }
-          .meta { margin-top: 8px; color: #5f5a55; }
-          .summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 24px 0; }
-          .card { border: 1px solid #e7ded1; border-radius: 16px; padding: 16px; background: #fcfaf6; }
-          .label { font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #8a6b45; }
-          .value { margin-top: 8px; font-size: 22px; font-weight: 700; }
-          table { width: 100%; border-collapse: collapse; margin-top: 24px; font-size: 14px; }
-          th, td { border: 1px solid #ece4d8; padding: 10px 12px; text-align: left; vertical-align: top; }
-          th { background: #f8f2e8; }
-        </style>
-      </head>
-      <body>
-        <p class="label">${escapeHtml(t("customersPage.statement.heading"))}</p>
-        <h1 style="margin-top: 8px;">${escapeHtml(customerDisplayName)}</h1>
-        <p class="meta">${escapeHtml(customer.phone ?? t("customersPage.ledger.phoneFallback"))} | ${escapeHtml(customerAddress)}</p>
-        <p class="meta">${escapeHtml(
-          t("customersPage.statement.generatedOn", {
-            date: formatDate(new Date(), {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            }),
-          }),
-        )}</p>
-        <div class="summary">
-          <div class="card"><p class="label">${escapeHtml(t("customersPage.statement.totalDue"))}</p><p class="value">${escapeHtml(formatCurrency(ledger.summary.outstandingBalance, "INR"))}</p></div>
-          <div class="card"><p class="label">${escapeHtml(t("customersPage.statement.totalBilled"))}</p><p class="value">${escapeHtml(formatCurrency(ledger.summary.totalBilled, "INR"))}</p></div>
-          <div class="card"><p class="label">${escapeHtml(t("customersPage.statement.totalPaid"))}</p><p class="value">${escapeHtml(formatCurrency(ledger.summary.totalPaid, "INR"))}</p></div>
-        </div>
-        <table>
-          <thead>
-            <tr><th>${escapeHtml(t("customersPage.ledger.columns.date"))}</th><th>${escapeHtml(t("customersPage.ledger.columns.description"))}</th><th>${escapeHtml(t("customersPage.ledger.columns.note"))}</th><th>${escapeHtml(t("customersPage.ledger.columns.debit"))}</th><th>${escapeHtml(t("customersPage.ledger.columns.credit"))}</th><th>${escapeHtml(t("customersPage.ledger.columns.balance"))}</th></tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </body>
-    </html>
-  `;
-};
 
 const CustomersClient = ({ name, image }: CustomersClientProps) => {
   const router = useRouter();
@@ -955,55 +863,19 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     setIsPrintingStatement(true);
 
     try {
-      const statementHtml = buildStatementHtml({
-        customer: selectedCustomer,
-        ledger,
-        formatCurrency,
-        formatDate,
-        t,
-      });
-      const parsedDocument = new DOMParser().parseFromString(
-        statementHtml,
-        "text/html",
+      const { blob, fileName } = await downloadCustomerLedgerPdf(
+        selectedCustomer.id,
       );
-      const styleContent =
-        parsedDocument.querySelector("style")?.textContent ?? "";
-
-      const exportRoot = document.createElement("div");
-      exportRoot.style.position = "fixed";
-      exportRoot.style.left = "-99999px";
-      exportRoot.style.top = "0";
-      exportRoot.style.width = "794px";
-      exportRoot.style.background = "#ffffff";
-      exportRoot.style.padding = "0";
-      exportRoot.style.zIndex = "-1";
-      exportRoot.setAttribute("aria-hidden", "true");
-      exportRoot.innerHTML = `
-        <style>${styleContent}</style>
-        <div class="customer-statement-export">
-          ${parsedDocument.body.innerHTML}
-        </div>
-      `;
-
-      document.body.appendChild(exportRoot);
-
-      try {
-        const statementCustomerName = getCustomerDisplayName(selectedCustomer);
-
-        await generateInvoicePdf({
-          element: exportRoot,
-          fileName: `${
-            statementCustomerName
-              .replace(/[^a-z0-9]+/gi, "-")
-              .replace(/^-+|-+$/g, "")
-              .toLowerCase() || "customer"
-          }-statement.pdf`,
-          imageType: "png",
-          quality: 1,
-        });
-      } finally {
-        exportRoot.remove();
-      }
+      const blobUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      toast.error(t("invoice.pdfError"));
     } finally {
       setIsPrintingStatement(false);
     }

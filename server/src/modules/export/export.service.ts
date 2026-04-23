@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import prisma from "../../config/db.config.js";
 import { sendEmail } from "../../emails/index.js";
 import XLSX from "xlsx";
-import puppeteer from "puppeteer";
+import { launchPuppeteerBrowser } from "../../lib/launchPuppeteerBrowser.js";
 
 export type ExportResource = "products" | "customers" | "invoices";
 export type ExportFormat = "csv" | "xlsx" | "pdf" | "json";
@@ -593,7 +593,7 @@ const createPdfBuffer = async <TRecord>(
   records: TRecord[],
   fields: ExportFieldDefinition<TRecord>[],
 ) => {
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await launchPuppeteerBrowser();
 
   try {
     const page = await browser.newPage();

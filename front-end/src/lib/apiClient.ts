@@ -2292,6 +2292,23 @@ export const fetchCustomerLedger = async (
   };
 };
 
+export const downloadCustomerLedgerPdf = async (customerId: number) => {
+  const response = await apiClient.get(`/customers/${customerId}/ledger/pdf`, {
+    responseType: "blob",
+  });
+
+  const dispositionHeader = response.headers["content-disposition"];
+  const fileNameMatch =
+    typeof dispositionHeader === "string"
+      ? dispositionHeader.match(/filename="?([^"]+)"?/)
+      : null;
+
+  return {
+    blob: response.data as Blob,
+    fileName: fileNameMatch?.[1] || `customer-${customerId}-ledger.pdf`,
+  };
+};
+
 export const fetchCategories = async (): Promise<Category[]> => {
   const response = await apiClient.get("/categories");
   return response.data.data as Category[];
