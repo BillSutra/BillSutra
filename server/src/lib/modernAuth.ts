@@ -3,7 +3,7 @@ import type { Request } from "express";
 import { AuthMethod, Prisma } from "@prisma/client";
 import { isoBase64URL } from "@simplewebauthn/server/helpers";
 import prisma from "../config/db.config.js";
-import { sendEmail } from "../emails/index.js";
+import { sendOtpEmail } from "../services/mailService.js";
 
 const DEFAULT_RP_NAME = "Billsutra";
 const DEFAULT_ORIGIN = "http://localhost:3000";
@@ -198,11 +198,24 @@ export const sendOtpLoginEmail = async ({
   expiresInMinutes: number;
   resendInSeconds: number;
 }) => {
-  await sendEmail("otp_login", {
-    email,
-    user_name: name?.trim() || "there",
-    code,
-    expires_in_minutes: expiresInMinutes,
-    resend_in_seconds: resendInSeconds,
+  const safeName = name?.trim() || "there";
+  const result = await sendOtpEmail({
+    to: email,
+    data: {
+      otp: code,
+      expiresInMinutes,
+      brandName: "BillSutra",
+    },
   });
+
+  if (!result.success) {
+    const detail = result.error?.message || "Unable to send login code email.";
+    throw new Error(detail);
+  }
+
+  return {
+    recipient: email,
+    userName: safeName,
+    resendInSeconds,
+  };
 };

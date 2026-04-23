@@ -1,4 +1,4 @@
-import type { Attachment } from "resend";
+import type { MailAttachment } from "../services/mailService.js";
 
 export type EmailMessage = {
   to: string | string[];
@@ -6,7 +6,7 @@ export type EmailMessage = {
   html: string;
   text: string;
   replyTo?: string | string[];
-  attachments?: Attachment[];
+  attachments?: MailAttachment[];
 };
 
 export type WelcomeEmailData = {
@@ -70,7 +70,7 @@ export type ExportReadyEmailData = {
   format: string;
   exported_count: number;
   file_name: string;
-  attachment: Attachment;
+  attachment: MailAttachment;
 };
 
 export type DeleteDataConfirmationEmailData = {

@@ -29,6 +29,7 @@ import SettingsController from "../controllers/SettingsController.js";
 import NotificationsController from "../controllers/NotificationsController.js";
 import InventoryInsightsController from "../controllers/InventoryInsightsController.js";
 import ExtraEntryController from "../controllers/ExtraEntryController.js";
+import MailController from "../controllers/MailController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
 import AdminAuthMiddleware from "../middlewares/AdminAuthMiddleware.js";
 import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
@@ -101,6 +102,7 @@ import {
   exportPreviewRequestSchema,
   exportRequestSchema,
   exportResourceParamSchema,
+  sendTestEmailSchema,
   settingsPreferencesUpsertSchema,
 } from "../validations/apiValidations.js";
 import invoiceRoutes from "../modules/invoice/invoice.routes.js";
@@ -285,6 +287,12 @@ router.post(
   "/auth/reset-password",
   validate({ body: authResetSchema }),
   AuthController.resetPassword,
+);
+router.post(
+  "/send-test-email",
+  AuthMiddleware,
+  validate({ body: sendTestEmailSchema }),
+  MailController.sendTestEmail,
 );
 
 // Public invoice view

@@ -980,6 +980,27 @@ export const invoiceEmailRequestSchema = z.object({
   email: z.string().email().optional(),
 });
 
+export const sendTestEmailSchema = z.object({
+  to: z.string().email().optional(),
+  template: z
+    .enum(["invoice", "otp", "payment_success", "plan_activation"])
+    .default("otp"),
+  subject: z.string().trim().min(1).max(160).optional(),
+  attachPdf: z.boolean().optional().default(false),
+  invoicePdfBase64: z.string().trim().min(1).optional(),
+  businessName: z.string().trim().min(1).max(120).optional(),
+  businessLogoUrl: z.string().url().optional(),
+  customerName: z.string().trim().min(1).max(120).optional(),
+  invoiceId: z.string().trim().min(1).max(120).optional(),
+  downloadLink: z.string().url().optional(),
+  otp: z.string().trim().min(4).max(10).optional(),
+  expiresInMinutes: z.coerce.number().int().positive().max(60).optional(),
+  amount: z.coerce.number().positive().optional(),
+  transactionId: z.string().trim().min(1).max(120).optional(),
+  planName: z.string().trim().min(1).max(120).optional(),
+  validity: z.string().trim().min(1).max(120).optional(),
+});
+
 export const paymentCreateSchema = z.object({
   invoice_id: z.coerce.number().int().positive(),
   amount: z.coerce.number().nonnegative(),

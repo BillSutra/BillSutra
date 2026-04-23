@@ -1545,6 +1545,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      if (typeof event.key !== "string" || event.key.length === 0) return;
 
       const target = event.target as HTMLElement | null;
       const isEditableTarget =

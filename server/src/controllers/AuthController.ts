@@ -582,8 +582,10 @@ class AuthController {
 
         const message =
           error instanceof Error &&
-          (error.message.includes("RESEND_API_KEY") ||
-            error.message.includes("configuration"))
+          (error.message.includes("configuration") ||
+            error.message.includes("EMAIL_USER") ||
+            error.message.includes("EMAIL_PASS") ||
+            error.message.includes("configured"))
             ? "Email login is not configured on the server yet."
             : "Unable to send the login code right now.";
 
