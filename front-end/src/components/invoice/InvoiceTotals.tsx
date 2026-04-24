@@ -17,6 +17,11 @@ type InvoiceTotalsProps = {
   paidAmount?: number;
   remainingAmount?: number;
   action?: React.ReactNode;
+  topSlot?: React.ReactNode;
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+  statusLabel?: string;
   className?: string;
 };
 
@@ -29,6 +34,11 @@ const InvoiceTotals = ({
   paidAmount,
   remainingAmount,
   action,
+  topSlot,
+  eyebrow = "Checkout",
+  title = "Bill summary",
+  description = "Review totals, GST, and payment status before generating the bill.",
+  statusLabel = "Live",
   className,
 }: InvoiceTotalsProps) => {
   const { formatCurrency, t } = useI18n();
@@ -44,28 +54,28 @@ const InvoiceTotals = ({
   return (
     <div
       className={cn(
-        "no-print rounded-[2.1rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-6 shadow-[0_30px_65px_-42px_rgba(15,23,42,0.24)] dark:border-slate-700 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(15,23,42,0.94)_100%)] dark:shadow-[0_26px_55px_-38px_rgba(0,0,0,0.48)]",
+        "no-print rounded-[1.9rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-5 shadow-[0_28px_58px_-42px_rgba(15,23,42,0.24)] dark:border-slate-700 dark:bg-[linear-gradient(180deg,rgba(15,23,42,0.98)_0%,rgba(15,23,42,0.94)_100%)] dark:shadow-[0_26px_55px_-38px_rgba(0,0,0,0.48)]",
         className,
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">
-            Step 3
+            {eyebrow}
           </p>
           <h3 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-slate-50">
-            Review this bill
+            {title}
           </h3>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-            Check the total, then generate the bill when everything looks right.
+            {description}
           </p>
         </div>
         <div className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-          Live
+          {statusLabel}
         </div>
       </div>
 
-      <div className="mt-5 rounded-[1.6rem] bg-slate-950 px-5 py-5 text-white shadow-[0_24px_50px_-34px_rgba(15,23,42,0.45)] dark:bg-slate-900">
+      <div className="mt-4 rounded-[1.45rem] bg-slate-950 px-5 py-5 text-white shadow-[0_24px_50px_-34px_rgba(15,23,42,0.45)] dark:bg-slate-900">
         <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
           Bill total
         </p>
@@ -74,7 +84,9 @@ const InvoiceTotals = ({
         </p>
       </div>
 
-      <div className="mt-5 space-y-2.5 text-sm">
+      {topSlot ? <div className="mt-4">{topSlot}</div> : null}
+
+      <div className="mt-4 space-y-2.5 text-sm">
         <div className="flex items-center justify-between rounded-[1.15rem] bg-slate-50/90 px-4 py-3 ring-1 ring-slate-200/80 dark:bg-slate-900/70 dark:ring-slate-700/70">
           <span className="text-slate-600 dark:text-slate-300">
             {t("invoiceTotals.subtotal")}

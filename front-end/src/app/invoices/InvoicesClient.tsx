@@ -1,24 +1,21 @@
 "use client";
 
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  CalendarDays,
   CheckCircle2,
   Circle,
-  FileText,
-  NotebookText,
   PackagePlus,
   ScanLine,
   UsersRound,
-  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
+import InvoiceCompactMetaPanel from "@/components/invoice/InvoiceCompactMetaPanel";
 import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
 import InvoiceForm from "@/components/invoice/InvoiceForm";
@@ -27,12 +24,12 @@ import InvoiceTotals from "@/components/invoice/InvoiceTotals";
 import InvoiceDraftPanel from "@/components/invoice/InvoiceDraftPanel";
 import InvoiceDraftList from "@/components/invoice/InvoiceDraftList";
 import InvoiceActions from "@/components/invoice/InvoiceActions";
+import InvoiceWorkspaceV2 from "@/components/invoice/InvoiceWorkspaceV2";
 import type { AsyncProductSelectHandle } from "@/components/products/AsyncProductSelect";
 import {
   DesignConfigProvider,
   normalizeDesignConfig,
 } from "@/components/invoice/DesignConfigContext";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -47,6 +44,7 @@ import Modal from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  fetchInvoicePdfFile,
   fetchBusinessProfile,
   fetchUserSettingsPreferences,
   sendInvoiceEmail,
@@ -187,7 +185,109 @@ type QuickCustomerForm = {
 
 const RECENT_PRODUCT_USAGE_STORAGE_KEY = "invoice-smart-recent-products";
 const LAST_DISCOUNT_TYPE_STORAGE_KEY = "invoice-last-discount-type";
+const LAST_WAREHOUSE_STORAGE_KEY = "invoice-last-warehouse-id";
 const SHOW_LEGACY_INVOICE_COMPOSER_UI = false;
+
+const getTodayDateValue = () => {
+  const now = new Date();
+  const timezoneOffset = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 10);
+};
+
+const downloadBlob = (blob: Blob, fileName: string) => {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+};
+
+const normalizeWarehousePreference = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return String(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  return null;
+};
+
+const getStoredWarehousePreference = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return normalizeWarehousePreference(
+    window.localStorage.getItem(LAST_WAREHOUSE_STORAGE_KEY),
+  );
+};
+
+const getPreferredWarehouseFromSettings = (
+  preferences: unknown,
+): string | null => {
+  if (!preferences || typeof preferences !== "object") {
+    return null;
+  }
+
+  const record = preferences as Record<string, unknown>;
+  const inventory =
+    record.inventory && typeof record.inventory === "object"
+      ? (record.inventory as Record<string, unknown>)
+      : null;
+  const appPreferences =
+    record.appPreferences && typeof record.appPreferences === "object"
+      ? (record.appPreferences as Record<string, unknown>)
+      : null;
+
+  return (
+    normalizeWarehousePreference(inventory?.defaultWarehouseId) ??
+    normalizeWarehousePreference(inventory?.defaultWarehouse) ??
+    normalizeWarehousePreference(appPreferences?.defaultWarehouseId) ??
+    normalizeWarehousePreference(appPreferences?.defaultWarehouse)
+  );
+};
+
+const resolveSmartWarehouseId = (
+  availableWarehouses: Array<{ id: number }>,
+  preferences: { defaultWarehouseId?: string | null; lastWarehouseId?: string | null },
+) => {
+  const warehouseIds = new Set(
+    availableWarehouses.map((warehouse) => String(warehouse.id)),
+  );
+  const defaultWarehouseId =
+    preferences.defaultWarehouseId &&
+    warehouseIds.has(preferences.defaultWarehouseId)
+      ? preferences.defaultWarehouseId
+      : null;
+
+  if (defaultWarehouseId) {
+    return defaultWarehouseId;
+  }
+
+  const lastWarehouseId =
+    preferences.lastWarehouseId && warehouseIds.has(preferences.lastWarehouseId)
+      ? preferences.lastWarehouseId
+      : null;
+
+  if (lastWarehouseId) {
+    return lastWarehouseId;
+  }
+
+  if (availableWarehouses.length === 1) {
+    return String(availableWarehouses[0].id);
+  }
+
+  return availableWarehouses[0] ? String(availableWarehouses[0].id) : "";
+};
+
+const isValidEmailAddress = (value: string) =>
+  /^[\w-.]+@[\w-]+\.[a-zA-Z]{2,}$/.test(value.trim());
 
 const getStoredDiscountType = (): InvoiceFormState["discount_type"] => {
   if (typeof window === "undefined") {
@@ -206,19 +306,22 @@ const getStoredDiscountType = (): InvoiceFormState["discount_type"] => {
 const createEmptyInvoiceForm = (
   customerId = "",
   discountType = getStoredDiscountType(),
+  defaults?: Partial<
+    Pick<InvoiceFormState, "date" | "due_date" | "payment_status" | "warehouse_id">
+  >,
 ): InvoiceFormState => ({
   customer_id: customerId,
-  date: "",
-  due_date: "",
+  date: defaults?.date ?? getTodayDateValue(),
+  due_date: defaults?.due_date ?? "",
   discount: "0",
   discount_type: discountType,
-  payment_status: "UNPAID",
+  payment_status: defaults?.payment_status ?? "UNPAID",
   amount_paid: "",
   payment_method: "",
   payment_date: "",
   notes: "",
   sync_sales: true,
-  warehouse_id: "",
+  warehouse_id: defaults?.warehouse_id ?? "",
 });
 
 const buildProductSku = (name: string, barcode: string) => {
@@ -233,136 +336,6 @@ const buildProductSku = (name: string, barcode: string) => {
     Date.now().toString().slice(-4);
 
   return `${base || "ITEM"}-${suffix}`;
-};
-
-const InvoiceComposerV2 = ({
-  isHindi,
-  title,
-  description,
-  guidedStep,
-  draftBadgeLabel,
-  draftMeta,
-  invoiceNumberPreview,
-  invoiceDateLabel,
-  customerLabel,
-  totalLabel,
-  lineItemsLabel,
-  bootstrapNotice,
-  heroActions,
-  customerNode,
-  helperNode,
-  productsNode,
-  previewNode,
-  totalsNode,
-  actionsNode,
-  draftsNode,
-}: {
-  isHindi: boolean;
-  title: string;
-  description: string;
-  guidedStep: number;
-  draftBadgeLabel: string;
-  draftMeta: string;
-  invoiceNumberPreview: string;
-  invoiceDateLabel: string;
-  customerLabel: string;
-  totalLabel: string;
-  lineItemsLabel: string;
-  bootstrapNotice: ReactNode;
-  heroActions: ReactNode;
-  customerNode: ReactNode;
-  helperNode: ReactNode;
-  productsNode: ReactNode;
-  previewNode: ReactNode;
-  totalsNode: ReactNode;
-  actionsNode: ReactNode;
-  draftsNode: ReactNode;
-}) => {
-  return (
-    <div className="mx-auto w-full max-w-[1680px] font-[var(--font-sora),var(--font-geist-sans)]">
-      {bootstrapNotice}
-
-      <Card className="overflow-hidden border-primary/15 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.14),transparent_38%),linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] py-0 dark:bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.18),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(15,23,42,0.9))]">
-        <CardContent className="grid gap-5 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
-          <div className="space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge>{isHindi ? "सिंगल स्क्रीन" : "Single-screen workflow"}</Badge>
-              <Badge>{`Step ${guidedStep}/3`}</Badge>
-              <Badge variant="pending">{draftBadgeLabel}</Badge>
-              <Badge>{lineItemsLabel}</Badge>
-            </div>
-            <div>
-              <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-                {title}
-              </h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
-                {description}
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">{draftMeta}</p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-                  {isHindi ? "इनवॉइस नंबर" : "Invoice number"}
-                </p>
-                <div className="mt-2 flex items-center gap-2 text-sm font-medium text-foreground">
-                  <FileText className="h-4 w-4 text-primary" />
-                  <span>{invoiceNumberPreview}</span>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-                  {isHindi ? "इनवॉइस तिथि" : "Invoice date"}
-                </p>
-                <div className="mt-2 flex items-center gap-2 text-sm font-medium text-foreground">
-                  <CalendarDays className="h-4 w-4 text-primary" />
-                  <span>{invoiceDateLabel}</span>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-                  {isHindi ? "ग्राहक" : "Customer"}
-                </p>
-                <div className="mt-2 flex items-center gap-2 text-sm font-medium text-foreground">
-                  <UsersRound className="h-4 w-4 text-primary" />
-                  <span className="truncate">{customerLabel}</span>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
-                  {isHindi ? "लाइव कुल" : "Live total"}
-                </p>
-                <div className="mt-2 flex items-center gap-2 text-sm font-medium text-foreground">
-                  <Wallet className="h-4 w-4 text-primary" />
-                  <span>{totalLabel}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:min-w-72">{heroActions}</div>
-        </CardContent>
-      </Card>
-
-      <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(340px,0.82fr)_minmax(0,1.18fr)_minmax(320px,0.72fr)] xl:items-start">
-        <div className="grid gap-6">
-          {customerNode}
-          {helperNode}
-        </div>
-
-        <div className="grid gap-6">
-          {productsNode}
-          {previewNode}
-        </div>
-
-        <aside className="grid gap-6 xl:sticky xl:top-24">
-          {totalsNode}
-          {actionsNode}
-          {draftsNode}
-        </aside>
-      </section>
-    </div>
-  );
 };
 
 const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
@@ -430,10 +403,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const [invoiceEmailError, setInvoiceEmailError] = useState<string | null>(
     null,
   );
+  const [checkoutAutomationPending, setCheckoutAutomationPending] =
+    useState(false);
   const initialCustomerId =
     searchParams.get("customer") ?? searchParams.get("customerId") ?? "";
   const [form, setForm] = useState<InvoiceFormState>(() =>
-    createEmptyInvoiceForm(initialCustomerId),
+    createEmptyInvoiceForm(initialCustomerId, getStoredDiscountType(), {
+      warehouse_id: getStoredWarehousePreference() ?? "",
+    }),
   );
   const [taxMode, setTaxMode] = useState<TaxMode>("CGST_SGST");
   const [items, setItems] = useState<InvoiceItemForm[]>([]);
@@ -574,6 +551,22 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     [businessProfile],
   );
   const autoFocusProductSearch = searchParams.get("quickAction") === "new-bill";
+  const settingsDefaultWarehouseId = useMemo(
+    () => getPreferredWarehouseFromSettings(userSettingsPreferences),
+    [userSettingsPreferences],
+  );
+  const warehouseIdSignature = useMemo(
+    () => warehouses.map((warehouse) => warehouse.id).join(","),
+    [warehouses],
+  );
+  const resolvedDefaultWarehouseId = useMemo(
+    () =>
+      resolveSmartWarehouseId(warehouses, {
+        defaultWarehouseId: settingsDefaultWarehouseId,
+        lastWarehouseId: getStoredWarehousePreference(),
+      }),
+    [settingsDefaultWarehouseId, warehouses],
+  );
   useEffect(() => {
     if (!invoiceBootstrap?.defaults) {
       return;
@@ -594,6 +587,42 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       };
     });
   }, [invoiceBootstrap?.defaults]);
+  useEffect(() => {
+    if (!warehouseIdSignature) {
+      return;
+    }
+
+    if (!resolvedDefaultWarehouseId) {
+      return;
+    }
+
+    setForm((current) => {
+      if (
+        current.warehouse_id &&
+        warehouses.some(
+          (warehouse) => String(warehouse.id) === current.warehouse_id,
+        )
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        warehouse_id: resolvedDefaultWarehouseId,
+      };
+    });
+  }, [form.warehouse_id, resolvedDefaultWarehouseId, warehouseIdSignature]);
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!form.warehouse_id) {
+      return;
+    }
+
+    window.localStorage.setItem(LAST_WAREHOUSE_STORAGE_KEY, form.warehouse_id);
+  }, [form.warehouse_id]);
   const isMacShortcutPlatform = useMemo(() => {
     if (typeof navigator === "undefined") return false;
     return /Mac|iPhone|iPad/i.test(navigator.platform);
@@ -1064,7 +1093,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       payment_method: draft.form.payment_method ?? "",
       payment_date: draft.form.payment_date ?? "",
       sync_sales: draft.form.sync_sales ?? true,
-      warehouse_id: draft.form.warehouse_id ?? "",
+      warehouse_id: draft.form.warehouse_id ?? resolvedDefaultWarehouseId,
     });
     setTaxMode(draft.taxMode);
     setItems(draft.items);
@@ -1073,7 +1102,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     setItemErrors([]);
     setSummaryErrors([]);
     setServerError(null);
-  }, []);
+  }, [resolvedDefaultWarehouseId]);
 
   const {
     drafts,
@@ -1169,7 +1198,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const resetInvoiceComposer = useCallback(
     (options?: { announce?: boolean }) => {
       setForm({
-        ...createEmptyInvoiceForm(),
+        ...createEmptyInvoiceForm("", form.discount_type, {
+          warehouse_id: resolvedDefaultWarehouseId,
+        }),
         discount_type: form.discount_type,
       });
       setTaxMode("CGST_SGST");
@@ -1190,7 +1221,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
       focusProductSearch();
     },
-    [clearDraft, flashShortcutSection, focusProductSearch, form.discount_type, t],
+    [
+      clearDraft,
+      flashShortcutSection,
+      focusProductSearch,
+      form.discount_type,
+      resolvedDefaultWarehouseId,
+      t,
+    ],
   );
 
   const handleItemChange = useCallback(
@@ -1502,8 +1540,50 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     t,
   ]);
 
+  const downloadCreatedInvoicePdf = useCallback(
+    async (invoiceId: number, invoiceNumber?: string | null) => {
+      const { blob, fileName } = await fetchInvoicePdfFile(
+        invoiceId,
+        invoiceNumber ?? undefined,
+      );
+      downloadBlob(blob, fileName);
+    },
+    [],
+  );
+
+  const autoSendInvoiceEmail = useCallback(
+    async (invoiceId: number, invoiceNumber: string | null, email: string) => {
+      const recipient = email.trim();
+      if (!recipient || !isValidEmailAddress(recipient)) {
+        return;
+      }
+
+      try {
+        const response = await sendInvoiceEmailMutation.mutateAsync({
+          invoiceId,
+          email: recipient,
+        });
+        setLastCreatedCustomerEmail(response.email ?? recipient);
+        captureAnalyticsEvent("invoice_email_sent", {
+          invoiceId,
+          invoiceNumber,
+          source: "auto-checkout",
+        });
+        toast.success(`Email sent to ${response.email ?? recipient}`);
+      } catch (error) {
+        toast.error(
+          parseServerErrors(
+            error,
+            `Invoice created, but email could not be sent to ${recipient}.`,
+          ),
+        );
+      }
+    },
+    [parseServerErrors, sendInvoiceEmailMutation],
+  );
+
   const submitInvoice = useCallback(async () => {
-    if (createInvoice.isPending) return;
+    if (createInvoice.isPending || checkoutAutomationPending) return;
 
     setServerError(null);
 
@@ -1527,6 +1607,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     }
 
     try {
+      setCheckoutAutomationPending(true);
       const selectedCustomer =
         customers?.find(
           (customer) => customer.id === Number(form.customer_id),
@@ -1596,14 +1677,36 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           invoiceNumber: createdInvoice.invoice_number,
         }),
       );
+      try {
+        await downloadCreatedInvoicePdf(
+          createdInvoice.id,
+          createdInvoice.invoice_number,
+        );
+      } catch {
+        toast.error(t("invoice.pdfError"));
+      }
+
+      if (selectedCustomer?.email?.trim()) {
+        await autoSendInvoiceEmail(
+          createdInvoice.id,
+          createdInvoice.invoice_number,
+          selectedCustomer.email,
+        );
+      }
+
       resetInvoiceComposer();
     } catch (error) {
       setServerError(parseServerErrors(error, t("invoice.createError")));
+    } finally {
+      setCheckoutAutomationPending(false);
     }
   }, [
+    autoSendInvoiceEmail,
+    checkoutAutomationPending,
     createInvoice,
     customers,
     discountValidationMessage,
+    downloadCreatedInvoicePdf,
     form,
     items,
     parseServerErrors,
@@ -1651,7 +1754,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       return;
     }
 
-    if (!/^[\w-.]+@[\w-]+\.[a-zA-Z]{2,}$/.test(recipient)) {
+    if (!isValidEmailAddress(recipient)) {
       setInvoiceEmailError(t("invoiceDetail.messages.enterValidEmail"));
       return;
     }
@@ -1939,7 +2042,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             : undefined
         }
       >
-        <InvoiceForm
+        <InvoiceCompactMetaPanel
           form={form}
           customers={customers}
           warehouses={warehouses}
@@ -1952,11 +2055,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           discountError={discountValidationMessage}
           onFormChange={handleFormChange}
           onTaxModeChange={handleTaxModeChange}
-          onSubmit={handleSubmit}
-          isSubmitting={createInvoice.isPending}
           summaryErrors={summaryErrors}
           serverError={serverError}
-          hideSubmit
+          onQuickAddCustomer={() => setQuickAddCustomerOpen(true)}
         />
       </div>
     </FirstTimeHint>
@@ -2087,6 +2188,86 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       discountValue={form.discount}
       discountType={form.discount_type}
       discountLabel={discountSummaryLabel}
+      eyebrow="Checkout"
+      title="Bill summary"
+      description="Keep the total in view, tweak discount inline, then generate the invoice."
+      statusLabel="Live"
+      topSlot={
+        <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50/90 p-3 dark:border-slate-700 dark:bg-slate-900/70">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Discount
+              </p>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                Adjust offer without leaving checkout.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full px-3"
+              disabled={totals.subtotal <= 0}
+              onClick={() =>
+                handleFormChange({
+                  ...form,
+                  discount: "10",
+                  discount_type: "PERCENTAGE",
+                })
+              }
+            >
+              Flat 10%
+            </Button>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_130px]">
+            <Input
+              id="discount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.discount}
+              disabled={totals.subtotal <= 0}
+              onChange={(event) =>
+                handleFormChange({ ...form, discount: event.target.value })
+              }
+              placeholder={t("invoiceForm.discountPlaceholder")}
+              className="h-10 rounded-xl border-slate-200 bg-white text-sm shadow-sm focus-visible:border-primary/35 focus-visible:ring-primary/10 dark:border-slate-700 dark:bg-slate-950"
+            />
+            <select
+              id="discount_type"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary/35 focus:outline-none focus:ring-2 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-primary/35 dark:focus:ring-primary/20"
+              value={form.discount_type}
+              disabled={totals.subtotal <= 0}
+              onChange={(event) =>
+                handleFormChange({
+                  ...form,
+                  discount_type: event.target
+                    .value as InvoiceFormState["discount_type"],
+                })
+              }
+            >
+              <option value="FIXED">{t("invoiceForm.discountTypeFixed")}</option>
+              <option value="PERCENTAGE">
+                {t("invoiceForm.discountTypePercentage")}
+              </option>
+            </select>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+            <span className="text-slate-600 dark:text-slate-300">
+              Applied discount
+            </span>
+            <span className="font-semibold text-slate-950 dark:text-slate-100">
+              -{formatCurrency(discountAppliedAmount)}
+            </span>
+          </div>
+          {discountValidationMessage ? (
+            <p className="mt-2 text-sm text-destructive">
+              {discountValidationMessage}
+            </p>
+          ) : null}
+        </div>
+      }
       paidAmount={
         form.payment_status === "PAID"
           ? totals.total
@@ -2121,10 +2302,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               type="button"
               size="lg"
               className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
-              disabled={createInvoice.isPending || items.length === 0}
+              disabled={
+                createInvoice.isPending ||
+                checkoutAutomationPending ||
+                items.length === 0
+              }
               onClick={() => void submitInvoice()}
             >
-              {createInvoice.isPending
+              {createInvoice.isPending || checkoutAutomationPending
                 ? t("invoiceComposer.generating")
                 : t("invoiceComposer.checkout")}
             </Button>
@@ -2200,15 +2385,13 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       actions={headerActions}
     >
       <>
-        <InvoiceComposerV2
-          isHindi={language === "hi"}
+        <InvoiceWorkspaceV2
           title={language === "hi" ? "इनवॉइस वर्कस्पेस" : "Invoice workspace"}
           description={
             language === "hi"
               ? "उसी लॉजिक के साथ ग्राहक, उत्पाद, प्रीव्यू और चेकआउट को एक तेज़ सिंगल-स्क्रीन लेआउट में रखें."
               : "Keep customer, products, preview, and checkout in one faster single-screen workspace using the same invoice logic."
           }
-          guidedStep={guidedStep}
           draftBadgeLabel={isDirty ? t("common.draft") : t("common.saved")}
           draftMeta={
             isDirty
@@ -2425,7 +2608,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               onFormChange={handleFormChange}
               onTaxModeChange={handleTaxModeChange}
               onSubmit={handleSubmit}
-                  isSubmitting={createInvoice.isPending}
+                  isSubmitting={
+                    createInvoice.isPending || checkoutAutomationPending
+                  }
                   summaryErrors={summaryErrors}
                   serverError={serverError}
                   hideSubmit
@@ -2616,10 +2801,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                       type="button"
                       size="lg"
                       className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
-                      disabled={createInvoice.isPending || items.length === 0}
+                      disabled={
+                        createInvoice.isPending ||
+                        checkoutAutomationPending ||
+                        items.length === 0
+                      }
                       onClick={() => void submitInvoice()}
                     >
-                      {createInvoice.isPending
+                      {createInvoice.isPending || checkoutAutomationPending
                         ? t("invoiceComposer.generating")
                         : t("invoiceComposer.checkout")}
                     </Button>

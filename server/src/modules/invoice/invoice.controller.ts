@@ -327,6 +327,13 @@ export const pdf = async (req: Request, res: Response) => {
       });
     }
 
+    console.error("[invoice.controller] pdf generation failed", {
+      invoiceId: req.params.id,
+      userId,
+      message: err?.message,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
     return res.status(500).json({ message: "Unable to generate invoice PDF" });
   }
 };

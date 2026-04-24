@@ -3,6 +3,8 @@ import {
   Prisma,
 } from "@prisma/client";
 import type { InvoiceStatus, PaymentMethod, PaymentStatus, SaleStatus } from "@prisma/client";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import puppeteer from "puppeteer";
 import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
@@ -484,6 +486,59 @@ const formatDate = (value: Date | null | undefined) => {
     month: "short",
     year: "numeric",
   });
+};
+
+const resolveInvoicePdfExecutablePath = () => {
+  const configuredPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
+  if (configuredPath && existsSync(configuredPath)) {
+    return configuredPath;
+  }
+
+  const userProfile = process.env.USERPROFILE?.trim();
+  const localAppData = process.env.LOCALAPPDATA?.trim();
+  const programFiles = process.env.PROGRAMFILES?.trim();
+  const programFilesX86 = process.env["PROGRAMFILES(X86)"]?.trim();
+
+  const candidates = [
+    localAppData
+      ? join(
+          localAppData,
+          ".chromium-browser-snapshots",
+          "chromium",
+          "win32-1596254",
+          "chrome-win",
+          "chrome.exe",
+        )
+      : null,
+    localAppData
+      ? join(
+          localAppData,
+          "ms-playwright",
+          "chromium-1208",
+          "chrome-win64",
+          "chrome.exe",
+        )
+      : null,
+    programFiles
+      ? join(programFiles, "Google", "Chrome", "Application", "chrome.exe")
+      : null,
+    programFilesX86
+      ? join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe")
+      : null,
+    userProfile
+      ? join(
+          userProfile,
+          "AppData",
+          "Local",
+          "Google",
+          "Chrome",
+          "Application",
+          "chrome.exe",
+        )
+      : null,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  return candidates.find((candidate) => existsSync(candidate));
 };
 
 const attachInvoiceGstMetadata = async <
@@ -1803,15 +1858,16 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
   );
 
   const html = buildInvoicePdfHtml(invoice, company, customerProfile);
-
+  const executablePath = resolveInvoicePdfExecutablePath();
   const browser = await puppeteer.launch({
     headless: true,
+    executablePath,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
+    await page.setContent(html, { waitUntil: "load" });
 
     const pdfBuffer = await page.pdf({
       format: "A4",

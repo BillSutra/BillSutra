@@ -6,23 +6,18 @@ import {
   useMemo,
   useRef,
   useState,
-  type Dispatch,
-  type MutableRefObject,
-  type SetStateAction,
 } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import {
-  CopyPlus,
   Download,
-  Minus,
-  Package2,
   Plus,
   Printer,
   ReceiptText,
   Trash2,
 } from "lucide-react";
+import CartV2Component from "@/components/billing/CartV2";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
@@ -785,6 +780,7 @@ const ExistingInvoicePreview = ({
   );
 };
 
+/*
 type StockTone = "emerald" | "amber" | "rose" | "slate";
 
 const stockToneClasses: Record<StockTone, string> = {
@@ -1301,6 +1297,8 @@ const CartV2 = ({
     </div>
   );
 };
+
+*/
 
 const SimpleBillClient = ({
   name,
@@ -2762,7 +2760,7 @@ const SimpleBillClient = ({
       subtitle={copy.pageSubtitle}
     >
       <>
-      <div className="no-print mx-auto grid w-full max-w-5xl gap-5">
+      <div className="no-print mx-auto grid w-full max-w-6xl gap-5">
         <section className="rounded-2xl bg-card/92 p-5 ring-1 ring-border/55">
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-end">
             <div>
@@ -2986,7 +2984,7 @@ const SimpleBillClient = ({
           ) : null}
 
           {!productsLocked ? (
-            <CartV2
+            <CartV2Component
               isHindi={isHindi}
               items={items}
               products={products}
