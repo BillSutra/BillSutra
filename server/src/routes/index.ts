@@ -364,6 +364,12 @@ router.get(
   validate({ params: idParamSchema }),
   CustomersController.ledger,
 );
+router.get(
+  "/customers/:id/ledger/pdf",
+  AuthMiddleware,
+  validate({ params: idParamSchema }),
+  CustomersController.ledgerPdf,
+);
 router.put(
   "/customers/:id",
   AuthMiddleware,
