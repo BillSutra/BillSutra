@@ -12,6 +12,7 @@ import {
   buildPublicInvoiceReference,
   buildPublicInvoiceUrl,
 } from "../../lib/appUrls.js";
+import { renderPublicInvoiceHtml } from "./publicInvoiceView.js";
 import {
   buildBusinessAddressLines,
   normalizeBusinessAddressDraft,
@@ -67,6 +68,10 @@ export type PublicInvoiceViewData = {
   discount_calculated: number;
   currency: string;
   status: InvoiceStatus;
+  payment_status: "PAID" | "PENDING" | "FAILED" | "PARTIALLY_PAID";
+  paid_amount: number;
+  pending_amount: number;
+  payment_method: string | null;
   date: string;
   due_date: string | null;
   notes: string | null;
@@ -95,6 +100,17 @@ export type PublicInvoiceViewData = {
 const publicInvoiceInclude = {
   customer: true,
   items: true,
+  payments: {
+    select: {
+      id: true,
+      amount: true,
+      method: true,
+      paid_at: true,
+    },
+    orderBy: {
+      paid_at: "desc",
+    },
+  },
   user: {
     select: {
       business_profile: {
@@ -212,6 +228,54 @@ const normalizeStatusLabel = (value: string) =>
     .replaceAll("_", " ")
     .toLowerCase()
     .replace(/\b\w/g, (char) => char.toUpperCase());
+
+const resolveDisplayPaymentStatusLabel = ({
+  total,
+  paidAmount,
+  dueDate,
+}: {
+  total: number;
+  paidAmount: number;
+  dueDate: Date | null;
+}) => {
+  if (paidAmount >= total && total > 0) {
+    return "Paid";
+  }
+
+  if (paidAmount > 0) {
+    return "Partially Paid";
+  }
+
+  if (dueDate && dueDate.getTime() < Date.now()) {
+    return "Pending";
+  }
+
+  return "Pending";
+};
+
+const resolvePublicInvoicePaymentStatus = ({
+  status,
+  total,
+  paidAmount,
+}: {
+  status: InvoiceStatus;
+  total: number;
+  paidAmount: number;
+}): PublicInvoiceViewData["payment_status"] => {
+  if (paidAmount >= total && total > 0) {
+    return "PAID";
+  }
+
+  if (paidAmount > 0) {
+    return "PARTIALLY_PAID";
+  }
+
+  if (status === INVOICE_STATUS.VOID) {
+    return "FAILED";
+  }
+
+  return "PENDING";
+};
 
 const createInvoiceValidationError = (
   message: string,
@@ -486,6 +550,59 @@ const formatDate = (value: Date | null | undefined) => {
   });
 };
 
+const resolveInvoicePdfExecutablePath = () => {
+  const configuredPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
+  if (configuredPath && existsSync(configuredPath)) {
+    return configuredPath;
+  }
+
+  const userProfile = process.env.USERPROFILE?.trim();
+  const localAppData = process.env.LOCALAPPDATA?.trim();
+  const programFiles = process.env.PROGRAMFILES?.trim();
+  const programFilesX86 = process.env["PROGRAMFILES(X86)"]?.trim();
+
+  const candidates = [
+    localAppData
+      ? join(
+          localAppData,
+          ".chromium-browser-snapshots",
+          "chromium",
+          "win32-1596254",
+          "chrome-win",
+          "chrome.exe",
+        )
+      : null,
+    localAppData
+      ? join(
+          localAppData,
+          "ms-playwright",
+          "chromium-1208",
+          "chrome-win64",
+          "chrome.exe",
+        )
+      : null,
+    programFiles
+      ? join(programFiles, "Google", "Chrome", "Application", "chrome.exe")
+      : null,
+    programFilesX86
+      ? join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe")
+      : null,
+    userProfile
+      ? join(
+          userProfile,
+          "AppData",
+          "Local",
+          "Google",
+          "Chrome",
+          "Application",
+          "chrome.exe",
+        )
+      : null,
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  return candidates.find((candidate) => existsSync(candidate));
+};
+
 const attachInvoiceGstMetadata = async <
   T extends
     | (Prisma.InvoiceGetPayload<{ include: { customer: true; items: true; payments: true } }> & {
@@ -647,6 +764,12 @@ const buildInvoicePdfHtml = (
     discount_type: unknown;
     discount_value: unknown;
     total: unknown;
+    payments: Array<{
+      id: number;
+      amount: Prisma.Decimal | number;
+      method: PaymentMethod | null;
+      paid_at: Date;
+    }>;
     customer: {
       name: string;
       email: string | null;
@@ -659,11 +782,6 @@ const buildInvoicePdfHtml = (
       price: unknown;
       tax_rate: unknown;
       total: unknown;
-    }>;
-    payments: Array<{
-      amount: unknown;
-      method: PaymentMethod;
-      paid_at: Date;
     }>;
   },
   company: {
@@ -703,6 +821,11 @@ const buildInvoicePdfHtml = (
         ? totalAmount
         : 0;
   const remainingAmount = Math.max(totalAmount - paidAmount, 0);
+  const paymentStatusLabel = resolveDisplayPaymentStatusLabel({
+    total: totalAmount,
+    paidAmount,
+    dueDate: invoice.due_date,
+  });
   const latestPayment = [...invoice.payments].sort(
     (left, right) => right.paid_at.getTime() - left.paid_at.getTime(),
   )[0];
@@ -838,9 +961,13 @@ const buildInvoicePdfHtml = (
             <div class="muted">#${escapeHtml(invoice.invoice_number)}</div>
             <div class="muted">Issue Date: ${formatDate(invoice.date)}</div>
             <div class="muted">Due Date: ${formatDate(invoice.due_date)}</div>
-            <div class="muted">Status: ${escapeHtml(normalizeStatusLabel(invoice.status))}</div>
+            <div class="muted">Status: ${escapeHtml(paymentStatusLabel)}</div>
             <div class="muted">Paid: ${formatCurrency(paidAmount, currency)} | Balance: ${formatCurrency(remainingAmount, currency)}</div>
-            ${latestPayment ? `<div class="muted">Last payment: ${formatDate(latestPayment.paid_at)} (${escapeHtml(normalizeStatusLabel(latestPayment.method))})</div>` : ""}
+            ${
+              latestPayment
+                ? `<div class="muted">Last payment: ${formatDate(latestPayment.paid_at)} (${escapeHtml(normalizeStatusLabel(latestPayment.method ?? "OTHER"))})</div>`
+                : ""
+            }
           </div>
           <div>
             <h2>Company Details</h2>
@@ -1002,6 +1129,12 @@ const mapPublicInvoice = (
     discount_value: unknown;
     discount_calculated: unknown;
     total: unknown;
+    payments: Array<{
+      id: number;
+      amount: Prisma.Decimal | number;
+      method: PaymentMethod | null;
+      paid_at: Date;
+    }>;
     customer: {
       name: string;
       email: string | null;
@@ -1032,6 +1165,17 @@ const mapPublicInvoice = (
   customerProfile?: CustomerInvoiceProfile | null,
 ): PublicInvoiceViewData => {
   const currency = invoice.user.business_profile?.currency ?? "INR";
+  const amount = toNumber(invoice.total);
+  const paidAmount = roundCurrencyAmount(
+    invoice.payments.reduce((sum, payment) => sum + toNumber(payment.amount), 0),
+  );
+  const pendingAmount = roundCurrencyAmount(Math.max(amount - paidAmount, 0));
+  const paymentStatus = resolvePublicInvoicePaymentStatus({
+    status: invoice.status,
+    total: amount,
+    paidAmount,
+  });
+  const latestPaymentMethod = invoice.payments[0]?.method ?? null;
   const businessProfile = invoice.user.business_profile;
   const customerType = normalizeCustomerType(customerProfile?.customer_type);
   const customerBusinessName = toNullableString(customerProfile?.business_name);
@@ -1061,7 +1205,7 @@ const mapPublicInvoice = (
     id: invoice.id,
     public_id: buildPublicInvoiceReference(invoice.id, invoice.invoice_number),
     invoice_id: invoice.invoice_number,
-    amount: toNumber(invoice.total),
+    amount,
     subtotal: toNumber(invoice.subtotal),
     tax: toNumber(invoice.tax),
     tax_mode: normalizeInvoiceTaxMode(invoice.tax_mode),
@@ -1071,6 +1215,10 @@ const mapPublicInvoice = (
     discount_calculated: toNumber(invoice.discount_calculated),
     currency,
     status: invoice.status,
+    payment_status: paymentStatus,
+    paid_amount: paidAmount,
+    pending_amount: pendingAmount,
+    payment_method: latestPaymentMethod,
     date: invoice.date.toISOString(),
     due_date: invoice.due_date?.toISOString() ?? null,
     notes: invoice.notes,
@@ -1803,6 +1951,13 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
   );
 
   const html = buildInvoicePdfHtml(invoice, company, customerProfile);
+  const buffer = await renderInvoicePdfBuffer(html);
+
+  return {
+    invoiceNumber: invoice.invoice_number,
+    buffer,
+  };
+};
 
   const browser = await launchPuppeteerBrowser();
 
@@ -1821,13 +1976,28 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
       },
     });
 
-    return {
-      invoiceNumber: invoice.invoice_number,
-      buffer: Buffer.from(pdfBuffer),
-    };
+    return Buffer.from(pdfBuffer);
   } finally {
     await browser.close();
   }
+};
+
+export const generatePublicInvoicePdf = async (reference: string) => {
+  const invoice = await getPublicInvoice(reference);
+
+  if (!invoice) {
+    const error = new Error("Invoice not found") as Error & { status?: number };
+    error.status = 404;
+    throw error;
+  }
+
+  const html = renderPublicInvoiceHtml(invoice);
+  const buffer = await renderInvoicePdfBuffer(html);
+
+  return {
+    invoiceNumber: invoice.invoice_id,
+    buffer,
+  };
 };
 
 export const deleteInvoice = async (userId: number, id: number) => {

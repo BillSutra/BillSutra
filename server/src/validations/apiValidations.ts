@@ -976,8 +976,24 @@ export const invoiceUpdateSchema = z.object({
   notes: z.string().optional(),
 });
 
+const invoicePreviewPayloadSchema = z.object({
+  templateId: z.string().trim().min(1).max(120).nullable().optional(),
+  templateName: z.string().trim().min(1).max(120).nullable().optional(),
+  data: z.record(z.string(), z.unknown()),
+  enabledSections: z.array(z.string().trim().min(1).max(64)).min(1).max(20),
+  sectionOrder: z.array(z.string().trim().min(1).max(64)).max(20).optional(),
+  theme: z.record(z.string(), z.unknown()).nullable().optional(),
+  designConfig: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
 export const invoiceEmailRequestSchema = z.object({
   email: z.string().email().optional(),
+  preview_payload: invoicePreviewPayloadSchema.optional(),
+});
+
+export const invoicePreviewPdfRequestSchema = z.object({
+  file_name: z.string().trim().min(1).max(160).optional(),
+  preview_payload: invoicePreviewPayloadSchema,
 });
 
 export const sendTestEmailSchema = z.object({

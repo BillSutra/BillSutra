@@ -357,7 +357,7 @@ const InvoiceForm = ({
                 }
               >
                 <option value="UNPAID">
-                  {t("invoiceHistory.status.SENT")}
+                  Unpaid
                 </option>
                 <option value="PARTIALLY_PAID">
                   {t("invoiceHistory.status.PARTIALLY_PAID")}

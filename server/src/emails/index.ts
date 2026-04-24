@@ -13,6 +13,7 @@ import type {
   EmailType,
 } from "./types.js";
 import { sendEmail as sendWithMailService } from "../services/mailService.js";
+import type { MailAttachment } from "../services/mailService.js";
 
 const DEFAULT_FROM_EMAIL = "BillSutra <no-reply@billsutra.com>";
 
@@ -38,9 +39,17 @@ const buildMessage = <T extends EmailType>(
 export const sendEmail = async <T extends EmailType>(
   type: T,
   payload: EmailTemplateDataMap[T],
+  options?: {
+    attachments?: MailAttachment[];
+    replyTo?: string | string[];
+  },
 ) => {
   const message = buildMessage(type, payload);
   const to = Array.isArray(message.to) ? message.to : [message.to];
+  const attachments = [
+    ...(message.attachments ?? []),
+    ...(options?.attachments ?? []),
+  ];
 
   const result = await sendWithMailService({
     from: process.env.EMAIL_FROM?.trim() || DEFAULT_FROM_EMAIL,
@@ -48,8 +57,8 @@ export const sendEmail = async <T extends EmailType>(
     subject: message.subject,
     html: message.html,
     text: message.text,
-    replyTo: message.replyTo,
-    attachments: message.attachments,
+    replyTo: options?.replyTo ?? message.replyTo,
+    attachments: attachments.length > 0 ? attachments : undefined,
   });
 
   if (!result.success) {

@@ -41,7 +41,7 @@ const formatInvoiceDate = (value?: string | null) => {
   }).format(parsed);
 };
 
-const getStatusNote = (status: PublicInvoice["status"]) => {
+const getPaymentStatusMeta = (status: PublicInvoice["paymentStatus"]) => {
   switch (status) {
     case "PAID":
       return {
@@ -51,27 +51,15 @@ const getStatusNote = (status: PublicInvoice["status"]) => {
       };
     case "PARTIALLY_PAID":
       return {
-        label: "Partial",
+        label: "Partially paid",
         tone: "partial" as const,
-        note: "Partially collected",
+        note: "Part payment received",
       };
-    case "OVERDUE":
+    case "FAILED":
       return {
-        label: "Overdue",
+        label: "Failed",
         tone: "pending" as const,
-        note: "Payment overdue",
-      };
-    case "DRAFT":
-      return {
-        label: "Draft",
-        tone: "pending" as const,
-        note: "Draft invoice",
-      };
-    case "VOID":
-      return {
-        label: "Void",
-        tone: "pending" as const,
-        note: "Invoice voided",
+        note: "Payment unavailable",
       };
     default:
       return {
@@ -92,6 +80,10 @@ export type PublicInvoice = {
   discount: number;
   currency: string;
   status: "DRAFT" | "SENT" | "PAID" | "OVERDUE" | "PARTIALLY_PAID" | "VOID";
+  paymentStatus: "PAID" | "PENDING" | "FAILED" | "PARTIALLY_PAID";
+  paidAmount: number;
+  pendingAmount: number;
+  paymentMethod: string | null;
   date: string;
   due_date: string | null;
   notes: string | null;
@@ -117,6 +109,16 @@ export type PublicInvoice = {
   }>;
 };
 
+type PublicInvoiceApiResponse = Omit<
+  PublicInvoice,
+  "paymentStatus" | "paidAmount" | "pendingAmount" | "paymentMethod"
+> & {
+  payment_status: PublicInvoice["paymentStatus"];
+  paid_amount: number;
+  pending_amount: number;
+  payment_method: string | null;
+};
+
 export class PublicInvoiceNotFoundError extends Error {
   constructor(message = "Invoice not found") {
     super(message);
@@ -130,7 +132,7 @@ export const fetchPublicInvoice = async (
   const trimmedInvoiceId = invoiceId.trim();
   const backendUrl = normalizeBaseUrl(Env.BACKEND_URL);
   const response = await fetch(
-    `${backendUrl}/api/invoices/${encodeURIComponent(trimmedInvoiceId)}`,
+    `${backendUrl}/api/public/invoice/${encodeURIComponent(trimmedInvoiceId)}`,
     {
       cache: "no-store",
       headers: {
@@ -145,20 +147,26 @@ export const fetchPublicInvoice = async (
 
   const payload = (await response.json().catch(() => null)) as {
     message?: string;
-    data?: PublicInvoice;
+    data?: PublicInvoiceApiResponse;
   } | null;
 
   if (!response.ok || !payload?.data) {
     throw new Error(payload?.message || "Unable to load invoice");
   }
 
-  return payload.data;
+  return {
+    ...payload.data,
+    paymentStatus: payload.data.payment_status,
+    paidAmount: payload.data.paid_amount,
+    pendingAmount: payload.data.pending_amount,
+    paymentMethod: payload.data.payment_method,
+  } as PublicInvoice;
 };
 
 export const buildPublicInvoicePreviewData = (
   invoice: PublicInvoice,
 ): InvoicePreviewData => {
-  const statusMeta = getStatusNote(invoice.status);
+  const paymentStatusMeta = getPaymentStatusMeta(invoice.paymentStatus);
   const businessState = parseBusinessAddressText(invoice.business_address ?? "").state;
   const customerState = getStateFromGstin(invoice.customer_gstin);
   const taxMode =
@@ -216,14 +224,22 @@ export const buildPublicInvoicePreviewData = (
       roundOff: 0,
     },
     paymentSummary: {
-      statusLabel: statusMeta.label,
-      statusTone: statusMeta.tone,
-      statusNote: statusMeta.note,
-      paidAmount: invoice.status === "PAID" ? invoice.amount : 0,
-      remainingAmount: invoice.status === "PAID" ? 0 : invoice.amount,
+      statusLabel: paymentStatusMeta.label,
+      statusTone: paymentStatusMeta.tone,
+      statusNote: paymentStatusMeta.note,
+      paidAmount: invoice.paidAmount,
+      remainingAmount: invoice.pendingAmount,
     },
     payment: {
-      mode: invoice.status === "PAID" ? "Paid" : "Pending",
+      mode: invoice.paymentMethod
+        ? invoice.paymentMethod.replaceAll("_", " ")
+        : invoice.paymentStatus === "PAID"
+          ? "Paid"
+          : invoice.paymentStatus === "PARTIALLY_PAID"
+            ? "Partially paid"
+            : invoice.paymentStatus === "FAILED"
+              ? "Unavailable"
+              : "Pending",
     },
     notes: invoice.notes ?? "",
     paymentInfo:

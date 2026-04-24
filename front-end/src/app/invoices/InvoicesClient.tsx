@@ -6,10 +6,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, Circle, PackagePlus, UsersRound } from "lucide-react";
+import {
+  CheckCircle2,
+  Circle,
+  PackagePlus,
+  ScanLine,
+  UsersRound,
+} from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
-import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
+import InvoiceCompactMetaPanel from "@/components/invoice/InvoiceCompactMetaPanel";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
 import InvoiceForm from "@/components/invoice/InvoiceForm";
 import InvoiceTable from "@/components/invoice/InvoiceTable";
@@ -17,12 +23,21 @@ import InvoiceTotals from "@/components/invoice/InvoiceTotals";
 import InvoiceDraftPanel from "@/components/invoice/InvoiceDraftPanel";
 import InvoiceDraftList from "@/components/invoice/InvoiceDraftList";
 import InvoiceActions from "@/components/invoice/InvoiceActions";
+import InvoiceWorkspaceV2 from "@/components/invoice/InvoiceWorkspaceV2";
+import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import type { AsyncProductSelectHandle } from "@/components/products/AsyncProductSelect";
 import {
   DesignConfigProvider,
   normalizeDesignConfig,
 } from "@/components/invoice/DesignConfigContext";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import FriendlyEmptyState from "@/components/ui/FriendlyEmptyState";
 import FirstTimeHint from "@/components/ui/FirstTimeHint";
 import Modal from "@/components/ui/modal";
@@ -33,6 +48,10 @@ import {
   fetchUserSettingsPreferences,
   sendInvoiceEmail,
 } from "@/lib/apiClient";
+import {
+  buildInvoiceRenderPayload,
+  type InvoiceRenderPayload,
+} from "@/lib/invoiceRenderPayload";
 import {
   buildSmartSuggestions,
   rankRecentProducts,
@@ -169,6 +188,98 @@ type QuickCustomerForm = {
 
 const RECENT_PRODUCT_USAGE_STORAGE_KEY = "invoice-smart-recent-products";
 const LAST_DISCOUNT_TYPE_STORAGE_KEY = "invoice-last-discount-type";
+const LAST_WAREHOUSE_STORAGE_KEY = "invoice-last-warehouse-id";
+const SHOW_LEGACY_INVOICE_COMPOSER_UI = false;
+
+const getTodayDateValue = () => {
+  const now = new Date();
+  const timezoneOffset = now.getTimezoneOffset() * 60_000;
+  return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 10);
+};
+
+const normalizeWarehousePreference = (value: unknown) => {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return String(value);
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed ? trimmed : null;
+  }
+
+  return null;
+};
+
+const getStoredWarehousePreference = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return normalizeWarehousePreference(
+    window.localStorage.getItem(LAST_WAREHOUSE_STORAGE_KEY),
+  );
+};
+
+const getPreferredWarehouseFromSettings = (
+  preferences: unknown,
+): string | null => {
+  if (!preferences || typeof preferences !== "object") {
+    return null;
+  }
+
+  const record = preferences as Record<string, unknown>;
+  const inventory =
+    record.inventory && typeof record.inventory === "object"
+      ? (record.inventory as Record<string, unknown>)
+      : null;
+  const appPreferences =
+    record.appPreferences && typeof record.appPreferences === "object"
+      ? (record.appPreferences as Record<string, unknown>)
+      : null;
+
+  return (
+    normalizeWarehousePreference(inventory?.defaultWarehouseId) ??
+    normalizeWarehousePreference(inventory?.defaultWarehouse) ??
+    normalizeWarehousePreference(appPreferences?.defaultWarehouseId) ??
+    normalizeWarehousePreference(appPreferences?.defaultWarehouse)
+  );
+};
+
+const resolveSmartWarehouseId = (
+  availableWarehouses: Array<{ id: number }>,
+  preferences: { defaultWarehouseId?: string | null; lastWarehouseId?: string | null },
+) => {
+  const warehouseIds = new Set(
+    availableWarehouses.map((warehouse) => String(warehouse.id)),
+  );
+  const defaultWarehouseId =
+    preferences.defaultWarehouseId &&
+    warehouseIds.has(preferences.defaultWarehouseId)
+      ? preferences.defaultWarehouseId
+      : null;
+
+  if (defaultWarehouseId) {
+    return defaultWarehouseId;
+  }
+
+  const lastWarehouseId =
+    preferences.lastWarehouseId && warehouseIds.has(preferences.lastWarehouseId)
+      ? preferences.lastWarehouseId
+      : null;
+
+  if (lastWarehouseId) {
+    return lastWarehouseId;
+  }
+
+  if (availableWarehouses.length === 1) {
+    return String(availableWarehouses[0].id);
+  }
+
+  return availableWarehouses[0] ? String(availableWarehouses[0].id) : "";
+};
+
+const isValidEmailAddress = (value: string) =>
+  /^[\w-.]+@[\w-]+\.[a-zA-Z]{2,}$/.test(value.trim());
 
 const getStoredDiscountType = (): InvoiceFormState["discount_type"] => {
   if (typeof window === "undefined") {
@@ -187,19 +298,22 @@ const getStoredDiscountType = (): InvoiceFormState["discount_type"] => {
 const createEmptyInvoiceForm = (
   customerId = "",
   discountType = getStoredDiscountType(),
+  defaults?: Partial<
+    Pick<InvoiceFormState, "date" | "due_date" | "payment_status" | "warehouse_id">
+  >,
 ): InvoiceFormState => ({
   customer_id: customerId,
-  date: "",
-  due_date: "",
+  date: defaults?.date ?? getTodayDateValue(),
+  due_date: defaults?.due_date ?? "",
   discount: "0",
   discount_type: discountType,
-  payment_status: "UNPAID",
+  payment_status: defaults?.payment_status ?? "UNPAID",
   amount_paid: "",
   payment_method: "",
   payment_date: "",
   notes: "",
   sync_sales: true,
-  warehouse_id: "",
+  warehouse_id: defaults?.warehouse_id ?? "",
 });
 
 const buildProductSku = (name: string, barcode: string) => {
@@ -249,8 +363,19 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     queryFn: fetchUserSettingsPreferences,
   });
   const sendInvoiceEmailMutation = useMutation({
-    mutationFn: ({ invoiceId, email }: { invoiceId: number; email: string }) =>
-      sendInvoiceEmail(invoiceId, { email }),
+    mutationFn: ({
+      invoiceId,
+      email,
+      previewPayload,
+    }: {
+      invoiceId: number;
+      email: string;
+      previewPayload?: InvoiceRenderPayload | null;
+    }) =>
+      sendInvoiceEmail(invoiceId, {
+        email,
+        preview_payload: previewPayload ?? undefined,
+      }),
   });
   const createInvoice = useCreateInvoiceMutation();
   const createProduct = useCreateProductMutation();
@@ -267,6 +392,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const [lastCreatedInvoiceNumber, setLastCreatedInvoiceNumber] = useState<
     string | null
   >(null);
+  const [lastCreatedInvoiceRenderPayload, setLastCreatedInvoiceRenderPayload] =
+    useState<InvoiceRenderPayload | null>(null);
   const [lastCreatedInvoiceTotal, setLastCreatedInvoiceTotal] = useState<
     number | null
   >(null);
@@ -281,10 +408,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const [invoiceEmailError, setInvoiceEmailError] = useState<string | null>(
     null,
   );
+  const [checkoutAutomationPending, setCheckoutAutomationPending] =
+    useState(false);
   const initialCustomerId =
     searchParams.get("customer") ?? searchParams.get("customerId") ?? "";
   const [form, setForm] = useState<InvoiceFormState>(() =>
-    createEmptyInvoiceForm(initialCustomerId),
+    createEmptyInvoiceForm(initialCustomerId, getStoredDiscountType(), {
+      warehouse_id: getStoredWarehousePreference() ?? "",
+    }),
   );
   const [taxMode, setTaxMode] = useState<TaxMode>("CGST_SGST");
   const [items, setItems] = useState<InvoiceItemForm[]>([]);
@@ -425,6 +556,22 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     [businessProfile],
   );
   const autoFocusProductSearch = searchParams.get("quickAction") === "new-bill";
+  const settingsDefaultWarehouseId = useMemo(
+    () => getPreferredWarehouseFromSettings(userSettingsPreferences),
+    [userSettingsPreferences],
+  );
+  const warehouseIdSignature = useMemo(
+    () => warehouses.map((warehouse) => warehouse.id).join(","),
+    [warehouses],
+  );
+  const resolvedDefaultWarehouseId = useMemo(
+    () =>
+      resolveSmartWarehouseId(warehouses, {
+        defaultWarehouseId: settingsDefaultWarehouseId,
+        lastWarehouseId: getStoredWarehousePreference(),
+      }),
+    [settingsDefaultWarehouseId, warehouses],
+  );
   useEffect(() => {
     if (!invoiceBootstrap?.defaults) {
       return;
@@ -445,6 +592,42 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       };
     });
   }, [invoiceBootstrap?.defaults]);
+  useEffect(() => {
+    if (!warehouseIdSignature) {
+      return;
+    }
+
+    if (!resolvedDefaultWarehouseId) {
+      return;
+    }
+
+    setForm((current) => {
+      if (
+        current.warehouse_id &&
+        warehouses.some(
+          (warehouse) => String(warehouse.id) === current.warehouse_id,
+        )
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        warehouse_id: resolvedDefaultWarehouseId,
+      };
+    });
+  }, [form.warehouse_id, resolvedDefaultWarehouseId, warehouseIdSignature]);
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!form.warehouse_id) {
+      return;
+    }
+
+    window.localStorage.setItem(LAST_WAREHOUSE_STORAGE_KEY, form.warehouse_id);
+  }, [form.warehouse_id]);
   const isMacShortcutPlatform = useMemo(() => {
     if (typeof navigator === "undefined") return false;
     return /Mac|iPhone|iPad/i.test(navigator.platform);
@@ -796,7 +979,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
     return {
       invoiceTitle: taxMode === "NONE" ? "Bill" : "Tax Invoice",
-      invoiceNumber: t("invoice.invoicePreviewNumber"),
+      invoiceNumber: invoiceNumberPreview,
       invoiceDate,
       dueDate,
       placeOfSupply,
@@ -901,11 +1084,34 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     form.payment_status,
     form.notes,
     invoiceDate,
+    invoiceNumberPreview,
     items,
     taxMode,
     t,
     totals,
   ]);
+
+  const currentInvoiceRenderPayload = useMemo(
+    () =>
+      buildInvoiceRenderPayload({
+        templateId: activeTemplate.templateId,
+        templateName: activeTemplate.templateName,
+        data: invoicePreviewData,
+        enabledSections: activeEnabledSections,
+        sectionOrder: activeSectionOrder,
+        theme: activeTheme,
+        designConfig: activeDesignConfig,
+      }),
+    [
+      activeDesignConfig,
+      activeEnabledSections,
+      activeSectionOrder,
+      activeTemplate.templateId,
+      activeTemplate.templateName,
+      activeTheme,
+      invoicePreviewData,
+    ],
+  );
 
   const handleLoadDraft = useCallback((draft: InvoiceDraft) => {
     setForm({
@@ -915,7 +1121,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       payment_method: draft.form.payment_method ?? "",
       payment_date: draft.form.payment_date ?? "",
       sync_sales: draft.form.sync_sales ?? true,
-      warehouse_id: draft.form.warehouse_id ?? "",
+      warehouse_id: draft.form.warehouse_id ?? resolvedDefaultWarehouseId,
     });
     setTaxMode(draft.taxMode);
     setItems(draft.items);
@@ -924,7 +1130,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     setItemErrors([]);
     setSummaryErrors([]);
     setServerError(null);
-  }, []);
+  }, [resolvedDefaultWarehouseId]);
 
   const {
     drafts,
@@ -1020,7 +1226,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const resetInvoiceComposer = useCallback(
     (options?: { announce?: boolean }) => {
       setForm({
-        ...createEmptyInvoiceForm(),
+        ...createEmptyInvoiceForm("", form.discount_type, {
+          warehouse_id: resolvedDefaultWarehouseId,
+        }),
         discount_type: form.discount_type,
       });
       setTaxMode("CGST_SGST");
@@ -1041,7 +1249,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
       focusProductSearch();
     },
-    [clearDraft, flashShortcutSection, focusProductSearch, form.discount_type, t],
+    [
+      clearDraft,
+      flashShortcutSection,
+      focusProductSearch,
+      form.discount_type,
+      resolvedDefaultWarehouseId,
+      t,
+    ],
   );
 
   const handleItemChange = useCallback(
@@ -1324,37 +1539,92 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     window.print();
   }, []);
 
+  const buildInvoicePdfFileName = useCallback(
+    (invoiceNumber?: string | null) => {
+      const normalized = (invoiceNumber?.trim() || invoiceNumberPreview).replace(
+        /[^a-zA-Z0-9._-]/g,
+        "-",
+      );
+      return `${normalized || "invoice"}.pdf`;
+    },
+    [invoiceNumberPreview],
+  );
+
+  const downloadPreviewInvoicePdf = useCallback(
+    async (
+      previewPayload: InvoiceRenderPayload,
+      invoiceNumber?: string | null,
+    ) => {
+      await downloadPdf({
+        previewPayload,
+        fileName: buildInvoicePdfFileName(
+          invoiceNumber || previewPayload.data.invoiceNumber,
+        ),
+      });
+    },
+    [buildInvoicePdfFileName, downloadPdf],
+  );
+
   const handleDownloadPdf = useCallback(async () => {
     try {
-      await downloadPdf({
-        previewPayload: {
-          templateId: activeTemplate.templateId,
-          templateName: activeTemplate.templateName,
-          data: invoicePreviewData,
-          enabledSections: activeEnabledSections,
-          sectionOrder: activeSectionOrder,
-          theme: activeTheme,
-          designConfig: activeDesignConfig,
-        },
-        fileName: `invoice-${invoicePreviewData.invoiceNumber}.pdf`,
-      });
+      await downloadPreviewInvoicePdf(
+        lastCreatedInvoiceRenderPayload ?? currentInvoiceRenderPayload,
+        lastCreatedInvoiceNumber,
+      );
     } catch {
       toast.error(t("invoice.pdfError"));
     }
   }, [
-    activeDesignConfig,
-    activeEnabledSections,
-    activeSectionOrder,
-    activeTemplate.templateId,
-    activeTemplate.templateName,
-    activeTheme,
-    downloadPdf,
-    invoicePreviewData,
+    currentInvoiceRenderPayload,
+    downloadPreviewInvoicePdf,
+    lastCreatedInvoiceRenderPayload,
+    lastCreatedInvoiceNumber,
     t,
   ]);
 
+  const autoSendInvoiceEmail = useCallback(
+    async (
+      invoiceId: number,
+      invoiceNumber: string | null,
+      email: string,
+      previewPayload?: InvoiceRenderPayload | null,
+    ) => {
+      const recipient = email.trim();
+      if (!recipient || !isValidEmailAddress(recipient)) {
+        return;
+      }
+
+      try {
+        const response = await sendInvoiceEmailMutation.mutateAsync({
+          invoiceId,
+          email: recipient,
+          previewPayload,
+        });
+        setLastCreatedCustomerEmail(response.email ?? recipient);
+        captureAnalyticsEvent("invoice_email_sent", {
+          invoiceId,
+          invoiceNumber,
+          source: "auto-checkout",
+        });
+        toast.success(
+          response.queued
+            ? `Email queued for ${response.email ?? recipient}`
+            : `Email sent to ${response.email ?? recipient}`,
+        );
+      } catch (error) {
+        toast.error(
+          parseServerErrors(
+            error,
+            `Invoice created, but email could not be sent to ${recipient}.`,
+          ),
+        );
+      }
+    },
+    [parseServerErrors, sendInvoiceEmailMutation],
+  );
+
   const submitInvoice = useCallback(async () => {
-    if (createInvoice.isPending) return;
+    if (createInvoice.isPending || checkoutAutomationPending) return;
 
     setServerError(null);
 
@@ -1378,6 +1648,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     }
 
     try {
+      setCheckoutAutomationPending(true);
       const selectedCustomer =
         customers?.find(
           (customer) => customer.id === Number(form.customer_id),
@@ -1423,9 +1694,17 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           tax_rate: item.tax_rate ? Number(item.tax_rate) : undefined,
         })),
       });
+      const createdInvoiceRenderPayload = buildInvoiceRenderPayload({
+        ...currentInvoiceRenderPayload,
+        data: {
+          ...currentInvoiceRenderPayload.data,
+          invoiceNumber: createdInvoice.invoice_number,
+        },
+      });
 
       setLastCreatedInvoiceId(createdInvoice.id);
       setLastCreatedInvoiceNumber(createdInvoice.invoice_number);
+      setLastCreatedInvoiceRenderPayload(createdInvoiceRenderPayload);
       setLastCreatedInvoiceTotal(Number(createdInvoice.total ?? totals.total));
       setLastCreatedInvoiceDate(
         createdInvoice.date
@@ -1447,14 +1726,38 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           invoiceNumber: createdInvoice.invoice_number,
         }),
       );
+      try {
+        await downloadPreviewInvoicePdf(
+          createdInvoiceRenderPayload,
+          createdInvoice.invoice_number,
+        );
+      } catch {
+        toast.error(t("invoice.pdfError"));
+      }
+
+      if (selectedCustomer?.email?.trim()) {
+        await autoSendInvoiceEmail(
+          createdInvoice.id,
+          createdInvoice.invoice_number,
+          selectedCustomer.email,
+          createdInvoiceRenderPayload,
+        );
+      }
+
       resetInvoiceComposer();
     } catch (error) {
       setServerError(parseServerErrors(error, t("invoice.createError")));
+    } finally {
+      setCheckoutAutomationPending(false);
     }
   }, [
+    autoSendInvoiceEmail,
+    checkoutAutomationPending,
     createInvoice,
+    currentInvoiceRenderPayload,
     customers,
     discountValidationMessage,
+    downloadPreviewInvoicePdf,
     form,
     items,
     parseServerErrors,
@@ -1502,7 +1805,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       return;
     }
 
-    if (!/^[\w-.]+@[\w-]+\.[a-zA-Z]{2,}$/.test(recipient)) {
+    if (!isValidEmailAddress(recipient)) {
       setInvoiceEmailError(t("invoiceDetail.messages.enterValidEmail"));
       return;
     }
@@ -1512,6 +1815,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       const response = await sendInvoiceEmailMutation.mutateAsync({
         invoiceId: lastCreatedInvoiceId,
         email: recipient,
+        previewPayload: lastCreatedInvoiceRenderPayload,
       });
       setLastCreatedCustomerEmail(response.email ?? recipient);
       setInvoiceEmailOpen(false);
@@ -1519,7 +1823,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         invoiceId: lastCreatedInvoiceId,
         invoiceNumber: lastCreatedInvoiceNumber,
       });
-      toast.success(t("invoice.sendEmailSuccess"));
+      toast.success(
+        response.queued
+          ? "Invoice email queued successfully."
+          : t("invoice.sendEmailSuccess"),
+      );
       toast.success(
         t("invoice.sendEmailSuccessInvoice", {
           invoiceNumber: lastCreatedInvoiceNumber ?? `#${lastCreatedInvoiceId}`,
@@ -1533,6 +1841,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     invoiceEmailRecipient,
     lastCreatedInvoiceId,
     lastCreatedInvoiceNumber,
+    lastCreatedInvoiceRenderPayload,
     t,
     parseServerErrors,
     sendInvoiceEmailMutation,
@@ -1702,6 +2011,424 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     </div>
   );
 
+  const bootstrapNotice = hasBootstrapError ? (
+    <section className="mb-6 rounded-2xl border border-amber-300/70 bg-amber-50/80 p-4 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
+      <p className="text-sm font-semibold">
+        {language === "hi"
+          ? "कुछ डेटा लोड नहीं हो पाया"
+          : "Some setup data could not be loaded"}
+      </p>
+      <p className="mt-1 text-xs opacity-90">
+        {language === "hi"
+          ? "ग्राहक, प्रोडक्ट या वेयरहाउस डेटा में दिक्कत है. कृपया फिर से लोड करें."
+          : "Customers, products, or warehouse data failed to load. Please retry."}
+      </p>
+      <div className="mt-3">
+        <Button type="button" variant="outline" onClick={handleRetryBootstrapData}>
+          {language === "hi" ? "फिर से लोड करें" : "Retry loading"}
+        </Button>
+      </div>
+    </section>
+  ) : isBootstrapLoading ? (
+    <section className="mb-6 rounded-2xl border border-slate-200 bg-slate-50/90 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+      {language === "hi"
+        ? "ग्राहक, प्रोडक्ट और वेयरहाउस डेटा लोड हो रहा है..."
+        : "Loading customers, products, and warehouse data..."}
+    </section>
+  ) : null;
+
+  const heroActions = (
+    <>
+      <div className="rounded-[1.4rem] border border-border/70 bg-background/80 px-4 py-3 text-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+          {isDirty ? t("common.draft") : t("common.saved")}
+        </p>
+        <p className="mt-2 text-sm text-foreground">{draftId ?? "invoice-composer"}</p>
+      </div>
+      {noCustomers ? (
+        <>
+          <Button type="button" onClick={() => setQuickAddCustomerOpen(true)}>
+            {helperCopy.addCustomer}
+          </Button>
+          <Button type="button" variant="outline" asChild>
+            <Link href="/customers">{helperCopy.openCustomers}</Link>
+          </Button>
+        </>
+      ) : noProducts ? (
+        <>
+          <Button type="button" onClick={() => setQuickAddProductOpen(true)}>
+            {helperCopy.addProduct}
+          </Button>
+          <Button type="button" variant="outline" asChild>
+            <Link href="/products">{helperCopy.openProducts}</Link>
+          </Button>
+        </>
+      ) : (
+        <Button type="button" onClick={scrollToCheckout}>
+          {reviewActionLabel}
+        </Button>
+      )}
+    </>
+  );
+
+  const customerWorkspaceNode = noCustomers ? (
+    <FriendlyEmptyState
+      icon={UsersRound}
+      title={helperCopy.noCustomersTitle}
+      description={helperCopy.noCustomersDescription}
+      hint={helperCopy.noCustomersHint}
+      primaryAction={{
+        label: helperCopy.addCustomer,
+        onClick: () => setQuickAddCustomerOpen(true),
+      }}
+      secondaryAction={{
+        label: helperCopy.openCustomers,
+        href: "/customers",
+        variant: "outline",
+      }}
+    />
+  ) : (
+    <FirstTimeHint
+      id="bill-step-customer"
+      message="Choose the customer first. This makes the rest of the bill easier."
+    >
+      <div
+        className={
+          shortcutHighlight === "form"
+            ? "rounded-[2rem] shadow-[0_0_0_4px_rgba(37,99,235,0.12)]"
+            : undefined
+        }
+      >
+        <InvoiceCompactMetaPanel
+          form={form}
+          customers={customers}
+          warehouses={warehouses}
+          businessSummary={businessSummary}
+          invoiceNumberPreview={invoiceNumberPreview}
+          subtotalAmount={totals.subtotal}
+          totalAmount={totals.total}
+          taxMode={taxMode}
+          discountAppliedAmount={discountAppliedAmount}
+          discountError={discountValidationMessage}
+          onFormChange={handleFormChange}
+          onTaxModeChange={handleTaxModeChange}
+          summaryErrors={summaryErrors}
+          serverError={serverError}
+          onQuickAddCustomer={() => setQuickAddCustomerOpen(true)}
+        />
+      </div>
+    </FirstTimeHint>
+  );
+
+  const helperNode = (
+    <div className="grid gap-4">
+      <Card className="gap-3 p-0">
+        <CardHeader className="pb-0">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+            <UsersRound className="h-4 w-4" />
+            {language === "hi" ? "सहायता" : "Support"}
+          </div>
+          <CardTitle className="text-lg">{helperCopy.missingCustomerQuestion}</CardTitle>
+          <CardDescription className="whitespace-normal">
+            {helperCopy.missingCustomerAnswer}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <p className="text-sm leading-6 text-muted-foreground">
+            {advancedHelpCopy.body}
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const productsWorkspaceNode = noProducts ? (
+    <FriendlyEmptyState
+      icon={PackagePlus}
+      title={helperCopy.noProductsTitle}
+      description={helperCopy.noProductsDescription}
+      hint={helperCopy.noProductsHint}
+      primaryAction={{
+        label: helperCopy.addProduct,
+        onClick: () => setQuickAddProductOpen(true),
+      }}
+      secondaryAction={{
+        label: helperCopy.openProducts,
+        href: "/products",
+        variant: "outline",
+      }}
+    />
+  ) : (
+    <FirstTimeHint
+      id="bill-step-products"
+      message="Search or scan a product here, then add it to the bill."
+    >
+      <InvoiceTable
+        items={items}
+        errors={itemErrors}
+        productLookup={productLookup}
+        quickEntryProduct={quickEntryProduct}
+        quickEntryRef={quickEntryRef}
+        autoFocusProductSearch={autoFocusProductSearch}
+        selectedItemIndex={resolvedSelectedItemIndex}
+        recentProductId={recentCartProductId}
+        suggestedProducts={suggestedProducts}
+        recentProducts={quickAccessProducts}
+        shortcutMetaLabel={shortcutModifierLabel}
+        entryHighlighted={shortcutHighlight === "entry"}
+        itemsHighlighted={shortcutHighlight === "items"}
+        onFocusEntry={() => focusProductSearch()}
+        onQuickEntrySelect={setQuickEntryProduct}
+        onQuickEntrySubmit={handleQuickEntrySubmit}
+        onSelectItem={setSelectedItemIndex}
+        onItemChange={handleItemChange}
+        onRemoveItem={removeItem}
+        onAddSuggestedProduct={handleSuggestedProductAdd}
+      />
+    </FirstTimeHint>
+  );
+
+  const previewWorkspaceNode = (
+    <Card className="overflow-hidden p-0">
+      <CardHeader>
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+          <ScanLine className="h-4 w-4" />
+          {language === "hi" ? "बिल प्रीव्यू" : "Invoice preview"}
+        </div>
+        <CardTitle className="text-xl">
+          {language === "hi" ? "लाइव A4 प्रीव्यू" : "Large live A4 preview"}
+        </CardTitle>
+        <CardDescription className="whitespace-normal">
+          {language === "hi"
+            ? "स्क्रीन पर साफ़ प्रीव्यू देखें. PDF और प्रिंट यही डेटा इस्तेमाल करते हैं."
+            : "Review the exact invoice data here before PDF, print, or email."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="printable">
+          <DesignConfigProvider
+            value={{
+              designConfig: activeDesignConfig,
+              updateSection: () => {},
+              resetSection: () => {},
+              resetAll: () => {},
+            }}
+          >
+            <div
+              id="invoice-preview-pdf-root"
+              className="rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none"
+            >
+              <A4PreviewStack
+                stackKey={`invoices-preview-${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
+              >
+                <InvoiceTemplate
+                  key={`${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
+                  templateId={activeTemplate.templateId}
+                  templateName={activeTemplate.templateName}
+                  data={invoicePreviewData}
+                  enabledSections={activeEnabledSections}
+                  sectionOrder={activeSectionOrder}
+                  theme={activeTheme}
+                />
+              </A4PreviewStack>
+            </div>
+          </DesignConfigProvider>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const totalsWorkspaceNode = (
+    <InvoiceTotals
+      totals={totals}
+      taxMode={taxMode}
+      discountValue={form.discount}
+      discountType={form.discount_type}
+      discountLabel={discountSummaryLabel}
+      eyebrow="Checkout"
+      title="Bill summary"
+      description="Keep the total in view, tweak discount inline, then generate the invoice."
+      statusLabel="Live"
+      topSlot={
+        <div className="rounded-[1.2rem] border border-slate-200 bg-slate-50/90 p-3 dark:border-slate-700 dark:bg-slate-900/70">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">
+                Discount
+              </p>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                Adjust offer without leaving checkout.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full px-3"
+              disabled={totals.subtotal <= 0}
+              onClick={() =>
+                handleFormChange({
+                  ...form,
+                  discount: "10",
+                  discount_type: "PERCENTAGE",
+                })
+              }
+            >
+              Flat 10%
+            </Button>
+          </div>
+          <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_130px]">
+            <Input
+              id="discount"
+              type="number"
+              min="0"
+              step="0.01"
+              value={form.discount}
+              disabled={totals.subtotal <= 0}
+              onChange={(event) =>
+                handleFormChange({ ...form, discount: event.target.value })
+              }
+              placeholder={t("invoiceForm.discountPlaceholder")}
+              className="h-10 rounded-xl border-slate-200 bg-white text-sm shadow-sm focus-visible:border-primary/35 focus-visible:ring-primary/10 dark:border-slate-700 dark:bg-slate-950"
+            />
+            <select
+              id="discount_type"
+              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 shadow-sm focus:border-primary/35 focus:outline-none focus:ring-2 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:border-primary/35 dark:focus:ring-primary/20"
+              value={form.discount_type}
+              disabled={totals.subtotal <= 0}
+              onChange={(event) =>
+                handleFormChange({
+                  ...form,
+                  discount_type: event.target
+                    .value as InvoiceFormState["discount_type"],
+                })
+              }
+            >
+              <option value="FIXED">{t("invoiceForm.discountTypeFixed")}</option>
+              <option value="PERCENTAGE">
+                {t("invoiceForm.discountTypePercentage")}
+              </option>
+            </select>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+            <span className="text-slate-600 dark:text-slate-300">
+              Applied discount
+            </span>
+            <span className="font-semibold text-slate-950 dark:text-slate-100">
+              -{formatCurrency(discountAppliedAmount)}
+            </span>
+          </div>
+          {discountValidationMessage ? (
+            <p className="mt-2 text-sm text-destructive">
+              {discountValidationMessage}
+            </p>
+          ) : null}
+        </div>
+      }
+      paidAmount={
+        form.payment_status === "PAID"
+          ? totals.total
+          : form.payment_status === "PARTIALLY_PAID"
+            ? Math.min(Math.max(Number(form.amount_paid || 0), 0), totals.total)
+            : 0
+      }
+      remainingAmount={
+        form.payment_status === "PAID"
+          ? 0
+          : Math.max(
+              totals.total -
+                (form.payment_status === "PARTIALLY_PAID"
+                  ? Math.min(
+                      Math.max(Number(form.amount_paid || 0), 0),
+                      totals.total,
+                    )
+                  : 0),
+              0,
+            )
+      }
+      className="xl:max-w-none"
+      action={
+        <FirstTimeHint
+          id="bill-step-generate"
+          message="When the customer and products are ready, use this button to create the bill."
+          position="bottom"
+        >
+          <div className="mt-6 grid gap-3">
+            <Button
+              id="bill-create-button"
+              type="button"
+              size="lg"
+              className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
+              disabled={
+                createInvoice.isPending ||
+                checkoutAutomationPending ||
+                items.length === 0
+              }
+              onClick={() => void submitInvoice()}
+            >
+              {createInvoice.isPending || checkoutAutomationPending
+                ? t("invoiceComposer.generating")
+                : t("invoiceComposer.checkout")}
+            </Button>
+            <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
+              <span>
+                {items.length === 0
+                  ? helperCopy.reviewMissing
+                  : helperCopy.reviewReady}
+              </span>
+              <span className="font-semibold">
+                {t("invoiceComposer.lineItemsCount", {
+                  count: items.length,
+                })}
+              </span>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {items.length === 0
+                ? helperCopy.reviewMissingHelp
+                : t("invoiceComposer.keyboardCheckout", {
+                    key: shortcutModifierLabel,
+                  })}
+            </p>
+          </div>
+        </FirstTimeHint>
+      }
+    />
+  );
+
+  const actionsWorkspaceNode = (
+    <div
+      className={
+        shortcutHighlight === "actions"
+          ? "rounded-[2rem] shadow-[0_0_0_4px_rgba(37,99,235,0.12)]"
+          : undefined
+      }
+    >
+      <InvoiceActions
+        onPrint={handlePrint}
+        onDownloadPdf={handleDownloadPdf}
+        onSendEmail={openInvoiceEmailModal}
+        isSendingEmail={sendInvoiceEmailMutation.isPending}
+      />
+    </div>
+  );
+
+  const draftsWorkspaceNode = (
+    <div className="grid gap-6">
+      <InvoiceDraftPanel
+        isDirty={isDirty}
+        lastSavedAt={lastSavedAt}
+        onSaveDraft={saveNewDraft}
+      />
+      <InvoiceDraftList
+        drafts={drafts}
+        currentDraftId={draftId}
+        customerNameById={customerNameById}
+        onLoadDraft={loadDraft}
+        onDeleteDraft={deleteDraft}
+      />
+    </div>
+  );
+
   return (
     <DashboardLayout
       name={name}
@@ -1714,6 +2441,44 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       }
       actions={headerActions}
     >
+      <>
+        <InvoiceWorkspaceV2
+          title={language === "hi" ? "इनवॉइस वर्कस्पेस" : "Invoice workspace"}
+          description={
+            language === "hi"
+              ? "उसी लॉजिक के साथ ग्राहक, उत्पाद, प्रीव्यू और चेकआउट को एक तेज़ सिंगल-स्क्रीन लेआउट में रखें."
+              : "Keep customer, products, preview, and checkout in one faster single-screen workspace using the same invoice logic."
+          }
+          draftBadgeLabel={isDirty ? t("common.draft") : t("common.saved")}
+          draftMeta={
+            isDirty
+              ? t("invoice.statusUnsavedChanges")
+              : lastSavedAt
+                ? t("invoiceDrafts.savedRelative", {
+                    time: formatRelativeTime(lastSavedAt, locale),
+                  })
+                : t("common.ready")
+          }
+          invoiceNumberPreview={invoiceNumberPreview}
+          invoiceDateLabel={invoiceDate}
+          customerLabel={customer?.name || t("invoiceForm.selectCustomer")}
+          totalLabel={formatCurrency(totals.total)}
+          lineItemsLabel={t("invoiceComposer.lineItemsCount", {
+            count: items.length,
+          })}
+          bootstrapNotice={bootstrapNotice}
+          heroActions={heroActions}
+          customerNode={customerWorkspaceNode}
+          helperNode={helperNode}
+          productsNode={productsWorkspaceNode}
+          previewNode={previewWorkspaceNode}
+          totalsNode={totalsWorkspaceNode}
+          actionsNode={actionsWorkspaceNode}
+          draftsNode={draftsWorkspaceNode}
+        />
+
+        {SHOW_LEGACY_INVOICE_COMPOSER_UI ? (
+          <>
       <div className="mx-auto w-full max-w-[1500px] font-[var(--font-sora),var(--font-geist-sans)]">
         {hasBootstrapError ? (
           <section className="mb-6 rounded-2xl border border-amber-300/70 bg-amber-50/80 p-4 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
@@ -1900,7 +2665,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               onFormChange={handleFormChange}
               onTaxModeChange={handleTaxModeChange}
               onSubmit={handleSubmit}
-                  isSubmitting={createInvoice.isPending}
+                  isSubmitting={
+                    createInvoice.isPending || checkoutAutomationPending
+                  }
                   summaryErrors={summaryErrors}
                   serverError={serverError}
                   hideSubmit
@@ -2017,7 +2784,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                   <A4PreviewStack
                     stackKey={`invoices-preview-${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
                   >
-                    <TemplatePreviewRenderer
+                    <InvoiceTemplate
                       key={`${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
                       templateId={activeTemplate.templateId}
                       templateName={activeTemplate.templateName}
@@ -2091,10 +2858,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                       type="button"
                       size="lg"
                       className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
-                      disabled={createInvoice.isPending || items.length === 0}
+                      disabled={
+                        createInvoice.isPending ||
+                        checkoutAutomationPending ||
+                        items.length === 0
+                      }
                       onClick={() => void submitInvoice()}
                     >
-                      {createInvoice.isPending
+                      {createInvoice.isPending || checkoutAutomationPending
                         ? t("invoiceComposer.generating")
                         : t("invoiceComposer.checkout")}
                     </Button>
@@ -2138,6 +2909,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             </div>
           </aside>
         </section>
+
+      </div>
+          </>
+        ) : null}
 
         <Modal
           open={invoiceEmailOpen}
@@ -2405,7 +3180,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             </div>
           </form>
         </Modal>
-      </div>
+      </>
     </DashboardLayout>
   );
 };

@@ -6,6 +6,7 @@ import {
   idParamSchema,
   invoiceCreateSchema,
   invoiceEmailRequestSchema,
+  invoicePreviewPdfRequestSchema,
   invoiceUpdateSchema,
 } from "../../validations/apiValidations.js";
 import {
@@ -14,6 +15,7 @@ import {
   duplicate as duplicateInvoice,
   index,
   pdf,
+  previewPdf,
   reminder,
   send,
   show,
@@ -25,6 +27,12 @@ const router = Router();
 
 router.get("/", AuthMiddleware, index);
 router.get("/bootstrap", AuthMiddleware, bootstrap);
+router.post(
+  "/preview-pdf",
+  AuthMiddleware,
+  validate({ body: invoicePreviewPdfRequestSchema }),
+  previewPdf,
+);
 router.post(
   "/",
   AuthMiddleware,

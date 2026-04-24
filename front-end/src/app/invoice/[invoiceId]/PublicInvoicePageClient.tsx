@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { Copy, ExternalLink, Printer } from "lucide-react";
+import { Copy, ExternalLink } from "lucide-react";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
 import {
   DesignConfigProvider,
   normalizeDesignConfig,
 } from "@/components/invoice/DesignConfigContext";
-import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
+import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   buildPublicInvoicePreviewData,
@@ -27,16 +28,11 @@ const formatCurrency = (value: number, currency: string) =>
     maximumFractionDigits: 2,
   }).format(value);
 
-const getStatusBadgeClassName = (status: PublicInvoice["status"]) => {
-  if (status === "PAID") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-
-  if (status === "OVERDUE") {
-    return "border-rose-200 bg-rose-50 text-rose-700";
-  }
-
-  return "border-amber-200 bg-amber-50 text-amber-700";
+const statusMap: Record<PublicInvoice["paymentStatus"], string> = {
+  PAID: "border-green-200 bg-green-100 text-green-700",
+  PENDING: "border-yellow-200 bg-yellow-100 text-yellow-700",
+  FAILED: "border-red-200 bg-red-100 text-red-700",
+  PARTIALLY_PAID: "border-blue-200 bg-blue-100 text-blue-700",
 };
 
 type PublicInvoicePageClientProps = {
@@ -52,10 +48,6 @@ const PublicInvoicePageClient = ({
     [invoice],
   );
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href);
@@ -67,7 +59,7 @@ const PublicInvoicePageClient = ({
   return (
     <main className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2ff_50%,#ffffff_100%)] px-4 py-8 text-slate-950 sm:px-6 lg:px-8">
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-6">
-        <section className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/90 shadow-[0_24px_80px_-42px_rgba(15,23,42,0.45)] backdrop-blur">
+        <section className="rounded-[2rem] border border-white/80 bg-white/90 shadow-[0_24px_80px_-42px_rgba(15,23,42,0.45)] backdrop-blur">
           <div className="grid gap-6 px-6 py-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.26em] text-slate-500">
@@ -82,11 +74,11 @@ const PublicInvoicePageClient = ({
               </p>
 
               <div className="mt-5 flex flex-wrap gap-3">
-                <span
-                  className={`inline-flex items-center rounded-full border px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] ${getStatusBadgeClassName(invoice.status)}`}
+                <Badge
+                  className={`px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] ${statusMap[invoice.paymentStatus]}`}
                 >
-                  {invoice.status.replaceAll("_", " ")}
-                </span>
+                  {invoice.paymentStatus.replaceAll("_", " ")}
+                </Badge>
                 <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-slate-600">
                   Total {formatCurrency(invoice.amount, invoice.currency)}
                 </span>
@@ -102,15 +94,6 @@ const PublicInvoicePageClient = ({
               >
                 <Copy className="h-4 w-4" />
                 Copy link
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 rounded-xl"
-                onClick={handlePrint}
-              >
-                <Printer className="h-4 w-4" />
-                Print
               </Button>
               <Button asChild className="h-11 rounded-xl">
                 <Link href="/" target="_blank" rel="noreferrer">
@@ -162,7 +145,10 @@ const PublicInvoicePageClient = ({
           </div>
         </section>
 
-        <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.4)]">
+        <section
+          id="invoice"
+          className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-[0_24px_70px_-44px_rgba(15,23,42,0.4)]"
+        >
           <DesignConfigProvider
             value={{
               designConfig,
@@ -172,7 +158,7 @@ const PublicInvoicePageClient = ({
             }}
           >
             <A4PreviewStack stackKey={`public-invoice-${invoice.public_id}`}>
-              <TemplatePreviewRenderer
+              <InvoiceTemplate
                 templateId={DEFAULT_INVOICE_TEMPLATE_ID}
                 templateName={DEFAULT_INVOICE_TEMPLATE_NAME}
                 data={previewData}

@@ -3,6 +3,7 @@ import app from "./app.js";
 import { startInventoryInsightsCron } from "./jobs/inventoryInsights.job.js";
 import { startRecurringInvoiceCron } from "./jobs/recurringInvoice.job.js";
 import { ensureSchemaCompatibility } from "./lib/schemaCompatibility.js";
+import { startInvoiceQueueWorker } from "./modules/invoice/invoice.queue.js";
 import {
   flushObservability,
   initServerObservability,
@@ -28,6 +29,7 @@ await ensureSchemaCompatibility();
 initServerObservability();
 startRecurringInvoiceCron();
 startInventoryInsightsCron();
+startInvoiceQueueWorker();
 
 app.listen(PORT, () => console.log(`Server is running on PORT ${PORT}`));
 

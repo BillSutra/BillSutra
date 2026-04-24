@@ -4,6 +4,7 @@ import prisma from "../../config/db.config.js";
 import type { z } from "zod";
 import {
   invoiceCreateSchema,
+  invoicePreviewPdfRequestSchema,
   invoiceUpdateSchema,
 } from "../../validations/apiValidations.js";
 import {
@@ -23,8 +24,12 @@ import { buildPublicInvoiceUrl } from "../../lib/appUrls.js";
 import { incrementInvoiceUsage } from "../../services/subscription.service.js";
 import { createNotification } from "../../services/notification.service.js";
 import { invalidateInventoryInsightsCacheByUser } from "../../services/inventoryInsights.service.js";
+import { deliverInvoiceEmail, resolveInvoiceEmailRecipient } from "./invoiceEmail.service.js";
+import { renderInvoicePreviewPdfBuffer } from "./invoicePreviewPdf.service.js";
+import { enqueueInvoiceEmailDelivery } from "./invoice.queue.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
+type InvoicePreviewPdfRequestInput = z.infer<typeof invoicePreviewPdfRequestSchema>;
 type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
 type HttpLikeError = Error & {
   status?: number;
@@ -85,6 +90,13 @@ const parseDateFilter = (value?: string) => {
   }
 
   return parsed;
+};
+
+const sanitizeDownloadFileName = (value?: string) => {
+  const fallback = "invoice-preview.pdf";
+  if (!value?.trim()) return fallback;
+  const safe = value.trim().replace(/[^a-zA-Z0-9._-]/g, "-");
+  return safe.toLowerCase().endsWith(".pdf") ? safe : `${safe}.pdf`;
 };
 
 export const index = async (req: Request, res: Response) => {
@@ -327,7 +339,72 @@ export const pdf = async (req: Request, res: Response) => {
       });
     }
 
+    console.error("[invoice.controller] pdf generation failed", {
+      invoiceId: req.params.id,
+      userId,
+      message: err?.message,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
     return res.status(500).json({ message: "Unable to generate invoice PDF" });
+  }
+};
+
+export const previewPdf = async (req: Request, res: Response) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  try {
+    const body = req.body as InvoicePreviewPdfRequestInput;
+    const previewPayload = body.preview_payload;
+    const previewItems = Array.isArray(previewPayload?.data?.items)
+      ? previewPayload.data.items
+      : [];
+
+    if (!previewItems.length) {
+      return res.status(422).json({
+        message: "Invoice data not ready for PDF generation",
+        errors: { preview_payload: ["At least one invoice item is required"] },
+      });
+    }
+
+    const buffer = await renderInvoicePreviewPdfBuffer(previewPayload);
+    const htmlLength = JSON.stringify(previewPayload).length;
+
+    console.info("[invoice.controller] preview pdf generated", {
+      userId,
+      itemCount: previewItems.length,
+      payloadSize: htmlLength,
+      fileName: body.file_name ?? null,
+    });
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${sanitizeDownloadFileName(body.file_name)}"`,
+    );
+
+    return res.status(200).send(buffer);
+  } catch (error) {
+    const err = error as HttpLikeError;
+    const status = getErrorStatus(error);
+
+    if (status) {
+      return res.status(status).json({
+        message: err.message,
+        errors: err.errors,
+      });
+    }
+
+    console.error("[invoice.controller] preview pdf generation failed", {
+      userId,
+      message: err?.message,
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+
+    return res.status(500).json({ message: "Unable to generate preview PDF" });
   }
 };
 
@@ -341,63 +418,51 @@ export const send = async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     const requestedEmail =
       typeof req.body?.email === "string" ? req.body.email.trim() : "";
-    const invoiceDetails = await getInvoice(userId, id);
-    if (!invoiceDetails) {
-      return res.status(404).json({ message: "Invoice not found" });
-    }
+    const previewPayload =
+      req.body?.preview_payload &&
+      typeof req.body.preview_payload === "object" &&
+      !Array.isArray(req.body.preview_payload)
+        ? req.body.preview_payload
+        : undefined;
+    const { recipientEmail } = await resolveInvoiceEmailRecipient(
+      userId,
+      id,
+      requestedEmail,
+    );
+    const queued = await enqueueInvoiceEmailDelivery({
+      userId,
+      invoiceId: id,
+      requestedEmail,
+      previewPayload,
+    });
 
-    const recipientEmail =
-      requestedEmail || invoiceDetails.customer?.email?.trim() || "";
-    if (!recipientEmail) {
-      return res.status(422).json({
-        message: "Customer email is required to send this invoice",
-        errors: { email: ["Customer email is required"] },
+    if (queued.queued) {
+      return res.status(202).json({
+        message: `Invoice email queued for ${recipientEmail}`,
+        data: {
+          invoiceId: id,
+          status: "queued",
+          email: recipientEmail,
+          queued: true,
+          jobId: queued.jobId,
+        },
       });
     }
 
-    const businessProfile = await prisma.businessProfile.findUnique({
-      where: { user_id: userId },
-      select: {
-        business_name: true,
-        email: true,
-        phone: true,
-        currency: true,
-      },
+    const result = await deliverInvoiceEmail({
+      userId,
+      invoiceId: id,
+      requestedEmail,
+      previewPayload,
     });
-
-    await sendEmail("invoice_sent", {
-      email: recipientEmail,
-      customer_name: invoiceDetails.customer?.name ?? "Customer",
-      invoice_id: invoiceDetails.invoice_number,
-      amount: Number(invoiceDetails.total ?? 0),
-      date: invoiceDetails.date,
-      due_date: invoiceDetails.due_date,
-      business_name: businessProfile?.business_name ?? "BillSutra",
-      business_email: businessProfile?.email ?? null,
-      business_phone: businessProfile?.phone ?? null,
-      notes: invoiceDetails.notes ?? null,
-      invoice_url: buildPublicInvoiceUrl(
-        invoiceDetails.id,
-        invoiceDetails.invoice_number,
-      ),
-      currency: businessProfile?.currency ?? "INR",
-      items: invoiceDetails.items.map((item) => ({
-        name: item.name,
-        quantity: Number(item.quantity ?? 0),
-        unit_price: Number(item.price ?? 0),
-        line_total: Number(item.total ?? 0),
-      })),
-    });
-
-    const invoice = await markInvoiceAsSent(userId, id);
-    emitDashboardUpdate({ userId, source: "invoice.sent" });
 
     return res.status(200).json({
       message: `Invoice email sent to ${recipientEmail}`,
       data: {
-        invoiceId: invoice.id,
-        status: invoice.status,
-        email: recipientEmail,
+        invoiceId: result.invoiceId,
+        status: result.status,
+        email: result.email,
+        queued: false,
       },
     });
   } catch (error) {
