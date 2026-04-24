@@ -1,12 +1,22 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { CheckCircle2, Circle, PackagePlus, UsersRound } from "lucide-react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  Circle,
+  FileText,
+  NotebookText,
+  PackagePlus,
+  ScanLine,
+  UsersRound,
+  Wallet,
+} from "lucide-react";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
@@ -22,7 +32,15 @@ import {
   DesignConfigProvider,
   normalizeDesignConfig,
 } from "@/components/invoice/DesignConfigContext";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import FriendlyEmptyState from "@/components/ui/FriendlyEmptyState";
 import FirstTimeHint from "@/components/ui/FirstTimeHint";
 import Modal from "@/components/ui/modal";
@@ -169,6 +187,7 @@ type QuickCustomerForm = {
 
 const RECENT_PRODUCT_USAGE_STORAGE_KEY = "invoice-smart-recent-products";
 const LAST_DISCOUNT_TYPE_STORAGE_KEY = "invoice-last-discount-type";
+const SHOW_LEGACY_INVOICE_COMPOSER_UI = false;
 
 const getStoredDiscountType = (): InvoiceFormState["discount_type"] => {
   if (typeof window === "undefined") {
@@ -214,6 +233,136 @@ const buildProductSku = (name: string, barcode: string) => {
     Date.now().toString().slice(-4);
 
   return `${base || "ITEM"}-${suffix}`;
+};
+
+const InvoiceComposerV2 = ({
+  isHindi,
+  title,
+  description,
+  guidedStep,
+  draftBadgeLabel,
+  draftMeta,
+  invoiceNumberPreview,
+  invoiceDateLabel,
+  customerLabel,
+  totalLabel,
+  lineItemsLabel,
+  bootstrapNotice,
+  heroActions,
+  customerNode,
+  helperNode,
+  productsNode,
+  previewNode,
+  totalsNode,
+  actionsNode,
+  draftsNode,
+}: {
+  isHindi: boolean;
+  title: string;
+  description: string;
+  guidedStep: number;
+  draftBadgeLabel: string;
+  draftMeta: string;
+  invoiceNumberPreview: string;
+  invoiceDateLabel: string;
+  customerLabel: string;
+  totalLabel: string;
+  lineItemsLabel: string;
+  bootstrapNotice: ReactNode;
+  heroActions: ReactNode;
+  customerNode: ReactNode;
+  helperNode: ReactNode;
+  productsNode: ReactNode;
+  previewNode: ReactNode;
+  totalsNode: ReactNode;
+  actionsNode: ReactNode;
+  draftsNode: ReactNode;
+}) => {
+  return (
+    <div className="mx-auto w-full max-w-[1680px] font-[var(--font-sora),var(--font-geist-sans)]">
+      {bootstrapNotice}
+
+      <Card className="overflow-hidden border-primary/15 bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.14),transparent_38%),linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,250,252,0.98))] py-0 dark:bg-[radial-gradient(circle_at_top_left,rgba(37,99,235,0.18),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.96),rgba(15,23,42,0.9))]">
+        <CardContent className="grid gap-5 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>{isHindi ? "सिंगल स्क्रीन" : "Single-screen workflow"}</Badge>
+              <Badge>{`Step ${guidedStep}/3`}</Badge>
+              <Badge variant="pending">{draftBadgeLabel}</Badge>
+              <Badge>{lineItemsLabel}</Badge>
+            </div>
+            <div>
+              <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+                {title}
+              </h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+                {description}
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">{draftMeta}</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+                  {isHindi ? "इनवॉइस नंबर" : "Invoice number"}
+                </p>
+                <div className="mt-2 flex items-center gap-2 text-sm font-medium text-foreground">
+                  <FileText className="h-4 w-4 text-primary" />
+                  <span>{invoiceNumberPreview}</span>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+                  {isHindi ? "इनवॉइस तिथि" : "Invoice date"}
+                </p>
+                <div className="mt-2 flex items-center gap-2 text-sm font-medium text-foreground">
+                  <CalendarDays className="h-4 w-4 text-primary" />
+                  <span>{invoiceDateLabel}</span>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+                  {isHindi ? "ग्राहक" : "Customer"}
+                </p>
+                <div className="mt-2 flex items-center gap-2 text-sm font-medium text-foreground">
+                  <UsersRound className="h-4 w-4 text-primary" />
+                  <span className="truncate">{customerLabel}</span>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-border/60 bg-background/80 px-4 py-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-muted-foreground">
+                  {isHindi ? "लाइव कुल" : "Live total"}
+                </p>
+                <div className="mt-2 flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Wallet className="h-4 w-4 text-primary" />
+                  <span>{totalLabel}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:min-w-72">{heroActions}</div>
+        </CardContent>
+      </Card>
+
+      <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(340px,0.82fr)_minmax(0,1.18fr)_minmax(320px,0.72fr)] xl:items-start">
+        <div className="grid gap-6">
+          {customerNode}
+          {helperNode}
+        </div>
+
+        <div className="grid gap-6">
+          {productsNode}
+          {previewNode}
+        </div>
+
+        <aside className="grid gap-6 xl:sticky xl:top-24">
+          {totalsNode}
+          {actionsNode}
+          {draftsNode}
+        </aside>
+      </section>
+    </div>
+  );
 };
 
 const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
@@ -1702,6 +1851,342 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     </div>
   );
 
+  const bootstrapNotice = hasBootstrapError ? (
+    <section className="mb-6 rounded-2xl border border-amber-300/70 bg-amber-50/80 p-4 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
+      <p className="text-sm font-semibold">
+        {language === "hi"
+          ? "कुछ डेटा लोड नहीं हो पाया"
+          : "Some setup data could not be loaded"}
+      </p>
+      <p className="mt-1 text-xs opacity-90">
+        {language === "hi"
+          ? "ग्राहक, प्रोडक्ट या वेयरहाउस डेटा में दिक्कत है. कृपया फिर से लोड करें."
+          : "Customers, products, or warehouse data failed to load. Please retry."}
+      </p>
+      <div className="mt-3">
+        <Button type="button" variant="outline" onClick={handleRetryBootstrapData}>
+          {language === "hi" ? "फिर से लोड करें" : "Retry loading"}
+        </Button>
+      </div>
+    </section>
+  ) : isBootstrapLoading ? (
+    <section className="mb-6 rounded-2xl border border-slate-200 bg-slate-50/90 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+      {language === "hi"
+        ? "ग्राहक, प्रोडक्ट और वेयरहाउस डेटा लोड हो रहा है..."
+        : "Loading customers, products, and warehouse data..."}
+    </section>
+  ) : null;
+
+  const heroActions = (
+    <>
+      <div className="rounded-[1.4rem] border border-border/70 bg-background/80 px-4 py-3 text-sm">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+          {isDirty ? t("common.draft") : t("common.saved")}
+        </p>
+        <p className="mt-2 text-sm text-foreground">{draftId ?? "invoice-composer"}</p>
+      </div>
+      {noCustomers ? (
+        <>
+          <Button type="button" onClick={() => setQuickAddCustomerOpen(true)}>
+            {helperCopy.addCustomer}
+          </Button>
+          <Button type="button" variant="outline" asChild>
+            <Link href="/customers">{helperCopy.openCustomers}</Link>
+          </Button>
+        </>
+      ) : noProducts ? (
+        <>
+          <Button type="button" onClick={() => setQuickAddProductOpen(true)}>
+            {helperCopy.addProduct}
+          </Button>
+          <Button type="button" variant="outline" asChild>
+            <Link href="/products">{helperCopy.openProducts}</Link>
+          </Button>
+        </>
+      ) : (
+        <Button type="button" onClick={scrollToCheckout}>
+          {reviewActionLabel}
+        </Button>
+      )}
+    </>
+  );
+
+  const customerWorkspaceNode = noCustomers ? (
+    <FriendlyEmptyState
+      icon={UsersRound}
+      title={helperCopy.noCustomersTitle}
+      description={helperCopy.noCustomersDescription}
+      hint={helperCopy.noCustomersHint}
+      primaryAction={{
+        label: helperCopy.addCustomer,
+        onClick: () => setQuickAddCustomerOpen(true),
+      }}
+      secondaryAction={{
+        label: helperCopy.openCustomers,
+        href: "/customers",
+        variant: "outline",
+      }}
+    />
+  ) : (
+    <FirstTimeHint
+      id="bill-step-customer"
+      message="Choose the customer first. This makes the rest of the bill easier."
+    >
+      <div
+        className={
+          shortcutHighlight === "form"
+            ? "rounded-[2rem] shadow-[0_0_0_4px_rgba(37,99,235,0.12)]"
+            : undefined
+        }
+      >
+        <InvoiceForm
+          form={form}
+          customers={customers}
+          warehouses={warehouses}
+          businessSummary={businessSummary}
+          invoiceNumberPreview={invoiceNumberPreview}
+          subtotalAmount={totals.subtotal}
+          totalAmount={totals.total}
+          taxMode={taxMode}
+          discountAppliedAmount={discountAppliedAmount}
+          discountError={discountValidationMessage}
+          onFormChange={handleFormChange}
+          onTaxModeChange={handleTaxModeChange}
+          onSubmit={handleSubmit}
+          isSubmitting={createInvoice.isPending}
+          summaryErrors={summaryErrors}
+          serverError={serverError}
+          hideSubmit
+        />
+      </div>
+    </FirstTimeHint>
+  );
+
+  const helperNode = (
+    <div className="grid gap-4">
+      <Card className="gap-3 p-0">
+        <CardHeader className="pb-0">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+            <UsersRound className="h-4 w-4" />
+            {language === "hi" ? "सहायता" : "Support"}
+          </div>
+          <CardTitle className="text-lg">{helperCopy.missingCustomerQuestion}</CardTitle>
+          <CardDescription className="whitespace-normal">
+            {helperCopy.missingCustomerAnswer}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <p className="text-sm leading-6 text-muted-foreground">
+            {advancedHelpCopy.body}
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const productsWorkspaceNode = noProducts ? (
+    <FriendlyEmptyState
+      icon={PackagePlus}
+      title={helperCopy.noProductsTitle}
+      description={helperCopy.noProductsDescription}
+      hint={helperCopy.noProductsHint}
+      primaryAction={{
+        label: helperCopy.addProduct,
+        onClick: () => setQuickAddProductOpen(true),
+      }}
+      secondaryAction={{
+        label: helperCopy.openProducts,
+        href: "/products",
+        variant: "outline",
+      }}
+    />
+  ) : (
+    <FirstTimeHint
+      id="bill-step-products"
+      message="Search or scan a product here, then add it to the bill."
+    >
+      <InvoiceTable
+        items={items}
+        errors={itemErrors}
+        productLookup={productLookup}
+        quickEntryProduct={quickEntryProduct}
+        quickEntryRef={quickEntryRef}
+        autoFocusProductSearch={autoFocusProductSearch}
+        selectedItemIndex={resolvedSelectedItemIndex}
+        recentProductId={recentCartProductId}
+        suggestedProducts={suggestedProducts}
+        recentProducts={quickAccessProducts}
+        shortcutMetaLabel={shortcutModifierLabel}
+        entryHighlighted={shortcutHighlight === "entry"}
+        itemsHighlighted={shortcutHighlight === "items"}
+        onFocusEntry={() => focusProductSearch()}
+        onQuickEntrySelect={setQuickEntryProduct}
+        onQuickEntrySubmit={handleQuickEntrySubmit}
+        onSelectItem={setSelectedItemIndex}
+        onItemChange={handleItemChange}
+        onRemoveItem={removeItem}
+        onAddSuggestedProduct={handleSuggestedProductAdd}
+      />
+    </FirstTimeHint>
+  );
+
+  const previewWorkspaceNode = (
+    <Card className="overflow-hidden p-0">
+      <CardHeader>
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+          <ScanLine className="h-4 w-4" />
+          {language === "hi" ? "बिल प्रीव्यू" : "Invoice preview"}
+        </div>
+        <CardTitle className="text-xl">
+          {language === "hi" ? "लाइव A4 प्रीव्यू" : "Large live A4 preview"}
+        </CardTitle>
+        <CardDescription className="whitespace-normal">
+          {language === "hi"
+            ? "स्क्रीन पर साफ़ प्रीव्यू देखें. PDF और प्रिंट यही डेटा इस्तेमाल करते हैं."
+            : "Review the exact invoice data here before PDF, print, or email."}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="printable">
+          <DesignConfigProvider
+            value={{
+              designConfig: activeDesignConfig,
+              updateSection: () => {},
+              resetSection: () => {},
+              resetAll: () => {},
+            }}
+          >
+            <div
+              id="invoice-preview-pdf-root"
+              className="rounded-[1.75rem] border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 print:border-0 print:bg-transparent print:p-0 print:shadow-none"
+            >
+              <A4PreviewStack
+                stackKey={`invoices-preview-${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
+              >
+                <TemplatePreviewRenderer
+                  key={`${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
+                  templateId={activeTemplate.templateId}
+                  templateName={activeTemplate.templateName}
+                  data={invoicePreviewData}
+                  enabledSections={activeEnabledSections}
+                  sectionOrder={activeSectionOrder}
+                  theme={activeTheme}
+                />
+              </A4PreviewStack>
+            </div>
+          </DesignConfigProvider>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const totalsWorkspaceNode = (
+    <InvoiceTotals
+      totals={totals}
+      taxMode={taxMode}
+      discountValue={form.discount}
+      discountType={form.discount_type}
+      discountLabel={discountSummaryLabel}
+      paidAmount={
+        form.payment_status === "PAID"
+          ? totals.total
+          : form.payment_status === "PARTIALLY_PAID"
+            ? Math.min(Math.max(Number(form.amount_paid || 0), 0), totals.total)
+            : 0
+      }
+      remainingAmount={
+        form.payment_status === "PAID"
+          ? 0
+          : Math.max(
+              totals.total -
+                (form.payment_status === "PARTIALLY_PAID"
+                  ? Math.min(
+                      Math.max(Number(form.amount_paid || 0), 0),
+                      totals.total,
+                    )
+                  : 0),
+              0,
+            )
+      }
+      className="xl:max-w-none"
+      action={
+        <FirstTimeHint
+          id="bill-step-generate"
+          message="When the customer and products are ready, use this button to create the bill."
+          position="bottom"
+        >
+          <div className="mt-6 grid gap-3">
+            <Button
+              id="bill-create-button"
+              type="button"
+              size="lg"
+              className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
+              disabled={createInvoice.isPending || items.length === 0}
+              onClick={() => void submitInvoice()}
+            >
+              {createInvoice.isPending
+                ? t("invoiceComposer.generating")
+                : t("invoiceComposer.checkout")}
+            </Button>
+            <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
+              <span>
+                {items.length === 0
+                  ? helperCopy.reviewMissing
+                  : helperCopy.reviewReady}
+              </span>
+              <span className="font-semibold">
+                {t("invoiceComposer.lineItemsCount", {
+                  count: items.length,
+                })}
+              </span>
+            </div>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {items.length === 0
+                ? helperCopy.reviewMissingHelp
+                : t("invoiceComposer.keyboardCheckout", {
+                    key: shortcutModifierLabel,
+                  })}
+            </p>
+          </div>
+        </FirstTimeHint>
+      }
+    />
+  );
+
+  const actionsWorkspaceNode = (
+    <div
+      className={
+        shortcutHighlight === "actions"
+          ? "rounded-[2rem] shadow-[0_0_0_4px_rgba(37,99,235,0.12)]"
+          : undefined
+      }
+    >
+      <InvoiceActions
+        onPrint={handlePrint}
+        onDownloadPdf={handleDownloadPdf}
+        onSendEmail={openInvoiceEmailModal}
+        isSendingEmail={sendInvoiceEmailMutation.isPending}
+      />
+    </div>
+  );
+
+  const draftsWorkspaceNode = (
+    <div className="grid gap-6">
+      <InvoiceDraftPanel
+        isDirty={isDirty}
+        lastSavedAt={lastSavedAt}
+        onSaveDraft={saveNewDraft}
+      />
+      <InvoiceDraftList
+        drafts={drafts}
+        currentDraftId={draftId}
+        customerNameById={customerNameById}
+        onLoadDraft={loadDraft}
+        onDeleteDraft={deleteDraft}
+      />
+    </div>
+  );
+
   return (
     <DashboardLayout
       name={name}
@@ -1714,6 +2199,46 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       }
       actions={headerActions}
     >
+      <>
+        <InvoiceComposerV2
+          isHindi={language === "hi"}
+          title={language === "hi" ? "इनवॉइस वर्कस्पेस" : "Invoice workspace"}
+          description={
+            language === "hi"
+              ? "उसी लॉजिक के साथ ग्राहक, उत्पाद, प्रीव्यू और चेकआउट को एक तेज़ सिंगल-स्क्रीन लेआउट में रखें."
+              : "Keep customer, products, preview, and checkout in one faster single-screen workspace using the same invoice logic."
+          }
+          guidedStep={guidedStep}
+          draftBadgeLabel={isDirty ? t("common.draft") : t("common.saved")}
+          draftMeta={
+            isDirty
+              ? t("invoice.statusUnsavedChanges")
+              : lastSavedAt
+                ? t("invoiceDrafts.savedRelative", {
+                    time: formatRelativeTime(lastSavedAt, locale),
+                  })
+                : t("common.ready")
+          }
+          invoiceNumberPreview={invoiceNumberPreview}
+          invoiceDateLabel={invoiceDate}
+          customerLabel={customer?.name || t("invoiceForm.selectCustomer")}
+          totalLabel={formatCurrency(totals.total)}
+          lineItemsLabel={t("invoiceComposer.lineItemsCount", {
+            count: items.length,
+          })}
+          bootstrapNotice={bootstrapNotice}
+          heroActions={heroActions}
+          customerNode={customerWorkspaceNode}
+          helperNode={helperNode}
+          productsNode={productsWorkspaceNode}
+          previewNode={previewWorkspaceNode}
+          totalsNode={totalsWorkspaceNode}
+          actionsNode={actionsWorkspaceNode}
+          draftsNode={draftsWorkspaceNode}
+        />
+
+        {SHOW_LEGACY_INVOICE_COMPOSER_UI ? (
+          <>
       <div className="mx-auto w-full max-w-[1500px] font-[var(--font-sora),var(--font-geist-sans)]">
         {hasBootstrapError ? (
           <section className="mb-6 rounded-2xl border border-amber-300/70 bg-amber-50/80 p-4 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100">
@@ -2139,6 +2664,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           </aside>
         </section>
 
+      </div>
+          </>
+        ) : null}
+
         <Modal
           open={invoiceEmailOpen}
           onOpenChange={(open) => {
@@ -2405,7 +2934,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             </div>
           </form>
         </Modal>
-      </div>
+      </>
     </DashboardLayout>
   );
 };
