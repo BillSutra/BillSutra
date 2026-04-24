@@ -1,10 +1,10 @@
 "use client";
 
-import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
 import {
   DesignConfigProvider,
   type DesignConfig,
 } from "@/components/invoice/DesignConfigContext";
+import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import type { InvoiceTheme, SectionKey } from "@/types/invoice-template";
 import type { InvoicePreviewData } from "@/types/invoice-template";
 
@@ -37,7 +37,7 @@ const InvoicePrint = ({
       }}
     >
       <div className="invoice-print-root bg-white text-black">
-        <TemplatePreviewRenderer
+        <InvoiceTemplate
           templateId={templateId}
           templateName={templateName}
           data={data}

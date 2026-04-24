@@ -85,7 +85,10 @@ export const applyInventoryDelta = async (params: {
   const currentProductQuantity = toWholeQuantity(productRow.stock_on_hand);
   const nextProductQuantity = currentProductQuantity + delta;
 
-  if (!allowNegativeStock && nextProductQuantity < 0) {
+  // Positive adjustments like purchases should always be able to recover
+  // existing negative stock. We only block deductions that would push stock
+  // further below zero when negative stock is not allowed.
+  if (!allowNegativeStock && delta < 0 && nextProductQuantity < 0) {
     throw new AppError("Not enough quantity available", 409);
   }
 
@@ -96,7 +99,7 @@ export const applyInventoryDelta = async (params: {
     const currentInventoryQuantity = toWholeQuantity(inventoryRow?.quantity ?? 0);
     nextInventoryQuantity = currentInventoryQuantity + delta;
 
-    if (!allowNegativeStock && nextInventoryQuantity < 0) {
+    if (!allowNegativeStock && delta < 0 && nextInventoryQuantity < 0) {
       throw new AppError("Not enough stock available", 409);
     }
 

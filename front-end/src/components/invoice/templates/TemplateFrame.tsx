@@ -44,6 +44,7 @@ const TemplateFrame = ({
   return (
     <div
       className={`${styles.templateShell} ${variantClassMap[variant]}`}
+      data-template-frame="true"
       style={
         {
           "--template-primary": theme.primaryColor,

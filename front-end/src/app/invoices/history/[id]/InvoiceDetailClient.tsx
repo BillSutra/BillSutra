@@ -20,7 +20,7 @@ import {
   normalizeDesignConfig,
 } from "@/components/invoice/DesignConfigContext";
 import InvoicePaymentStatusBadge from "@/components/invoice/InvoicePaymentStatusBadge";
-import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
+import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,13 +30,13 @@ import {
   formatPaymentMethodLabel,
   getInvoicePaymentSnapshot,
 } from "@/lib/invoicePayments";
+import { buildInvoiceRenderPayload } from "@/lib/invoiceRenderPayload";
 import {
   formatBusinessAddressFromRecord,
   formatCustomerAddressFromRecord,
 } from "@/lib/indianAddress";
 import { buildDiscountLabel } from "@/lib/invoiceDiscount";
 import { getStateFromGstin } from "@/lib/gstin";
-import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import { resolveBackendAssetUrl } from "@/lib/backendAssetUrl";
 import {
   useCreatePaymentMutation,
@@ -44,6 +44,7 @@ import {
   useUpdateInvoiceMutation,
 } from "@/hooks/useInventoryQueries";
 import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
+import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   InvoicePreviewData,
@@ -83,7 +84,6 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     queryKey: ["business-profile"],
     queryFn: fetchBusinessProfile,
   });
-  const { downloadPdf } = useInvoicePdf();
   const updateInvoice = useUpdateInvoiceMutation();
   const createPayment = useCreatePaymentMutation();
   const [partialOpen, setPartialOpen] = useState(false);
@@ -95,6 +95,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     null,
   );
   const [invoiceEmailSending, setInvoiceEmailSending] = useState(false);
+  const { downloadPdf } = useInvoicePdf();
   const fallbackActiveTemplate = useMemo(
     () => ({
       templateId: "indian-gst-template",
@@ -113,6 +114,13 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     : activeTemplate.enabledSections;
   const activeTheme = activeTemplate.theme;
   const designConfig = activeTemplate.designConfig;
+  const buildInvoicePdfFileName = useCallback((invoiceNumber?: string | null) => {
+    const normalized = (invoiceNumber?.trim() || `invoice-${id}`).replace(
+      /[^a-zA-Z0-9._-]/g,
+      "-",
+    );
+    return `${normalized || `invoice-${id}`}.pdf`;
+  }, [id]);
 
   const invoiceDate = useCallback(
     (value?: string | null) => {
@@ -357,21 +365,37 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     t,
   ]);
 
+  const invoiceRenderPayload = useMemo(() => {
+    if (!previewData) {
+      return null;
+    }
+
+    return buildInvoiceRenderPayload({
+      templateId: activeTemplate.templateId,
+      templateName: activeTemplate.templateName,
+      data: previewData,
+      enabledSections: activeEnabledSections,
+      sectionOrder: activeSectionOrder,
+      theme: activeTheme,
+      designConfig,
+    });
+  }, [
+    activeEnabledSections,
+    activeSectionOrder,
+    activeTemplate.templateId,
+    activeTemplate.templateName,
+    activeTheme,
+    designConfig,
+    previewData,
+  ]);
+
   const handleDownloadPdf = async () => {
-    if (!previewData || !data) return;
+    if (!data || !invoiceRenderPayload) return;
 
     try {
       await downloadPdf({
-        previewPayload: {
-          templateId: activeTemplate.templateId,
-          templateName: activeTemplate.templateName,
-          data: previewData,
-          enabledSections: activeEnabledSections,
-          sectionOrder: activeSectionOrder,
-          theme: activeTheme,
-          designConfig,
-        },
-        fileName: `${data.invoice_number}.pdf`,
+        previewPayload: invoiceRenderPayload,
+        fileName: buildInvoicePdfFileName(data.invoice_number),
       });
     } catch {
       toast.error(t("invoiceDetail.messages.downloadError"));
@@ -423,7 +447,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   };
 
   const handleSendInvoiceEmail = async () => {
-    if (!data) return;
+    if (!data || !invoiceRenderPayload) return;
 
     const recipient = invoiceEmailRecipient.trim();
     if (!recipient) {
@@ -440,10 +464,17 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     setInvoiceEmailError(null);
 
     try {
-      await sendInvoiceEmail(data.id, { email: recipient });
+      const response = await sendInvoiceEmail(data.id, {
+        email: recipient,
+        preview_payload: invoiceRenderPayload,
+      });
       setInvoiceEmailOpen(false);
       toast.success(
-        t("invoiceDetail.messages.emailSent", { number: data.invoice_number }),
+        response.queued
+          ? `Invoice email queued for ${data.invoice_number}`
+          : t("invoiceDetail.messages.emailSent", {
+              number: data.invoice_number,
+            }),
       );
     } catch {
       setInvoiceEmailError(t("invoiceDetail.messages.emailError"));
@@ -780,7 +811,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                     <A4PreviewStack
                       stackKey={`invoice-detail-${data.id}-${activeTemplate.templateId}-${data.status}-${paymentHistory.length}`}
                     >
-                      <TemplatePreviewRenderer
+                      <InvoiceTemplate
                         templateId={activeTemplate.templateId}
                         templateName={activeTemplate.templateName}
                         data={previewData}

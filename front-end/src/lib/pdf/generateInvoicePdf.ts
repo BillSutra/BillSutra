@@ -1,5 +1,6 @@
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
+import { fetchPreviewInvoicePdfFile } from "@/lib/apiClient";
 import type { InvoicePdfInput } from "@/types/invoice";
 
 const A4_WIDTH_PX = 794;
@@ -118,24 +119,22 @@ const capturePageCanvas = async (
 
 export const generateInvoicePdf = async (input: InvoicePdfInput) => {
   if (input.previewPayload) {
-    const response = await fetch("/api/pdf/render", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fileName: input.fileName,
-        payload: input.previewPayload,
-      }),
-    });
+    const previewItems = Array.isArray(input.previewPayload.data?.items)
+      ? input.previewPayload.data.items
+      : [];
 
-    if (!response.ok) {
-      throw new Error("Server-side PDF render failed");
+    if (!previewItems.length) {
+      throw new Error("Invoice data not ready for PDF export");
     }
 
-    const blob = await response.blob();
+    const { blob, fileName } = await fetchPreviewInvoicePdfFile(
+      input.previewPayload,
+      input.fileName,
+    );
     const blobUrl = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = blobUrl;
-    anchor.download = input.fileName ?? DEFAULT_FILE_NAME;
+    anchor.download = fileName || input.fileName || DEFAULT_FILE_NAME;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();

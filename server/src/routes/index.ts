@@ -297,6 +297,20 @@ router.post(
 
 // Public invoice view
 router.get(
+  "/invoice/:id/pdf",
+  validate({
+    params: publicInvoiceParamSchema,
+  }),
+  PublicInvoiceController.downloadPdf,
+);
+router.get(
+  "/public/invoice/:id/pdf",
+  validate({
+    params: publicInvoiceParamSchema,
+  }),
+  PublicInvoiceController.downloadPdf,
+);
+router.get(
   "/invoice/:id",
   validate({
     params: publicInvoiceParamSchema,

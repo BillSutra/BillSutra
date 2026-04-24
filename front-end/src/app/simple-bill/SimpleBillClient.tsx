@@ -37,6 +37,7 @@ import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTempla
 import {
   fetchBusinessProfile,
   fetchCustomers,
+  fetchInvoicePdfFile,
   type BusinessProfileRecord,
   type Customer,
   type Invoice,
@@ -49,7 +50,6 @@ import {
 } from "@/lib/indianAddress";
 import { getStateFromGstin } from "@/lib/gstin";
 import { resolveBackendAssetUrl } from "@/lib/backendAssetUrl";
-import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   DiscountType,
@@ -1522,7 +1522,6 @@ const SimpleBillClient = ({
     queryKey: ["business-profile"],
     queryFn: fetchBusinessProfile,
   });
-  const { downloadPdf } = useInvoicePdf();
   const createCustomer = useCreateCustomerMutation();
   const createInvoice = useCreateInvoiceMutation();
   const [billState, setBillState] = useState<BillState>(() =>
@@ -2715,18 +2714,18 @@ const SimpleBillClient = ({
     }
 
     try {
-      await downloadPdf({
-        previewPayload: {
-          templateId: activeTemplate.templateId,
-          templateName: activeTemplate.templateName,
-          data: invoicePreviewData,
-          enabledSections: activeEnabledSections,
-          sectionOrder: activeSectionOrder,
-          theme: activeTheme,
-          designConfig: activeDesignConfig,
-        },
-        fileName: `${generatedInvoice.invoice_number || invoicePreviewData.invoiceNumber || "bill"}.pdf`,
-      });
+      const { blob, fileName } = await fetchInvoicePdfFile(
+        generatedInvoice.id,
+        generatedInvoice.invoice_number || invoicePreviewData.invoiceNumber,
+      );
+      const blobUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = blobUrl;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(blobUrl);
       toast.success(copy.toastPdfDownloaded);
     } catch {
       toast.error(copy.toastPdfError);

@@ -1,5 +1,8 @@
 import type { Request, Response } from "express";
-import { getPublicInvoice } from "../modules/invoice/invoice.service.js";
+import {
+  generatePublicInvoicePdf,
+  getPublicInvoice,
+} from "../modules/invoice/invoice.service.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
 const readRouteParam = (value: string | string[] | undefined) =>
@@ -36,6 +39,39 @@ class PublicInvoiceController {
 
       return sendResponse(res, 500, {
         message: "Unable to retrieve invoice",
+      });
+    }
+  }
+
+  static async downloadPdf(req: Request, res: Response) {
+    try {
+      const reference = readRouteParam(req.params.id);
+      if (!reference) {
+        return sendResponse(res, 422, {
+          message: "Invoice reference is required",
+        });
+      }
+
+      const result = await generatePublicInvoicePdf(reference);
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${result.invoiceNumber}.pdf"`,
+      );
+      res.setHeader("Cache-Control", "private, max-age=0, must-revalidate");
+      res.setHeader("X-Robots-Tag", "noindex, nofollow");
+
+      return res.status(200).send(result.buffer);
+    } catch (error) {
+      const err = error as Error & { status?: number };
+
+      if (err.status) {
+        return sendResponse(res, err.status, { message: err.message });
+      }
+
+      return sendResponse(res, 500, {
+        message: "Unable to generate public invoice PDF",
       });
     }
   }

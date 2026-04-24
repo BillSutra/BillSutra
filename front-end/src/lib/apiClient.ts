@@ -5,6 +5,7 @@ import type {
   AssistantReply as SharedAssistantReply,
 } from "../../../server/src/modules/assistant/assistant.contract";
 import { API_URL } from "./apiEndPoints";
+import type { InvoiceRenderPayload } from "./invoiceRenderPayload";
 import {
   formatBusinessAddress,
   parseBusinessAddressText,
@@ -2621,13 +2622,21 @@ export const switchToFreePlan = async (): Promise<SubscriptionSnapshot> => {
 
 export const sendInvoiceEmail = async (
   invoiceId: number,
-  payload: { email?: string } = {},
-): Promise<{ invoiceId: number; status?: string; email?: string }> => {
+  payload: { email?: string; preview_payload?: InvoiceRenderPayload } = {},
+): Promise<{
+  invoiceId: number;
+  status?: string;
+  email?: string;
+  queued?: boolean;
+  jobId?: string | null;
+}> => {
   const response = await apiClient.post(`/invoices/${invoiceId}/send`, payload);
   return (response.data?.data ?? { invoiceId }) as {
     invoiceId: number;
     status?: string;
     email?: string;
+    queued?: boolean;
+    jobId?: string | null;
   };
 };
 
@@ -2642,6 +2651,32 @@ export const sendInvoiceReminder = async (
   return (response.data?.data ?? { invoiceId }) as {
     invoiceId: number;
     email?: string;
+  };
+};
+
+export const fetchPreviewInvoicePdfFile = async (
+  previewPayload: InvoiceRenderPayload,
+  fallbackFileName?: string,
+): Promise<{ blob: Blob; fileName: string }> => {
+  const response = await apiClient.post(
+    "/invoices/preview-pdf",
+    {
+      file_name: fallbackFileName,
+      preview_payload: previewPayload,
+    },
+    {
+      responseType: "blob",
+    },
+  );
+
+  const fallback = fallbackFileName?.trim() || "invoice-preview.pdf";
+  const disposition = response.headers?.["content-disposition"] as
+    | string
+    | undefined;
+
+  return {
+    blob: response.data as Blob,
+    fileName: parseDownloadFileName(disposition, fallback),
   };
 };
 

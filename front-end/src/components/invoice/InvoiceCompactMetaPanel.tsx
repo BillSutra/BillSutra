@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CalendarDays, ChevronDown, Plus, Search, UsersRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -79,7 +79,13 @@ const InvoiceCompactMetaPanel = ({
     Boolean(form.notes) ||
     Boolean(form.warehouse_id) ||
     form.payment_status !== "UNPAID";
-  const [advancedOpen, setAdvancedOpen] = useState(showAdvancedDefaults);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  useEffect(() => {
+    if (showAdvancedDefaults) {
+      setAdvancedOpen(true);
+    }
+  }, [showAdvancedDefaults]);
 
   const paidAmount =
     form.payment_status === "PAID"

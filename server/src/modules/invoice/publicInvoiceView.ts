@@ -46,6 +46,12 @@ const renderDiscountLabel = (invoice: PublicInvoiceViewData) => {
   return `Discount (${formatCurrency(invoice.discount_value, invoice.currency)})`;
 };
 
+const renderPaymentStatusLabel = (invoice: PublicInvoiceViewData) =>
+  invoice.payment_status
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+
 export const renderPublicInvoiceHtml = (invoice: PublicInvoiceViewData) => {
   const itemRows = invoice.items
     .map(
@@ -301,8 +307,8 @@ export const renderPublicInvoiceHtml = (invoice: PublicInvoiceViewData) => {
                     <div class="value">${escapeHtml(formatDate(invoice.due_date))}</div>
                   </div>
                   <div>
-                    <div class="label">Status</div>
-                    <div class="value">${escapeHtml(invoice.status)}</div>
+                    <div class="label">Payment status</div>
+                    <div class="value">${escapeHtml(renderPaymentStatusLabel(invoice))}</div>
                   </div>
                   <div>
                     <div class="label">Amount</div>
@@ -318,6 +324,13 @@ export const renderPublicInvoiceHtml = (invoice: PublicInvoiceViewData) => {
                   ${escapeHtml(invoice.business_email ?? "")}<br />
                   ${escapeHtml(invoice.business_phone ?? "")}<br />
                   ${renderMultiline(invoice.business_address)}
+                  ${
+                    invoice.payment_method
+                      ? `<br /><strong>Payment method:</strong> ${escapeHtml(
+                          invoice.payment_method.replaceAll("_", " "),
+                        )}`
+                      : ""
+                  }
                 </div>
               </aside>
             </section>

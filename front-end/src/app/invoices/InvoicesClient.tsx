@@ -16,7 +16,6 @@ import {
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import InvoiceCompactMetaPanel from "@/components/invoice/InvoiceCompactMetaPanel";
-import TemplatePreviewRenderer from "@/components/invoice/TemplatePreviewRenderer";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
 import InvoiceForm from "@/components/invoice/InvoiceForm";
 import InvoiceTable from "@/components/invoice/InvoiceTable";
@@ -25,6 +24,7 @@ import InvoiceDraftPanel from "@/components/invoice/InvoiceDraftPanel";
 import InvoiceDraftList from "@/components/invoice/InvoiceDraftList";
 import InvoiceActions from "@/components/invoice/InvoiceActions";
 import InvoiceWorkspaceV2 from "@/components/invoice/InvoiceWorkspaceV2";
+import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import type { AsyncProductSelectHandle } from "@/components/products/AsyncProductSelect";
 import {
   DesignConfigProvider,
@@ -44,11 +44,14 @@ import Modal from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  fetchInvoicePdfFile,
   fetchBusinessProfile,
   fetchUserSettingsPreferences,
   sendInvoiceEmail,
 } from "@/lib/apiClient";
+import {
+  buildInvoiceRenderPayload,
+  type InvoiceRenderPayload,
+} from "@/lib/invoiceRenderPayload";
 import {
   buildSmartSuggestions,
   rankRecentProducts,
@@ -192,17 +195,6 @@ const getTodayDateValue = () => {
   const now = new Date();
   const timezoneOffset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - timezoneOffset).toISOString().slice(0, 10);
-};
-
-const downloadBlob = (blob: Blob, fileName: string) => {
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = fileName;
-  document.body.appendChild(anchor);
-  anchor.click();
-  anchor.remove();
-  URL.revokeObjectURL(url);
 };
 
 const normalizeWarehousePreference = (value: unknown) => {
@@ -371,8 +363,19 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     queryFn: fetchUserSettingsPreferences,
   });
   const sendInvoiceEmailMutation = useMutation({
-    mutationFn: ({ invoiceId, email }: { invoiceId: number; email: string }) =>
-      sendInvoiceEmail(invoiceId, { email }),
+    mutationFn: ({
+      invoiceId,
+      email,
+      previewPayload,
+    }: {
+      invoiceId: number;
+      email: string;
+      previewPayload?: InvoiceRenderPayload | null;
+    }) =>
+      sendInvoiceEmail(invoiceId, {
+        email,
+        preview_payload: previewPayload ?? undefined,
+      }),
   });
   const createInvoice = useCreateInvoiceMutation();
   const createProduct = useCreateProductMutation();
@@ -389,6 +392,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
   const [lastCreatedInvoiceNumber, setLastCreatedInvoiceNumber] = useState<
     string | null
   >(null);
+  const [lastCreatedInvoiceRenderPayload, setLastCreatedInvoiceRenderPayload] =
+    useState<InvoiceRenderPayload | null>(null);
   const [lastCreatedInvoiceTotal, setLastCreatedInvoiceTotal] = useState<
     number | null
   >(null);
@@ -974,7 +979,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
     return {
       invoiceTitle: taxMode === "NONE" ? "Bill" : "Tax Invoice",
-      invoiceNumber: t("invoice.invoicePreviewNumber"),
+      invoiceNumber: invoiceNumberPreview,
       invoiceDate,
       dueDate,
       placeOfSupply,
@@ -1079,11 +1084,34 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     form.payment_status,
     form.notes,
     invoiceDate,
+    invoiceNumberPreview,
     items,
     taxMode,
     t,
     totals,
   ]);
+
+  const currentInvoiceRenderPayload = useMemo(
+    () =>
+      buildInvoiceRenderPayload({
+        templateId: activeTemplate.templateId,
+        templateName: activeTemplate.templateName,
+        data: invoicePreviewData,
+        enabledSections: activeEnabledSections,
+        sectionOrder: activeSectionOrder,
+        theme: activeTheme,
+        designConfig: activeDesignConfig,
+      }),
+    [
+      activeDesignConfig,
+      activeEnabledSections,
+      activeSectionOrder,
+      activeTemplate.templateId,
+      activeTemplate.templateName,
+      activeTheme,
+      invoicePreviewData,
+    ],
+  );
 
   const handleLoadDraft = useCallback((draft: InvoiceDraft) => {
     setForm({
@@ -1511,48 +1539,56 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     window.print();
   }, []);
 
+  const buildInvoicePdfFileName = useCallback(
+    (invoiceNumber?: string | null) => {
+      const normalized = (invoiceNumber?.trim() || invoiceNumberPreview).replace(
+        /[^a-zA-Z0-9._-]/g,
+        "-",
+      );
+      return `${normalized || "invoice"}.pdf`;
+    },
+    [invoiceNumberPreview],
+  );
+
+  const downloadPreviewInvoicePdf = useCallback(
+    async (
+      previewPayload: InvoiceRenderPayload,
+      invoiceNumber?: string | null,
+    ) => {
+      await downloadPdf({
+        previewPayload,
+        fileName: buildInvoicePdfFileName(
+          invoiceNumber || previewPayload.data.invoiceNumber,
+        ),
+      });
+    },
+    [buildInvoicePdfFileName, downloadPdf],
+  );
+
   const handleDownloadPdf = useCallback(async () => {
     try {
-      await downloadPdf({
-        previewPayload: {
-          templateId: activeTemplate.templateId,
-          templateName: activeTemplate.templateName,
-          data: invoicePreviewData,
-          enabledSections: activeEnabledSections,
-          sectionOrder: activeSectionOrder,
-          theme: activeTheme,
-          designConfig: activeDesignConfig,
-        },
-        fileName: `invoice-${invoicePreviewData.invoiceNumber}.pdf`,
-      });
+      await downloadPreviewInvoicePdf(
+        lastCreatedInvoiceRenderPayload ?? currentInvoiceRenderPayload,
+        lastCreatedInvoiceNumber,
+      );
     } catch {
       toast.error(t("invoice.pdfError"));
     }
   }, [
-    activeDesignConfig,
-    activeEnabledSections,
-    activeSectionOrder,
-    activeTemplate.templateId,
-    activeTemplate.templateName,
-    activeTheme,
-    downloadPdf,
-    invoicePreviewData,
+    currentInvoiceRenderPayload,
+    downloadPreviewInvoicePdf,
+    lastCreatedInvoiceRenderPayload,
+    lastCreatedInvoiceNumber,
     t,
   ]);
 
-  const downloadCreatedInvoicePdf = useCallback(
-    async (invoiceId: number, invoiceNumber?: string | null) => {
-      const { blob, fileName } = await fetchInvoicePdfFile(
-        invoiceId,
-        invoiceNumber ?? undefined,
-      );
-      downloadBlob(blob, fileName);
-    },
-    [],
-  );
-
   const autoSendInvoiceEmail = useCallback(
-    async (invoiceId: number, invoiceNumber: string | null, email: string) => {
+    async (
+      invoiceId: number,
+      invoiceNumber: string | null,
+      email: string,
+      previewPayload?: InvoiceRenderPayload | null,
+    ) => {
       const recipient = email.trim();
       if (!recipient || !isValidEmailAddress(recipient)) {
         return;
@@ -1562,6 +1598,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         const response = await sendInvoiceEmailMutation.mutateAsync({
           invoiceId,
           email: recipient,
+          previewPayload,
         });
         setLastCreatedCustomerEmail(response.email ?? recipient);
         captureAnalyticsEvent("invoice_email_sent", {
@@ -1569,7 +1606,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           invoiceNumber,
           source: "auto-checkout",
         });
-        toast.success(`Email sent to ${response.email ?? recipient}`);
+        toast.success(
+          response.queued
+            ? `Email queued for ${response.email ?? recipient}`
+            : `Email sent to ${response.email ?? recipient}`,
+        );
       } catch (error) {
         toast.error(
           parseServerErrors(
@@ -1653,9 +1694,17 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           tax_rate: item.tax_rate ? Number(item.tax_rate) : undefined,
         })),
       });
+      const createdInvoiceRenderPayload = buildInvoiceRenderPayload({
+        ...currentInvoiceRenderPayload,
+        data: {
+          ...currentInvoiceRenderPayload.data,
+          invoiceNumber: createdInvoice.invoice_number,
+        },
+      });
 
       setLastCreatedInvoiceId(createdInvoice.id);
       setLastCreatedInvoiceNumber(createdInvoice.invoice_number);
+      setLastCreatedInvoiceRenderPayload(createdInvoiceRenderPayload);
       setLastCreatedInvoiceTotal(Number(createdInvoice.total ?? totals.total));
       setLastCreatedInvoiceDate(
         createdInvoice.date
@@ -1678,8 +1727,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         }),
       );
       try {
-        await downloadCreatedInvoicePdf(
-          createdInvoice.id,
+        await downloadPreviewInvoicePdf(
+          createdInvoiceRenderPayload,
           createdInvoice.invoice_number,
         );
       } catch {
@@ -1691,6 +1740,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           createdInvoice.id,
           createdInvoice.invoice_number,
           selectedCustomer.email,
+          createdInvoiceRenderPayload,
         );
       }
 
@@ -1704,9 +1754,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     autoSendInvoiceEmail,
     checkoutAutomationPending,
     createInvoice,
+    currentInvoiceRenderPayload,
     customers,
     discountValidationMessage,
-    downloadCreatedInvoicePdf,
+    downloadPreviewInvoicePdf,
     form,
     items,
     parseServerErrors,
@@ -1764,6 +1815,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       const response = await sendInvoiceEmailMutation.mutateAsync({
         invoiceId: lastCreatedInvoiceId,
         email: recipient,
+        previewPayload: lastCreatedInvoiceRenderPayload,
       });
       setLastCreatedCustomerEmail(response.email ?? recipient);
       setInvoiceEmailOpen(false);
@@ -1771,7 +1823,11 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         invoiceId: lastCreatedInvoiceId,
         invoiceNumber: lastCreatedInvoiceNumber,
       });
-      toast.success(t("invoice.sendEmailSuccess"));
+      toast.success(
+        response.queued
+          ? "Invoice email queued successfully."
+          : t("invoice.sendEmailSuccess"),
+      );
       toast.success(
         t("invoice.sendEmailSuccessInvoice", {
           invoiceNumber: lastCreatedInvoiceNumber ?? `#${lastCreatedInvoiceId}`,
@@ -1785,6 +1841,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     invoiceEmailRecipient,
     lastCreatedInvoiceId,
     lastCreatedInvoiceNumber,
+    lastCreatedInvoiceRenderPayload,
     t,
     parseServerErrors,
     sendInvoiceEmailMutation,
@@ -2164,7 +2221,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               <A4PreviewStack
                 stackKey={`invoices-preview-${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
               >
-                <TemplatePreviewRenderer
+                <InvoiceTemplate
                   key={`${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
                   templateId={activeTemplate.templateId}
                   templateName={activeTemplate.templateName}
@@ -2727,7 +2784,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                   <A4PreviewStack
                     stackKey={`invoices-preview-${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}-${activeTheme.primaryColor}`}
                   >
-                    <TemplatePreviewRenderer
+                    <InvoiceTemplate
                       key={`${activeTemplate.templateId}-${activeSectionOrder.join(",")}-${activeEnabledSections.join(",")}`}
                       templateId={activeTemplate.templateId}
                       templateName={activeTemplate.templateName}
