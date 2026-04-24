@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo } from "react";
-import { Copy, Download, ExternalLink } from "lucide-react";
+import { Copy, ExternalLink } from "lucide-react";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
 import {
   DesignConfigProvider,
@@ -11,7 +11,6 @@ import {
 import InvoiceTemplate from "@/components/invoice/InvoiceTemplate";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import Env from "@/lib/env";
 import {
   buildPublicInvoicePreviewData,
   DEFAULT_INVOICE_SECTIONS,
@@ -48,13 +47,6 @@ const PublicInvoicePageClient = ({
     () => buildPublicInvoicePreviewData(invoice),
     [invoice],
   );
-  const pdfDownloadUrl = useMemo(
-    () =>
-      `${Env.BACKEND_URL.replace(/\/$/, "")}/api/public/invoice/${encodeURIComponent(
-        invoice.public_id,
-      )}/pdf`,
-    [invoice.public_id],
-  );
 
   const handleCopyLink = async () => {
     try {
@@ -62,10 +54,6 @@ const PublicInvoicePageClient = ({
     } catch {
       // Ignore clipboard failures on restricted browsers.
     }
-  };
-
-  const handleDownloadPdf = () => {
-    window.open(pdfDownloadUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -106,15 +94,6 @@ const PublicInvoicePageClient = ({
               >
                 <Copy className="h-4 w-4" />
                 Copy link
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 rounded-xl"
-                onClick={handleDownloadPdf}
-              >
-                <Download className="h-4 w-4" />
-                Download PDF
               </Button>
               <Button asChild className="h-11 rounded-xl">
                 <Link href="/" target="_blank" rel="noreferrer">
