@@ -1,6 +1,11 @@
 import type { Request, Response } from "express";
 import prisma from "../config/db.config.js";
 import { sendResponse } from "../utils/sendResponse.js";
+import {
+  computeInvoicePaymentSnapshotFromPayments,
+} from "../utils/invoicePaymentSnapshot.js";
+import { getCache, setCache } from "../redis/cache.js";
+import { buildAnalyticsOverviewRedisKey } from "../redis/cacheKeys.js";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 
@@ -35,91 +40,46 @@ class AnalyticsController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    const cacheKey = buildAnalyticsOverviewRedisKey(userId);
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return sendResponse(res, 200, { data: cached });
+    }
+
     const now = new Date();
     const months = getLast12Months();
     const firstMonthStart =
       months[0]?.start ??
       new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
-    // Fetch all necessary data for sales and purchases based on payment status
     const [
-      paidSalesAgg,
-      partiallyPaidSalesAgg,
-      unpaidSalesAgg,
-      paidSalesCount,
-      partiallyPaidSalesCount,
-      unpaidSalesCount,
-      paidSalesInLast12Months,
-      partiallyPaidSalesInLast12Months,
+      invoices,
+      paymentsInLast12Months,
       purchasesInLast12Months,
     ] = await Promise.all([
-      // PAID sales: count 100% of totalAmount
-      prisma.sale.aggregate({
-        where: {
-          user_id: userId,
-          paymentStatus: "PAID",
-        },
-        _sum: { totalAmount: true },
-      }),
-      // PARTIALLY_PAID sales: count only paidAmount
-      prisma.sale.aggregate({
-        where: {
-          user_id: userId,
-          paymentStatus: "PARTIALLY_PAID",
-        },
-        _sum: { paidAmount: true },
-      }),
-      // UNPAID sales: for pending receivables calculation
-      prisma.sale.aggregate({
-        where: {
-          user_id: userId,
-          paymentStatus: "UNPAID",
-        },
-        _sum: { totalAmount: true },
-      }),
-      prisma.sale.count({
-        where: {
-          user_id: userId,
-          paymentStatus: "PAID",
+      prisma.invoice.findMany({
+        where: { user_id: userId },
+        select: {
+          total: true,
+          status: true,
+          due_date: true,
+          payments: {
+            select: {
+              amount: true,
+            },
+          },
         },
       }),
-      prisma.sale.count({
+      prisma.payment.findMany({
         where: {
           user_id: userId,
-          paymentStatus: "PARTIALLY_PAID",
-        },
-      }),
-      prisma.sale.count({
-        where: {
-          user_id: userId,
-          paymentStatus: "UNPAID",
-        },
-      }),
-      // PAID sales in last 12 months
-      prisma.sale.findMany({
-        where: {
-          user_id: userId,
-          paymentStatus: "PAID",
-          sale_date: { gte: firstMonthStart },
+          paid_at: { gte: firstMonthStart },
         },
         select: {
-          sale_date: true,
-          totalAmount: true,
+          paid_at: true,
+          amount: true,
         },
       }),
-      // PARTIALLY_PAID sales in last 12 months (count only paid portion)
-      prisma.sale.findMany({
-        where: {
-          user_id: userId,
-          paymentStatus: "PARTIALLY_PAID",
-          sale_date: { gte: firstMonthStart },
-        },
-        select: {
-          sale_date: true,
-          paidAmount: true,
-        },
-      }),
-      // All purchases in last 12 months for expenses
       prisma.purchase.findMany({
         where: {
           user_id: userId,
@@ -134,41 +94,41 @@ class AnalyticsController {
       }),
     ]);
 
-    // Calculate total realized revenue (PAID + PARTIALLY_PAID portions)
-    const paidRevenue = toNumber(paidSalesAgg._sum.totalAmount);
-    const partiallyPaidRevenue = toNumber(partiallyPaidSalesAgg._sum.paidAmount);
-    const totalRevenue = paidRevenue + partiallyPaidRevenue;
+    const invoiceSnapshots = invoices.map((invoice) =>
+      computeInvoicePaymentSnapshotFromPayments({
+        total: invoice.total,
+        status: invoice.status,
+        dueDate: invoice.due_date,
+        payments: invoice.payments,
+      }),
+    );
 
-    // Calculate pending receivables (unpaid portions)
-    const pendingReceivables = toNumber(unpaidSalesAgg._sum.totalAmount);
+    const allTimeRevenue = invoiceSnapshots.reduce(
+      (sum, invoice) => sum + invoice.paidAmount,
+      0,
+    );
+    const pendingReceivables = invoiceSnapshots.reduce(
+      (sum, invoice) => sum + invoice.pendingAmount,
+      0,
+    );
 
-    // Total sales metrics
-    const totalSalesTransactions = paidSalesCount + partiallyPaidSalesCount + unpaidSalesCount;
-    const completedSales = paidSalesCount + partiallyPaidSalesCount;
+    const totalSalesTransactions = invoiceSnapshots.filter(
+      (invoice) => invoice.isCollectible,
+    ).length;
+    const completedSales = invoiceSnapshots.filter(
+      (invoice) => invoice.paymentStatus !== "UNPAID",
+    ).length;
 
-    // Build monthly revenue map
     const monthlyMap = new Map<string, number>(
       months.map((month) => [month.key, 0]),
     );
 
-    // Add PAID sales
-    for (const sale of paidSalesInLast12Months) {
-      const key = getMonthKey(sale.sale_date);
+    for (const payment of paymentsInLast12Months) {
+      const key = getMonthKey(payment.paid_at);
       if (monthlyMap.has(key)) {
         monthlyMap.set(
           key,
-          (monthlyMap.get(key) ?? 0) + toNumber(sale.totalAmount),
-        );
-      }
-    }
-
-    // Add PARTIALLY_PAID sales (only paid portion)
-    for (const sale of partiallyPaidSalesInLast12Months) {
-      const key = getMonthKey(sale.sale_date);
-      if (monthlyMap.has(key)) {
-        monthlyMap.set(
-          key,
-          (monthlyMap.get(key) ?? 0) + toNumber(sale.paidAmount),
+          (monthlyMap.get(key) ?? 0) + toNumber(payment.amount),
         );
       }
     }
@@ -202,15 +162,17 @@ class AnalyticsController {
       };
     });
 
-    return sendResponse(res, 200, {
-      data: {
-        totalRevenue,
-        pendingReceivables,
-        completedSales,
-        totalSalesTransactions,
-        monthlyRevenue,
-      },
-    });
+    const data = {
+      totalRevenue: allTimeRevenue,
+      pendingReceivables,
+      completedSales,
+      totalSalesTransactions,
+      monthlyRevenue,
+    };
+
+    void setCache(cacheKey, data, 60);
+
+    return sendResponse(res, 200, { data });
   }
 }
 

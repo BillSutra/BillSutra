@@ -117,15 +117,6 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     token !== "undefined" &&
     token !== "null";
 
-  useEffect(() => {
-    if (!hasValidSessionToken) {
-      window.localStorage.removeItem("token");
-      return;
-    }
-
-    window.localStorage.setItem("token", token);
-  }, [hasValidSessionToken, token]);
-
   useDashboardRealtime({
     enabled: hydrated && hasValidSessionToken && DASHBOARD_REALTIME_ENABLED,
     token,

@@ -3,29 +3,15 @@ import type { Application, NextFunction, Request, Response } from "express";
 import cors from "cors";
 import type { CorsOptions } from "cors";
 import morgan from "morgan";
-import path from "path";
-import { fileURLToPath } from "url";
 import AppError from "./utils/AppError.js";
 import errorMiddleware from "./middlewares/error.middleware.js";
 import { requestObservabilityMiddleware } from "./lib/observability.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import LegacyUploadsController from "./controllers/LegacyUploadsController.js";
+import { PUBLIC_UPLOADS_ROOT } from "./lib/uploadPaths.js";
+import { getAllowedCorsOrigins } from "./lib/corsOrigins.js";
 
 const app: Application = express();
-const defaultCorsOrigins = ["http://localhost:3000", "http://127.0.0.1:3000"];
-const configuredCorsOrigins = (
-  process.env.CORS_ORIGINS ??
-  process.env.CORS_ORIGIN ??
-  process.env.FRONTEND_URL ??
-  process.env.APP_URL ??
-  process.env.CLIENT_URL ??
-  ""
-)
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
-const corsOrigins = new Set([...defaultCorsOrigins, ...configuredCorsOrigins]);
+const corsOrigins = new Set(getAllowedCorsOrigins());
 const corsOptions: CorsOptions = {
   origin(origin, callback) {
     if (!origin || corsOrigins.has(origin)) {
@@ -53,13 +39,11 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Serve uploaded files (logos, payment proofs, etc.) as static assets.
-// Storage services write to <server-root>/uploads, so the static root needs
-// to resolve there in both tsx dev mode and compiled dist mode.
-app.use(
-  "/uploads",
-  express.static(path.resolve(__dirname, "../uploads")),
-);
+// Phased upload hardening:
+// - new public assets are served only from /uploads/public
+// - legacy /uploads/* links stay alive temporarily via a controlled handler
+app.use("/uploads/public", express.static(PUBLIC_UPLOADS_ROOT));
+app.use("/uploads", LegacyUploadsController.serve);
 
 app.get("/", (_req: Request, res: Response) => {
   return res.send("It's working ....");

@@ -4,6 +4,9 @@ import jwt from "jsonwebtoken";
 import prisma from "../config/db.config.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
+const ADMIN_AUTH_COOKIE_NAME = "bill_sutra_admin_session";
+const isProd = process.env.NODE_ENV === "production";
+
 const parseOwnerUserId = (ownerId: string) => {
   const parsed = Number.parseInt(ownerId, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -16,6 +19,29 @@ const createAdminToken = (payload: AdminAuthUser) =>
   `Bearer ${jwt.sign(payload, process.env.JWT_SECRET as string, {
     expiresIn: "30d",
   })}`;
+
+const setAdminAuthCookie = (res: Response, token: string) => {
+  const normalizedToken = token.startsWith("Bearer ")
+    ? token.slice("Bearer ".length)
+    : token;
+
+  res.cookie(ADMIN_AUTH_COOKIE_NAME, normalizedToken, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: "strict",
+    path: "/",
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+};
+
+const clearAdminAuthCookie = (res: Response) => {
+  res.clearCookie(ADMIN_AUTH_COOKIE_NAME, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: "strict",
+    path: "/",
+  });
+};
 
 class AdminController {
   static async login(req: Request, res: Response) {
@@ -49,13 +75,22 @@ class AdminController {
       email: admin.email,
       role: "SUPER_ADMIN",
     };
+    const token = createAdminToken(authUser);
+    setAdminAuthCookie(res, token);
 
     return sendResponse(res, 200, {
       message: "Admin login successful",
       data: {
         user: authUser,
-        token: createAdminToken(authUser),
+        token,
       },
+    });
+  }
+
+  static async logout(_req: Request, res: Response) {
+    clearAdminAuthCookie(res);
+    return sendResponse(res, 200, {
+      message: "Admin logged out successfully",
     });
   }
 

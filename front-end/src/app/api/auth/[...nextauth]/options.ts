@@ -10,6 +10,11 @@ import {
   check_credential,
 } from "@/lib/apiEndPoints";
 
+const exposeAccessTokenToClient =
+  (process.env.NEXT_PUBLIC_USE_COOKIE_AUTH ??
+    process.env.USE_COOKIE_AUTH ??
+    "false") !== "true";
+
 /* ================= TYPES ================= */
 
 export type CustomSession = {
@@ -68,7 +73,7 @@ const mapAuthPayloadToUser = (
     email: user.email ?? null,
     image: user.image ?? null,
     provider: user.provider ?? fallbackProvider,
-    token: authPayload?.token ?? null,
+    token: exposeAccessTokenToClient ? authPayload?.token ?? null : null,
     role: user.role ?? null,
     businessId: user.businessId ?? null,
     accountType: user.accountType ?? user.account_type ?? null,

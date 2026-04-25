@@ -195,3 +195,59 @@ export const deliverInvoiceEmail = async ({
     invoiceNumber: invoiceDetails.invoice_number,
   };
 };
+
+export const deliverInvoiceReminderEmail = async ({
+  userId,
+  invoiceId,
+  requestedEmail,
+}: {
+  userId: number;
+  invoiceId: number;
+  requestedEmail?: string | null;
+}) => {
+  const invoice = await getInvoice(userId, invoiceId);
+  if (!invoice) {
+    const error = new Error("Invoice not found") as Error & { status?: number };
+    error.status = 404;
+    throw error;
+  }
+
+  const recipientEmail =
+    requestedEmail?.trim() || invoice.customer?.email?.trim() || "";
+  if (!recipientEmail) {
+    const error = new Error(
+      "Customer email is required to send this reminder",
+    ) as Error & {
+      status?: number;
+      errors?: Record<string, string[]>;
+    };
+    error.status = 422;
+    error.errors = { email: ["Customer email is required"] };
+    throw error;
+  }
+
+  const businessProfile = await prisma.businessProfile.findUnique({
+    where: { user_id: userId },
+    select: {
+      business_name: true,
+      currency: true,
+    },
+  });
+
+  await sendEmail("invoice_reminder", {
+    email: recipientEmail,
+    customer_name: invoice.customer?.name ?? "Customer",
+    invoice_id: invoice.invoice_number,
+    amount: Number(invoice.total ?? 0),
+    due_date: invoice.due_date,
+    business_name: businessProfile?.business_name ?? "BillSutra",
+    invoice_url: buildPublicInvoiceUrl(invoice.id, invoice.invoice_number),
+    currency: businessProfile?.currency ?? "INR",
+  });
+
+  return {
+    invoiceId: invoice.id,
+    email: recipientEmail,
+    invoiceNumber: invoice.invoice_number,
+  };
+};

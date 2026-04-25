@@ -1,13 +1,14 @@
 import "dotenv/config";
+import { createServer } from "http";
 import app from "./app.js";
 import { startInventoryInsightsCron } from "./jobs/inventoryInsights.job.js";
 import { startRecurringInvoiceCron } from "./jobs/recurringInvoice.job.js";
 import { ensureSchemaCompatibility } from "./lib/schemaCompatibility.js";
-import { startInvoiceQueueWorker } from "./modules/invoice/invoice.queue.js";
 import {
   flushObservability,
   initServerObservability,
 } from "./lib/observability.js";
+import { initRealtimeSocketServer } from "./services/realtimeSocket.service.js";
 
 const requiredEnv = ["JWT_SECRET"] as const;
 
@@ -29,9 +30,18 @@ await ensureSchemaCompatibility();
 initServerObservability();
 startRecurringInvoiceCron();
 startInventoryInsightsCron();
-startInvoiceQueueWorker();
 
-app.listen(PORT, () => console.log(`Server is running on PORT ${PORT}`));
+const server = createServer(app);
+
+try {
+  initRealtimeSocketServer(server);
+} catch (error) {
+  console.warn("[socket] realtime server initialization failed", {
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
+server.listen(PORT, () => console.log(`Server is running on PORT ${PORT}`));
 
 process.on("beforeExit", () => {
   void flushObservability();

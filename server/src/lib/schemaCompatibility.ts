@@ -236,6 +236,7 @@ const ensureFaceDataTableInternal = async () => {
       "face_encoding" TEXT NOT NULL,
       "face_encoding_json" TEXT NOT NULL DEFAULT '[]',
       "is_enabled" BOOLEAN NOT NULL DEFAULT true,
+      "is_encrypted" BOOLEAN NOT NULL DEFAULT false,
       "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -248,6 +249,7 @@ const ensureFaceDataTableInternal = async () => {
       ADD COLUMN IF NOT EXISTS "face_encoding" TEXT,
       ADD COLUMN IF NOT EXISTS "face_encoding_json" TEXT,
       ADD COLUMN IF NOT EXISTS "is_enabled" BOOLEAN NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS "is_encrypted" BOOLEAN NOT NULL DEFAULT false,
       ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
   `);
@@ -257,11 +259,13 @@ const ensureFaceDataTableInternal = async () => {
     SET
       "face_encoding" = COALESCE(NULLIF("face_encoding", ''), '[]'),
       "face_encoding_json" = COALESCE(NULLIF("face_encoding_json", ''), "face_encoding", '[]'),
-      "is_enabled" = COALESCE("is_enabled", true)
+      "is_enabled" = COALESCE("is_enabled", true),
+      "is_encrypted" = COALESCE("is_encrypted", false)
     WHERE
       "face_encoding" IS NULL
       OR "face_encoding_json" IS NULL
-      OR "is_enabled" IS NULL;
+      OR "is_enabled" IS NULL
+      OR "is_encrypted" IS NULL;
   `);
 
   await prisma.$executeRawUnsafe(`

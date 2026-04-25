@@ -22,9 +22,11 @@ export type TemplateLayout = "stacked" | "split";
 
 export type InvoiceTemplateVariant =
   | "classic"
+  | "classicBusiness"
   | "modern"
   | "indianGst"
   | "indianModern"
+  | "simpleResume"
   | "gst"
   | "headerLeft"
   | "banner"

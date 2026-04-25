@@ -27,6 +27,7 @@ import {
   updateInvoice,
   deleteInvoice,
   createPayment,
+  updatePayment,
   createCategory,
   fetchSuppliers,
   fetchWorkers,
@@ -428,6 +429,27 @@ export const useCreatePaymentMutation = () => {
   });
 };
 
+export const useUpdatePaymentMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: number;
+      payload: Parameters<typeof updatePayment>[1];
+    }) => updatePayment(id, payload),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-ledger"] }),
+        queryClient.invalidateQueries({ queryKey: ["payments"] }),
+        invalidateDashboard(queryClient),
+      ]),
+  });
+};
+
 export const useCreateSaleMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -457,6 +479,10 @@ export const useUpdateSaleMutation = () => {
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["sales"] }),
+        queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        queryClient.invalidateQueries({ queryKey: ["payments"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-ledger"] }),
         queryClient.invalidateQueries({ queryKey: ["products"] }),
         queryClient.invalidateQueries({ queryKey: ["inventory", "insights"] }),
         invalidateDashboard(queryClient),

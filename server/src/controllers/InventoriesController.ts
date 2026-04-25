@@ -6,7 +6,7 @@ import {
   inventoryAdjustSchema,
   inventoryQuerySchema,
 } from "../validations/apiValidations.js";
-import { createNotification } from "../services/notification.service.js";
+import { dispatchNotification } from "../services/notification.service.js";
 import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
 import { applyInventoryDelta } from "../services/inventoryValidation.service.js";
 
@@ -123,7 +123,7 @@ class InventoriesController {
         updated.product.reorder_level > 0 &&
         updated.product.stock_on_hand <= updated.product.reorder_level
       ) {
-        await createNotification({
+        await dispatchNotification({
           userId,
           businessId,
           type: "inventory",

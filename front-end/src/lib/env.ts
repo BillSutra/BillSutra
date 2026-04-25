@@ -48,6 +48,21 @@ class Env {
 
   static ANALYTICS_OPT_OUT_DEFAULT =
     process.env.NEXT_PUBLIC_ANALYTICS_OPT_OUT_DEFAULT ?? "false";
+
+  static USE_SECURE_AUTH =
+    process.env.NEXT_PUBLIC_USE_SECURE_AUTH ??
+    process.env.USE_SECURE_AUTH ??
+    "false";
+
+  static USE_COOKIE_AUTH =
+    process.env.NEXT_PUBLIC_USE_COOKIE_AUTH ??
+    process.env.USE_COOKIE_AUTH ??
+    "false";
+
+  static USE_DYNAMIC_STATUS =
+    process.env.NEXT_PUBLIC_USE_DYNAMIC_STATUS ??
+    process.env.USE_DYNAMIC_STATUS ??
+    "false";
 }
 
 export default Env;

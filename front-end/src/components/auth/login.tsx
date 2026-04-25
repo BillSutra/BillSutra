@@ -163,7 +163,6 @@ export default function Login({
           throw new Error("Unable to create your session.");
         }
 
-        window.localStorage.setItem("token", token);
         router.push(callbackUrl);
         router.refresh();
       } catch (error) {

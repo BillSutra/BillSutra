@@ -36,6 +36,8 @@ model User {
   subscription                Subscription?
   subscription_usage          SubscriptionUsage[]
   resets                      PasswordResetToken[]
+  refresh_tokens              RefreshToken[]
+  uploaded_files              UploadedFile[]
   business_profile            BusinessProfile?
   user_templates              UserTemplate[]
   user_saved_templates        UserSavedTemplate[]
@@ -656,6 +658,7 @@ model Payment {
   method         PaymentMethod
   provider       String?       @db.VarChar(120)
   transaction_id String?       @db.VarChar(191)
+  payment_idempotency_key String? @db.VarChar(191)
 
   reference String?
 
@@ -664,6 +667,7 @@ model Payment {
 
   @@index([invoice_id])
   @@index([user_id])
+  @@unique([user_id, payment_idempotency_key])
   @@map("payments")
 }
 
@@ -789,6 +793,38 @@ model PasswordResetToken {
   @@map("password_reset_tokens")
 }
 
+model RefreshToken {
+  id String @id @default(cuid()) @db.VarChar(191)
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  token_hash String   @unique @db.VarChar(191)
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  @@index([user_id, expires_at])
+  @@map("refresh_tokens")
+}
+
+model UploadedFile {
+  id String @id @default(cuid()) @db.VarChar(191)
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  file_name       String  @db.VarChar(191)
+  original_name   String? @db.VarChar(191)
+  file_path       String  @unique
+  legacy_public_url String?
+  type            String  @db.VarChar(64)
+  mime_type       String? @db.VarChar(191)
+  created_at      DateTime @default(now())
+
+  @@index([user_id, created_at])
+  @@map("uploaded_files")
+}
+
 model ExportLog {
   id Int @id @default(autoincrement())
 
@@ -896,6 +932,7 @@ model FaceData {
   face_encoding String  @db.Text
   face_encoding_json String @db.Text
   is_enabled    Boolean @default(true)
+  is_encrypted  Boolean @default(false)
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
 

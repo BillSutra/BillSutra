@@ -15,7 +15,7 @@ import {
 } from "../lib/indianAddress.js";
 import { normalizeGstin } from "../lib/gstin.js";
 import { launchPuppeteerBrowser } from "../lib/launchPuppeteerBrowser.js";
-import { createNotification } from "../services/notification.service.js";
+import { dispatchNotification } from "../services/notification.service.js";
 
 type CustomerCreateInput = z.infer<typeof customerCreateSchema>;
 type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
@@ -1018,7 +1018,7 @@ class CustomersController {
 
     if (businessId) {
       try {
-        await createNotification({
+        await dispatchNotification({
           userId,
           businessId,
           type: "customer",

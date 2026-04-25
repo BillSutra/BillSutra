@@ -13,7 +13,7 @@ import {
   getWorkerAccessRole,
   type BillingAction,
 } from "../lib/workerPermissions.js";
-import { createNotification } from "../services/notification.service.js";
+import { dispatchNotification } from "../services/notification.service.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoiceUpdateInput = z.infer<typeof invoiceUpdateSchema>;
@@ -131,7 +131,7 @@ class InvoicesController {
     }
 
     if (businessId) {
-      await createNotification({
+      await dispatchNotification({
         userId,
         businessId,
         type: "payment",

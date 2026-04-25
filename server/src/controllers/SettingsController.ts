@@ -3,6 +3,10 @@ import { AuthMethod, Prisma } from "@prisma/client";
 import prisma from "../config/db.config.js";
 import { sendResponse } from "../utils/sendResponse.js";
 import { recordAuthEvent } from "../lib/modernAuth.js";
+import {
+  clearAuthCookies,
+  revokeAllRefreshTokensForUser,
+} from "../lib/authCookies.js";
 
 type SettingsPayload = {
   appPreferences?: {
@@ -206,6 +210,9 @@ class SettingsController {
         throw error;
       }
     }
+
+    await revokeAllRefreshTokensForUser(userId);
+    clearAuthCookies(res);
 
     await recordAuthEvent({
       req,

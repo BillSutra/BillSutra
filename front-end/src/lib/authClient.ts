@@ -57,7 +57,11 @@ const extractMessage = (error: unknown, fallback: string) => {
 
 export const requestOtpLoginCode = async (email: string) => {
   try {
-    const response = await axios.post(`${API_URL}/auth/otp/send`, { email });
+    const response = await axios.post(
+      `${API_URL}/auth/otp/send`,
+      { email },
+      { withCredentials: true },
+    );
     return response.data.data as { retryAfter: number; expiresIn: number };
   } catch (error) {
     const nextError = new Error(
@@ -81,6 +85,8 @@ export const verifyOtpLoginCode = async (email: string, code: string) => {
     const response = await axios.post(`${API_URL}/auth/otp/verify`, {
       email,
       code,
+    }, {
+      withCredentials: true,
     });
     return (response.data.data ?? response.data) as AuthSuccessPayload;
   } catch (error) {
@@ -95,6 +101,7 @@ export const requestPasskeyAuthenticationOptions = async <TOptions>(
     const response = await axios.post(
       `${API_URL}/auth/passkeys/authenticate/options`,
       { email },
+      { withCredentials: true },
     );
     return response.data.data as PasskeyOptionsResponse<TOptions>;
   } catch (error) {
@@ -117,6 +124,7 @@ export const verifyPasskeyAuthentication = async (
         challenge_id: challengeId,
         response: responsePayload,
       },
+      { withCredentials: true },
     );
     return (response.data.data ?? response.data) as AuthSuccessPayload;
   } catch (error) {

@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { AuthMethod, type User } from "@prisma/client";
+import jwt from "jsonwebtoken";
 import {
   generateAuthenticationOptions,
   generateRegistrationOptions,
@@ -30,9 +31,18 @@ import {
 import {
   buildOwnerAuthUser,
   buildWorkerAuthUser,
-  createAuthBearerToken,
   ensureBusinessForUser,
+  getUserSessionVersionIfAvailable,
+  resolveAuthUserFromDecoded,
 } from "../lib/authSession.js";
+import {
+  clearAuthCookies,
+  issueAuthCookies,
+  logResolvedTokenSource,
+  refreshAuthCookies,
+  resolveAccessTokenFromRequest,
+  revokeRefreshTokenFromRequest,
+} from "../lib/authCookies.js";
 import {
   generateOtpCode,
   getPasskeyLabel,
@@ -94,16 +104,48 @@ const serializeOwnerUser = (
 });
 
 const buildOwnerAuthResponse = async (
+  res: Response,
   user: SerializableOwnerUser,
   message: string,
 ) => {
   const authUser = await buildOwnerAuthUser(user);
+  const { accessToken } = await issueAuthCookies(res, authUser);
 
   return {
     message,
     user: serializeOwnerUser(user, authUser),
-    token: createAuthBearerToken(authUser),
+    token: `Bearer ${accessToken}`,
   };
+};
+
+const resolveAuthUserFromAccessToken = async (token: string | null) => {
+  if (!token) {
+    return null;
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    const authUser = await resolveAuthUserFromDecoded(decoded);
+
+    if (!authUser) {
+      return null;
+    }
+
+    const latestSessionVersion = await getUserSessionVersionIfAvailable(
+      authUser.ownerUserId,
+    );
+
+    if (
+      latestSessionVersion !== null &&
+      latestSessionVersion !== authUser.sessionVersion
+    ) {
+      return null;
+    }
+
+    return authUser;
+  } catch {
+    return null;
+  }
 };
 
 const getCredentialNotFoundMessage = () =>
@@ -172,7 +214,7 @@ class AuthController {
       return sendResponse(
         res,
         200,
-        await buildOwnerAuthResponse(findUser, "Login successful"),
+        await buildOwnerAuthResponse(res, findUser, "Login successful"),
       );
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -235,6 +277,83 @@ class AuthController {
     }
   }
 
+  static async refresh(req: Request, res: Response) {
+    try {
+      const refreshed = await refreshAuthCookies(req, res);
+
+      if (!refreshed) {
+        return sendResponse(res, 401, {
+          message: "Unable to refresh session",
+        });
+      }
+
+      return sendResponse(res, 200, {
+        message: "Session refreshed",
+        data: {
+          token: `Bearer ${refreshed.accessToken}`,
+          source: "cookie",
+        },
+      });
+    } catch {
+      clearAuthCookies(res);
+      return sendResponse(res, 500, {
+        message: "Unable to refresh session",
+      });
+    }
+  }
+
+  static async bootstrapSecureSession(req: Request, res: Response) {
+    try {
+      const { headerToken, cookieToken } = resolveAccessTokenFromRequest(req);
+      const authUser =
+        (await resolveAuthUserFromAccessToken(headerToken)) ??
+        (await resolveAuthUserFromAccessToken(cookieToken));
+
+      logResolvedTokenSource(
+        headerToken ? "header" : cookieToken ? "cookie" : "none",
+        { flow: "auth.bootstrap_secure_session" },
+      );
+
+      if (!authUser) {
+        clearAuthCookies(res);
+        return sendResponse(res, 401, {
+          message: "Unauthorized",
+        });
+      }
+
+      const issued = await issueAuthCookies(res, authUser);
+
+      return sendResponse(res, 200, {
+        message:
+          "Secure cookie session bootstrapped. Legacy bearer tokens remain supported during the transition.",
+        data: {
+          token: `Bearer ${issued.accessToken}`,
+        },
+      });
+    } catch {
+      clearAuthCookies(res);
+      return sendResponse(res, 500, {
+        message: "Unable to bootstrap secure session",
+      });
+    }
+  }
+
+  static async logout(req: Request, res: Response) {
+    try {
+      await revokeRefreshTokenFromRequest(req);
+      clearAuthCookies(res);
+
+      return sendResponse(res, 200, {
+        message: "Logged out successfully",
+      });
+    } catch {
+      clearAuthCookies(res);
+      return sendResponse(res, 200, {
+        message: "Logged out successfully",
+      });
+    }
+  }
+
   static async loginCheck(req: Request, res: Response) {
     try {
       const body: CredentialsLoginPayload = req.body;
@@ -286,7 +405,7 @@ class AuthController {
       return sendResponse(
         res,
         200,
-        await buildOwnerAuthResponse(user, "Login successful"),
+        await buildOwnerAuthResponse(res, user, "Login successful"),
       );
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -352,6 +471,7 @@ class AuthController {
       }
 
       const authUser = await buildWorkerAuthUser(worker);
+      const { accessToken } = await issueAuthCookies(res, authUser);
 
       try {
         await prisma.$executeRaw`
@@ -384,7 +504,7 @@ class AuthController {
           accountType: "WORKER",
           workerId: worker.id,
         },
-        token: createAuthBearerToken(authUser),
+        token: `Bearer ${accessToken}`,
       });
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -719,6 +839,7 @@ class AuthController {
         res,
         200,
         await buildOwnerAuthResponse(
+          res,
           { ...user, is_email_verified: true },
           "OTP verified. Login successful",
         ),
@@ -927,7 +1048,7 @@ class AuthController {
       return sendResponse(
         res,
         200,
-        await buildOwnerAuthResponse(user, "Passkey login successful"),
+        await buildOwnerAuthResponse(res, user, "Passkey login successful"),
       );
     } catch {
       return sendResponse(res, 422, {

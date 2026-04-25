@@ -106,6 +106,7 @@ export type AdminAccessPaymentRecord = {
   status: "pending" | "approved" | "rejected" | "success";
   name?: string | null;
   utr?: string | null;
+  proofFileId?: string | null;
   proofUrl?: string | null;
   proofMimeType?: string | null;
   proofOriginalName?: string | null;
@@ -129,9 +130,12 @@ export type AdminAccessPaymentRecord = {
 
 const adminApiClient = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
 });
 
 adminApiClient.interceptors.request.use((config) => {
+  config.withCredentials = true;
+
   if (typeof window !== "undefined") {
     const token = getStoredAdminToken();
     if (token) {
@@ -148,8 +152,14 @@ export const loginSuperAdmin = async (payload: {
   email: string;
   password: string;
 }) => {
-  const response = await axios.post(ADMIN_LOGIN_URL, payload);
+  const response = await axios.post(ADMIN_LOGIN_URL, payload, {
+    withCredentials: true,
+  });
   return response.data.data as AdminLoginResponse;
+};
+
+export const logoutSuperAdmin = async () => {
+  await adminApiClient.post("/admin/logout");
 };
 
 export const fetchAdminBusinesses = async () => {

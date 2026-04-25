@@ -5,7 +5,6 @@ import { isAxiosError } from "axios";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ValidationField } from "@/components/ui/ValidationField";
-import { persistAdminToken } from "@/lib/adminAuth";
 import { loginSuperAdmin } from "@/lib/adminApiClient";
 import { validateEmail } from "@/lib/validation";
 
@@ -22,8 +21,7 @@ const AdminLoginClient = () => {
     setIsSubmitting(true);
 
     try {
-      const response = await loginSuperAdmin({ email, password });
-      persistAdminToken(response.token);
+      await loginSuperAdmin({ email, password });
       router.replace("/admin/dashboard");
     } catch (requestError) {
       if (isAxiosError<{ message?: string }>(requestError)) {

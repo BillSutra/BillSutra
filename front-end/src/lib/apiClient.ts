@@ -26,37 +26,46 @@ import {
 import { normalizeListResponse } from "./normalizeListResponse";
 import { captureApiFailure } from "./observability/shared";
 import { normalizeGstin } from "./gstin";
-
-const normalizeAuthToken = (rawToken: string | null | undefined) => {
-  if (!rawToken) return null;
-  const token = rawToken.trim();
-  if (!token) return null;
-  if (token === "undefined" || token === "null") return null;
-  if (token === "Bearer undefined" || token === "Bearer null") return null;
-  return token;
-};
+import {
+  clearLegacyStoredToken,
+  clearSecureAuthBootstrapped,
+  getLegacyStoredToken,
+  hasSecureAuthBootstrap,
+  isCookieOnlyAuthEnabled,
+  isSecureAuthEnabled,
+  markSecureAuthBootstrapped,
+  normalizeAuthToken,
+} from "./secureAuth";
 
 export const apiClient = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
+});
+
+const refreshClient = axios.create({
+  baseURL: API_URL,
+  withCredentials: true,
 });
 
 apiClient.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
-    let token = normalizeAuthToken(window.localStorage.getItem("token"));
+    config.withCredentials = true;
+    const secureAuthEnabled = isSecureAuthEnabled();
+    const secureCookieReady = secureAuthEnabled && hasSecureAuthBootstrap();
 
-    if (!token) {
+    let token = getLegacyStoredToken();
+
+    if (!token && !isCookieOnlyAuthEnabled()) {
       const session = await getSession();
       token = normalizeAuthToken(
         (session?.user as { token?: string } | undefined)?.token ?? null,
       );
-      if (token) {
-        window.localStorage.setItem("token", token);
-      } else {
-        window.localStorage.removeItem("token");
+      if (!token) {
+        clearLegacyStoredToken();
       }
     }
 
-    if (token) {
+    if (!secureCookieReady && token) {
       const header = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
       config.headers.Authorization = header;
     } else if (config.headers?.Authorization) {
@@ -68,7 +77,7 @@ apiClient.interceptors.request.use(async (config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     captureApiFailure(error);
 
     if (typeof window !== "undefined") {
@@ -100,6 +109,60 @@ apiClient.interceptors.response.use(
             },
           }),
         );
+      }
+
+      const originalRequest = error?.config as
+        | (typeof error.config & { _retry?: boolean })
+        | undefined;
+      const requestUrl =
+        typeof originalRequest?.url === "string" ? originalRequest.url : "";
+      const isRefreshRequest =
+        requestUrl.includes("/auth/refresh") ||
+        requestUrl.includes("/auth/logout") ||
+        requestUrl.includes("/auth/session/bootstrap");
+
+      if (
+        isSecureAuthEnabled() &&
+        status === 401 &&
+        !isRefreshRequest &&
+        originalRequest &&
+        !originalRequest._retry
+      ) {
+        originalRequest._retry = true;
+
+        try {
+          const refreshResponse = await refreshClient.post("/auth/refresh");
+          const refreshedToken = normalizeAuthToken(
+            refreshResponse.data?.data?.token ?? null,
+          );
+
+          markSecureAuthBootstrapped();
+
+          if (originalRequest.headers?.Authorization) {
+            delete originalRequest.headers.Authorization;
+          }
+
+          originalRequest.withCredentials = true;
+          return apiClient(originalRequest);
+        } catch (refreshError) {
+          captureApiFailure(refreshError);
+
+          const legacyToken = getLegacyStoredToken();
+          clearSecureAuthBootstrapped();
+
+          if (legacyToken) {
+            originalRequest.headers = originalRequest.headers ?? {};
+            originalRequest.headers.Authorization = legacyToken.startsWith(
+              "Bearer ",
+            )
+              ? legacyToken
+              : `Bearer ${legacyToken}`;
+            originalRequest.withCredentials = true;
+            return apiClient(originalRequest);
+          }
+
+          clearLegacyStoredToken();
+        }
       }
     }
 
@@ -728,6 +791,7 @@ export type Invoice = {
   date: string;
   due_date?: string | null;
   status: string;
+  computedStatus?: "PAID" | "PARTIAL" | "UNPAID";
   subtotal: string;
   total_base?: string | null;
   tax: string;
@@ -742,6 +806,7 @@ export type Invoice = {
   total: string;
   grand_total?: string | null;
   notes?: string | null;
+  totalPaid?: number;
   customer?: Customer | null;
   payments: Array<{
     id: number;
@@ -1087,6 +1152,8 @@ export type PaymentInput = {
   paid_at?: string | Date;
 };
 
+export type PaymentUpdateInput = Partial<Omit<PaymentInput, "invoice_id">>;
+
 export type AccessPaymentRecord = {
   id: string;
   userId: number;
@@ -1097,6 +1164,7 @@ export type AccessPaymentRecord = {
   status: "pending" | "approved" | "rejected" | "success";
   name?: string | null;
   utr?: string | null;
+  proofFileId?: string | null;
   proofUrl?: string | null;
   proofMimeType?: string | null;
   proofOriginalName?: string | null;
@@ -2616,6 +2684,13 @@ export const createPayment = async (payload: PaymentInput): Promise<void> => {
   await apiClient.post("/payments", payload);
 };
 
+export const updatePayment = async (
+  paymentId: number,
+  payload: PaymentUpdateInput,
+): Promise<void> => {
+  await apiClient.put(`/payments/${paymentId}`, payload);
+};
+
 export const fetchAccessPaymentStatus =
   async (): Promise<AccessPaymentStatusResponse> => {
     const response = await apiClient.get("/payments/access/status");
@@ -3246,6 +3321,10 @@ export const fetchSecurityActivity = async (): Promise<
 
 export const logoutAllDevices = async (): Promise<void> => {
   await apiClient.post("/security/logout-all");
+};
+
+export const logoutCurrentSession = async (): Promise<void> => {
+  await apiClient.post("/auth/logout");
 };
 
 export const fetchTemplates = async (): Promise<TemplateRecord[]> => {

@@ -1,4 +1,9 @@
 import prisma from "../config/db.config.js";
+import { getCache, setCache, deleteCacheByPrefix } from "../redis/cache.js";
+import {
+  buildInventoryInsightsCachePrefix,
+  buildInventoryInsightsRedisKey,
+} from "../redis/cacheKeys.js";
 
 const INVENTORY_INSIGHTS_CACHE_MS = Number(
   process.env.INVENTORY_INSIGHTS_CACHE_MS ?? 6 * 60 * 60 * 1000,
@@ -94,6 +99,8 @@ export const invalidateInventoryInsightsCacheByUser = (userId: number) => {
       inventoryInsightsCache.delete(key);
     }
   }
+
+  void deleteCacheByPrefix(buildInventoryInsightsCachePrefix(userId));
 };
 
 const daysBetween = (left: Date, right: Date) =>
@@ -135,7 +142,14 @@ export const getInventoryInsights = async (
   options: InventoryInsightsOptions = {},
 ): Promise<InventoryInsightsResponse> => {
   const cacheKey = buildCacheKey(userId, options.warehouseId);
+  const redisCacheKey = buildInventoryInsightsRedisKey(userId, options.warehouseId);
   if (options.useCache !== false) {
+    const redisCached = await getCache<InventoryInsightsResponse>(redisCacheKey);
+    if (redisCached) {
+      setCachedInsights(cacheKey, redisCached);
+      return redisCached;
+    }
+
     const cached = getCachedInsights(cacheKey);
     if (cached) {
       return cached;
@@ -190,6 +204,11 @@ export const getInventoryInsights = async (
       insights: [],
     };
     setCachedInsights(cacheKey, emptyPayload);
+    void setCache(
+      redisCacheKey,
+      emptyPayload,
+      Math.max(30, Math.floor(INVENTORY_INSIGHTS_CACHE_MS / 1000)),
+    );
     return emptyPayload;
   }
 
@@ -521,6 +540,11 @@ export const getInventoryInsights = async (
   };
 
   setCachedInsights(cacheKey, response);
+  void setCache(
+    redisCacheKey,
+    response,
+    Math.max(30, Math.floor(INVENTORY_INSIGHTS_CACHE_MS / 1000)),
+  );
   return response;
 };
 

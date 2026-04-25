@@ -18,6 +18,9 @@ import {
   normalizeBusinessAddressDraft,
 } from "../../lib/indianAddress.js";
 import {
+  computeInvoicePaymentSnapshotFromPayments,
+} from "../../utils/invoicePaymentSnapshot.js";
+import {
   applyBillingSaleInventoryAdjustments,
   getBillingInventorySchemaSupport,
   getBillingInventorySettings,
@@ -561,6 +564,13 @@ const attachInvoiceGstMetadata = async <
     return invoice;
   }
 
+  const paymentSnapshot = computeInvoicePaymentSnapshotFromPayments({
+    total: invoice.total,
+    status: invoice.status,
+    dueDate: "due_date" in invoice ? invoice.due_date : null,
+    payments: invoice.payments,
+  });
+
   const [invoiceRows, itemRows] = await Promise.all([
     prisma.$queryRaw<InvoiceGstMetadataRow[]>(Prisma.sql`
       SELECT id, total_base, total_cgst, total_sgst, total_igst, grand_total
@@ -585,6 +595,8 @@ const attachInvoiceGstMetadata = async <
     total_sgst: invoiceRow?.total_sgst ?? null,
     total_igst: invoiceRow?.total_igst ?? null,
     grand_total: invoiceRow?.grand_total ?? null,
+    totalPaid: paymentSnapshot.paidAmount,
+    computedStatus: paymentSnapshot.dynamicPaymentStatus,
     items: invoice.items.map((item) => {
       const meta = itemMetaById.get(item.id);
       return {

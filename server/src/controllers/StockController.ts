@@ -3,7 +3,7 @@ import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
 import type { z } from "zod";
 import { stockAdjustSchema } from "../validations/apiValidations.js";
-import { createNotification } from "../services/notification.service.js";
+import { dispatchNotification } from "../services/notification.service.js";
 import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
 import { applyInventoryDelta } from "../services/inventoryValidation.service.js";
 
@@ -65,7 +65,7 @@ class StockController {
         updated.reorder_level > 0 &&
         updated.stock_on_hand <= updated.reorder_level
       ) {
-        await createNotification({
+        await dispatchNotification({
           userId,
           businessId,
           type: "inventory",

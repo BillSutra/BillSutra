@@ -1,6 +1,9 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../config/db.config.js";
 import { getExtraEntryStats } from "./extraEntry.service.js";
+import {
+  computeInvoicePaymentSnapshotFromPayments,
+} from "../utils/invoicePaymentSnapshot.js";
 
 type RevenuePoint = { date: Date; total: Prisma.Decimal | number };
 type CostPoint = { date: Date; total: Prisma.Decimal | number };
@@ -500,18 +503,7 @@ const resolveInvoicePaidAmount = (invoice: {
   status: string;
   payments: Array<{ amount: unknown }>;
 }) => {
-  const total = toNumber(invoice.total);
-  const paidFromPayments = invoice.payments.reduce(
-    (sum, payment) => sum + toNumber(payment.amount),
-    0,
-  );
-  const normalizedPaid = Math.max(0, Math.min(paidFromPayments, total));
-
-  if (normalizedPaid > 0) {
-    return normalizedPaid;
-  }
-
-  return invoice.status === INVOICE_STATUS.PAID ? total : 0;
+  return computeInvoicePaymentSnapshotFromPayments(invoice).paidAmount;
 };
 
 const resolveInvoicePendingAmount = (invoice: {
@@ -519,16 +511,7 @@ const resolveInvoicePendingAmount = (invoice: {
   status: string;
   payments: Array<{ amount: unknown }>;
 }) => {
-  if (
-    invoice.status === INVOICE_STATUS.VOID ||
-    invoice.status === INVOICE_STATUS.DRAFT
-  ) {
-    return 0;
-  }
-
-  const total = toNumber(invoice.total);
-  const paid = resolveInvoicePaidAmount(invoice);
-  return Math.max(0, total - paid);
+  return computeInvoicePaymentSnapshotFromPayments(invoice).pendingAmount;
 };
 
 export const fetchCashInflowSnapshot = async (params: {
@@ -539,7 +522,7 @@ export const fetchCashInflowSnapshot = async (params: {
 }) => {
   const { userId, start, endExclusive, debugLabel } = params;
 
-  const [salesReceipts, invoicePayments, legacyPaidInvoices] = await Promise.all([
+  const [salesReceipts, invoicePayments] = await Promise.all([
     prisma.sale.findMany({
       where: {
         user_id: userId,
@@ -570,19 +553,6 @@ export const fetchCashInflowSnapshot = async (params: {
         paid_at: true,
       },
     }),
-    prisma.invoice.findMany({
-      where: {
-        user_id: userId,
-        date: { gte: start, lt: endExclusive },
-        status: INVOICE_STATUS.PAID,
-        payments: { none: {} },
-      },
-      select: {
-        id: true,
-        date: true,
-        total: true,
-      },
-    }),
   ]);
 
   const directSalesEntries: CashInflowEntry[] = salesReceipts
@@ -605,14 +575,7 @@ export const fetchCashInflowSnapshot = async (params: {
     }))
     .filter((entry) => entry.amount > 0);
 
-  const legacyInvoiceEntries: CashInflowEntry[] = legacyPaidInvoices
-    .map((invoice) => ({
-      source: "legacy_invoice_settlement" as const,
-      amount: roundMetric(toNumber(invoice.total)),
-      date: invoice.date,
-      invoiceId: invoice.id,
-    }))
-    .filter((entry) => entry.amount > 0);
+  const legacyInvoiceEntries: CashInflowEntry[] = [];
 
   const snapshot = {
     total: roundMetric(
@@ -674,14 +637,6 @@ const fetchSalesMetricSnapshot = async (params: {
       where: {
         user_id: userId,
         date: { gte: start, lt: endExclusive },
-        status: {
-          in: [
-            INVOICE_STATUS.SENT,
-            INVOICE_STATUS.PARTIALLY_PAID,
-            INVOICE_STATUS.PAID,
-            INVOICE_STATUS.OVERDUE,
-          ],
-        },
       },
       select: {
         total: true,

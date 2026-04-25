@@ -3,9 +3,16 @@ import axios, { AxiosError } from "axios";
 import { Prisma, AuthMethod } from "@prisma/client";
 
 import prisma from "../config/db.config.js";
-import { buildOwnerAuthUser, createAuthBearerToken } from "../lib/authSession.js";
+import AppError from "../utils/AppError.js";
+import { buildOwnerAuthUser } from "../lib/authSession.js";
+import { issueAuthCookies } from "../lib/authCookies.js";
 import { recordAuthEvent } from "../lib/modernAuth.js";
 import { sendResponse } from "../utils/sendResponse.js";
+import {
+  decryptFaceEncoding,
+  encryptFaceEncoding,
+  looksEncryptedFaceEncoding,
+} from "../lib/faceEncryption.js";
 
 const FACE_SERVICE_URL = process.env.FACE_SERVICE_URL || "http://localhost:5001";
 const FACE_RECOGNITION_TIMEOUT = Number(process.env.FACE_RECOGNITION_TIMEOUT_MS || 15000);
@@ -124,6 +131,21 @@ type FaceErrorMeta = {
 
 const serviceEndpoint = (path: string) => `${FACE_SERVICE_URL}${path}`;
 
+function buildFaceServiceHeaders(headers: Record<string, string>) {
+  const nextHeaders: Record<string, string> = {
+    ...headers,
+    "X-Face-Service-Client": "billsutra-backend",
+    "User-Agent": "BillSutra-Backend/1.0",
+  };
+
+  const apiKey = process.env.FACE_SERVICE_API_KEY?.trim();
+  if (apiKey) {
+    nextHeaders["X-API-KEY"] = apiKey;
+  }
+
+  return nextHeaders;
+}
+
 function logFace(level: "log" | "warn" | "error", event: string, payload: Record<string, unknown>) {
   console[level](
     `[Face Recognition] ${event}`,
@@ -226,6 +248,46 @@ function validateAndSerializeEncoding(encoding: unknown): string {
   }
 
   return JSON.stringify(encoding);
+}
+
+function sanitizeFaceServiceResponseForLogs(payload: unknown) {
+  if (!payload || typeof payload !== "object") {
+    return payload;
+  }
+
+  const sanitized = { ...(payload as Record<string, unknown>) };
+  if ("data" in sanitized && sanitized.data && typeof sanitized.data === "object") {
+    const data = { ...(sanitized.data as Record<string, unknown>) };
+    if ("encoding" in data) {
+      data.encoding = "[REDACTED]";
+    }
+    sanitized.data = data;
+  }
+  if ("encoding" in sanitized) {
+    sanitized.encoding = "[REDACTED]";
+  }
+
+  return sanitized;
+}
+
+function resolveStoredEncodingString(faceData: {
+  face_encoding?: string | null;
+  face_encoding_json?: string | null;
+  is_encrypted?: boolean | null;
+}) {
+  const rawEncoding =
+    faceData.face_encoding_json?.trim() ||
+    faceData.face_encoding?.trim() ||
+    "";
+
+  if (!rawEncoding) {
+    throw new Error("Stored face encoding is missing.");
+  }
+
+  const shouldDecrypt =
+    faceData.is_encrypted === true || looksEncryptedFaceEncoding(rawEncoding);
+
+  return shouldDecrypt ? decryptFaceEncoding(rawEncoding) : rawEncoding;
 }
 
 function isStructuredSuccess<T extends object>(payload: unknown): payload is FaceServiceSuccess<T> {
@@ -393,7 +455,7 @@ async function postToFaceService<T extends object>(
   headers: Record<string, string>,
 ): Promise<FaceServiceSuccess<T>> {
   const response = await axios.post<FaceServiceResponse<T>>(serviceEndpoint(path), body, {
-    headers,
+    headers: buildFaceServiceHeaders(headers),
     timeout: FACE_RECOGNITION_TIMEOUT,
     validateStatus: () => true,
   });
@@ -505,7 +567,9 @@ export const registerFace = async (req: Request, res: Response) => {
           FaceAuthError.INVALID_RESPONSE,
           "Face recognition service returned an invalid response.",
           {
-            details: (error as Error & { response?: { status?: number; data?: unknown } }).response,
+            details: sanitizeFaceServiceResponseForLogs(
+              (error as Error & { response?: { status?: number; data?: unknown } }).response,
+            ),
             stack: error.stack,
           },
         );
@@ -525,6 +589,7 @@ export const registerFace = async (req: Request, res: Response) => {
 
     const payload = faceServiceResponse.data;
     let serializedEncoding: string;
+    let encryptedEncoding: string;
     try {
       serializedEncoding = validateAndSerializeEncoding(payload.encoding);
     } catch (error) {
@@ -532,28 +597,51 @@ export const registerFace = async (req: Request, res: Response) => {
         userId,
         message: (error as Error).message,
       });
-      return sendFaceError(res, 502, FaceAuthError.INVALID_RESPONSE, "Face service produced invalid encoding data.");
+      return sendFaceError(
+        res,
+        502,
+        FaceAuthError.INVALID_RESPONSE,
+        "Face service produced invalid encoding data.",
+      );
+    }
+
+    try {
+      encryptedEncoding = encryptFaceEncoding(serializedEncoding);
+    } catch (error) {
+      logFace("error", "register.encoding_encryption_failed", {
+        userId,
+        message: (error as Error).message,
+      });
+      return sendFaceError(
+        res,
+        error instanceof AppError ? error.statusCode : 500,
+        FaceAuthError.DATABASE_ERROR,
+        "Biometric data encryption is unavailable right now.",
+      );
     }
 
     try {
       const dbResult = await prismaUnsafe.faceData.upsert({
         where: { user_id: userId },
         update: {
-          face_encoding: serializedEncoding,
-          face_encoding_json: serializedEncoding,
+          face_encoding: encryptedEncoding,
+          face_encoding_json: encryptedEncoding,
           is_enabled: true,
+          is_encrypted: true,
           updated_at: new Date(),
         },
         create: {
           user_id: userId,
-          face_encoding: serializedEncoding,
-          face_encoding_json: serializedEncoding,
+          face_encoding: encryptedEncoding,
+          face_encoding_json: encryptedEncoding,
           is_enabled: true,
+          is_encrypted: true,
         },
         select: {
           id: true,
           user_id: true,
           is_enabled: true,
+          is_encrypted: true,
           created_at: true,
           updated_at: true,
         },
@@ -645,6 +733,14 @@ export const authenticateFace = async (req: Request, res: Response) => {
     const faceData = user
       ? await prismaUnsafe.faceData.findUnique({
           where: { user_id: user.id },
+          select: {
+            id: true,
+            user_id: true,
+            face_encoding: true,
+            face_encoding_json: true,
+            is_enabled: true,
+            is_encrypted: true,
+          },
         })
       : null;
 
@@ -678,7 +774,7 @@ export const authenticateFace = async (req: Request, res: Response) => {
 
     let storedEncoding: unknown;
     try {
-      storedEncoding = JSON.parse(faceData.face_encoding_json);
+      storedEncoding = JSON.parse(resolveStoredEncodingString(faceData));
     } catch (error) {
       logFace("error", "authenticate.encoding_parse_failed", {
         userId: user.id,
@@ -712,7 +808,9 @@ export const authenticateFace = async (req: Request, res: Response) => {
           FaceAuthError.INVALID_RESPONSE,
           "Face recognition service returned an invalid response.",
           {
-            details: (error as Error & { response?: { status?: number; data?: unknown } }).response,
+            details: sanitizeFaceServiceResponseForLogs(
+              (error as Error & { response?: { status?: number; data?: unknown } }).response,
+            ),
             stack: error.stack,
           },
         );
@@ -790,7 +888,8 @@ export const authenticateFace = async (req: Request, res: Response) => {
       email: user.email,
       name: user.name,
     });
-    const token = createAuthBearerToken(authUser);
+    const { accessToken } = await issueAuthCookies(res, authUser);
+    const token = `Bearer ${accessToken}`;
 
     return sendResponse(res, 200, {
       success: true,
@@ -927,6 +1026,7 @@ export const getFaceData = async (req: Request, res: Response) => {
 export const deleteFaceData = async (req: Request, res: Response) => {
   try {
     const userId = resolveUserId(req);
+    const faceDataIdParam = req.params.id ? Number(req.params.id) : null;
 
     if (!userId || userId < 0) {
       return sendFaceError(res, 400, FaceAuthError.INVALID_REQUEST, "userId is required.");
@@ -937,17 +1037,20 @@ export const deleteFaceData = async (req: Request, res: Response) => {
       select: { id: true, is_enabled: true },
     });
 
-    if (!existing?.is_enabled) {
+    if (!existing) {
       return sendFaceError(res, 404, FaceAuthError.FACE_NOT_FOUND);
     }
 
-    const result = await prismaUnsafe.faceData.update({
+    if (faceDataIdParam && existing.id !== faceDataIdParam) {
+      return sendFaceError(res, 404, FaceAuthError.FACE_NOT_FOUND);
+    }
+
+    const result = await prismaUnsafe.faceData.delete({
       where: { user_id: userId },
-      data: { is_enabled: false },
-      select: { id: true, user_id: true, is_enabled: true, updated_at: true },
+      select: { id: true, user_id: true },
     });
 
-    logFace("log", "delete.db_update_success", {
+    logFace("log", "delete.db_delete_success", {
       userId,
       result,
     });

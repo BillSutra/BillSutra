@@ -1,4 +1,5 @@
 import type { Invoice } from "@/lib/apiClient";
+import Env from "@/lib/env";
 
 type PaymentRecord = Invoice["payments"][number];
 
@@ -35,14 +36,20 @@ export const getLastPaymentDate = (payments: PaymentRecord[]) => {
 };
 
 export const getInvoicePaymentSnapshot = (
-  invoice: Pick<Invoice, "status" | "total" | "payments">,
+  invoice: Pick<Invoice, "status" | "total" | "payments" | "computedStatus" | "totalPaid">,
 ): InvoicePaymentSnapshot => {
   const total = clampCurrency(Number(invoice.total ?? 0));
-  const paid = Math.min(sumPaymentAmount(invoice.payments), total);
+  const useDynamicStatus = Env.USE_DYNAMIC_STATUS === "true";
+  const paidSource =
+    useDynamicStatus && typeof invoice.totalPaid === "number"
+      ? invoice.totalPaid
+      : sumPaymentAmount(invoice.payments);
+  const paid = Math.min(clampCurrency(paidSource), total);
   const remaining = Math.max(clampCurrency(total - paid), 0);
   const isOverdue = invoice.status === "OVERDUE";
+  const computedStatus = useDynamicStatus ? invoice.computedStatus : undefined;
 
-  if (remaining <= 0 && total > 0) {
+  if (computedStatus === "PAID" || (remaining <= 0 && total > 0)) {
     return {
       total,
       paid,
@@ -56,7 +63,11 @@ export const getInvoicePaymentSnapshot = (
     };
   }
 
-  if (paid > 0 || invoice.status === "PARTIALLY_PAID") {
+  if (
+    computedStatus === "PARTIAL" ||
+    paid > 0 ||
+    invoice.status === "PARTIALLY_PAID"
+  ) {
     return {
       total,
       paid,

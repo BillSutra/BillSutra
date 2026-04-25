@@ -1027,6 +1027,19 @@ export const paymentCreateSchema = z.object({
   paid_at: z.coerce.date().optional(),
 });
 
+export const paymentUpdateSchema = z
+  .object({
+    amount: z.coerce.number().nonnegative().optional(),
+    method: z.nativeEnum(PaymentMethod).optional(),
+    provider: z.string().min(1).max(120).optional(),
+    transaction_id: z.string().min(1).max(191).optional(),
+    reference: z.string().optional(),
+    paid_at: z.coerce.date().optional(),
+  })
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "At least one field is required",
+  });
+
 export const accessRazorpayOrderSchema = z.object({
   plan_id: accessPlanSchema,
   billing_cycle: accessBillingCycleSchema,

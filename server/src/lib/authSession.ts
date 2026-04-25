@@ -288,10 +288,20 @@ export const buildWorkerAuthUser = async (
   };
 };
 
+const getAccessTokenTtl = () =>
+  process.env.ACCESS_TOKEN_TTL?.trim() || "15m";
+
 export const signAuthToken = (authUser: AuthUser) =>
-  jwt.sign(authUser, process.env.JWT_SECRET as string, {
-    expiresIn: "365d",
-  });
+  jwt.sign(
+    {
+      ...authUser,
+      token_type: "access_v2",
+    },
+    process.env.JWT_SECRET as string,
+    {
+      expiresIn: getAccessTokenTtl() as jwt.SignOptions["expiresIn"],
+    },
+  );
 
 export const createAuthBearerToken = (authUser: AuthUser) =>
   `Bearer ${signAuthToken(authUser)}`;

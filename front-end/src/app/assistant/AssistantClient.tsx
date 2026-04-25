@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React from "react";
 import AssistantChat from "@/components/assistant/AssistantChat";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { useI18n } from "@/providers/LanguageProvider";
@@ -14,15 +14,6 @@ type AssistantClientProps = {
 const AssistantClient = ({ name, image, token }: AssistantClientProps) => {
   const { t } = useI18n();
   const displayName = name.trim() || t("common.guest");
-
-  useEffect(() => {
-    if (!token) {
-      window.localStorage.removeItem("token");
-      return;
-    }
-
-    window.localStorage.setItem("token", token);
-  }, [token]);
 
   return (
     <DashboardLayout

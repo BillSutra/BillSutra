@@ -19,14 +19,24 @@ import {
   updateInvoice,
 } from "./invoice.service.js";
 import { emitDashboardUpdate } from "../../services/dashboardRealtime.js";
+import { emitRealtimeInvoiceUpdated } from "../../services/realtimeSocket.service.js";
 import { sendEmail } from "../../emails/index.js";
 import { buildPublicInvoiceUrl } from "../../lib/appUrls.js";
 import { incrementInvoiceUsage } from "../../services/subscription.service.js";
 import { createNotification } from "../../services/notification.service.js";
+import { dispatchNotification } from "../../services/notification.service.js";
 import { invalidateInventoryInsightsCacheByUser } from "../../services/inventoryInsights.service.js";
-import { deliverInvoiceEmail, resolveInvoiceEmailRecipient } from "./invoiceEmail.service.js";
+import {
+  deliverInvoiceEmail,
+  deliverInvoiceReminderEmail,
+  resolveInvoiceEmailRecipient,
+} from "./invoiceEmail.service.js";
 import { renderInvoicePreviewPdfBuffer } from "./invoicePreviewPdf.service.js";
-import { enqueueInvoiceEmailDelivery } from "./invoice.queue.js";
+import {
+  enqueueInvoiceEmailDelivery,
+  enqueueInvoicePdfGeneration,
+  enqueueInvoiceReminderDelivery,
+} from "./invoice.queue.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoicePreviewPdfRequestInput = z.infer<typeof invoicePreviewPdfRequestSchema>;
@@ -195,7 +205,7 @@ export const store = async (req: Request, res: Response) => {
 
     if (businessId) {
       try {
-        await createNotification({
+        await dispatchNotification({
           userId,
           businessId,
           type: "payment",
@@ -210,6 +220,25 @@ export const store = async (req: Request, res: Response) => {
       }
     }
     emitDashboardUpdate({ userId, source: "invoice.create" });
+    void enqueueInvoicePdfGeneration({
+      userId,
+      invoiceId: invoice.id,
+    });
+    const hydratedInvoice = await getInvoice(userId, invoice.id);
+    if (hydratedInvoice) {
+      emitRealtimeInvoiceUpdated({
+        userId,
+        invoiceId: hydratedInvoice.id,
+        status: hydratedInvoice.status,
+        totalPaid: Number(
+          (hydratedInvoice as { totalPaid?: unknown }).totalPaid ?? 0,
+        ),
+        computedStatus:
+          (hydratedInvoice as { computedStatus?: string }).computedStatus ??
+          undefined,
+        source: "invoice.create",
+      });
+    }
 
     return res.status(201).json({
       message: "Invoice created",
@@ -262,6 +291,22 @@ export const update = async (req: Request, res: Response) => {
   }
 
   emitDashboardUpdate({ userId, source: "invoice.update" });
+  void enqueueInvoicePdfGeneration({
+    userId,
+    invoiceId: id,
+  });
+  const invoice = await getInvoice(userId, id);
+  if (invoice) {
+    emitRealtimeInvoiceUpdated({
+      userId,
+      invoiceId: invoice.id,
+      status: invoice.status,
+      totalPaid: Number((invoice as { totalPaid?: unknown }).totalPaid ?? 0),
+      computedStatus:
+        (invoice as { computedStatus?: string }).computedStatus ?? undefined,
+      source: "invoice.update",
+    });
+  }
   return res.status(200).json({ message: "Invoice updated" });
 };
 
@@ -291,6 +336,19 @@ export const duplicate = async (req: Request, res: Response) => {
     const id = Number(req.params.id);
     const invoice = await duplicateInvoice(userId, id);
     emitDashboardUpdate({ userId, source: "invoice.duplicate" });
+    void enqueueInvoicePdfGeneration({
+      userId,
+      invoiceId: invoice.id,
+    });
+    emitRealtimeInvoiceUpdated({
+      userId,
+      invoiceId: invoice.id,
+      status: invoice.status,
+      totalPaid: Number((invoice as { totalPaid?: unknown }).totalPaid ?? 0),
+      computedStatus:
+        (invoice as { computedStatus?: string }).computedStatus ?? undefined,
+      source: "invoice.duplicate",
+    });
 
     return res.status(201).json({
       message: "Invoice duplicated",
@@ -429,12 +487,15 @@ export const send = async (req: Request, res: Response) => {
       id,
       requestedEmail,
     );
-    const queued = await enqueueInvoiceEmailDelivery({
-      userId,
-      invoiceId: id,
-      requestedEmail,
-      previewPayload,
-    });
+    const queued =
+      // Queue jobs intentionally carry IDs only. Preview payload sends stay sync.
+      previewPayload === undefined
+        ? await enqueueInvoiceEmailDelivery({
+            userId,
+            invoiceId: id,
+            requestedEmail,
+          })
+        : { queued: false as const };
 
     if (queued.queued) {
       return res.status(202).json({
@@ -502,24 +563,19 @@ export const reminder = async (req: Request, res: Response) => {
       });
     }
 
-    const businessProfile = await prisma.businessProfile.findUnique({
-      where: { user_id: userId },
-      select: {
-        business_name: true,
-        currency: true,
-      },
+    const queued = await enqueueInvoiceReminderDelivery({
+      userId,
+      invoiceId: id,
+      requestedEmail,
     });
 
-    await sendEmail("invoice_reminder", {
-      email: recipientEmail,
-      customer_name: invoice.customer?.name ?? "Customer",
-      invoice_id: invoice.invoice_number,
-      amount: Number(invoice.total ?? 0),
-      due_date: invoice.due_date,
-      business_name: businessProfile?.business_name ?? "BillSutra",
-      invoice_url: buildPublicInvoiceUrl(invoice.id, invoice.invoice_number),
-      currency: businessProfile?.currency ?? "INR",
-    });
+    if (!queued.queued) {
+      await deliverInvoiceReminderEmail({
+        userId,
+        invoiceId: id,
+        requestedEmail,
+      });
+    }
 
     return res.status(200).json({
       message: `Invoice reminder sent to ${recipientEmail}`,

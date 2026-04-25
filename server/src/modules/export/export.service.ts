@@ -3,6 +3,7 @@ import prisma from "../../config/db.config.js";
 import { sendEmail } from "../../emails/index.js";
 import XLSX from "xlsx";
 import { launchPuppeteerBrowser } from "../../lib/launchPuppeteerBrowser.js";
+import { enqueueExportEmailDelivery } from "../../queues/jobs/export.jobs.js";
 
 export type ExportResource = "products" | "customers" | "invoices";
 export type ExportFormat = "csv" | "xlsx" | "pdf" | "json";
@@ -854,6 +855,27 @@ const fetchPreviewRecords = async (
   return { records, totalCount };
 };
 
+const countExportRecords = async (
+  userId: number,
+  payload: Pick<ExportPayload, "resource" | "scope" | "selected_ids" | "filters" | "fields">,
+) => {
+  const { totalCount } = await fetchPreviewRecords(
+    userId,
+    {
+      resource: payload.resource,
+      scope: payload.scope,
+      fields: payload.fields,
+      selected_ids: payload.selected_ids,
+      filters: payload.filters,
+      format: "json",
+      delivery: "download",
+    },
+    1,
+  );
+
+  return totalCount;
+};
+
 const getBusinessProfile = (userId: number) =>
   prisma.businessProfile.findUnique({
     where: { user_id: userId },
@@ -980,10 +1002,15 @@ const sendExportEmail = async (
   });
 };
 
-export const executeExport = async (
+export const executeQueuedExportEmail = async (
   authUser: { id: number; email?: string; actorId?: string },
   payload: ExportPayload,
 ) => {
+  const recipientEmail = payload.email?.trim() || authUser.email?.trim();
+  if (!recipientEmail) {
+    throw new Error("A destination email address is required.");
+  }
+
   const records = await fetchRecords(authUser.id, payload);
   const fields = resolveFieldDefinitions<any>(payload.resource, payload.fields);
   const businessProfile = await getBusinessProfile(authUser.id);
@@ -991,29 +1018,71 @@ export const executeExport = async (
 
   await logExport(prisma, authUser, payload, result.exportedCount);
 
+  await sendExportEmail(
+    recipientEmail,
+    authUser.actorId ?? `User ${authUser.id}`,
+    result.fileName,
+    result.contentType,
+    result.content,
+    payload,
+    result.exportedCount,
+  );
+
+  return {
+    delivery: "email" as const,
+    exportedCount: result.exportedCount,
+    email: recipientEmail,
+    fileName: result.fileName,
+  };
+};
+
+export const executeExport = async (
+  authUser: { id: number; email?: string; actorId?: string },
+  payload: ExportPayload,
+) => {
   if (payload.delivery === "email") {
     const recipientEmail = payload.email?.trim() || authUser.email?.trim();
     if (!recipientEmail) {
       throw new Error("A destination email address is required.");
     }
 
-    await sendExportEmail(
-      recipientEmail,
-      authUser.actorId ?? `User ${authUser.id}`,
-      result.fileName,
-      result.contentType,
-      result.content,
-      payload,
-      result.exportedCount,
-    );
-
-    return {
-      delivery: "email" as const,
-      exportedCount: result.exportedCount,
+    const normalizedPayload: ExportPayload = {
+      ...payload,
       email: recipientEmail,
-      fileName: result.fileName,
+      delivery: "email",
     };
+
+    const queued = await enqueueExportEmailDelivery({
+      userId: authUser.id,
+      actorId: authUser.actorId,
+      email: recipientEmail,
+      payload: normalizedPayload,
+    });
+
+    if (queued.queued) {
+      const exportedCount = await countExportRecords(authUser.id, normalizedPayload);
+
+      return {
+        delivery: "email" as const,
+        exportedCount,
+        email: recipientEmail,
+        fileName: buildFileName(
+          normalizedPayload.resource,
+          normalizedPayload.format,
+          normalizedPayload.filters,
+        ),
+      };
+    }
+
+    return executeQueuedExportEmail(authUser, normalizedPayload);
   }
+
+  const records = await fetchRecords(authUser.id, payload);
+  const fields = resolveFieldDefinitions<any>(payload.resource, payload.fields);
+  const businessProfile = await getBusinessProfile(authUser.id);
+  const result = await buildDownload(payload, businessProfile, records, fields);
+
+  await logExport(prisma, authUser, payload, result.exportedCount);
 
   return {
     delivery: "download" as const,

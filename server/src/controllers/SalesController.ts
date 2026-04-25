@@ -2,8 +2,10 @@ import type { Request, Response } from "express";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
 import {
+  InvoiceStatus,
   PaymentMethod,
   PaymentStatus,
+  Prisma,
   SaleStatus,
 } from "@prisma/client";
 import type { z } from "zod";
@@ -13,6 +15,7 @@ import {
 } from "../validations/apiValidations.js";
 import { computePaymentState } from "../utils/paymentCalculations.js";
 import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
+import { emitRealtimeInvoiceUpdated } from "../services/realtimeSocket.service.js";
 import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
 import {
   applyBillingSaleInventoryAdjustments,
@@ -28,12 +31,210 @@ import {
   getWorkerAccessRole,
   type BillingAction,
 } from "../lib/workerPermissions.js";
+import { computeInvoiceStatus } from "../utils/invoicePaymentSnapshot.js";
 
 type SaleCreateInput = z.infer<typeof saleCreateSchema>;
 type SaleUpdateInput = z.infer<typeof saleUpdateSchema>;
 type SaleItemInput = SaleCreateInput["items"][number];
 
 const toNumber = (value: unknown) => Number(value ?? 0);
+const roundCurrencyAmount = (value: number) =>
+  Math.round((value + Number.EPSILON) * 100) / 100;
+const SYNCED_INVOICE_NOTE_CAPTURE = /Synced from invoice\s+([^\s,)]+)/i;
+
+const extractSyncedInvoiceNumber = (notes?: string | null) =>
+  notes?.match(SYNCED_INVOICE_NOTE_CAPTURE)?.[1] ?? null;
+
+const extractSyncedInvoiceDescriptor = (notes?: string | null) =>
+  notes?.match(/Synced from invoice[^)]*/i)?.[0] ?? null;
+
+const mergeSyncedInvoiceNotes = (
+  currentNotes: string | null | undefined,
+  requestedNotes: string | null | undefined,
+) => {
+  if (requestedNotes === undefined) {
+    return undefined;
+  }
+
+  const syncDescriptor = extractSyncedInvoiceDescriptor(currentNotes);
+  if (!syncDescriptor) {
+    return requestedNotes;
+  }
+
+  const trimmed = requestedNotes?.trim() ?? "";
+  if (!trimmed) {
+    return syncDescriptor;
+  }
+
+  return trimmed.includes(syncDescriptor)
+    ? trimmed
+    : `${trimmed} (${syncDescriptor})`;
+};
+
+const resolveInvoiceStatusFromPaidAmount = (
+  paidAmount: number,
+  totalAmount: number,
+) => {
+  if (paidAmount >= totalAmount) {
+    return InvoiceStatus.PAID;
+  }
+
+  if (paidAmount > 0) {
+    return InvoiceStatus.PARTIALLY_PAID;
+  }
+
+  return InvoiceStatus.SENT;
+};
+
+const createSaleSyncValidationError = (message: string) => {
+  const error = new Error(message) as Error & { statusCode?: number };
+  error.statusCode = 422;
+  return error;
+};
+
+const buildSaleSyncPaymentReference = (saleId: number) => `sale-sync:${saleId}`;
+
+const syncLinkedInvoicePaymentState = async (params: {
+  tx: Prisma.TransactionClient;
+  userId: number;
+  saleId: number;
+  currentSalePaidAmount: number;
+  linkedInvoiceNumber: string;
+  paymentState: ReturnType<typeof computePaymentState>;
+}) => {
+  const {
+    tx,
+    userId,
+    saleId,
+    currentSalePaidAmount,
+    linkedInvoiceNumber,
+    paymentState,
+  } = params;
+
+  const invoice = await tx.invoice.findFirst({
+    where: { user_id: userId, invoice_number: linkedInvoiceNumber },
+    include: {
+      payments: {
+        orderBy: [{ paid_at: "asc" }, { id: "asc" }],
+      },
+    },
+  });
+
+  if (!invoice) {
+    console.warn("[sales] linked invoice missing during payment sync", {
+      saleId,
+      userId,
+      invoiceNumber: linkedInvoiceNumber,
+    });
+    return null;
+  }
+
+  const syncReference = buildSaleSyncPaymentReference(saleId);
+  let syncPayments = invoice.payments.filter(
+    (payment) => payment.reference === syncReference,
+  );
+
+  if (syncPayments.length === 0 && invoice.payments.length === 1) {
+    const [candidate] = invoice.payments;
+    const candidateAmount = roundCurrencyAmount(Number(candidate.amount ?? 0));
+    if (
+      !candidate.reference &&
+      candidateAmount === roundCurrencyAmount(currentSalePaidAmount)
+    ) {
+      await tx.payment.update({
+        where: { id: candidate.id },
+        data: { reference: syncReference },
+      });
+      syncPayments = [{ ...candidate, reference: syncReference }];
+    }
+  }
+
+  const syncPaymentIds = new Set(syncPayments.map((payment) => payment.id));
+  const externalPaidAmount = roundCurrencyAmount(
+    invoice.payments.reduce((sum, payment) => {
+      if (syncPaymentIds.has(payment.id)) {
+        return sum;
+      }
+
+      return sum + Number(payment.amount ?? 0);
+    }, 0),
+  );
+
+  const desiredPaidAmount = roundCurrencyAmount(paymentState.paidAmount);
+  if (desiredPaidAmount < externalPaidAmount) {
+    throw createSaleSyncValidationError(
+      "Cannot reduce this sale below the amount already collected on the linked invoice.",
+    );
+  }
+
+  const desiredSyncAmount = roundCurrencyAmount(
+    Math.max(desiredPaidAmount - externalPaidAmount, 0),
+  );
+  const [primarySyncPayment, ...extraSyncPayments] = syncPayments;
+
+  if (extraSyncPayments.length > 0) {
+    await tx.payment.deleteMany({
+      where: { id: { in: extraSyncPayments.map((payment) => payment.id) } },
+    });
+  }
+
+  if (desiredSyncAmount > 0) {
+    const syncPaymentPayload = {
+      amount: desiredSyncAmount,
+      method: paymentState.paymentMethod ?? PaymentMethod.CASH,
+      paid_at: paymentState.paymentDate ?? new Date(),
+      reference: syncReference,
+    };
+
+    if (primarySyncPayment) {
+      await tx.payment.update({
+        where: { id: primarySyncPayment.id },
+        data: syncPaymentPayload,
+      });
+    } else {
+      await tx.payment.create({
+        data: {
+          user_id: userId,
+          invoice_id: invoice.id,
+          ...syncPaymentPayload,
+        },
+      });
+    }
+  } else if (primarySyncPayment) {
+    await tx.payment.delete({
+      where: { id: primarySyncPayment.id },
+    });
+  }
+
+  const totalPaidAmount = roundCurrencyAmount(
+    externalPaidAmount + Math.max(desiredSyncAmount, 0),
+  );
+  const invoiceStatus = resolveInvoiceStatusFromPaidAmount(
+    totalPaidAmount,
+    Number(invoice.total ?? 0),
+  );
+
+  await tx.invoice.update({
+    where: { id: invoice.id },
+    data: { status: invoiceStatus },
+  });
+
+  console.info("[sales] synced linked invoice payment state", {
+    saleId,
+    invoiceId: invoice.id,
+    invoiceNumber: linkedInvoiceNumber,
+    userId,
+    totalPaid: totalPaidAmount,
+    status: invoiceStatus,
+  });
+
+  return {
+    invoiceId: invoice.id,
+    totalPaid: totalPaidAmount,
+    status: invoiceStatus,
+    computedStatus: computeInvoiceStatus(totalPaidAmount, Number(invoice.total ?? 0)),
+  };
+};
 
 const canMutateBilling = async (req: Request, action: BillingAction) => {
   if (!req.user?.workerId) return true;
@@ -293,6 +494,7 @@ class SalesController {
         paymentStatus: true,
         paymentDate: true,
         paymentMethod: true,
+        notes: true,
       },
     });
 
@@ -309,22 +511,67 @@ class SalesController {
       paymentDate: body.payment_date ?? existing.paymentDate ?? undefined,
       paymentMethod: body.payment_method ?? existing.paymentMethod ?? undefined,
     });
+    const linkedInvoiceNumber = extractSyncedInvoiceNumber(existing.notes);
+    const mergedNotes = mergeSyncedInvoiceNotes(existing.notes, notes);
+    let syncedInvoiceUpdate:
+      | Awaited<ReturnType<typeof syncLinkedInvoicePaymentState>>
+      | null = null;
 
-    await prisma.sale.update({
-      where: { id: existing.id },
-      data: {
-        status,
-        notes,
-        paidAmount: paymentState.paidAmount,
-        pendingAmount: paymentState.pendingAmount,
-        paymentStatus: paymentState.paymentStatus,
-        paymentDate: paymentState.paymentDate,
-        paymentMethod: paymentState.paymentMethod,
-      },
-    });
+    try {
+      syncedInvoiceUpdate = await prisma.$transaction(async (tx) => {
+        await tx.sale.update({
+          where: { id: existing.id },
+          data: {
+            status,
+            notes: mergedNotes,
+            paidAmount: paymentState.paidAmount,
+            pendingAmount: paymentState.pendingAmount,
+            paymentStatus: paymentState.paymentStatus,
+            paymentDate: paymentState.paymentDate,
+            paymentMethod: paymentState.paymentMethod,
+          },
+        });
+
+        if (linkedInvoiceNumber) {
+          return syncLinkedInvoicePaymentState({
+            tx,
+            userId,
+            saleId: existing.id,
+            currentSalePaidAmount: toNumber(existing.paidAmount),
+            linkedInvoiceNumber,
+            paymentState,
+          });
+        }
+
+        return null;
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        const statusCode =
+          "statusCode" in error && typeof error.statusCode === "number"
+            ? error.statusCode
+            : 500;
+
+        return sendResponse(res, statusCode, {
+          message: statusCode >= 500 ? "Sale could not be updated" : error.message,
+        });
+      }
+
+      return sendResponse(res, 500, { message: "Sale could not be updated" });
+    }
 
     invalidateInventoryInsightsCacheByUser(userId);
     emitDashboardUpdate({ userId, source: "sale.update" });
+    if (syncedInvoiceUpdate) {
+      emitRealtimeInvoiceUpdated({
+        userId,
+        invoiceId: syncedInvoiceUpdate.invoiceId,
+        status: syncedInvoiceUpdate.status,
+        totalPaid: syncedInvoiceUpdate.totalPaid,
+        computedStatus: syncedInvoiceUpdate.computedStatus,
+        source: "sale.update",
+      });
+    }
     return sendResponse(res, 200, { message: "Sale updated" });
   }
 
