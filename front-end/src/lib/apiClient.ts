@@ -588,12 +588,16 @@ export type WorkerHistoryParams = {
 export type Purchase = {
   id: number;
   purchase_date: string;
+  supplierId?: number | null;
+  warehouseId?: number | null;
   subtotal: string;
   tax: string;
   total: string;
   totalAmount: number;
   paidAmount: number;
   pendingAmount: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   paymentStatus: "PAID" | "PARTIALLY_PAID" | "UNPAID";
   paymentDate?: string | null;
   paymentMethod?:
@@ -609,13 +613,31 @@ export type Purchase = {
   warehouse?: { id: number; name: string } | null;
   items: Array<{
     id: number;
+    purchaseId?: number | null;
     product_id?: number | null;
+    productId?: number | null;
     name: string;
     quantity: number;
     unit_cost: string;
+    costPrice?: number;
     tax_rate?: string | null;
     line_total: string;
+    total?: number;
   }>;
+};
+
+export type PurchaseListParams = {
+  page?: number;
+  limit?: number;
+  search?: string | null;
+};
+
+export type PurchaseListResponse = {
+  purchases: Purchase[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 };
 
 export type PurchaseInput = {
@@ -2456,9 +2478,52 @@ export const fetchWorkerHistory = async (
   return response.data.data as WorkerHistoryResponse;
 };
 
-export const fetchPurchases = async (): Promise<Purchase[]> => {
-  const response = await apiClient.get("/purchases");
-  return response.data.data as Purchase[];
+export const fetchPurchases = async (
+  params?: PurchaseListParams,
+): Promise<Purchase[]> => {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.search) searchParams.set("search", params.search);
+
+  const query = searchParams.toString();
+  const response = await apiClient.get(query ? `/purchases?${query}` : "/purchases");
+  const payload = response.data?.data;
+  return normalizeListResponse<Purchase>(
+    payload?.purchases ?? payload?.items ?? payload,
+  );
+};
+
+export const fetchPurchasesPage = async (
+  params?: PurchaseListParams,
+): Promise<PurchaseListResponse> => {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.search) searchParams.set("search", params.search);
+
+  const query = searchParams.toString();
+  const response = await apiClient.get(query ? `/purchases?${query}` : "/purchases");
+  const payload = response.data?.data;
+  const purchases = normalizeListResponse<Purchase>(
+    payload?.purchases ?? payload?.items ?? payload,
+  );
+
+  return {
+    purchases,
+    total: typeof payload?.total === "number" ? payload.total : purchases.length,
+    page: typeof payload?.page === "number" ? payload.page : (params?.page ?? 1),
+    limit:
+      typeof payload?.limit === "number"
+        ? payload.limit
+        : (params?.limit ?? purchases.length),
+    totalPages: typeof payload?.totalPages === "number" ? payload.totalPages : 1,
+  };
+};
+
+export const fetchPurchase = async (id: number): Promise<Purchase> => {
+  const response = await apiClient.get(`/purchases/${id}`);
+  return response.data.data as Purchase;
 };
 
 export const createPurchase = async (

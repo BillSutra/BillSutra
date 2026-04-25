@@ -100,7 +100,7 @@ const buildBulkRestockHref = (rows: InventoryInsightRow[]) => {
     ),
   );
 
-  return `/purchases?${params.toString()}`;
+  return `/purchases/new?${params.toString()}`;
 };
 
 const formatDateKey = (value: string | Date) => {

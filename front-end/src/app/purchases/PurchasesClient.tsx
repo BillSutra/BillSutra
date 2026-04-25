@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import axios from "axios";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import AsyncProductSelect from "@/components/products/AsyncProductSelect";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -29,12 +31,14 @@ import { Label } from "@/components/ui/label";
 import {
   useCreatePurchaseMutation,
   useCreateSupplierMutation,
+  usePurchaseQuery,
+  usePurchasesPageQuery,
   usePurchasesQuery,
   useSuppliersQuery,
   useUpdatePurchaseMutation,
   useWarehousesQuery,
 } from "@/hooks/useInventoryQueries";
-import type { Product } from "@/lib/apiClient";
+import type { Product, Purchase } from "@/lib/apiClient";
 import SuggestedPurchasesPanel from "@/components/purchases/suggested-purchases-panel";
 import SmartSupplierSelect, {
   type SupplierInsight,
@@ -43,6 +47,9 @@ import { useI18n } from "@/providers/LanguageProvider";
 import type { PurchaseSuggestionItem } from "@/hooks/usePredictionQueries";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
 import { cn } from "@/lib/utils";
+import {
+  usePurchaseDraft,
+} from "./PurchaseDraftContext";
 
 const humanizeEnum = (value: string) =>
   value
@@ -54,6 +61,8 @@ const humanizeEnum = (value: string) =>
 type PurchasesClientProps = {
   name: string;
   image?: string;
+  mode?: "dashboard" | "new" | "edit" | "details";
+  purchaseId?: number;
 };
 
 type PurchaseLineItemError = {
@@ -63,47 +72,40 @@ type PurchaseLineItemError = {
   tax_rate?: string;
 };
 
-type PurchaseFormItem = {
-  product_id: string;
-  product_label: string;
-  quantity: string;
-  unit_cost: string;
-  tax_rate: string;
-};
-
-const createEmptyPurchaseItem = (): PurchaseFormItem => ({
-  product_id: "",
-  product_label: "",
-  quantity: "1",
-  unit_cost: "",
-  tax_rate: "",
-});
-
 const COMPACT_MODE_STORAGE_KEY = "billsutra:purchases:compact-mode";
 
-const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
+const PurchasesClient = ({
+  name,
+  image,
+  mode = "dashboard",
+  purchaseId,
+}: PurchasesClientProps) => {
   const { t, safeT, formatCurrency, formatDate } = useI18n();
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+  const {
+    state: { form, items, editingId, lastLoadedPurchaseId },
+    setFormField,
+    updateItemField,
+    setProductForItem,
+    addItem: addDraftItem,
+    removeItem: removeDraftItem,
+    appendSuggestedItem,
+    mergeSuggestedItems,
+    loadPurchase,
+    resetDraft,
+    setEditingId,
+  } = usePurchaseDraft();
   const { data, isLoading, isError } = usePurchasesQuery();
   const { data: suppliers } = useSuppliersQuery();
   const { data: warehouses } = useWarehousesQuery();
+  const purchaseDetailQuery = usePurchaseQuery(
+    mode === "edit" || mode === "details" ? purchaseId : undefined,
+  );
   const createPurchase = useCreatePurchaseMutation();
   const updatePurchase = useUpdatePurchaseMutation();
   const createSupplier = useCreateSupplierMutation();
-  const [form, setForm] = useState({
-    supplier_id: "",
-    warehouse_id: "",
-    purchase_date: "",
-    payment_status: "UNPAID",
-    amount_paid: "",
-    payment_date: "",
-    payment_method: "",
-    notes: "",
-  });
-  const [items, setItems] = useState<PurchaseFormItem[]>([
-    createEmptyPurchaseItem(),
-  ]);
-  const [editingId, setEditingId] = useState<number | null>(null);
   const [lineItemErrors, setLineItemErrors] = useState<PurchaseLineItemError[]>(
     [],
   );
@@ -118,7 +120,9 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     address: "",
   });
   const [supplierError, setSupplierError] = useState<string | null>(null);
-  const [hasAppliedSearchPrefill, setHasAppliedSearchPrefill] = useState(false);
+  const [recentSearchInput, setRecentSearchInput] = useState("");
+  const [recentSearch, setRecentSearch] = useState("");
+  const [recentPage, setRecentPage] = useState(1);
   const [isCompactMode, setIsCompactMode] = useState<boolean>(() => {
     if (typeof window === "undefined") {
       return false;
@@ -133,6 +137,13 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
   const quantityInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const unitCostInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const taxRateInputRefs = useRef<Array<HTMLInputElement | null>>([]);
+  const lastAppliedPrefillRef = useRef<string | null>(null);
+
+  const recentPurchasesQuery = usePurchasesPageQuery({
+    page: recentPage,
+    limit: 6,
+    search: recentSearch.trim() || undefined,
+  });
 
   const withTranslatedValidation =
     (validator: (value: string) => string) => (value: string) =>
@@ -379,121 +390,72 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     };
   }, [form.amount_paid, form.payment_status, items]);
 
+  const getItemTotals = (
+    item: Purchase["items"][number] | (typeof items)[number],
+  ) => {
+    const quantity = Math.max(Number(item.quantity) || 0, 0);
+    const unitCost = Math.max(
+      Number(
+        "costPrice" in item
+          ? (item.costPrice ?? item.unit_cost)
+          : item.unit_cost,
+      ) || 0,
+      0,
+    );
+    const taxRate = Math.max(Number(item.tax_rate || 0) || 0, 0);
+    const subtotal = quantity * unitCost;
+    const tax = taxRate > 0 ? (subtotal * taxRate) / 100 : 0;
+
+    return {
+      subtotal,
+      tax,
+      total: subtotal + tax,
+    };
+  };
+
   const handleItemChange = (
     index: number,
     key: "quantity" | "unit_cost" | "tax_rate",
     value: string,
   ) => {
-    setItems((prev) =>
-      prev.map((item, idx) =>
-        idx === index ? { ...item, [key]: value } : item,
-      ),
-    );
+    updateItemField(index, key, value);
     setLineItemSummary([]);
     setLineItemErrors([]);
     setServerError(null);
   };
 
   const handleProductSelect = (index: number, product: Product | null) => {
-    setItems((prev) =>
-      prev.map((item, idx) => {
-        if (idx !== index) return item;
-
-        if (!product) {
-          return {
-            ...item,
-            product_id: "",
-            product_label: "",
-          };
-        }
-
-        return {
-          ...item,
-          product_id: String(product.id),
-          product_label: product.sku
-            ? `${product.name} - ${product.sku}`
-            : product.name,
-          unit_cost: product.cost ?? product.price ?? item.unit_cost,
-          tax_rate:
-            product.gst_rate !== undefined && product.gst_rate !== null
-              ? String(product.gst_rate)
-              : item.tax_rate,
-        };
-      }),
-    );
+    const focusIndex = setProductForItem(index, product);
     setLineItemErrors([]);
     setLineItemSummary([]);
     setServerError(null);
 
     if (product) {
       window.setTimeout(() => {
-        quantityInputRefs.current[index]?.focus();
-        quantityInputRefs.current[index]?.select();
+        const nextIndex = focusIndex ?? index;
+        quantityInputRefs.current[nextIndex]?.focus();
+        quantityInputRefs.current[nextIndex]?.select();
       }, 40);
     }
   };
 
   const addItem = () => {
-    setItems((prev) => [...prev, createEmptyPurchaseItem()]);
+    addDraftItem();
     setLineItemErrors([]);
     setLineItemSummary([]);
   };
 
   const removeItem = (index: number) => {
-    setItems((prev) => prev.filter((_, idx) => idx !== index));
+    removeDraftItem(index);
     setLineItemErrors([]);
     setLineItemSummary([]);
   };
 
   const resetForm = () => {
-    setForm({
-      supplier_id: "",
-      warehouse_id: "",
-      purchase_date: "",
-      payment_status: "UNPAID",
-      amount_paid: "",
-      payment_date: "",
-      payment_method: "",
-      notes: "",
-    });
-    setItems([createEmptyPurchaseItem()]);
-    setEditingId(null);
+    resetDraft();
     setLineItemErrors([]);
     setLineItemSummary([]);
     setPaymentError(null);
-    setServerError(null);
-  };
-
-  const appendSuggestedItem = (
-    suggestion: Pick<
-      PurchaseSuggestionItem,
-      | "product_id"
-      | "product_name"
-      | "recommended_reorder_quantity"
-      | "unit_cost"
-    >,
-    taxRate?: number,
-  ) => {
-    setItems((prev) => {
-      const nextItem: PurchaseFormItem = {
-        product_id: String(suggestion.product_id),
-        product_label: suggestion.product_name,
-        quantity: String(suggestion.recommended_reorder_quantity),
-        unit_cost: String(suggestion.unit_cost),
-        tax_rate: taxRate !== undefined ? String(taxRate) : "",
-      };
-
-      const firstEmptyIndex = prev.findIndex((item) => !item.product_id);
-      if (firstEmptyIndex >= 0) {
-        return prev.map((item, index) =>
-          index === firstEmptyIndex ? nextItem : item,
-        );
-      }
-
-      return [...prev, nextItem];
-    });
-    setLineItemErrors([]);
-    setLineItemSummary([]);
     setServerError(null);
   };
 
@@ -506,19 +468,19 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     if (!latest) return;
 
     setEditingId(null);
-    setItems(
+    mergeSuggestedItems(
       latest.items.map((item) => ({
-        product_id: item.product_id ? String(item.product_id) : "",
-        product_label: item.name,
-        quantity: String(item.quantity),
-        unit_cost: String(item.unit_cost),
-        tax_rate: item.tax_rate ? String(item.tax_rate) : "",
+        product_id: item.productId ?? item.product_id ?? 0,
+        product_name: item.name,
+        recommended_reorder_quantity: item.quantity,
+        unit_cost: Number(item.costPrice ?? item.unit_cost ?? 0),
       })),
+      {
+        supplierId: selectedSupplierId,
+        warehouseId: latest.warehouse?.id ?? latest.warehouseId ?? null,
+        note: `Repeated from PO-${latest.id}`,
+      },
     );
-    setForm((prev) => ({
-      ...prev,
-      notes: prev.notes.trim() || `Repeated from PO-${latest.id}`,
-    }));
     setLineItemErrors([]);
     setLineItemSummary([]);
     setServerError(null);
@@ -542,16 +504,14 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
       return;
     }
 
-    setItems((prev) => [
-      ...prev,
-      ...candidates.map((item) => ({
-        product_id: String(item.product_id),
-        product_label: item.name,
-        quantity: "1",
-        unit_cost: String(item.unit_cost || ""),
-        tax_rate: item.tax_rate !== undefined ? String(item.tax_rate) : "",
+    mergeSuggestedItems(
+      candidates.map((item) => ({
+        product_id: item.product_id,
+        product_name: item.name,
+        recommended_reorder_quantity: 1,
+        unit_cost: item.unit_cost || 0,
       })),
-    ]);
+    );
     setLineItemErrors([]);
     setLineItemSummary([]);
     captureAnalyticsEvent("purchase_suggestions_loaded", {
@@ -570,24 +530,11 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     const firstSupplierId =
       suggestedItems.find((item) => item.supplierId)?.supplierId ?? null;
 
-    setEditingId(null);
-    setForm((prev) => ({
-      ...prev,
-      supplier_id: firstSupplierId ? String(firstSupplierId) : prev.supplier_id,
-      warehouse_id: firstWarehouseId
-        ? String(firstWarehouseId)
-        : prev.warehouse_id,
-      notes: prev.notes.trim() || "Loaded from predictive restock suggestions.",
-    }));
-    setItems(
-      suggestedItems.map((item) => ({
-        product_id: String(item.product_id),
-        product_label: item.product_name,
-        quantity: String(item.recommended_reorder_quantity),
-        unit_cost: String(item.unit_cost),
-        tax_rate: "",
-      })),
-    );
+    mergeSuggestedItems(suggestedItems, {
+      supplierId: firstSupplierId,
+      warehouseId: firstWarehouseId,
+      note: "Loaded from predictive restock suggestions.",
+    });
     setLineItemErrors([]);
     setLineItemSummary([]);
     setPaymentError(null);
@@ -724,33 +671,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
   };
 
   const handleEditPurchase = (purchase: (typeof purchases)[number]) => {
-    setEditingId(purchase.id);
-    setForm({
-      supplier_id: purchase.supplier?.id ? String(purchase.supplier.id) : "",
-      warehouse_id: purchase.warehouse?.id ? String(purchase.warehouse.id) : "",
-      purchase_date: purchase.purchase_date
-        ? new Date(purchase.purchase_date).toISOString().slice(0, 10)
-        : "",
-      payment_status: purchase.paymentStatus ?? "UNPAID",
-      amount_paid: String(purchase.paidAmount ?? 0),
-      payment_date: purchase.paymentDate
-        ? new Date(purchase.paymentDate).toISOString().slice(0, 10)
-        : "",
-      payment_method: purchase.paymentMethod ?? "",
-      notes: purchase.notes ?? "",
-    });
-    setItems(
-      purchase.items.map((item) => ({
-        product_id: item.product_id ? String(item.product_id) : "",
-        product_label: item.name ?? "",
-        quantity: String(item.quantity),
-        unit_cost: String(item.unit_cost),
-        tax_rate: item.tax_rate ? String(item.tax_rate) : "",
-      })),
-    );
-    setLineItemErrors([]);
-    setLineItemSummary([]);
-    setPaymentError(null);
+    router.push(`/purchases/edit/${purchase.id}`);
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -795,11 +716,9 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     };
 
     try {
-      if (editingId) {
-        await updatePurchase.mutateAsync({ id: editingId, payload });
-      } else {
-        await createPurchase.mutateAsync(payload);
-      }
+      const savedPurchase = editingId
+        ? await updatePurchase.mutateAsync({ id: editingId, payload })
+        : await createPurchase.mutateAsync(payload);
 
       captureAnalyticsEvent("purchase_saved", {
         mode: editingId ? "update" : "create",
@@ -809,9 +728,19 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
         paymentStatus: payload.payment_status,
         total: totals.total,
       });
-      resetForm();
+      loadPurchase(savedPurchase);
+      toast.success(
+        editingId ? "Purchase updated successfully." : "Purchase created successfully.",
+      );
+      if (!editingId) {
+        router.push(`/purchases/${savedPurchase.id}`);
+      } else if (pathname !== `/purchases/${savedPurchase.id}`) {
+        router.push(`/purchases/${savedPurchase.id}`);
+      }
     } catch (error) {
-      setServerError(parseServerErrors(error, t("purchasesPage.saveError")));
+      const message = parseServerErrors(error, t("purchasesPage.saveError"));
+      setServerError(message);
+      toast.error(message);
     }
   };
 
@@ -830,20 +759,26 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
 
       setSupplierDialogOpen(false);
       setSupplierForm({ name: "", email: "", phone: "", address: "" });
-      setForm((prev) => ({ ...prev, supplier_id: String(created.id) }));
+      setFormField("supplier_id", String(created.id));
+      toast.success("Supplier added to this purchase.");
     } catch (error) {
-      setSupplierError(
-        parseServerErrors(error, t("purchasesPage.supplierForm.saveError")),
+      const message = parseServerErrors(
+        error,
+        t("purchasesPage.supplierForm.saveError"),
       );
+      setSupplierError(message);
+      toast.error(message);
     }
   };
 
   useEffect(() => {
-    if (hasAppliedSearchPrefill) return;
-
     const restockItemsParam = searchParams.get("restockItems");
     const productId = searchParams.get("productId");
     if (!restockItemsParam && !productId) return;
+    if (mode === "edit" || mode === "details") return;
+
+    const signature = searchParams.toString();
+    if (!signature || lastAppliedPrefillRef.current === signature) return;
 
     const warehouseId = searchParams.get("warehouseId");
     const quantity = searchParams.get("quantity");
@@ -902,45 +837,41 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
           return uniqueWarehouseIds.length === 1 ? uniqueWarehouseIds[0] : null;
         })();
 
-      setEditingId(null);
-      setForm((prev) => ({
-        ...prev,
-        supplier_id: supplierId ?? prev.supplier_id,
-        warehouse_id: prefilledWarehouseId ?? prev.warehouse_id,
-        notes:
-          prev.notes.trim() ||
-          `Loaded from ${
+      mergeSuggestedItems(
+        parsedRestockItems?.length
+          ? parsedRestockItems.map((item) => ({
+              product_id: Number(item.productId),
+              product_name: item.productLabel,
+              recommended_reorder_quantity: Number(item.quantity ?? "1") || 1,
+              unit_cost: Number(item.unitCost ?? "0") || 0,
+            }))
+          : productId
+            ? [
+                {
+                  product_id: Number(productId),
+                  product_name: productLabel,
+                  recommended_reorder_quantity: Number(quantity ?? "1") || 1,
+                  unit_cost: Number(unitCost ?? "0") || 0,
+                },
+              ]
+            : [],
+        {
+          supplierId: supplierId ? Number(supplierId) : null,
+          warehouseId: prefilledWarehouseId ? Number(prefilledWarehouseId) : null,
+          note: `Loaded from ${
             source === "smart_inventory_insights"
               ? "smart inventory insights"
               : source === "inventory_bulk_restock"
                 ? "inventory restock list"
                 : "inventory purchase suggestion"
           }${supplierName ? ` with ${supplierName}` : ""}.`,
-      }));
-      setItems(
-        parsedRestockItems?.length
-          ? parsedRestockItems.map((item) => ({
-              product_id: item.productId,
-              product_label: item.productLabel,
-              quantity: item.quantity ?? "1",
-              unit_cost: item.unitCost ?? "",
-              tax_rate: "",
-            }))
-          : [
-              {
-                product_id: productId ?? "",
-                product_label: productLabel,
-                quantity: quantity ?? "1",
-                unit_cost: unitCost ?? "",
-                tax_rate: "",
-              },
-            ],
+        },
       );
       setLineItemErrors([]);
       setLineItemSummary([]);
       setPaymentError(null);
       setServerError(null);
-      setHasAppliedSearchPrefill(true);
+      lastAppliedPrefillRef.current = signature;
       captureAnalyticsEvent("purchase_suggestion_prefilled", {
         source: source ?? "inventory_page",
         productId,
@@ -952,7 +883,35 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
-  }, [hasAppliedSearchPrefill, searchParams]);
+  }, [mergeSuggestedItems, mode, searchParams]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setRecentSearch(recentSearchInput.trim());
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [recentSearchInput]);
+
+  useEffect(() => {
+    setRecentPage(1);
+  }, [recentSearch]);
+
+  useEffect(() => {
+    if (!purchaseDetailQuery.data) {
+      return;
+    }
+
+    if (lastLoadedPurchaseId === purchaseDetailQuery.data.id) {
+      return;
+    }
+
+    loadPurchase(purchaseDetailQuery.data);
+    setLineItemErrors([]);
+    setLineItemSummary([]);
+    setPaymentError(null);
+    setServerError(null);
+  }, [lastLoadedPurchaseId, loadPurchase, purchaseDetailQuery.data]);
 
   useEffect(() => {
     try {
@@ -965,12 +924,171 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
     }
   }, [isCompactMode]);
 
+  const recentPurchases = recentPurchasesQuery.data?.purchases ?? [];
+  const detailPurchase = purchaseDetailQuery.data;
+  const pageTitle =
+    mode === "details"
+      ? `Purchase #${purchaseId ?? ""}`
+      : mode === "edit"
+        ? "Edit purchase"
+        : mode === "new"
+          ? "New purchase"
+          : t("purchasesPage.title");
+  const pageSubtitle =
+    mode === "details"
+      ? "Review supplier, items, and payment details."
+      : mode === "edit"
+        ? "Update a saved purchase without losing draft progress."
+        : mode === "new"
+          ? "Record a supplier purchase with draft-safe routing."
+          : t("purchasesPage.subtitle");
+
+  if (mode === "details") {
+    return (
+      <DashboardLayout
+        name={name}
+        image={image}
+        title={pageTitle}
+        subtitle={pageSubtitle}
+      >
+        <div className="mx-auto grid w-full max-w-6xl gap-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm uppercase tracking-[0.2em] text-[#8a6d56]">
+                Procurement
+              </p>
+              <h1 className="mt-1 text-2xl font-semibold text-[#1f1b16]">
+                {detailPurchase
+                  ? `Purchase #${detailPurchase.id}`
+                  : "Purchase details"}
+              </h1>
+              <p className="mt-1 text-sm text-[#5c4b3b]">
+                {detailPurchase?.supplier?.name ?? "Direct purchase"}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline">
+                <Link href="/purchases/new">Record another purchase</Link>
+              </Button>
+              {detailPurchase ? (
+                <Button asChild>
+                  <Link href={`/purchases/edit/${detailPurchase.id}`}>Edit purchase</Link>
+                </Button>
+              ) : null}
+            </div>
+          </div>
+
+          {purchaseDetailQuery.isLoading ? (
+            <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6 text-sm text-[#8a6d56]">
+              Loading purchase details...
+            </div>
+          ) : null}
+
+          {purchaseDetailQuery.isError ? (
+            <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6 text-sm text-[#b45309]">
+              Could not load this purchase right now.
+            </div>
+          ) : null}
+
+          {detailPurchase ? (
+            <>
+              <section className="grid gap-4 md:grid-cols-4">
+                <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-[#8a6d56]">
+                    Supplier
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-[#1f1b16]">
+                    {detailPurchase.supplier?.name ?? "Direct purchase"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-[#8a6d56]">
+                    Warehouse
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-[#1f1b16]">
+                    {detailPurchase.warehouse?.name ?? "Default stock"}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-[#8a6d56]">
+                    Total
+                  </p>
+                  <p className="mt-2 text-base font-semibold text-[#1f1b16]">
+                    {formatAmount(detailPurchase.totalAmount)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-4">
+                  <p className="text-xs uppercase tracking-[0.16em] text-[#8a6d56]">
+                    Status
+                  </p>
+                  <p className="mt-2">
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-semibold ${paymentStatusBadgeClass(
+                        detailPurchase.paymentStatus,
+                      )}`}
+                    >
+                      {translatePaymentStatus(detailPurchase.paymentStatus)}
+                    </span>
+                  </p>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-[#ecdccf] bg-white/90 p-4 sm:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-[#1f1b16]">
+                      Items
+                    </h2>
+                    <p className="text-sm text-[#8a6d56]">
+                      Recorded on {formatPurchaseDate(detailPurchase.purchase_date)}
+                    </p>
+                  </div>
+                  <div className="text-sm text-[#5c4b3b]">
+                    {detailPurchase.notes || "No notes added."}
+                  </div>
+                </div>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-[#ead8c7] text-left text-[#8a6d56]">
+                        <th className="pb-2 pr-4 font-medium">Product</th>
+                        <th className="pb-2 pr-4 font-medium">Qty</th>
+                        <th className="pb-2 pr-4 font-medium">Cost</th>
+                        <th className="pb-2 pr-4 font-medium">Tax</th>
+                        <th className="pb-2 font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailPurchase.items.map((item) => (
+                        <tr key={item.id} className="border-b border-[#f3e7db]">
+                          <td className="py-3 pr-4 text-[#1f1b16]">{item.name}</td>
+                          <td className="py-3 pr-4">{item.quantity}</td>
+                          <td className="py-3 pr-4">{formatAmount(item.costPrice ?? item.unit_cost)}</td>
+                          <td className="py-3 pr-4">
+                            {item.tax_rate ? `${item.tax_rate}%` : "-"}
+                          </td>
+                          <td className="py-3 font-semibold text-[#1f1b16]">
+                            {formatAmount(item.total ?? item.line_total)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
+          ) : null}
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   return (
     <DashboardLayout
       name={name}
       image={image}
-      title={t("purchasesPage.title")}
-      subtitle={t("purchasesPage.subtitle")}
+      title={pageTitle}
+      subtitle={pageSubtitle}
     >
       <div className="mx-auto w-full max-w-7xl">
         <div className="flex flex-col gap-2">
@@ -990,6 +1108,9 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
             onLoadItems={loadSuggestedItemsIntoForm}
             onAppendItem={(item) => {
               appendSuggestedItem(item);
+              setLineItemErrors([]);
+              setLineItemSummary([]);
+              setServerError(null);
             }}
           />
         </div>
@@ -1135,7 +1256,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                   selectedSummaryLabel={t("purchasesPage.smart.selected")}
                   onChange={(nextValue) => {
                     setPaymentError(null);
-                    setForm((prev) => ({ ...prev, supplier_id: nextValue }));
+                    setFormField("supplier_id", nextValue);
                   }}
                   formatDate={formatPurchaseDate}
                   formatCurrency={(value) => formatAmount(value)}
@@ -1192,15 +1313,20 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                         size="sm"
                         className="rounded-full"
                         onClick={() =>
-                          appendSuggestedItem(
-                            {
-                              product_id: item.product_id,
-                              product_name: item.name,
-                              recommended_reorder_quantity: 1,
-                              unit_cost: item.unit_cost,
-                            },
-                            item.tax_rate,
-                          )
+                          (() => {
+                            appendSuggestedItem(
+                              {
+                                product_id: item.product_id,
+                                product_name: item.name,
+                                recommended_reorder_quantity: 1,
+                                unit_cost: item.unit_cost,
+                              },
+                              item.tax_rate,
+                            );
+                            setLineItemErrors([]);
+                            setLineItemSummary([]);
+                            setServerError(null);
+                          })()
                         }
                       >
                         {item.name}
@@ -1219,9 +1345,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                   label={t("purchasesPage.fields.warehouse")}
                   as="select"
                   value={form.warehouse_id}
-                  onChange={(value) =>
-                    setForm((prev) => ({ ...prev, warehouse_id: value }))
-                  }
+                  onChange={(value) => setFormField("warehouse_id", value)}
                   validate={(value) =>
                     value ? "" : t("purchasesPage.validation.selectWarehouse")
                   }
@@ -1242,9 +1366,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                 label={t("purchasesPage.fields.purchaseDate")}
                 type="date"
                 value={form.purchase_date}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, purchase_date: value }))
-                }
+                onChange={(value) => setFormField("purchase_date", value)}
                 validate={withTranslatedValidation(validateDate)}
                 required
                 success
@@ -1254,9 +1376,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                 id="notes"
                 label={t("purchasesPage.fields.notes")}
                 value={form.notes}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, notes: value }))
-                }
+                onChange={(value) => setFormField("notes", value)}
                 validate={() => ""}
                 placeholder={t("purchasesPage.placeholders.notes")}
                 success
@@ -1270,7 +1390,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                   value={form.payment_status}
                   onChange={(value) => {
                     setPaymentError(null);
-                    setForm((prev) => ({ ...prev, payment_status: value }));
+                    setFormField("payment_status", value as typeof form.payment_status);
                   }}
                   validate={withTranslatedValidation(validateRequired)}
                   required
@@ -1293,7 +1413,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                     value={form.amount_paid}
                     onChange={(value) => {
                       setPaymentError(null);
-                      setForm((prev) => ({ ...prev, amount_paid: value }));
+                      setFormField("amount_paid", value);
                     }}
                     validate={(value) =>
                       value
@@ -1310,9 +1430,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                   label={t("purchasesPage.fields.paymentDate")}
                   type="date"
                   value={form.payment_date}
-                  onChange={(value) =>
-                    setForm((prev) => ({ ...prev, payment_date: value }))
-                  }
+                  onChange={(value) => setFormField("payment_date", value)}
                   validate={withTranslatedValidation(validateDate)}
                   success
                 />
@@ -1326,7 +1444,7 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                     value={form.payment_method}
                     onChange={(value) => {
                       setPaymentError(null);
-                      setForm((prev) => ({ ...prev, payment_method: value }));
+                      setFormField("payment_method", value);
                     }}
                     validate={withTranslatedValidation(validateRequired)}
                     required={form.payment_status === "PAID"}
@@ -1408,152 +1526,177 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                     </ul>
                   </div>
                 )}
-                {items.map((item, index) => (
-                  <div
-                    key={`item-${index}`}
-                    className={cn(
-                      "rounded-xl border border-[#f2e6dc] bg-[#fff9f2]",
-                      isCompactMode ? "grid gap-2 p-2" : "grid gap-3 p-3",
-                    )}
-                  >
-                    <div className="grid gap-2">
-                      <Label>
-                        {t("purchasesPage.lineItems.fields.product")}
-                      </Label>
-                      <AsyncProductSelect
-                        value={item.product_id}
-                        selectedLabel={item.product_label}
-                        onSelect={(product) =>
-                          handleProductSelect(index, product)
-                        }
-                        variant="warm"
-                      />
-                      {lineItemErrors[index]?.product_id && (
-                        <p className="text-xs text-[#b45309]">
-                          {lineItemErrors[index]?.product_id}
-                        </p>
-                      )}
-                    </div>
+                {items.map((item, index) => {
+                  const lineTotals = getItemTotals(item);
+
+                  return (
                     <div
+                      key={`item-${index}`}
                       className={cn(
-                        "grid gap-2",
-                        isCompactMode && "grid-cols-1 sm:grid-cols-3",
+                        "rounded-xl border border-[#f2e6dc] bg-[#fff9f2]",
+                        isCompactMode ? "grid gap-2 p-2" : "grid gap-3 p-3",
                       )}
                     >
                       <div className="grid gap-2">
-                        <Label>
-                          {t("purchasesPage.lineItems.fields.quantity")}
-                        </Label>
-                        <Input
-                          type="number"
-                          ref={(element) => {
-                            quantityInputRefs.current[index] = element;
-                          }}
-                          value={item.quantity}
-                          onChange={(event) =>
-                            handleItemChange(
-                              index,
-                              "quantity",
-                              event.target.value,
-                            )
+                        <div className="flex items-center justify-between gap-3">
+                          <Label>
+                            {t("purchasesPage.lineItems.fields.product")}
+                          </Label>
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-[#8a6d56]">
+                            Line total {formatAmount(lineTotals.total)}
+                          </span>
+                        </div>
+                        <AsyncProductSelect
+                          value={item.product_id}
+                          selectedLabel={item.product_label}
+                          onSelect={(product) =>
+                            handleProductSelect(index, product)
                           }
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              unitCostInputRefs.current[index]?.focus();
-                              unitCostInputRefs.current[index]?.select();
-                            }
-                          }}
-                          required
+                          variant="warm"
                         />
-                        {lineItemErrors[index]?.quantity && (
+                        {lineItemErrors[index]?.product_id && (
                           <p className="text-xs text-[#b45309]">
-                            {lineItemErrors[index]?.quantity}
+                            {lineItemErrors[index]?.product_id}
                           </p>
                         )}
                       </div>
-                      <div className="grid gap-2">
-                        <Label>
-                          {t("purchasesPage.lineItems.fields.unitCost")}
-                        </Label>
-                        <Input
-                          type="number"
-                          ref={(element) => {
-                            unitCostInputRefs.current[index] = element;
-                          }}
-                          value={item.unit_cost}
-                          onChange={(event) =>
-                            handleItemChange(
-                              index,
-                              "unit_cost",
-                              event.target.value,
-                            )
-                          }
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              taxRateInputRefs.current[index]?.focus();
-                              taxRateInputRefs.current[index]?.select();
-                            }
-                          }}
-                          required
-                        />
-                        {lineItemErrors[index]?.unit_cost && (
-                          <p className="text-xs text-[#b45309]">
-                            {lineItemErrors[index]?.unit_cost}
-                          </p>
+                      <div
+                        className={cn(
+                          "grid gap-2 lg:grid-cols-4",
+                          isCompactMode && "sm:grid-cols-2",
                         )}
-                      </div>
-                      <div className="grid gap-2">
-                        <Label>
-                          {t("purchasesPage.lineItems.fields.taxRate")}
-                        </Label>
-                        <Input
-                          type="number"
-                          ref={(element) => {
-                            taxRateInputRefs.current[index] = element;
-                          }}
-                          value={item.tax_rate}
-                          onChange={(event) =>
-                            handleItemChange(
-                              index,
-                              "tax_rate",
-                              event.target.value,
-                            )
-                          }
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") {
-                              event.preventDefault();
-                              if (index === items.length - 1) {
-                                addItem();
-                                window.setTimeout(() => {
-                                  quantityInputRefs.current[index + 1]?.focus();
-                                }, 40);
-                              } else {
-                                quantityInputRefs.current[index + 1]?.focus();
-                              }
-                            }
-                          }}
-                          placeholder={t("purchasesPage.optional")}
-                        />
-                        {lineItemErrors[index]?.tax_rate && (
-                          <p className="text-xs text-[#b45309]">
-                            {lineItemErrors[index]?.tax_rate}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    {items.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={() => removeItem(index)}
                       >
-                        {t("purchasesPage.lineItems.removeItem")}
-                      </Button>
-                    )}
-                  </div>
-                ))}
+                        <div className="grid gap-2">
+                          <Label>
+                            {t("purchasesPage.lineItems.fields.quantity")}
+                          </Label>
+                          <Input
+                            type="number"
+                            min={1}
+                            ref={(element) => {
+                              quantityInputRefs.current[index] = element;
+                            }}
+                            value={item.quantity}
+                            onChange={(event) =>
+                              handleItemChange(
+                                index,
+                                "quantity",
+                                event.target.value,
+                              )
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                unitCostInputRefs.current[index]?.focus();
+                                unitCostInputRefs.current[index]?.select();
+                              }
+                            }}
+                            required
+                          />
+                          {lineItemErrors[index]?.quantity && (
+                            <p className="text-xs text-[#b45309]">
+                              {lineItemErrors[index]?.quantity}
+                            </p>
+                          )}
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>
+                            {t("purchasesPage.lineItems.fields.unitCost")}
+                          </Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            ref={(element) => {
+                              unitCostInputRefs.current[index] = element;
+                            }}
+                            value={item.unit_cost}
+                            onChange={(event) =>
+                              handleItemChange(
+                                index,
+                                "unit_cost",
+                                event.target.value,
+                              )
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                taxRateInputRefs.current[index]?.focus();
+                                taxRateInputRefs.current[index]?.select();
+                              }
+                            }}
+                            required
+                          />
+                          {lineItemErrors[index]?.unit_cost && (
+                            <p className="text-xs text-[#b45309]">
+                              {lineItemErrors[index]?.unit_cost}
+                            </p>
+                          )}
+                        </div>
+                        <div className="grid gap-2">
+                          <Label>
+                            {t("purchasesPage.lineItems.fields.taxRate")}
+                          </Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            ref={(element) => {
+                              taxRateInputRefs.current[index] = element;
+                            }}
+                            value={item.tax_rate}
+                            onChange={(event) =>
+                              handleItemChange(
+                                index,
+                                "tax_rate",
+                                event.target.value,
+                              )
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                if (index === items.length - 1) {
+                                  addItem();
+                                  window.setTimeout(() => {
+                                    quantityInputRefs.current[index + 1]?.focus();
+                                  }, 40);
+                                } else {
+                                  quantityInputRefs.current[index + 1]?.focus();
+                                }
+                              }
+                            }}
+                            placeholder={t("purchasesPage.optional")}
+                          />
+                          {lineItemErrors[index]?.tax_rate && (
+                            <p className="text-xs text-[#b45309]">
+                              {lineItemErrors[index]?.tax_rate}
+                            </p>
+                          )}
+                        </div>
+                        <div className="rounded-xl border border-[#ead8c7] bg-white px-3 py-2">
+                          <p className="text-[11px] uppercase tracking-[0.16em] text-[#8a6d56]">
+                            Total
+                          </p>
+                          <p className="mt-2 text-base font-semibold text-[#1f1b16]">
+                            {formatAmount(lineTotals.total)}
+                          </p>
+                          <p className="mt-1 text-xs text-[#8a6d56]">
+                            Tax {formatAmount(lineTotals.tax)}
+                          </p>
+                        </div>
+                      </div>
+                      {items.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          onClick={() => removeItem(index)}
+                        >
+                          {t("purchasesPage.lineItems.removeItem")}
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="sticky bottom-1 z-10 grid gap-2 rounded-xl border border-[#e4d4c7] bg-white/95 p-3 backdrop-blur">
@@ -1568,9 +1711,9 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                     ? t("purchasesPage.updatePurchase")
                     : t("purchasesPage.savePurchase")}
                 </Button>
-                {editingId && (
+                {(editingId || mode === "new") && (
                   <Button type="button" variant="outline" onClick={resetForm}>
-                    {t("purchasesPage.cancelEdit")}
+                    {editingId ? t("purchasesPage.cancelEdit") : "Clear draft"}
                   </Button>
                 )}
                 {(createPurchase.isError ||
@@ -1585,31 +1728,53 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
           </div>
 
           <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-4 sm:p-6">
-            <h2 className="text-lg font-semibold">
-              {t("purchasesPage.listTitle")}
-            </h2>
-            <p className="text-sm text-[#8a6d56]">
-              {t("purchasesPage.listDescription")}
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">
+                  Recent purchases
+                </h2>
+                <p className="text-sm text-[#8a6d56]">
+                  Real purchase records with direct edit routing.
+                </p>
+              </div>
+              <Button asChild variant="outline">
+                <Link href="/purchases/new">New purchase</Link>
+              </Button>
+            </div>
             <div className="mt-4">
-              {isLoading && (
+              <Input
+                value={recentSearchInput}
+                onChange={(event) => setRecentSearchInput(event.target.value)}
+                placeholder="Search by purchase ID, supplier, or notes"
+              />
+            </div>
+            <div className="mt-4">
+              {(isLoading || recentPurchasesQuery.isLoading) && (
                 <p className="text-sm text-[#8a6d56]">
                   {t("purchasesPage.loading")}
                 </p>
               )}
-              {isError && (
+              {(isError || recentPurchasesQuery.isError) && (
                 <p className="text-sm text-[#b45309]">
                   {t("purchasesPage.loadError")}
                 </p>
               )}
-              {!isLoading && !isError && purchases.length === 0 && (
+              {!isLoading &&
+                !isError &&
+                !recentPurchasesQuery.isLoading &&
+                !recentPurchasesQuery.isError &&
+                recentPurchases.length === 0 && (
                 <p className="text-sm text-[#8a6d56]">
                   {t("purchasesPage.empty")}
                 </p>
               )}
-              {!isLoading && !isError && purchases.length > 0 && (
+              {!isLoading &&
+                !isError &&
+                !recentPurchasesQuery.isLoading &&
+                !recentPurchasesQuery.isError &&
+                recentPurchases.length > 0 && (
                 <div className="grid gap-3">
-                  {purchases.map((purchase) => (
+                  {recentPurchases.map((purchase) => (
                     <div
                       key={purchase.id}
                       className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#f2e6dc] bg-[#fff9f2] px-4 py-3"
@@ -1655,6 +1820,9 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                             amount: formatAmount(purchase.pendingAmount),
                           })}
                         </span>
+                        <Button asChild type="button" variant="ghost">
+                          <Link href={`/purchases/${purchase.id}`}>View</Link>
+                        </Button>
                         <Button
                           type="button"
                           variant="outline"
@@ -1667,6 +1835,44 @@ const PurchasesClient = ({ name, image }: PurchasesClientProps) => {
                   ))}
                 </div>
               )}
+              {recentPurchasesQuery.data &&
+              recentPurchasesQuery.data.totalPages > 1 ? (
+                <div className="mt-4 flex items-center justify-between gap-3 text-sm text-[#8a6d56]">
+                  <span>
+                    Page {recentPurchasesQuery.data.page} of{" "}
+                    {recentPurchasesQuery.data.totalPages}
+                  </span>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={recentPage <= 1}
+                      onClick={() => setRecentPage((current) => Math.max(current - 1, 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        recentPage >= recentPurchasesQuery.data.totalPages
+                      }
+                      onClick={() =>
+                        setRecentPage((current) =>
+                          Math.min(
+                            current + 1,
+                            recentPurchasesQuery.data?.totalPages ?? current,
+                          ),
+                        )
+                      }
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </section>

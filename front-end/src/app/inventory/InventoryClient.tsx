@@ -105,7 +105,7 @@ const buildPurchaseHref = (row: InventoryTableRow) => {
   }
 
   params.set("source", "inventory_page");
-  return `/purchases?${params.toString()}`;
+  return `/purchases/new?${params.toString()}`;
 };
 
 const buildBulkPurchaseHref = (rows: InventoryTableRow[]) => {
@@ -139,7 +139,7 @@ const buildBulkPurchaseHref = (rows: InventoryTableRow[]) => {
     ),
   );
 
-  return `/purchases?${params.toString()}`;
+  return `/purchases/new?${params.toString()}`;
 };
 
 const InventoryClient = ({ name, image }: InventoryClientProps) => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import type { Supplier } from "@/lib/apiClient";
@@ -49,7 +49,16 @@ const SmartSupplierSelect = ({
   formatCurrency,
 }: SmartSupplierSelectProps) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("ALL");
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchQuery]);
 
   const categories = useMemo(() => {
     const unique = new Set<string>();
@@ -74,7 +83,7 @@ const SmartSupplierSelect = ({
       : activeCategory;
 
   const filteredSuppliers = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const normalizedQuery = debouncedSearchQuery.toLowerCase();
 
     return suppliers
       .filter((entry) => {
@@ -115,7 +124,7 @@ const SmartSupplierSelect = ({
           sensitivity: "base",
         });
       });
-  }, [resolvedCategory, searchQuery, suppliers]);
+  }, [debouncedSearchQuery, resolvedCategory, suppliers]);
 
   const selectedSupplier = suppliers.find(
     (entry) => String(entry.supplier.id) === value,

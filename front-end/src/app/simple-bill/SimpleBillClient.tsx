@@ -38,6 +38,7 @@ import {
   fetchBusinessProfile,
   fetchCustomers,
   fetchInvoicePdfFile,
+  fetchUserSettingsPreferences,
   type BusinessProfileRecord,
   type Customer,
   type Invoice,
@@ -177,6 +178,16 @@ const createItem = (
   gstRate: defaults?.gstRate ?? "18",
   gstType: defaults?.gstType ?? "CGST_SGST",
 });
+
+const isSimpleBillItemActive = (item: SimpleBillItem) =>
+  Boolean(
+    item.productId ||
+      item.name.trim() ||
+      item.price.trim() ||
+      (item.quantity.trim() && item.quantity.trim() !== "1"),
+  );
+
+const sanitizeDecimalInput = (value: string) => value.replace(/[^\d.]/g, "");
 
 const createInitialBillState = (invoiceDate: string): BillState => ({
   customer: null,
@@ -341,9 +352,6 @@ const paymentLabel = (payment: InvoicePaymentMethod) => {
   if (payment === "BANK_TRANSFER") return "Online";
   return "Cash";
 };
-
-const containsText = (value: string | null | undefined, search: string) =>
-  value?.toLowerCase().includes(search.toLowerCase()) ?? false;
 
 const normalizeText = (value: string | null | undefined) =>
   value?.trim().toLowerCase() ?? "";
@@ -1522,6 +1530,10 @@ const SimpleBillClient = ({
     queryKey: ["business-profile"],
     queryFn: fetchBusinessProfile,
   });
+  const { data: userSettingsPreferences } = useQuery({
+    queryKey: ["settings", "preferences"],
+    queryFn: fetchUserSettingsPreferences,
+  });
   const createCustomer = useCreateCustomerMutation();
   const createInvoice = useCreateInvoiceMutation();
   const [billState, setBillState] = useState<BillState>(() =>
@@ -1538,7 +1550,8 @@ const SimpleBillClient = ({
   const [newCustomerPhone, setNewCustomerPhone] = useState("");
   const [newCustomerEmail, setNewCustomerEmail] = useState("");
   const [customerSuggestionsOpen, setCustomerSuggestionsOpen] = useState(false);
-  const [focusedItemId, setFocusedItemId] = useState<string | null>(null);
+  const [productSearchOpen, setProductSearchOpen] = useState(false);
+  const [productSearchFocusToken, setProductSearchFocusToken] = useState(0);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedInvoice, setGeneratedInvoice] = useState<Invoice | null>(
@@ -1548,7 +1561,6 @@ const SimpleBillClient = ({
   const [productUsage, setProductUsage] = useState<Record<number, number>>({});
   const submitLockRef = useRef(false);
   const newCustomerPhoneRef = useRef<HTMLInputElement | null>(null);
-  const itemNameRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const itemQuantityRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const itemPriceRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const pendingCustomerPrefillRef = useRef(initialCustomerName.trim());
@@ -1583,6 +1595,16 @@ const SimpleBillClient = ({
     invoiceDate,
   } = billState;
   const selectedCustomerId = selectedCustomer?.id ?? null;
+  const productLookup = useMemo(
+    () =>
+      Object.fromEntries(products.map((product) => [product.id, product])) as Record<
+        number,
+        Product
+      >,
+    [products],
+  );
+  const allowNegativeStock =
+    userSettingsPreferences?.inventory.allowNegativeStock ?? true;
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -1632,6 +1654,35 @@ const SimpleBillClient = ({
   const invoiceItems = useMemo(
     () => mapSimpleBillItemsToInvoiceItems(items, gstEnabled),
     [gstEnabled, items],
+  );
+  const billItems = useMemo(
+    () =>
+      items
+        .filter(isSimpleBillItemActive)
+        .map((item) => {
+          const quantity =
+            item.quantity.trim() === ""
+              ? 0
+              : Number.isFinite(Number(item.quantity))
+                ? Math.max(0, Number(item.quantity))
+                : toQuantity(item.quantity);
+          const price =
+            item.price.trim() === ""
+              ? 0
+              : Number.isFinite(Number(item.price))
+                ? Math.max(0, Number(item.price))
+                : toAmount(item.price);
+
+          return {
+            id: item.id,
+            productId: item.productId,
+            name: item.name.trim(),
+            quantity,
+            price,
+            total: roundCurrency(quantity * price),
+          };
+        }),
+    [items],
   );
   const validItems = useMemo(
     () => invoiceItems.filter(isInvoiceItemReady),
@@ -1905,32 +1956,6 @@ const SimpleBillClient = ({
     ],
   );
 
-  const frequentProducts = useMemo(
-    () =>
-      [...products]
-        .sort(
-          (left, right) =>
-            (productUsage[right.id] ?? 0) - (productUsage[left.id] ?? 0),
-        )
-        .slice(0, 4),
-    [productUsage, products],
-  );
-
-  const getProductSuggestions = useCallback(
-    (itemName: string) => {
-      const search = itemName.trim();
-      if (!search) return products.slice(0, 5);
-      return products
-        .filter(
-          (product) =>
-            containsText(product.name, search) ||
-            containsText(product.barcode, search),
-        )
-        .slice(0, 5);
-    },
-    [products],
-  );
-
   useEffect(() => {
     const storedUsage = window.localStorage.getItem(PRODUCT_USAGE_KEY);
     if (storedUsage) {
@@ -2130,7 +2155,20 @@ const SimpleBillClient = ({
       updateBillState((current) => ({
         ...current,
         items: current.items.map((item) =>
-          item.id === id ? { ...item, ...patch } : item,
+          item.id === id
+            ? {
+                ...item,
+                ...patch,
+                quantity:
+                  typeof patch.quantity === "string"
+                    ? sanitizeDecimalInput(patch.quantity)
+                    : item.quantity,
+                price:
+                  typeof patch.price === "string"
+                    ? sanitizeDecimalInput(patch.price)
+                    : item.price,
+              }
+            : item,
         ),
       }));
     },
@@ -2175,12 +2213,22 @@ const SimpleBillClient = ({
     [items, removeItem, updateItem],
   );
 
-  const addOneMoreItem = useCallback(
+  const commitItemQuantity = useCallback(
     (id: string) => {
-      adjustItemQuantity(id, 1);
-      window.setTimeout(() => itemQuantityRefs.current[id]?.focus(), 0);
+      const item = items.find((currentItem) => currentItem.id === id);
+      if (!item) {
+        return;
+      }
+
+      const nextQuantity = Number(item.quantity);
+      if (!Number.isFinite(nextQuantity) || nextQuantity <= 0) {
+        removeItem(id);
+        return;
+      }
+
+      updateItem(id, { quantity: String(nextQuantity) });
     },
-    [adjustItemQuantity],
+    [items, removeItem, updateItem],
   );
 
   const selectCustomer = useCallback(
@@ -2258,102 +2306,195 @@ const SimpleBillClient = ({
     isAssigningWalkIn,
   ]);
 
-  const selectProductForItem = useCallback(
-    (itemId: string, product: Product) => {
-      const duplicateItem = items.find(
-        (item) => item.id !== itemId && item.productId === product.id,
-      );
-      const focusTargetId = duplicateItem?.id ?? itemId;
+  const openProductSearch = useCallback(() => {
+    setProductSearchOpen(true);
+    setProductSearchFocusToken((current) => current + 1);
+  }, []);
 
-      if (duplicateItem) {
-        updateBillState((current) => {
-          const sourceItem = current.items.find((item) => item.id === itemId);
-          const quantityToMerge = sourceItem?.name.trim()
-            ? Math.max(1, Number(sourceItem.quantity) || 1)
-            : 1;
+  const closeProductSearch = useCallback((open: boolean) => {
+    setProductSearchOpen(open);
+  }, []);
 
-          return {
-            ...current,
-            items: current.items
-              .map((item) =>
-                item.id === duplicateItem.id
-                  ? {
-                      ...item,
-                      productId: product.id,
-                      name: product.name,
-                      price: String(Number(product.price) || 0),
-                      gstRate: String(Number(product.gst_rate) || 0),
-                      quantity: String(
-                        roundCurrency(
-                          Math.max(1, Number(item.quantity) || 1) +
-                            quantityToMerge,
-                        ),
-                      ),
-                    }
-                  : item,
-              )
-              .filter((item) => item.id !== itemId),
-          };
-        });
-      } else {
-        updateItem(itemId, {
-          productId: product.id,
-          name: product.name,
-          price: String(Number(product.price) || 0),
-          gstRate: String(Number(product.gst_rate) || 0),
-        });
-      }
+  const addProductToBill = useCallback(
+    (product: Product) => {
+      const stockOnHand = Number(product.stock_on_hand) || 0;
+      const productPrice = Number(product.price) || 0;
+      const productTaxRate = String(Number(product.gst_rate) || 0);
 
-      window.setTimeout(
-        () => itemQuantityRefs.current[focusTargetId]?.focus(),
-        0,
-      );
-    },
-    [items, updateBillState, updateItem],
-  );
-
-  const handleItemNameChange = useCallback(
-    (itemId: string, value: string) => {
-      const exactMatch = products.find(
-        (product) => product.name.toLowerCase() === value.trim().toLowerCase(),
-      );
-
-      if (exactMatch) {
-        selectProductForItem(itemId, exactMatch);
+      if (!allowNegativeStock && stockOnHand <= 0) {
+        toast.error(`${product.name} is out of stock.`);
         return;
       }
 
-      updateItem(itemId, { name: value, productId: undefined });
+      let mergedItemId: string | null = null;
+      let blockedByStock = false;
+
+      updateBillState((current) => {
+        const existingIndex = current.items.findIndex(
+          (item) => item.productId === product.id && isSimpleBillItemActive(item),
+        );
+
+        if (existingIndex >= 0) {
+          const existingItem = current.items[existingIndex];
+          const currentQuantity = Math.max(1, Number(existingItem.quantity) || 1);
+          if (!allowNegativeStock && currentQuantity >= stockOnHand) {
+            blockedByStock = true;
+            return current;
+          }
+
+          mergedItemId = existingItem.id;
+
+          return {
+            ...current,
+            items: current.items.map((item, index) =>
+              index === existingIndex
+                ? {
+                    ...item,
+                    quantity: String(roundCurrency(currentQuantity + 1)),
+                    price: String(productPrice),
+                    gstRate: productTaxRate,
+                    name: product.name,
+                    productId: product.id,
+                  }
+                : item,
+            ),
+          };
+        }
+
+        const nextItem: SimpleBillItem = {
+          ...createItem(undefined, {
+            gstRate: productTaxRate,
+            gstType: normalizeGstType(selectedTaxMode),
+          }),
+          productId: product.id,
+          name: product.name,
+          quantity: "1",
+          price: String(productPrice),
+          gstRate: productTaxRate,
+        };
+
+        const firstBlankIndex = current.items.findIndex(
+          (item) => !isSimpleBillItemActive(item),
+        );
+
+        if (firstBlankIndex >= 0) {
+          mergedItemId = current.items[firstBlankIndex].id;
+          return {
+            ...current,
+            items: current.items.map((item, index) =>
+              index === firstBlankIndex ? { ...nextItem, id: item.id } : item,
+            ),
+          };
+        }
+
+        mergedItemId = nextItem.id;
+        return {
+          ...current,
+          items: [...current.items, nextItem],
+        };
+      });
+
+      if (blockedByStock) {
+        toast.error(`Only ${stockOnHand} in stock for ${product.name}.`);
+        return;
+      }
+
+      window.setTimeout(() => {
+        if (mergedItemId) {
+          itemQuantityRefs.current[mergedItemId]?.focus();
+        }
+      }, 0);
     },
-    [products, selectProductForItem, updateItem],
+    [allowNegativeStock, selectedTaxMode, updateBillState],
   );
 
-  const addItemAfter = useCallback((afterId?: string) => {
-    const nextItem = createItem(undefined, {
-      gstRate: "18",
-      gstType: normalizeGstType(selectedTaxMode),
-    });
-    updateBillState((current) => {
-      if (!afterId) {
-        return { ...current, items: [...current.items, nextItem] };
+  const addManualItemToBill = useCallback(
+    ({
+      name,
+      price,
+      quantity,
+    }: {
+      name: string;
+      price: number;
+      quantity: number;
+    }) => {
+      const trimmedName = name.trim();
+      if (!trimmedName || !(price > 0) || !(quantity > 0)) {
+        toast.error("Enter a valid item name, quantity, and price.");
+        return;
       }
 
-      const index = current.items.findIndex((item) => item.id === afterId);
-      if (index < 0) {
-        return { ...current, items: [...current.items, nextItem] };
-      }
+      let targetItemId: string | null = null;
 
-      return {
-        ...current,
-        items: [
-          ...current.items.slice(0, index + 1),
-          nextItem,
-          ...current.items.slice(index + 1),
-        ],
-      };
-    });
-    window.setTimeout(() => itemNameRefs.current[nextItem.id]?.focus(), 0);
-  }, [selectedTaxMode, updateBillState]);
+      updateBillState((current) => {
+        const existingIndex = current.items.findIndex(
+          (item) =>
+            !item.productId &&
+            normalizeText(item.name) === normalizeText(trimmedName) &&
+            isSimpleBillItemActive(item),
+        );
+
+        if (existingIndex >= 0) {
+          const existingItem = current.items[existingIndex];
+          targetItemId = existingItem.id;
+          return {
+            ...current,
+            items: current.items.map((item, index) =>
+              index === existingIndex
+                ? {
+                    ...item,
+                    quantity: String(
+                      roundCurrency((Number(item.quantity) || 0) + quantity),
+                    ),
+                    price: String(price),
+                    name: trimmedName,
+                    productId: undefined,
+                  }
+                : item,
+            ),
+          };
+        }
+
+        const nextItem: SimpleBillItem = {
+          ...createItem(undefined, {
+            gstRate,
+            gstType: normalizeGstType(selectedTaxMode),
+          }),
+          name: trimmedName,
+          quantity: String(quantity),
+          price: String(price),
+          productId: undefined,
+        };
+
+        const firstBlankIndex = current.items.findIndex(
+          (item) => !isSimpleBillItemActive(item),
+        );
+
+        if (firstBlankIndex >= 0) {
+          targetItemId = current.items[firstBlankIndex].id;
+          return {
+            ...current,
+            items: current.items.map((item, index) =>
+              index === firstBlankIndex ? { ...nextItem, id: item.id } : item,
+            ),
+          };
+        }
+
+        targetItemId = nextItem.id;
+        return {
+          ...current,
+          items: [...current.items, nextItem],
+        };
+      });
+
+      window.setTimeout(() => {
+        if (targetItemId) {
+          itemQuantityRefs.current[targetItemId]?.focus();
+        }
+      }, 0);
+    },
+    [gstRate, selectedTaxMode, updateBillState],
+  );
 
   const handleCustomerSearch = (value: string) => {
     setCustomerSearch(value);
@@ -2582,6 +2723,31 @@ const SimpleBillClient = ({
       return;
     }
 
+    if (!allowNegativeStock) {
+      const stockConflict = validItems.find((item) => {
+        const productId = item.product_id ? Number(item.product_id) : 0;
+        const linkedProduct =
+          Number.isInteger(productId) && productId > 0
+            ? productLookup[productId]
+            : undefined;
+
+        return (
+          linkedProduct &&
+          Number.isFinite(Number(item.quantity)) &&
+          Number(item.quantity) > linkedProduct.stock_on_hand
+        );
+      });
+
+      if (stockConflict) {
+        const productId = Number(stockConflict.product_id || 0);
+        const linkedProduct = productLookup[productId];
+        toast.error(
+          `Only ${linkedProduct?.stock_on_hand ?? 0} in stock for ${stockConflict.name}.`,
+        );
+        return;
+      }
+    }
+
     if (discountValidationMessage) {
       toast.error(discountValidationMessage);
       return;
@@ -2650,6 +2816,7 @@ const SimpleBillClient = ({
       selectCustomer(customer);
       setGeneratedInvoice(createdInvoice);
       setPreviewOpen(true);
+      setProductSearchOpen(false);
       toast.success(copy.toastBillGenerated);
       window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
       router.refresh();
@@ -2672,7 +2839,7 @@ const SimpleBillClient = ({
     setBillState(createInitialBillState(today));
     setGeneratedInvoice(null);
     setPreviewOpen(false);
-    setFocusedItemId(null);
+    setProductSearchOpen(false);
     window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
     toast.success(copy.toastNewBillReady);
   }, [copy.toastNewBillReady]);
@@ -2742,14 +2909,8 @@ const SimpleBillClient = ({
   }, [refetchCustomerSuggestions, refetchProducts, shouldSearchCustomers]);
 
   const focusPrimaryCartItem = useCallback(() => {
-    const firstItemId = items[0]?.id;
-    if (!firstItemId) {
-      addItemAfter();
-      return;
-    }
-
-    itemNameRefs.current[firstItemId]?.focus();
-  }, [addItemAfter, items]);
+    openProductSearch();
+  }, [openProductSearch]);
 
   return (
     <DashboardLayout
@@ -2961,7 +3122,7 @@ const SimpleBillClient = ({
               <p className="mt-1 text-sm text-muted-foreground">
                 {isHindi
                   ? "प्रोडक्ट का नाम, मात्रा और कीमत डालें।"
-                  : "Add product name, quantity, and price."}
+                  : "Search products, scan a barcode, or add a manual item."}
               </p>
             </div>
             <Button
@@ -2969,10 +3130,10 @@ const SimpleBillClient = ({
               size="lg"
               className="h-11 font-semibold"
               disabled={productsLocked}
-              onClick={() => addItemAfter()}
+              onClick={openProductSearch}
             >
               <Plus size={16} />
-              {copy.addItem}
+              {isHindi ? "प्रोडक्ट जोड़ें" : "Add Product"}
             </Button>
           </div>
 
@@ -2987,26 +3148,27 @@ const SimpleBillClient = ({
               isHindi={isHindi}
               items={items}
               products={products}
-              gstEnabled={gstEnabled}
-              focusedItemId={focusedItemId}
-              setFocusedItemId={setFocusedItemId}
-              getProductSuggestions={getProductSuggestions}
-              itemNameRefs={itemNameRefs}
+              productsLoading={productsLoading}
+              productsError={productsError}
+              allowNegativeStock={allowNegativeStock}
+              productSearchOpen={productSearchOpen}
+              productSearchFocusToken={productSearchFocusToken}
               itemQuantityRefs={itemQuantityRefs}
               itemPriceRefs={itemPriceRefs}
-              handleItemNameChange={handleItemNameChange}
-              selectProductForItem={selectProductForItem}
+              onProductSearchOpenChange={closeProductSearch}
+              onRetryProducts={handleRetryDataLoad}
+              onAddProduct={addProductToBill}
+              onAddManualItem={addManualItemToBill}
               updateItem={updateItem}
               removeItem={removeItem}
               adjustItemQuantity={adjustItemQuantity}
-              addOneMoreItem={addOneMoreItem}
-              addItemAfter={addItemAfter}
+              commitItemQuantity={commitItemQuantity}
               formatMoney={formatMoney}
               onFocusPrimaryItem={focusPrimaryCartItem}
             />
           ) : null}
 
-          {false ? <div className="mt-4 grid gap-3">
+          {/*
             {items.length === 1 && !items[0]?.name.trim() ? (
               <div className="rounded-lg bg-muted/35 px-4 py-3 text-sm text-muted-foreground">
                 {isHindi ? "पहला प्रोडक्ट जोड़ें" : "Start by adding a product"}
@@ -3275,7 +3437,7 @@ const SimpleBillClient = ({
                   </div>
                 );
               })}
-          </div> : null}
+          */}
         </section>
 
         <section className="rounded-2xl bg-card/95 p-5 ring-1 ring-border/55">
@@ -3290,7 +3452,7 @@ const SimpleBillClient = ({
                 </p>
                 <p className="mt-2 text-sm text-muted-foreground">
                   {t("invoiceComposer.lineItemsCount", {
-                    count: validItems.length,
+                    count: billItems.length,
                   })}
                 </p>
               </div>

@@ -1,8 +1,8 @@
 import { getServerSession } from "next-auth";
-import { authOptions, CustomSession } from "../api/auth/[...nextauth]/options";
-import PurchasesClient from "./PurchasesClient";
+import { authOptions, CustomSession } from "../../api/auth/[...nextauth]/options";
+import PurchasesClient from "../PurchasesClient";
 
-const PurchasesPage = async () => {
+const NewPurchasePage = async () => {
   const session: CustomSession | null = await getServerSession(authOptions);
   const name = session?.user?.name?.trim() ?? "";
 
@@ -10,9 +10,9 @@ const PurchasesPage = async () => {
     <PurchasesClient
       name={name}
       image={session?.user?.image || undefined}
-      mode="dashboard"
+      mode="new"
     />
   );
 };
 
-export default PurchasesPage;
+export default NewPurchasePage;

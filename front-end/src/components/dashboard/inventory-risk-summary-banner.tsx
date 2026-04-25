@@ -108,7 +108,7 @@ const InventoryRiskSummaryBanner = () => {
             </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link href="/purchases">
+            <Link href="/purchases/new">
               <ShoppingCart size={16} />
               Create Purchase
             </Link>

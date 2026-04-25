@@ -17,6 +17,8 @@ import {
   fetchProductOptions,
   fetchProducts,
   fetchPurchases,
+  fetchPurchase,
+  fetchPurchasesPage,
   fetchSales,
   fetchInvoices,
   fetchInvoice,
@@ -44,6 +46,7 @@ import {
   createWorker,
   deleteWorker,
   type CustomerListParams,
+  type PurchaseListParams,
   type ProductListParams,
   updateWorker,
 } from "@/lib/apiClient";
@@ -279,7 +282,21 @@ export const useUpdateWorkerMutation = () => {
 };
 
 export const usePurchasesQuery = () =>
-  useQuery({ queryKey: ["purchases"], queryFn: fetchPurchases });
+  useQuery({ queryKey: ["purchases"], queryFn: () => fetchPurchases() });
+
+export const usePurchasesPageQuery = (params: PurchaseListParams) =>
+  useQuery({
+    queryKey: ["purchases", "page", params],
+    queryFn: () => fetchPurchasesPage(params),
+    placeholderData: (previousData) => previousData,
+  });
+
+export const usePurchaseQuery = (purchaseId?: number) =>
+  useQuery({
+    queryKey: ["purchases", purchaseId],
+    queryFn: () => fetchPurchase(purchaseId ?? 0),
+    enabled: Number.isFinite(purchaseId) && (purchaseId ?? 0) > 0,
+  });
 
 export const useCreatePurchaseMutation = () => {
   const queryClient = useQueryClient();

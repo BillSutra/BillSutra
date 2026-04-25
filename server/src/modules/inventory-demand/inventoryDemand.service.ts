@@ -35,7 +35,8 @@ const calculateDaysUntilStockout = (
     currentStock: number,
     predictedDailySales: number,
 ): number => {
-    if (predictedDailySales === 0) return Infinity;
+    if (predictedDailySales <= 0) return Infinity;
+    if (currentStock <= 0) return 0;
     return currentStock / predictedDailySales;
 };
 
@@ -43,9 +44,14 @@ const calculateDaysUntilStockout = (
  * Calculate recommended reorder quantity
  * Uses 14 days buffer (2 weeks)
  */
-const calculateReorderQuantity = (predictedDailySales: number): number => {
+const calculateReorderQuantity = (
+    predictedDailySales: number,
+    currentStock: number,
+): number => {
     const bufferDays = 14;
-    const reorderQty = Math.ceil(predictedDailySales * bufferDays);
+    const reorderQty = Math.ceil(
+        predictedDailySales * bufferDays - Math.max(currentStock, 0),
+    );
     return Math.max(reorderQty, 1); // Minimum 1
 };
 
@@ -193,6 +199,7 @@ export const getInventoryDemandPredictions = async (
         const currentStock = warehouseInventoryByProductId
             ? warehouseInventoryByProductId.get(product.id) ?? 0
             : product.stock_on_hand ?? 0;
+        const normalizedCurrentStock = Math.max(currentStock, 0);
         const quantitySold30Days =
             quantitySoldByProductId.get(product.id) ?? 0;
 
@@ -204,12 +211,14 @@ export const getInventoryDemandPredictions = async (
 
         // Calculate stockout metrics
         const daysUntilStockout = calculateDaysUntilStockout(
-            currentStock,
+            normalizedCurrentStock,
             predictedDailySales,
         );
 
-        const recommendedReorderQuantity =
-            calculateReorderQuantity(predictedDailySales);
+        const recommendedReorderQuantity = calculateReorderQuantity(
+            predictedDailySales,
+            normalizedCurrentStock,
+        );
 
         // Determine alert level
         const alertLevel = getAlertLevel(daysUntilStockout);
@@ -219,7 +228,7 @@ export const getInventoryDemandPredictions = async (
             product_id: product.id,
             product_name: product.name,
             warehouse_id: warehouseId ?? null,
-            stock_left: currentStock,
+            stock_left: normalizedCurrentStock,
             predicted_daily_sales: Math.round(predictedDailySales * 100) / 100, // Round to 2 decimals
             days_until_stockout:
                 daysUntilStockout === Infinity ? 999 : Math.round(daysUntilStockout), // Show 999 for infinity
