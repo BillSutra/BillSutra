@@ -43,6 +43,12 @@ export const buildResetPasswordUrl = (token: string, email: string) => {
   return resetUrl.toString();
 };
 
+export const buildVerifyEmailUrl = (token: string) => {
+  const verifyUrl = new URL("/verify-email", `${getFrontendAppUrl()}/`);
+  verifyUrl.searchParams.set("token", token);
+  return verifyUrl.toString();
+};
+
 export const buildPublicInvoiceReference = (
   invoiceId: number,
   invoiceNumber: string,

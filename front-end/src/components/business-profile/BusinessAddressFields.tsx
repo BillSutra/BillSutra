@@ -28,9 +28,9 @@ type BusinessAddressFieldsProps = {
 };
 
 const statusToneClassName: Record<AutofillStatus["tone"], string> = {
-  success: "text-emerald-600",
-  neutral: "text-slate-500",
-  error: "text-amber-700",
+  success: "text-emerald-600 dark:text-emerald-400",
+  neutral: "text-zinc-500 dark:text-zinc-400",
+  error: "text-amber-700 dark:text-amber-400",
 };
 
 const BusinessAddressFields = ({

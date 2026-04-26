@@ -18,6 +18,9 @@ import {
   normalizeBusinessAddressDraft,
 } from "../../lib/indianAddress.js";
 import {
+  computeInvoicePaymentSnapshotFromPayments,
+} from "../../utils/invoicePaymentSnapshot.js";
+import {
   applyBillingSaleInventoryAdjustments,
   getBillingInventorySchemaSupport,
   getBillingInventorySettings,
@@ -127,6 +130,25 @@ const publicInvoiceInclude = {
         },
       },
     },
+  },
+} satisfies Prisma.InvoiceInclude;
+
+const invoicePaymentSelect = {
+  id: true,
+  amount: true,
+  method: true,
+  provider: true,
+  transaction_id: true,
+  reference: true,
+  paid_at: true,
+  created_at: true,
+} satisfies Prisma.PaymentSelect;
+
+const invoiceInclude = {
+  customer: true,
+  items: true,
+  payments: {
+    select: invoicePaymentSelect,
   },
 } satisfies Prisma.InvoiceInclude;
 
@@ -550,62 +572,9 @@ const formatDate = (value: Date | null | undefined) => {
   });
 };
 
-const resolveInvoicePdfExecutablePath = () => {
-  const configuredPath = process.env.PUPPETEER_EXECUTABLE_PATH?.trim();
-  if (configuredPath && existsSync(configuredPath)) {
-    return configuredPath;
-  }
-
-  const userProfile = process.env.USERPROFILE?.trim();
-  const localAppData = process.env.LOCALAPPDATA?.trim();
-  const programFiles = process.env.PROGRAMFILES?.trim();
-  const programFilesX86 = process.env["PROGRAMFILES(X86)"]?.trim();
-
-  const candidates = [
-    localAppData
-      ? join(
-          localAppData,
-          ".chromium-browser-snapshots",
-          "chromium",
-          "win32-1596254",
-          "chrome-win",
-          "chrome.exe",
-        )
-      : null,
-    localAppData
-      ? join(
-          localAppData,
-          "ms-playwright",
-          "chromium-1208",
-          "chrome-win64",
-          "chrome.exe",
-        )
-      : null,
-    programFiles
-      ? join(programFiles, "Google", "Chrome", "Application", "chrome.exe")
-      : null,
-    programFilesX86
-      ? join(programFilesX86, "Google", "Chrome", "Application", "chrome.exe")
-      : null,
-    userProfile
-      ? join(
-          userProfile,
-          "AppData",
-          "Local",
-          "Google",
-          "Chrome",
-          "Application",
-          "chrome.exe",
-        )
-      : null,
-  ].filter((candidate): candidate is string => Boolean(candidate));
-
-  return candidates.find((candidate) => existsSync(candidate));
-};
-
 const attachInvoiceGstMetadata = async <
   T extends
-    | (Prisma.InvoiceGetPayload<{ include: { customer: true; items: true; payments: true } }> & {
+    | (Prisma.InvoiceGetPayload<{ include: typeof invoiceInclude }> & {
         [key: string]: unknown;
       })
     | null,
@@ -613,6 +582,13 @@ const attachInvoiceGstMetadata = async <
   if (!invoice) {
     return invoice;
   }
+
+  const paymentSnapshot = computeInvoicePaymentSnapshotFromPayments({
+    total: invoice.total,
+    status: invoice.status,
+    dueDate: "due_date" in invoice ? invoice.due_date : null,
+    payments: invoice.payments,
+  });
 
   const [invoiceRows, itemRows] = await Promise.all([
     prisma.$queryRaw<InvoiceGstMetadataRow[]>(Prisma.sql`
@@ -638,6 +614,8 @@ const attachInvoiceGstMetadata = async <
     total_sgst: invoiceRow?.total_sgst ?? null,
     total_igst: invoiceRow?.total_igst ?? null,
     grand_total: invoiceRow?.grand_total ?? null,
+    totalPaid: paymentSnapshot.paidAmount,
+    computedStatus: paymentSnapshot.dynamicPaymentStatus,
     items: invoice.items.map((item) => {
       const meta = itemMetaById.get(item.id);
       return {
@@ -1272,7 +1250,7 @@ export const listInvoices = async (
 
   const invoices = await prisma.invoice.findMany({
     where,
-    include: { customer: true, items: true, payments: true },
+    include: invoiceInclude,
     orderBy: { createdAt: "desc" },
   });
 
@@ -1468,7 +1446,12 @@ export const createInvoice = async (
     try {
       invoice = await tx.invoice.create({
         data: invoiceCreateData,
-        include: { items: true, payments: true },
+        include: {
+          items: true,
+          payments: {
+            select: invoicePaymentSelect,
+          },
+        },
       });
     } catch (error) {
       const shouldRetryWithoutInvoiceInventoryFields =
@@ -1504,7 +1487,12 @@ export const createInvoice = async (
           ...fallbackInvoiceCreateData,
           items: { create: fallbackItemPayload },
         },
-        include: { items: true, payments: true },
+        include: {
+          items: true,
+          payments: {
+            select: invoicePaymentSelect,
+          },
+        },
       });
     }
 
@@ -1561,6 +1549,7 @@ export const createInvoice = async (
           method: paymentState.paymentMethod,
           paid_at: paymentState.paymentDate ?? new Date(),
         },
+        select: invoicePaymentSelect,
       });
     }
 
@@ -1649,7 +1638,7 @@ export const getInvoice = async (userId: number, id: number) => {
 
   const invoice = await prisma.invoice.findFirst({
     where: { id, user_id: userId },
-    include: { customer: true, items: true, payments: true },
+    include: invoiceInclude,
   });
 
   return attachInvoiceGstMetadata(invoice);
@@ -1905,7 +1894,7 @@ export const duplicateInvoice = async (userId: number, id: number) => {
           })),
         },
       },
-      include: { customer: true, items: true, payments: true },
+      include: invoiceInclude,
     });
 
     return duplicated;
@@ -1918,7 +1907,9 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
     include: {
       customer: true,
       items: true,
-      payments: true,
+      payments: {
+        select: invoicePaymentSelect,
+      },
     },
   });
 
@@ -1959,6 +1950,7 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
   };
 };
 
+const renderInvoicePdfBuffer = async (html: string) => {
   const browser = await launchPuppeteerBrowser();
 
   try {

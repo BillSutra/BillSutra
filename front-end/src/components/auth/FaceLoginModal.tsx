@@ -8,7 +8,7 @@ import { getFriendlyFaceErrorMessage } from "@/utils/faceErrorHandler";
 interface FaceLoginModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: (auth: { user: any; token: string }) => void;
+  onSuccess?: (auth: { user: any; token: string }) => Promise<boolean | void> | boolean | void;
   onError?: (error: string) => void;
   email?: string;
 }
@@ -34,6 +34,15 @@ const GUIDE_WIDTH_RATIO = 0.62;
 const GUIDE_HEIGHT_RATIO = 0.78;
 const MAX_ATTEMPTS = 5;
 const LOCKOUT_SECONDS = 30;
+
+const getAttemptLabel = (attemptsRemaining: number) => {
+  const attemptsUsed = Math.min(
+    MAX_ATTEMPTS,
+    Math.max(1, MAX_ATTEMPTS - attemptsRemaining + 1),
+  );
+
+  return `Attempt ${attemptsUsed} of ${MAX_ATTEMPTS}`;
+};
 
 const getFriendlyFaceFeedback = (
   message?: string | null,
@@ -353,12 +362,36 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
       stopCamera();
 
       const result = await authenticateFace(email.trim(), imageBlob);
+      console.log("Face match result:", result);
 
       if (result.success && result.user && result.token) {
         setFaceFeedback(null);
         setFaceError(null);
         setStep("success");
-        onSuccess?.({ user: result.user, token: result.token });
+        try {
+          const loginCompleted = await onSuccess?.({
+            user: result.user,
+            token: result.token,
+          });
+
+          if (loginCompleted === false) {
+            setStep("capture");
+            setFaceFeedback("system-error");
+            setFaceError("Face matched, but login could not be completed. Please try again.");
+            await startCamera();
+            return;
+          }
+        } catch (error) {
+          setStep("capture");
+          setFaceFeedback("system-error");
+          setFaceError(
+            error instanceof Error && error.message.trim()
+              ? error.message
+              : "Face matched, but login could not be completed. Please try again.",
+          );
+          await startCamera();
+          return;
+        }
         return;
       }
 
@@ -492,7 +525,13 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
       setLockoutRemainingSec(0);
       if (lockoutWasActiveRef.current) {
         lockoutWasActiveRef.current = false;
-        handleClose();
+        clearModalState();
+        setFaceFeedback("retry-ready");
+        setFaceError(
+          "You can try face login again now, or use your password instead.",
+        );
+        setStep("instruction");
+        setAttemptsRemaining(MAX_ATTEMPTS);
       }
       return;
     }
@@ -513,7 +552,7 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
     update();
     const interval = window.setInterval(update, 250);
     return () => window.clearInterval(interval);
-  }, [handleClose, isLockedOut, lockoutUntilMs]);
+  }, [clearModalState, isLockedOut, lockoutUntilMs]);
 
   useEffect(() => {
     return () => {
@@ -673,6 +712,9 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
               </p>
 
               <p className="text-center text-xs text-gray-500">
+                {getAttemptLabel(attemptsRemaining)}
+              </p>
+              <p className="text-center text-xs text-gray-500">
                 Attempts remaining: {attemptsRemaining}
               </p>
 
@@ -765,6 +807,11 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
                 ) : null}
                 {attemptsRemaining > 0 ? (
                   <p className="text-xs text-gray-500">
+                    {getAttemptLabel(attemptsRemaining)}
+                  </p>
+                ) : null}
+                {attemptsRemaining > 0 ? (
+                  <p className="text-xs text-gray-500">
                     Attempts remaining: {attemptsRemaining}
                   </p>
                 ) : null}
@@ -782,7 +829,9 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
                   onClick={handleClose}
                   className="flex-1 rounded-lg bg-gray-300 py-2 font-medium text-gray-700 transition hover:bg-gray-400"
                 >
-                  Cancel
+                  {attemptsRemaining <= 0 || faceFeedback === "system-error"
+                    ? "Use Password Login"
+                    : "Cancel"}
                 </button>
               </div>
             </div>

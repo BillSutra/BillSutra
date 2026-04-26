@@ -15,6 +15,7 @@ import { computePaymentState } from "../utils/paymentCalculations.js";
 import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
 import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
 import { applyInventoryDelta } from "../services/inventoryValidation.service.js";
+import { getTotalPages, parsePagination } from "../utils/pagination.js";
 
 type PurchaseCreateInput = z.infer<typeof purchaseCreateSchema>;
 type PurchaseItemInput = PurchaseCreateInput["items"][number];
@@ -49,6 +50,79 @@ const decoratePurchaseFinancials = <T extends { total: unknown }>(
   paymentMethod: purchase.paymentMethod ?? null,
 });
 
+const mergePurchaseItems = (items: PurchaseItemInput[]) => {
+  const merged = new Map<
+    number,
+    {
+      product_id: number;
+      quantity: number;
+      unit_cost: number;
+      tax_rate?: number;
+    }
+  >();
+
+  items.forEach((item) => {
+    const current = merged.get(item.product_id);
+    if (!current) {
+      merged.set(item.product_id, {
+        product_id: item.product_id,
+        quantity: item.quantity,
+        unit_cost: item.unit_cost,
+        tax_rate: item.tax_rate,
+      });
+      return;
+    }
+
+    merged.set(item.product_id, {
+      product_id: item.product_id,
+      quantity: current.quantity + item.quantity,
+      unit_cost: item.unit_cost,
+      tax_rate: item.tax_rate ?? current.tax_rate,
+    });
+  });
+
+  return Array.from(merged.values());
+};
+
+const serializePurchase = <
+  T extends {
+    total: unknown;
+    supplier_id?: number | null;
+    warehouse_id?: number | null;
+    created_at?: Date;
+    updated_at?: Date;
+    items?: Array<{
+      id: number;
+      purchase_id?: number;
+      product_id?: number | null;
+      quantity: number;
+      unit_cost: unknown;
+      tax_rate?: unknown;
+      line_total: unknown;
+      name: string;
+    }>;
+  },
+>(
+  purchase: T & {
+    supplier?: unknown;
+    warehouse?: unknown;
+  },
+) => ({
+  ...decoratePurchaseFinancials(purchase),
+  supplierId: purchase.supplier_id ?? null,
+  warehouseId: purchase.warehouse_id ?? null,
+  createdAt: purchase.created_at ?? null,
+  updatedAt: purchase.updated_at ?? null,
+  items:
+    purchase.items?.map((item) => ({
+      ...item,
+      purchaseId: item.purchase_id ?? null,
+      productId: item.product_id ?? null,
+      costPrice: toNumber(item.unit_cost),
+      total: toNumber(item.line_total),
+    })) ?? [],
+});
+
 class PurchasesController {
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
@@ -56,18 +130,84 @@ class PurchasesController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const purchases = await prisma.purchase.findMany({
-      where: { user_id: userId },
+    const search =
+      typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const hasPaginationRequest =
+      req.query.page !== undefined || req.query.limit !== undefined;
+    const { page, limit, skip } = parsePagination(
+      {
+        page: req.query.page,
+        limit: req.query.limit,
+      },
+      {
+        defaultLimit: 8,
+        maxLimit: 100,
+      },
+    );
+
+    const where: Prisma.PurchaseWhereInput = {
+      user_id: userId,
+    };
+
+    if (search) {
+      const parsedId = Number(search);
+      const searchClauses: Prisma.PurchaseWhereInput[] = [];
+
+      if (Number.isInteger(parsedId) && parsedId > 0) {
+        searchClauses.push({ id: parsedId });
+      }
+
+      searchClauses.push({
+        supplier: {
+          is: {
+            name: {
+              contains: search,
+              mode: Prisma.QueryMode.insensitive,
+            },
+          },
+        },
+      });
+
+      searchClauses.push({
+        notes: {
+          contains: search,
+          mode: Prisma.QueryMode.insensitive,
+        },
+      });
+
+      where.OR = searchClauses;
+    }
+
+    const query = {
+      where,
       include: {
         supplier: { select: purchaseSupplierSelect },
         items: true,
         warehouse: true,
       },
       orderBy: { created_at: "desc" },
-    });
+      ...(hasPaginationRequest
+        ? {
+            skip,
+            take: limit,
+          }
+        : {}),
+    } satisfies Prisma.PurchaseFindManyArgs;
+
+    const [purchases, total] = await prisma.$transaction([
+      prisma.purchase.findMany(query),
+      prisma.purchase.count({ where }),
+    ]);
 
     return sendResponse(res, 200, {
-      data: purchases.map((purchase) => decoratePurchaseFinancials(purchase)),
+      data: {
+        items: purchases.map((purchase) => serializePurchase(purchase)),
+        purchases: purchases.map((purchase) => serializePurchase(purchase)),
+        total,
+        page: hasPaginationRequest ? page : 1,
+        limit: hasPaginationRequest ? limit : purchases.length,
+        totalPages: hasPaginationRequest ? getTotalPages(total, limit) : 1,
+      },
     });
   }
 
@@ -100,7 +240,8 @@ class PurchasesController {
       }
     }
 
-    const productIds = body.items.map(
+    const normalizedItems = mergePurchaseItems(body.items);
+    const productIds = normalizedItems.map(
       (item: PurchaseItemInput) => item.product_id,
     );
 
@@ -125,7 +266,7 @@ class PurchasesController {
       line_total: number;
     }> = [];
 
-    for (const item of body.items) {
+    for (const item of normalizedItems) {
       const product = productMap.get(item.product_id);
       if (!product) {
         return sendResponse(res, 404, { message: "Product not found" });
@@ -201,7 +342,7 @@ class PurchasesController {
     emitDashboardUpdate({ userId, source: "purchase.create" });
     return sendResponse(res, 201, {
       message: "Purchase recorded",
-      data: decoratePurchaseFinancials(purchase),
+      data: serializePurchase(purchase),
     });
   }
 
@@ -226,7 +367,7 @@ class PurchasesController {
     }
 
     return sendResponse(res, 200, {
-      data: decoratePurchaseFinancials(purchase),
+      data: serializePurchase(purchase),
     });
   }
 
@@ -269,7 +410,8 @@ class PurchasesController {
       }
     }
 
-    const productIds = body.items.map(
+    const normalizedItems = mergePurchaseItems(body.items);
+    const productIds = normalizedItems.map(
       (item: PurchaseItemInput) => item.product_id,
     );
 
@@ -294,7 +436,7 @@ class PurchasesController {
       line_total: number;
     }> = [];
 
-    for (const item of body.items) {
+    for (const item of normalizedItems) {
       const product = productMap.get(item.product_id);
       if (!product) {
         return sendResponse(res, 404, { message: "Product not found" });
@@ -449,7 +591,7 @@ class PurchasesController {
     emitDashboardUpdate({ userId, source: "purchase.update" });
     return sendResponse(res, 200, {
       message: "Purchase updated",
-      data: decoratePurchaseFinancials(updated),
+      data: serializePurchase(updated),
     });
   }
 }

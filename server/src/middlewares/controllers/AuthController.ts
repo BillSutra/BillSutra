@@ -39,12 +39,13 @@ class AuthController {
         id: findUser.id,
       };
       const token = jwt.sign(JWTPayload, process.env.JWT_SECRET as string, {
-        expiresIn: "365d",
+        expiresIn: "15m",
       });
       res.status(200).json({
         message: "Login Successful",
         user: findUser,
         token: `Bearer ${token}`,
+        expiresAt: Date.now() + 15 * 60 * 1000,
       });
     } catch (error) {
       res.status(500).send("Internal Server Error");

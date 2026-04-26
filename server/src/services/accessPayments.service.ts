@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import path from "path";
 import {
   AccessPaymentMethod,
   AccessPaymentStatus,
@@ -13,13 +14,20 @@ import {
 } from "../config/accessPlans.js";
 import AppError from "../utils/AppError.js";
 import { paymentProofStorage } from "./storage/paymentProofStorage.js";
-import { getBackendAppUrl, getFrontendAppUrl } from "../lib/appUrls.js";
-import { sendEmail } from "../emails/index.js";
+import { getBackendAppUrl } from "../lib/appUrls.js";
 import {
   applySubscriptionGrant,
   getSubscriptionSnapshot,
   hasPaidAccess,
 } from "./subscription.service.js";
+import { dispatchPlanApprovedEmail } from "./email.service.js";
+import {
+  buildSecureFileUrl,
+  deleteUploadedFileById,
+  deleteUploadedFileByPath,
+  isUploadedFilesTableAvailable,
+  registerUploadedFile,
+} from "./uploadedFiles.service.js";
 
 const UTR_REGEX = /^[A-Z0-9]{8,22}$/i;
 const RAZORPAY_API_BASE = "https://api.razorpay.com/v1";
@@ -100,6 +108,8 @@ const getProofMetadata = (payment: AccessPayment) => {
       : {};
 
   return {
+    fileId:
+      typeof proof.fileId === "string" ? proof.fileId : null,
     mimeType:
       typeof proof.mimeType === "string" ? proof.mimeType : null,
     originalName:
@@ -124,9 +134,25 @@ const getReviewMetadata = (payment: AccessPayment) => {
   };
 };
 
+const toSerializableProofUrl = (
+  fileId?: string | null,
+  screenshotUrl?: string | null,
+) => {
+  if (fileId) {
+    return buildSecureFileUrl(fileId);
+  }
+
+  if (!screenshotUrl || screenshotUrl.startsWith("/uploads/private/")) {
+    return null;
+  }
+
+  return toAbsoluteUploadUrl(screenshotUrl);
+};
+
 const serializePayment = (payment: AccessPayment) => {
   const proof = getProofMetadata(payment);
   const review = getReviewMetadata(payment);
+  const proofUrl = toSerializableProofUrl(proof.fileId, payment.screenshot_url);
 
   return {
     id: payment.id,
@@ -138,12 +164,13 @@ const serializePayment = (payment: AccessPayment) => {
     status: normalizeStatus(payment.status),
     name: payment.name,
     utr: payment.utr,
-    proofUrl: toAbsoluteUploadUrl(payment.screenshot_url),
+    proofFileId: proof.fileId,
+    proofUrl,
     proofMimeType: proof.mimeType,
     proofOriginalName: proof.originalName,
     proofSize: proof.size,
     proofUploadedAt: proof.uploadedAt,
-    screenshotUrl: toAbsoluteUploadUrl(payment.screenshot_url),
+    screenshotUrl: proofUrl,
     adminNote: review.adminNote,
     paymentId: payment.provider_payment_id,
     orderId: payment.provider_order_id,
@@ -499,9 +526,48 @@ export const submitAccessUpiPayment = async ({
   }
 
   const quote = resolveAccessPlanQuote(planId, billingCycle);
-  const proof = await paymentProofStorage.save(userId, paymentProof);
+  const secureProofStorageEnabled = await isUploadedFilesTableAvailable();
+  let proof = await paymentProofStorage.save(userId, paymentProof, {
+    secure: secureProofStorageEnabled,
+  });
+  let uploadedFileRecord: Awaited<ReturnType<typeof registerUploadedFile>> = null;
+
+  if (proof.secure) {
+    try {
+      uploadedFileRecord = await registerUploadedFile({
+        ownerUserId: userId,
+        fileName: path.basename(proof.filePath),
+        originalName: paymentProof.originalname,
+        filePath: proof.filePath,
+        type: "payment_proof",
+        mimeType: paymentProof.mimetype,
+      });
+    } catch (error) {
+      console.warn(
+        "[payments] secure proof registration failed; falling back to legacy proof access",
+        {
+          userId,
+          message: error instanceof Error ? error.message : error,
+        },
+      );
+
+      await paymentProofStorage.delete(proof.filePath);
+      proof = await paymentProofStorage.save(userId, paymentProof, {
+        secure: false,
+      });
+    }
+
+    if (!uploadedFileRecord && proof.secure) {
+      await paymentProofStorage.delete(proof.filePath);
+      proof = await paymentProofStorage.save(userId, paymentProof, {
+        secure: false,
+      });
+    }
+  }
+
   const proofMetadata = {
     proof: {
+      fileId: uploadedFileRecord?.id ?? null,
       mimeType: paymentProof.mimetype,
       originalName: paymentProof.originalname,
       size: paymentProof.size,
@@ -533,6 +599,8 @@ export const submitAccessUpiPayment = async ({
     payment = rejectedPayment
       ? await prisma.$transaction(async (tx) => {
           await paymentProofStorage.delete(rejectedPayment.screenshot_path);
+          await deleteUploadedFileById(getProofMetadata(rejectedPayment).fileId);
+          await deleteUploadedFileByPath(rejectedPayment.screenshot_path);
 
           return tx.accessPayment.update({
             where: { id: rejectedPayment.id },
@@ -576,6 +644,8 @@ export const submitAccessUpiPayment = async ({
           },
         });
   } catch (error) {
+    await deleteUploadedFileById(uploadedFileRecord?.id);
+    await deleteUploadedFileByPath(proof.filePath);
     await paymentProofStorage.delete(proof.filePath);
     throw error;
   }
@@ -719,21 +789,8 @@ export const reviewAdminUpiPayment = async ({
     });
   }
 
-  if (nextStatus === AccessPaymentStatus.APPROVED && payment.user.email) {
-    try {
-      await sendEmail("payment_access_approved", {
-        email: payment.user.email,
-        user_name: payment.user.name,
-        plan_name: payment.plan_id === "pro-plus" ? "Pro Plus" : "Pro",
-        amount: Number(payment.amount),
-        status_page_url: `${getFrontendAppUrl()}/payments`,
-      });
-    } catch (error) {
-      console.warn("[payments] approval email failed", {
-        paymentId: payment.id,
-        error: error instanceof Error ? error.message : error,
-      });
-    }
+  if (nextStatus === AccessPaymentStatus.APPROVED) {
+    void dispatchPlanApprovedEmail(payment.id);
   }
 
   return serializePayment(updated);

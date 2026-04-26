@@ -448,6 +448,7 @@ export const useFaceAuthentication = () => {
         });
 
         const data = response.data;
+        console.log("Face authentication API response:", data);
 
         if (!data?.success || !data?.data) {
           const normalizedError = normalizeFaceError({

@@ -4,6 +4,7 @@ Production-grade implementation with robust error handling, validation, and logg
 """
 import base64
 import functools
+import hmac
 import os
 import time
 import traceback
@@ -15,8 +16,14 @@ from flask import Flask, g, jsonify, request
 from flask_cors import CORS
 
 from config import (
+    ALLOWED_ORIGINS,
     DEBUG_MODE as CONFIG_DEBUG_MODE,
     ERROR_MESSAGES,
+    FACE_SERVICE_API_KEY,
+    FACE_SERVICE_ENFORCE_API_KEY,
+    FACE_SERVICE_ENFORCE_INTERNAL_CLIENT,
+    FACE_SERVICE_INTERNAL_CLIENT_HEADER,
+    FACE_SERVICE_INTERNAL_CLIENT_VALUE,
     LOG_FORMAT,
     MAX_IMAGE_SIZE,
     REQUEST_TIMEOUT,
@@ -43,13 +50,133 @@ CORS(
     app,
     resources={
         r"/api/*": {
-            "origins": "*",
+            "origins": ALLOWED_ORIGINS,
             "methods": ["GET", "POST", "OPTIONS"],
-            "allow_headers": ["Content-Type", "Authorization", "X-Face-Encoding"],
+            "allow_headers": [
+                "Content-Type",
+                "Authorization",
+                "X-Face-Encoding",
+                "X-API-KEY",
+                FACE_SERVICE_INTERNAL_CLIENT_HEADER,
+            ],
             "max_age": 3600,
         }
     },
+    supports_credentials=True,
 )
+
+
+def build_request_context() -> Dict[str, Any]:
+    return {
+        "remote_addr": request.remote_addr,
+        "origin": request.headers.get("Origin"),
+        "user_agent": request.headers.get("User-Agent"),
+        "api_key_present": bool(request.headers.get("X-API-KEY", "").strip()),
+        "internal_client": request.headers.get(FACE_SERVICE_INTERNAL_CLIENT_HEADER),
+    }
+
+
+def is_allowed_origin(origin: Optional[str]) -> bool:
+    if not origin:
+        return True
+    return origin in ALLOWED_ORIGINS
+
+
+def validate_service_access() -> Optional[Any]:
+    if request.method == "OPTIONS":
+        return None
+
+    context = build_request_context()
+    origin = context["origin"]
+
+    if not is_allowed_origin(origin):
+        logger.warning(
+            {
+                "event": "face_service.origin_rejected",
+                "request_id": getattr(g, "request_id", None),
+                **context,
+            }
+        )
+        return json_error(
+            "Request origin is not allowed.",
+            "FORBIDDEN_ORIGIN",
+            status_code=403,
+        )
+
+    if FACE_SERVICE_ENFORCE_INTERNAL_CLIENT:
+        provided_client = request.headers.get(FACE_SERVICE_INTERNAL_CLIENT_HEADER, "").strip()
+        if provided_client != FACE_SERVICE_INTERNAL_CLIENT_VALUE:
+            logger.warning(
+                {
+                    "event": "face_service.internal_client_rejected",
+                    "request_id": getattr(g, "request_id", None),
+                    **context,
+                }
+            )
+            return json_error(
+                "Direct browser access is not allowed.",
+                "FORBIDDEN_CLIENT",
+                status_code=403,
+            )
+
+    provided_api_key = request.headers.get("X-API-KEY", "").strip()
+    expected_api_key = FACE_SERVICE_API_KEY
+
+    if not expected_api_key:
+        if FACE_SERVICE_ENFORCE_API_KEY:
+            logger.error(
+                {
+                    "event": "face_service.api_key_missing_configuration",
+                    "request_id": getattr(g, "request_id", None),
+                    **context,
+                }
+            )
+            return json_error(
+                "Face service authentication is not configured.",
+                "FACE_SERVICE_AUTH_MISCONFIGURED",
+                status_code=503,
+            )
+
+        if not provided_api_key:
+            logger.warning(
+                {
+                    "event": "face_service.api_key_missing_rollout_warning",
+                    "request_id": getattr(g, "request_id", None),
+                    **context,
+                }
+            )
+        return None
+
+    api_key_valid = bool(provided_api_key) and hmac.compare_digest(
+        provided_api_key,
+        expected_api_key,
+    )
+
+    if api_key_valid:
+        return None
+
+    if FACE_SERVICE_ENFORCE_API_KEY:
+        logger.warning(
+            {
+                "event": "face_service.api_key_rejected",
+                "request_id": getattr(g, "request_id", None),
+                **context,
+            }
+        )
+        return json_error(
+            "Unauthorized request.",
+            "UNAUTHORIZED",
+            status_code=401,
+        )
+
+    logger.warning(
+        {
+            "event": "face_service.api_key_missing_rollout_warning",
+            "request_id": getattr(g, "request_id", None),
+            **context,
+        }
+    )
+    return None
 
 
 def build_success_response(
@@ -293,6 +420,7 @@ def before_request():
         content_type=request.content_type,
         content_length=request.content_length,
     )
+    return validate_service_access()
 
 
 @app.after_request

@@ -489,20 +489,55 @@ const BusinessProfileClient = ({
 
   const currentStepSummary =
     steps.find((step) => step.id === currentStep) ?? steps[0];
+  const sectionPanelClassName =
+    "rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-[0_24px_60px_-40px_rgba(0,0,0,0.72)] sm:p-7";
+  const infoPanelClassName =
+    "rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-[0_24px_60px_-40px_rgba(0,0,0,0.72)]";
+  const pageHeroClassName =
+    "rounded-[2rem] border border-white/75 bg-white/78 p-6 shadow-[0_28px_90px_-70px_rgba(17,37,63,0.55)] backdrop-blur-xl transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-[0_24px_60px_-40px_rgba(0,0,0,0.72)] sm:p-8";
+  const titleClassName =
+    "text-2xl font-semibold tracking-tight text-[#10233f] dark:text-white";
+  const heroTitleClassName =
+    "mt-3 text-3xl font-semibold tracking-tight text-[#10233f] dark:text-white sm:text-[2.4rem]";
+  const bodyTextClassName =
+    "max-w-3xl text-sm leading-6 text-[#627890] dark:text-zinc-400";
+  const mutedTextClassName = "text-sm leading-6 text-[#627890] dark:text-zinc-400";
+  const badgeClassName =
+    "inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab] transition-all duration-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400";
+  const iconWrapClassName =
+    "flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5fb] text-[#123d65] transition-all duration-200 dark:bg-zinc-800 dark:text-blue-400";
+  const choiceCardBaseClassName =
+    "rounded-[1.5rem] border px-5 py-5 text-left shadow-sm transition-all duration-200";
+  const choiceCardInactiveClassName =
+    "border-[#d7e4f1] bg-white hover:border-[#7aa8d6] hover:bg-[#f9fbff] dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:shadow-zinc-900/50";
+  const choiceCardActiveClassName =
+    "border-[#123d65] bg-[linear-gradient(180deg,#eef6ff_0%,#f8fbff_100%)] shadow-[0_24px_50px_-38px_rgba(17,37,63,0.45)] dark:border-blue-500 dark:bg-zinc-800 dark:ring-1 dark:ring-blue-500/30 dark:shadow-zinc-950/60";
+  const choiceTitleClassName =
+    "text-base font-semibold text-[#10233f] dark:text-white";
+  const chipClassName =
+    "inline-flex rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1.5 text-xs font-medium text-[#4f6882] transition-all duration-200 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300";
+  const nestedSurfaceClassName =
+    "rounded-[1.5rem] border border-[#d7e4f1] bg-[#f8fbff] p-4 transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-800";
+  const previewFrameClassName =
+    "mt-5 rounded-[1.65rem] border border-[#d7e4f1] bg-[linear-gradient(180deg,#fbfdff_0%,#f4f8fc_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-[0_20px_44px_-34px_rgba(0,0,0,0.7)]";
+  const previewViewportClassName =
+    "max-h-[72rem] overflow-auto rounded-[1.35rem] border border-white/80 bg-white/92 p-2 shadow-[0_28px_55px_-50px_rgba(17,37,63,0.5)] transition-all duration-200 dark:border-zinc-700 dark:bg-zinc-800 dark:shadow-[0_24px_48px_-36px_rgba(0,0,0,0.72)]";
+  const stepCardClassName =
+    "min-w-[180px] rounded-[1.45rem] border px-4 py-3 transition-all duration-200";
 
   const renderLeftPanel = () => {
     if (currentStep === 1) {
       return (
-        <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur sm:p-7">
+        <section className={sectionPanelClassName}>
           <div className="space-y-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab]">
+            <span className={badgeClassName}>
               <Sparkles className="h-3.5 w-3.5" />
               {t("businessProfilePage.content.setupBadge")}
             </span>
-            <h2 className="text-2xl font-semibold tracking-tight text-[#10233f]">
+            <h2 className={titleClassName}>
               {t("businessProfilePage.stepTitles.businessType")}
             </h2>
-            <p className="max-w-3xl text-sm leading-6 text-[#627890]">
+            <p className={bodyTextClassName}>
               {t("businessProfilePage.content.businessTypeDescription")}
             </p>
           </div>
@@ -516,18 +551,18 @@ const BusinessProfileClient = ({
                   type="button"
                   onClick={() => handleBusinessTypeChange(type.id)}
                   className={[
-                    "rounded-[1.5rem] border px-5 py-5 text-left transition-all duration-200",
+                    choiceCardBaseClassName,
                     active
-                      ? "border-[#123d65] bg-[linear-gradient(180deg,#eef6ff_0%,#f8fbff_100%)] shadow-[0_24px_50px_-38px_rgba(17,37,63,0.45)]"
-                      : "border-[#d7e4f1] bg-white hover:border-[#7aa8d6] hover:bg-[#f9fbff]",
+                      ? choiceCardActiveClassName
+                      : choiceCardInactiveClassName,
                   ].join(" ")}
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-base font-semibold text-[#10233f]">
+                      <p className={choiceTitleClassName}>
                         {type.label}
                       </p>
-                      <p className="mt-2 text-sm leading-6 text-[#627890]">
+                      <p className={`mt-2 ${mutedTextClassName}`}>
                         {t(
                           "businessProfilePage.content.businessTypeCardDescription",
                         )}
@@ -537,8 +572,8 @@ const BusinessProfileClient = ({
                       className={[
                         "mt-1 inline-flex h-8 w-8 items-center justify-center rounded-full border text-xs font-semibold",
                         active
-                          ? "border-[#123d65] bg-[#123d65] text-white"
-                          : "border-[#d7e4f1] bg-white text-[#7f95ab]",
+                          ? "border-[#123d65] bg-[#123d65] text-white dark:border-blue-500 dark:bg-blue-600"
+                          : "border-[#d7e4f1] bg-white text-[#7f95ab] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-500",
                       ].join(" ")}
                     >
                       {active ? <CheckCircle2 className="h-4 w-4" /> : "."}
@@ -554,16 +589,16 @@ const BusinessProfileClient = ({
 
     if (currentStep === 3) {
       return (
-        <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur sm:p-7">
+        <section className={sectionPanelClassName}>
           <div className="space-y-2">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab]">
+            <span className={badgeClassName}>
               <LayoutTemplate className="h-3.5 w-3.5" />
               {t("businessProfilePage.content.templateBadge")}
             </span>
-            <h2 className="text-2xl font-semibold tracking-tight text-[#10233f]">
+            <h2 className={titleClassName}>
               {t("businessProfilePage.stepTitles.templateSelection")}
             </h2>
-            <p className="max-w-3xl text-sm leading-6 text-[#627890]">
+            <p className={bodyTextClassName}>
               {t("businessProfilePage.content.templateDescription")}
             </p>
           </div>
@@ -577,10 +612,10 @@ const BusinessProfileClient = ({
                   type="button"
                   onClick={() => setSelectedTemplateId(template.id)}
                   className={[
-                    "rounded-[1.5rem] border px-5 py-5 text-left transition-all duration-200",
+                    choiceCardBaseClassName,
                     selected
-                      ? "border-[#123d65] bg-[linear-gradient(180deg,#eef6ff_0%,#f8fbff_100%)] shadow-[0_24px_50px_-38px_rgba(17,37,63,0.45)]"
-                      : "border-[#d7e4f1] bg-white hover:border-[#7aa8d6] hover:bg-[#f9fbff]",
+                      ? choiceCardActiveClassName
+                      : choiceCardInactiveClassName,
                   ].join(" ")}
                 >
                   <div
@@ -589,20 +624,20 @@ const BusinessProfileClient = ({
                   />
                   <div className="mt-4 flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-base font-semibold text-[#10233f]">
+                      <p className={choiceTitleClassName}>
                         {template.name}
                       </p>
                       {template.bestFor ? (
-                        <p className="mt-2 inline-flex rounded-full bg-[#edf5fb] px-2.5 py-1 text-[11px] font-medium text-[#123d65]">
+                        <p className="mt-2 inline-flex rounded-full bg-[#edf5fb] px-2.5 py-1 text-[11px] font-medium text-[#123d65] dark:bg-zinc-700 dark:text-zinc-100">
                           {template.bestFor}
                         </p>
                       ) : null}
-                      <p className="mt-2 text-sm leading-6 text-[#627890]">
+                      <p className={`mt-2 ${mutedTextClassName}`}>
                         {template.description}
                       </p>
                     </div>
                     {selected ? (
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#123d65] text-white">
+                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#123d65] text-white dark:bg-blue-600">
                         <CheckCircle2 className="h-4 w-4" />
                       </span>
                     ) : null}
@@ -616,16 +651,16 @@ const BusinessProfileClient = ({
     }
 
     return (
-      <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur sm:p-7">
+      <section className={sectionPanelClassName}>
         <div className="space-y-2">
-          <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab]">
+          <span className={badgeClassName}>
             <Building2 className="h-3.5 w-3.5" />
             {t("businessProfilePage.content.detailsBadge")}
           </span>
-          <h2 className="text-2xl font-semibold tracking-tight text-[#10233f]">
+          <h2 className={titleClassName}>
             {t("businessProfilePage.content.detailsTitle")}
           </h2>
-          <p className="max-w-3xl text-sm leading-6 text-[#627890]">
+          <p className={bodyTextClassName}>
             {t("businessProfilePage.content.detailsDescription")}
           </p>
         </div>
@@ -735,16 +770,16 @@ const BusinessProfileClient = ({
   const renderRightTopCard = () => {
     if (currentStep === 1) {
       return (
-        <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur">
+        <section className={infoPanelClassName}>
           <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5fb] text-[#123d65]">
+            <div className={iconWrapClassName}>
               <Sparkles className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-[#10233f]">
+              <p className="text-sm font-semibold text-[#10233f] dark:text-white">
                 {t("businessProfilePage.content.enabledSectionsTitle")}
               </p>
-              <p className="mt-1 text-sm leading-6 text-[#627890]">
+              <p className={`mt-1 ${mutedTextClassName}`}>
                 {t("businessProfilePage.content.enabledSectionsDescription", {
                   label: selectedBusinessType.label,
                 })}
@@ -755,7 +790,7 @@ const BusinessProfileClient = ({
             {enabledSections.map((section) => (
               <span
                 key={section}
-                className="inline-flex rounded-full border border-[#d7e4f1] bg-[#f8fbff] px-3 py-1.5 text-xs font-medium text-[#4f6882]"
+                className={chipClassName}
               >
                 {SECTION_LABELS[section]}
               </span>
@@ -767,16 +802,16 @@ const BusinessProfileClient = ({
 
     if (currentStep === 3) {
       return (
-        <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur">
+        <section className={infoPanelClassName}>
           <div className="flex items-start gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5fb] text-[#123d65]">
+            <div className={iconWrapClassName}>
               <Palette className="h-5 w-5" />
             </div>
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-[#10233f]">
+              <p className="text-sm font-semibold text-[#10233f] dark:text-white">
                 {t("businessProfilePage.content.selectedStyleTitle")}
               </p>
-              <p className="mt-1 text-sm leading-6 text-[#627890]">
+              <p className={`mt-1 ${mutedTextClassName}`}>
                 {t("businessProfilePage.content.selectedStyleDescription", {
                   name:
                     selectedTemplate?.name ??
@@ -785,16 +820,16 @@ const BusinessProfileClient = ({
               </p>
             </div>
           </div>
-          <div className="mt-5 rounded-[1.5rem] border border-[#d7e4f1] bg-[#f8fbff] p-4">
+          <div className={`mt-5 ${nestedSurfaceClassName}`}>
             <div
               className="h-2.5 w-20 rounded-full"
               style={{ backgroundColor: selectedTemplate?.theme.primaryColor }}
             />
-            <p className="mt-4 text-base font-semibold text-[#10233f]">
+            <p className="mt-4 text-base font-semibold text-[#10233f] dark:text-white">
               {selectedTemplate?.name ??
                 t("businessProfilePage.templateFallback")}
             </p>
-            <p className="mt-2 text-sm leading-6 text-[#627890]">
+            <p className={`mt-2 ${mutedTextClassName}`}>
               {selectedTemplate?.description ??
                 t("businessProfilePage.content.selectedStyleFallback")}
             </p>
@@ -804,16 +839,16 @@ const BusinessProfileClient = ({
     }
 
     return (
-      <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur">
+      <section className={infoPanelClassName}>
         <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5fb] text-[#123d65]">
+          <div className={iconWrapClassName}>
             <Palette className="h-5 w-5" />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-[#10233f]">
+            <p className="text-sm font-semibold text-[#10233f] dark:text-white">
               {t("businessProfilePage.content.brandingTitle")}
             </p>
-            <p className="mt-1 text-sm leading-6 text-[#627890]">
+            <p className={`mt-1 ${mutedTextClassName}`}>
               {t("businessProfilePage.content.brandingDescription")}
             </p>
           </div>
@@ -823,15 +858,15 @@ const BusinessProfileClient = ({
           <LogoUploader />
         </div>
 
-        <div className="mt-6 rounded-[1.5rem] border border-[#d7e4f1] bg-[#f8fbff] p-4">
-          <p className="text-sm font-semibold text-[#10233f]">
+        <div className={`mt-6 ${nestedSurfaceClassName}`}>
+          <p className="text-sm font-semibold text-[#10233f] dark:text-white">
             {t("businessProfilePage.content.brandingControlsTitle")}
           </p>
           <div className="mt-4 space-y-3">
             {toggleOptions.map((option) => (
               <label
                 key={option.key}
-                className="flex items-start gap-3 rounded-[1.2rem] border border-white/80 bg-white/90 p-3.5 shadow-[0_18px_36px_-34px_rgba(17,37,63,0.45)]"
+                className="flex items-start gap-3 rounded-[1.2rem] border border-white/80 bg-white/90 p-3.5 shadow-[0_18px_36px_-34px_rgba(17,37,63,0.45)] transition-all duration-200 hover:-translate-y-0.5 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
               >
                 <input
                   type="checkbox"
@@ -839,13 +874,13 @@ const BusinessProfileClient = ({
                   onChange={() =>
                     updateProfile(option.key, !profile[option.key])
                   }
-                  className="mt-1 h-4 w-4 rounded border-[#b9d1e6] text-[#123d65] accent-[#123d65]"
+                  className="mt-1 h-4 w-4 rounded border-[#b9d1e6] text-[#123d65] accent-[#123d65] dark:border-zinc-600 dark:accent-blue-500"
                 />
                 <span className="min-w-0">
-                  <span className="block text-sm font-medium text-[#10233f]">
+                  <span className="block text-sm font-medium text-[#10233f] dark:text-white">
                     {option.label}
                   </span>
-                  <span className="mt-1 block text-sm leading-6 text-[#627890]">
+                  <span className="mt-1 block text-sm leading-6 text-[#627890] dark:text-zinc-400">
                     {option.description}
                   </span>
                 </span>
@@ -870,14 +905,14 @@ const BusinessProfileClient = ({
       subtitle={t("businessProfilePage.subtitle")}
     >
       <div className="mx-auto w-full max-w-[1280px] space-y-6">
-        <section className="rounded-[2rem] border border-white/75 bg-white/78 p-6 shadow-[0_28px_90px_-70px_rgba(17,37,63,0.55)] backdrop-blur-xl sm:p-8">
+        <section className={pageHeroClassName}>
           <div className="flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div className="max-w-3xl">
               <p className="app-kicker">{t("businessProfilePage.kicker")}</p>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[#10233f] sm:text-[2.4rem]">
+              <h2 className={heroTitleClassName}>
                 {t("businessProfilePage.heading")}
               </h2>
-              <p className="mt-3 text-sm leading-6 text-[#627890] sm:text-[0.98rem]">
+              <p className="mt-3 text-sm leading-6 text-[#627890] dark:text-zinc-400 sm:text-[0.98rem]">
                 {currentStepSummary.accent}
               </p>
             </div>
@@ -892,12 +927,12 @@ const BusinessProfileClient = ({
                     key={step.id}
                     aria-current={isActive ? "step" : undefined}
                     className={[
-                      "min-w-[180px] rounded-[1.45rem] border px-4 py-3 transition-all duration-200",
+                      stepCardClassName,
                       isActive
-                        ? "border-[#123d65] bg-[#eef6ff] shadow-[0_20px_40px_-34px_rgba(17,37,63,0.4)]"
+                        ? "border-[#123d65] bg-[#eef6ff] shadow-[0_20px_40px_-34px_rgba(17,37,63,0.4)] dark:border-blue-500 dark:bg-zinc-800 dark:ring-1 dark:ring-blue-500/30 dark:shadow-zinc-950/60"
                         : isCompleted
-                          ? "border-emerald-200 bg-emerald-50/80"
-                          : "border-[#d7e4f1] bg-white/85",
+                          ? "border-emerald-200 bg-emerald-50/80 dark:border-emerald-800 dark:bg-emerald-950/30"
+                          : "border-[#d7e4f1] bg-white/85 dark:border-zinc-800 dark:bg-zinc-900",
                     ].join(" ")}
                   >
                     <div className="flex items-center gap-3">
@@ -905,10 +940,10 @@ const BusinessProfileClient = ({
                         className={[
                           "flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold",
                           isActive
-                            ? "bg-[#123d65] text-white"
+                            ? "bg-[#123d65] text-white dark:bg-blue-600"
                             : isCompleted
                               ? "bg-emerald-600 text-white"
-                              : "bg-[#edf5fb] text-[#7f95ab]",
+                              : "bg-[#edf5fb] text-[#7f95ab] dark:bg-zinc-800 dark:text-zinc-500",
                         ].join(" ")}
                       >
                         {step.id}
@@ -917,10 +952,10 @@ const BusinessProfileClient = ({
                         className={[
                           "text-[0.72rem] font-semibold uppercase tracking-[0.22em]",
                           isActive
-                            ? "text-[#123d65]"
+                            ? "text-[#123d65] dark:text-blue-400"
                             : isCompleted
-                              ? "text-emerald-700"
-                              : "text-[#7f95ab]",
+                              ? "text-emerald-700 dark:text-emerald-300"
+                              : "text-[#7f95ab] dark:text-zinc-500",
                         ].join(" ")}
                       >
                         {step.label}
@@ -937,11 +972,11 @@ const BusinessProfileClient = ({
           <div className="space-y-6">
             {renderLeftPanel()}
 
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.8rem] border border-white/75 bg-white/78 px-5 py-4 shadow-[0_24px_70px_-60px_rgba(17,37,63,0.48)] backdrop-blur-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.8rem] border border-white/75 bg-white/78 px-5 py-4 shadow-[0_24px_70px_-60px_rgba(17,37,63,0.48)] backdrop-blur-xl transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-[0_22px_48px_-34px_rgba(0,0,0,0.72)]">
               <Button
                 type="button"
                 variant="outline"
-                className="rounded-full border-[#d7e4f1] bg-white/90 px-5"
+                className="rounded-full px-5"
                 onClick={() => setCurrentStep((prev) => Math.max(prev - 1, 1))}
                 disabled={currentStep === 1}
               >
@@ -977,23 +1012,23 @@ const BusinessProfileClient = ({
           <div className="space-y-6">
             {renderRightTopCard()}
 
-            <section className="rounded-[2rem] border border-white/70 bg-white/92 p-6 shadow-[0_30px_90px_-65px_rgba(17,37,63,0.55)] backdrop-blur">
+            <section className={infoPanelClassName}>
               <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#edf5fb] text-[#123d65]">
+                <div className={iconWrapClassName}>
                   <Eye className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <h3 className="text-sm font-semibold text-[#10233f]">
+                  <h3 className="text-sm font-semibold text-[#10233f] dark:text-white">
                     {t("businessProfilePage.previewTitle")}
                   </h3>
-                  <p className="mt-1 text-sm leading-6 text-[#627890]">
+                  <p className="mt-1 text-sm leading-6 text-[#627890] dark:text-zinc-400">
                     {t("businessProfilePage.previewDescription")}
                   </p>
                 </div>
               </div>
 
-              <div className="mt-5 rounded-[1.65rem] border border-[#d7e4f1] bg-[linear-gradient(180deg,#fbfdff_0%,#f4f8fc_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
-                <div className="max-h-[72rem] overflow-auto rounded-[1.35rem] border border-white/80 bg-white/92 p-2 shadow-[0_28px_55px_-50px_rgba(17,37,63,0.5)]">
+              <div className={previewFrameClassName}>
+                <div className={previewViewportClassName}>
                   <A4PreviewStack
                     stackKey={`business-profile-${selectedTemplate?.id ?? "template"}-${enabledSections.join(",")}`}
                   >

@@ -8,7 +8,7 @@ import {
   isBusinessTableAvailable,
   isWorkersTableAvailable,
 } from "../lib/authSession.js";
-import { createNotification } from "../services/notification.service.js";
+import { dispatchNotification } from "../services/notification.service.js";
 
 const WORKER_MIGRATION_MESSAGE =
   "Worker management requires the latest database migration. Run Prisma migrations and restart the server.";
@@ -674,7 +674,7 @@ class WorkersController {
     });
 
     if (req.user?.id) {
-      await createNotification({
+      await dispatchNotification({
         userId: req.user.id,
         businessId,
         type: "worker",
@@ -817,7 +817,7 @@ class WorkersController {
     }
 
     if (req.user?.id) {
-      await createNotification({
+      await dispatchNotification({
         userId: req.user.id,
         businessId,
         type: "worker",
@@ -871,7 +871,7 @@ class WorkersController {
     ]);
 
     if (req.user?.id) {
-      await createNotification({
+      await dispatchNotification({
         userId: req.user.id,
         businessId,
         type: "worker",

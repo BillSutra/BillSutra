@@ -189,7 +189,7 @@ const SuggestedPurchasesPanel = ({
                           <p className="mt-1 text-sm font-semibold text-[#1f1b16]">
                             {item.days_until_stockout >= 999
                               ? t("suggestedPurchases.notProjected")
-                              : number(item.days_until_stockout)}
+                              : number(Math.max(item.days_until_stockout, 0))}
                           </p>
                         </div>
                         <div>

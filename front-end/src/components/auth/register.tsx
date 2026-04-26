@@ -1,5 +1,12 @@
 "use client";
-import React, { FormEvent, useActionState, useEffect, useMemo, useState } from "react";
+import React, {
+  FormEvent,
+  useActionState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { registerAction } from "@/actions/authActions";
 import AuthFormField from "@/components/auth/AuthFormField";
@@ -9,7 +16,13 @@ import { signIn } from "next-auth/react";
 import Image from "next/image";
 import { useI18n } from "@/providers/LanguageProvider";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
-import { Eye, EyeOff, LoaderCircle } from "lucide-react";
+import {
+  bootstrapSecureAuthSession,
+  isSecureAuthEnabled,
+} from "@/lib/secureAuth";
+import { captureFrontendException } from "@/lib/observability/shared";
+import { useRouter } from "next/navigation";
+import { Check, Eye, EyeOff, LoaderCircle, X } from "lucide-react";
 
 type RegisterProps = {
   autoFocusFirstField?: boolean;
@@ -17,6 +30,7 @@ type RegisterProps = {
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const INDIAN_PHONE_REGEX = /^(?:\+91|91)?[6-9]\d{9}$/;
+const SPECIAL_CHARACTER_REGEX = /[@$!%*?&]/;
 
 const normalizePhone = (value: string) => value.replace(/[^\d+]/g, "");
 
@@ -30,6 +44,7 @@ const asErrorText = (value: unknown) => {
 
 const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
   const { t } = useI18n();
+  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -37,6 +52,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [isCompletingSignup, setIsCompletingSignup] = useState(false);
   const [touched, setTouched] = useState({
     name: false,
     email: false,
@@ -55,6 +71,60 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
     registerAction,
     initalState,
   );
+
+  const passwordChecks = useMemo(
+    () => [
+      {
+        label: "Minimum 8 characters",
+        met: password.length >= 8,
+      },
+      {
+        label: "At least 1 uppercase letter",
+        met: /[A-Z]/.test(password),
+      },
+      {
+        label: "At least 1 lowercase letter",
+        met: /[a-z]/.test(password),
+      },
+      {
+        label: "At least 1 number",
+        met: /\d/.test(password),
+      },
+      {
+        label: "At least 1 special character",
+        met: SPECIAL_CHARACTER_REGEX.test(password),
+      },
+    ],
+    [password],
+  );
+
+  const passwordStrength = useMemo(() => {
+    const metCount = passwordChecks.filter((rule) => rule.met).length;
+
+    if (metCount <= 2) {
+      return {
+        label: "Weak",
+        barClassName: "bg-red-500",
+        textClassName: "text-red-600",
+      };
+    }
+
+    if (metCount <= 4) {
+      return {
+        label: "Medium",
+        barClassName: "bg-amber-500",
+        textClassName: "text-amber-600",
+      };
+    }
+
+    return {
+      label: "Strong",
+      barClassName: "bg-emerald-500",
+      textClassName: "text-emerald-600",
+    };
+  }, [passwordChecks]);
+
+  const isPasswordStrong = passwordChecks.every((rule) => rule.met);
 
   const validateName = (value: string) => {
     if (!value.trim()) {
@@ -97,8 +167,31 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
       return "Create a password.";
     }
 
-    if (value.length < 8) {
-      return "Password should be at least 8 characters.";
+    const firstUnmetRule = [
+      {
+        test: value.length >= 8,
+        message: "Minimum 8 characters",
+      },
+      {
+        test: /[A-Z]/.test(value),
+        message: "Must include uppercase letter",
+      },
+      {
+        test: /[a-z]/.test(value),
+        message: "Must include lowercase letter",
+      },
+      {
+        test: /\d/.test(value),
+        message: "Must include number",
+      },
+      {
+        test: SPECIAL_CHARACTER_REGEX.test(value),
+        message: "Must include special character",
+      },
+    ].find((rule) => !rule.test);
+
+    if (firstUnmetRule) {
+      return firstUnmetRule.message;
     }
 
     return "";
@@ -136,6 +229,19 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
     Boolean(clientErrors.password) ||
     Boolean(clientErrors.confirm_password);
 
+  const isFormValid = Boolean(
+    name.trim() &&
+      email.trim() &&
+      phone.trim() &&
+      password &&
+      confirmPassword &&
+      !validateName(name) &&
+      !validateEmail(email) &&
+      !validatePhone(phone) &&
+      isPasswordStrong &&
+      !validateConfirmPassword(confirmPassword, password),
+  );
+
   const serverErrors = {
     name: asErrorText(state.errors?.name),
     email: asErrorText(state.errors?.email),
@@ -143,6 +249,61 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
     password: asErrorText(state.errors?.password),
     confirm_password: asErrorText(state.errors?.confirm_password),
   };
+
+  const completeTokenSignup = useCallback(
+    async (
+      rawToken: unknown,
+      options?: {
+        isEmailVerified?: boolean | null;
+      },
+    ) => {
+      if (typeof rawToken !== "string" || !rawToken.trim()) {
+        toast.error("A valid login token was not returned.");
+        return false;
+      }
+
+      const token = rawToken.trim().startsWith("Bearer ")
+        ? rawToken.trim()
+        : `Bearer ${rawToken.trim()}`;
+
+      setIsCompletingSignup(true);
+      try {
+        const result = await signIn("auth-token", {
+          token,
+          redirect: false,
+        });
+
+        if (result?.error) {
+          throw new Error("Unable to create your session.");
+        }
+
+        if (isSecureAuthEnabled()) {
+          await bootstrapSecureAuthSession(token);
+        }
+
+        router.push(
+          options?.isEmailVerified === false ? "/verify-email" : "/dashboard",
+        );
+        router.refresh();
+        return true;
+      } catch (error) {
+        captureFrontendException(error, {
+          tags: {
+            flow: "auth.complete_signup_login",
+          },
+        });
+        const message =
+          error instanceof Error && error.message.trim()
+            ? error.message
+            : "Unable to complete sign in.";
+        toast.error(message);
+        return false;
+      } finally {
+        setIsCompletingSignup(false);
+      }
+    },
+    [router],
+  );
 
   useEffect(() => {
     if (state.status >= 400) {
@@ -155,9 +316,15 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
       captureAnalyticsEvent("auth_signup_succeeded", {
         method: "password",
       });
-      toast.success(state.message || t("auth.registerForm.emailSent"));
+      toast.success(state.message || "Registration successful.");
+      void completeTokenSignup(state.data?.token, {
+        isEmailVerified:
+          typeof state.data?.user?.is_email_verified === "boolean"
+            ? state.data.user.is_email_verified
+            : null,
+      });
     }
-  }, [state, t]);
+  }, [completeTokenSignup, state, t]);
 
   const handleGoogleSignup = () => {
     captureAnalyticsEvent("auth_signup_started", {
@@ -265,7 +432,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           onBlur={() => setTouched((current) => ({ ...current, password: true }))}
           autoComplete="new-password"
           error={clientErrors.password || serverErrors.password}
-          disabled={isRegisterSubmitting}
+          disabled={isRegisterSubmitting || isCompletingSignup}
           rightAdornment={
             <Button
               type="button"
@@ -284,6 +451,40 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           }
         />
 
+        <div className="rounded-xl border border-border/80 bg-muted/30 p-3">
+          <div className="mb-3 flex items-center justify-between text-xs">
+            <span className="font-medium text-foreground">
+              Password strength
+            </span>
+            <span className={passwordStrength.textClassName}>
+              {password ? passwordStrength.label : "Enter a password"}
+            </span>
+          </div>
+          <div className="mb-3 h-2 rounded-full bg-muted">
+            <div
+              className={`h-2 rounded-full transition-all duration-200 ${passwordStrength.barClassName}`}
+              style={{
+                width: `${(passwordChecks.filter((rule) => rule.met).length / passwordChecks.length) * 100}%`,
+              }}
+            />
+          </div>
+          <div className="grid gap-2">
+            {passwordChecks.map((rule) => (
+              <div
+                key={rule.label}
+                className="flex items-center gap-2 text-xs text-muted-foreground"
+              >
+                {rule.met ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                ) : (
+                  <X className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+                <span>{rule.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
         <AuthFormField
           id="confirm_password"
           name="confirm_password"
@@ -297,7 +498,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           }
           autoComplete="new-password"
           error={clientErrors.confirm_password || serverErrors.confirm_password}
-          disabled={isRegisterSubmitting}
+          disabled={isRegisterSubmitting || isCompletingSignup}
           rightAdornment={
             <Button
               type="button"
@@ -319,12 +520,16 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
         <Button
           type="submit"
           className="mt-2 w-full"
-          disabled={isRegisterSubmitting || hasClientError}
+          disabled={
+            isRegisterSubmitting || isCompletingSignup || hasClientError || !isFormValid
+          }
         >
-          {isRegisterSubmitting ? (
+          {isRegisterSubmitting || isCompletingSignup ? (
             <>
               <LoaderCircle className="h-4 w-4 animate-spin" />
-              {t("auth.shared.creatingAccount")}
+              {isCompletingSignup
+                ? "Signing you in..."
+                : t("auth.shared.creatingAccount")}
             </>
           ) : (
             t("auth.shared.createAccount")

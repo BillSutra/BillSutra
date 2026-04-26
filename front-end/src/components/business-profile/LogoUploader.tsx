@@ -27,6 +27,8 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
 
   const { logo, setLogo, removeLogo } = useBusinessLogo();
   const hasLogo = Boolean(logo);
+  const textPrimaryClassName = "text-[#10233f] dark:text-white";
+  const textSecondaryClassName = "text-[#627890] dark:text-zinc-400";
 
   const convertToBase64 = (file: File): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -92,10 +94,10 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <p className="text-sm font-semibold text-[#10233f]">
+        <p className={`text-sm font-semibold ${textPrimaryClassName}`}>
           {t("businessProfilePage.logo.title")}
         </p>
-        <p className="text-sm leading-6 text-[#627890]">
+        <p className={`text-sm leading-6 ${textSecondaryClassName}`}>
           Upload a crisp square or horizontal mark for invoices, portals, and
           branded documents.
         </p>
@@ -117,30 +119,30 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
         onDragLeave={() => setDragOver(false)}
         className={[
           "relative overflow-hidden rounded-[1.75rem] border-2 border-dashed transition-all duration-200",
-          "bg-[linear-gradient(180deg,#fbfdff_0%,#f4f8fc_100%)] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]",
+          "bg-[linear-gradient(180deg,#fbfdff_0%,#f4f8fc_100%)] px-5 py-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] dark:bg-zinc-900 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]",
           dragOver
-            ? "border-[#1d578c] bg-[#eef6ff] shadow-[0_20px_45px_-35px_rgba(17,37,63,0.45)]"
-            : "border-[#cfe0f0] hover:border-[#7aa8d6] hover:bg-[#f8fbff]",
+            ? "border-[#1d578c] bg-[#eef6ff] shadow-[0_20px_45px_-35px_rgba(17,37,63,0.45)] dark:border-blue-500 dark:bg-zinc-800 dark:ring-1 dark:ring-blue-500/30 dark:shadow-zinc-900/50"
+            : "border-[#cfe0f0] hover:border-[#7aa8d6] hover:bg-[#f8fbff] dark:border-zinc-800 dark:hover:border-zinc-600 dark:hover:bg-zinc-800",
           isProcessing ? "pointer-events-none opacity-70" : "cursor-pointer",
         ].join(" ")}
       >
-        <div className="pointer-events-none absolute inset-x-6 top-0 h-20 rounded-b-[2rem] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.9),rgba(255,255,255,0))]" />
+        <div className="pointer-events-none absolute inset-x-6 top-0 h-20 rounded-b-[2rem] bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.9),rgba(255,255,255,0))] dark:bg-[radial-gradient(circle_at_top,rgba(59,130,246,0.14),rgba(24,24,27,0))]" />
         <div className="relative space-y-4">
           <div className="flex items-center justify-between gap-3">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-white/90 px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab]">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-white/90 px-3 py-1 text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-[#7f95ab] dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
               <ImagePlus className="h-3.5 w-3.5" />
               Brand asset
             </span>
-            <span className="text-xs font-medium text-[#7f95ab]">
+            <span className="text-xs font-medium text-[#7f95ab] dark:text-zinc-500">
               {t("businessProfilePage.logo.uploadDescription")}
             </span>
           </div>
 
-          <div className="rounded-[1.5rem] border border-white/80 bg-white/90 p-4 shadow-[0_24px_50px_-42px_rgba(17,37,63,0.45)]">
-            <div className="flex min-h-[15rem] items-center justify-center rounded-[1.35rem] border border-[#d7e4f1] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-5">
+          <div className="rounded-[1.5rem] border border-white/80 bg-white/90 p-4 shadow-[0_24px_50px_-42px_rgba(17,37,63,0.45)] transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-zinc-950/60">
+            <div className="flex min-h-[15rem] items-center justify-center rounded-[1.35rem] border border-[#d7e4f1] bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-5 transition-all duration-200 dark:border-zinc-700 dark:bg-zinc-800">
               {hasLogo && logo ? (
                 <div className="flex w-full flex-col items-center gap-4">
-                  <div className="flex aspect-[4/3] w-full max-w-[16rem] items-center justify-center overflow-hidden rounded-[1.25rem] border border-[#d7e4f1] bg-white p-4 shadow-[0_14px_30px_-26px_rgba(17,37,63,0.45)]">
+                  <div className="flex aspect-[4/3] w-full max-w-[16rem] items-center justify-center overflow-hidden rounded-[1.25rem] border border-[#d7e4f1] bg-white p-4 shadow-[0_14px_30px_-26px_rgba(17,37,63,0.45)] transition-all duration-200 dark:border-zinc-700 dark:bg-zinc-900 dark:shadow-zinc-950/60">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={logo}
@@ -148,21 +150,23 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
                       className="h-full w-full object-contain"
                     />
                   </div>
-                  <p className="max-w-[18rem] text-center text-sm leading-6 text-[#627890]">
+                  <p
+                    className={`max-w-[18rem] text-center text-sm leading-6 ${textSecondaryClassName}`}
+                  >
                     Your uploaded logo will stay proportional and appear on
                     branded invoice layouts automatically.
                   </p>
                 </div>
               ) : (
                 <div className="flex max-w-[18rem] flex-col items-center gap-3 text-center">
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#eaf2fa] text-[#123d65] shadow-[0_12px_26px_-20px_rgba(17,37,63,0.4)]">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#eaf2fa] text-[#123d65] shadow-[0_12px_26px_-20px_rgba(17,37,63,0.4)] dark:bg-zinc-800 dark:text-blue-400 dark:shadow-zinc-950/60">
                     <UploadCloud className="h-6 w-6" />
                   </div>
                   <div className="space-y-1.5">
-                    <p className="text-base font-semibold text-[#10233f]">
+                    <p className={`text-base font-semibold ${textPrimaryClassName}`}>
                       {t("businessProfilePage.logo.uploadTitle")}
                     </p>
-                    <p className="text-sm leading-6 text-[#627890]">
+                    <p className={`text-sm leading-6 ${textSecondaryClassName}`}>
                       Drag and drop your logo here, or click to choose a file.
                     </p>
                   </div>
@@ -172,8 +176,8 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
           </div>
 
           {isProcessing ? (
-            <div className="absolute inset-0 flex items-center justify-center rounded-[1.75rem] bg-white/78 backdrop-blur-sm">
-              <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#123d65] border-t-transparent" />
+            <div className="absolute inset-0 flex items-center justify-center rounded-[1.75rem] bg-white/78 backdrop-blur-sm dark:bg-zinc-950/75">
+              <div className="h-7 w-7 animate-spin rounded-full border-2 border-[#123d65] border-t-transparent dark:border-blue-500 dark:border-t-transparent" />
             </div>
           ) : null}
         </div>
@@ -194,7 +198,7 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
         <Button
           type="button"
           variant="outline"
-          className="rounded-full border-[#d7e4f1] bg-white/90"
+          className="rounded-full border-[#d7e4f1] bg-white/90 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
           onClick={openPicker}
           disabled={isProcessing}
         >
@@ -205,7 +209,7 @@ const LogoUploader = ({ onLogoChange }: LogoUploaderProps) => {
           <Button
             type="button"
             variant="outline"
-            className="rounded-full border-red-200 bg-red-50/70 text-red-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+            className="rounded-full border-red-200 bg-red-50/70 text-red-600 hover:border-red-300 hover:bg-red-50 hover:text-red-700 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-300 dark:hover:border-red-800 dark:hover:bg-red-950/60 dark:hover:text-red-200"
             onClick={handleRemove}
             disabled={isProcessing}
           >

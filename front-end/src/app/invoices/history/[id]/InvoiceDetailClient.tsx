@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Clock3,
@@ -25,7 +25,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Modal from "@/components/ui/modal";
-import { fetchBusinessProfile, sendInvoiceEmail } from "@/lib/apiClient";
+import {
+  fetchBusinessProfile,
+  sendInvoiceEmail,
+  type PaymentInput,
+} from "@/lib/apiClient";
 import {
   formatPaymentMethodLabel,
   getInvoicePaymentSnapshot,
@@ -41,6 +45,7 @@ import { resolveBackendAssetUrl } from "@/lib/backendAssetUrl";
 import {
   useCreatePaymentMutation,
   useInvoiceQuery,
+  useUpdatePaymentMutation,
   useUpdateInvoiceMutation,
 } from "@/hooks/useInventoryQueries";
 import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
@@ -70,6 +75,28 @@ const DEFAULT_INVOICE_THEME: InvoiceTheme = {
   tableStyle: "grid",
 };
 
+const PAYMENT_METHOD_OPTIONS: Array<NonNullable<PaymentInput["method"]>> = [
+  "CASH",
+  "CARD",
+  "BANK_TRANSFER",
+  "UPI",
+  "CHEQUE",
+  "OTHER",
+];
+
+const toDateInputValue = (value?: string | null) => {
+  if (!value) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  return parsed.toISOString().slice(0, 10);
+};
+
 type InvoiceDetailClientProps = {
   name: string;
   image?: string;
@@ -78,17 +105,28 @@ type InvoiceDetailClientProps = {
 const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   const params = useParams();
   const id = Number(params?.id);
+  const queryClient = useQueryClient();
   const { formatCurrency, formatDate, t, safeT } = useI18n();
-  const { data, isLoading, isError } = useInvoiceQuery(id);
+  const { data, isLoading, isError, refetch: refetchInvoice } = useInvoiceQuery(id);
   const { data: businessProfile } = useQuery({
     queryKey: ["business-profile"],
     queryFn: fetchBusinessProfile,
   });
   const updateInvoice = useUpdateInvoiceMutation();
   const createPayment = useCreatePaymentMutation();
+  const updatePayment = useUpdatePaymentMutation();
   const [partialOpen, setPartialOpen] = useState(false);
   const [partialAmount, setPartialAmount] = useState("");
   const [partialError, setPartialError] = useState<string | null>(null);
+  const [paymentEditOpen, setPaymentEditOpen] = useState(false);
+  const [editingPaymentId, setEditingPaymentId] = useState<number | null>(null);
+  const [editingPaymentAmount, setEditingPaymentAmount] = useState("");
+  const [editingPaymentMethod, setEditingPaymentMethod] =
+    useState<NonNullable<PaymentInput["method"]>>("CASH");
+  const [editingPaymentDate, setEditingPaymentDate] = useState(
+    toDateInputValue(),
+  );
+  const [paymentEditError, setPaymentEditError] = useState<string | null>(null);
   const [invoiceEmailOpen, setInvoiceEmailOpen] = useState(false);
   const [invoiceEmailRecipient, setInvoiceEmailRecipient] = useState("");
   const [invoiceEmailError, setInvoiceEmailError] = useState<string | null>(
@@ -177,6 +215,12 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
       return rightTime - leftTime;
     });
   }, [data]);
+
+  const editingPayment = useMemo(
+    () =>
+      paymentHistory.find((payment) => payment.id === editingPaymentId) ?? null,
+    [editingPaymentId, paymentHistory],
+  );
 
   const formatLocalizedPaymentMethod = useCallback(
     (method?: Parameters<typeof formatPaymentMethodLabel>[0]) => {
@@ -498,6 +542,72 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
     }
   };
 
+  const openEditPaymentModal = useCallback(
+    (payment: (typeof paymentHistory)[number]) => {
+      setEditingPaymentId(payment.id);
+      setEditingPaymentAmount(String(Number(payment.amount ?? 0)));
+      setEditingPaymentMethod(
+        payment.method && PAYMENT_METHOD_OPTIONS.includes(payment.method)
+          ? payment.method
+          : "CASH",
+      );
+      setEditingPaymentDate(toDateInputValue(payment.paid_at));
+      setPaymentEditError(null);
+      setPaymentEditOpen(true);
+    },
+    [],
+  );
+
+  const closeEditPaymentModal = useCallback(() => {
+    setPaymentEditOpen(false);
+    setEditingPaymentId(null);
+    setEditingPaymentAmount("");
+    setEditingPaymentMethod("CASH");
+    setEditingPaymentDate(toDateInputValue());
+    setPaymentEditError(null);
+  }, []);
+
+  const handleUpdatePayment = async () => {
+    if (!data || editingPaymentId === null) return;
+
+    const amount = Number(editingPaymentAmount);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setPaymentEditError("Payment amount must be zero or greater.");
+      return;
+    }
+
+    const paidAt = new Date(editingPaymentDate);
+    if (Number.isNaN(paidAt.getTime())) {
+      setPaymentEditError("Choose a valid payment date.");
+      return;
+    }
+
+    try {
+      await updatePayment.mutateAsync({
+        id: editingPaymentId,
+        payload: {
+          amount,
+          method: editingPaymentMethod,
+          paid_at: paidAt.toISOString(),
+        },
+      });
+      await Promise.all([
+        refetchInvoice(),
+        queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        queryClient.invalidateQueries({ queryKey: ["payments"] }),
+      ]);
+      toast.success("Payment updated successfully");
+      closeEditPaymentModal();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update payment";
+      setPaymentEditError(message);
+      toast.error("Failed to update payment");
+    }
+  };
+
   const handleMarkPaid = async () => {
     if (!data || !paymentSnapshot) return;
 
@@ -769,8 +879,18 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                               {formatLocalizedPaymentMethod(payment.method)}
                             </p>
                           </div>
-                          <div className="text-right text-sm text-slate-500 dark:text-slate-400">
-                            <p>{invoiceDate(payment.paid_at)}</p>
+                          <div className="flex items-center gap-3">
+                            <div className="text-right text-sm text-slate-500 dark:text-slate-400">
+                              <p>{invoiceDate(payment.paid_at)}</p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9 rounded-xl"
+                              onClick={() => openEditPaymentModal(payment)}
+                            >
+                              Edit
+                            </Button>
                           </div>
                         </div>
                       ))}
@@ -901,6 +1021,107 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                 {invoiceEmailSending
                   ? t("invoiceDetail.sending")
                   : t("invoiceDetail.sendEmail")}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+
+        <Modal
+          open={paymentEditOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              closeEditPaymentModal();
+              return;
+            }
+
+            setPaymentEditOpen(true);
+          }}
+          title="Update Payment"
+          description={
+            editingPayment
+              ? `Update payment #${editingPayment.id} and sync invoice totals automatically.`
+              : "Update the payment details."
+          }
+        >
+          <div className="grid gap-4">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+              <p>
+                Invoice total: {formatCurrency(paymentSnapshot?.total ?? 0, "INR")}
+              </p>
+              <p className="mt-1">
+                Current paid: {formatCurrency(paymentSnapshot?.paid ?? 0, "INR")}
+              </p>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-payment-amount">Amount</Label>
+              <Input
+                id="edit-payment-amount"
+                type="number"
+                min="0"
+                step="0.01"
+                value={editingPaymentAmount}
+                onChange={(event) => {
+                  setEditingPaymentAmount(event.target.value);
+                  setPaymentEditError(null);
+                }}
+                placeholder="Enter payment amount"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-payment-method">Method</Label>
+              <select
+                id="edit-payment-method"
+                value={editingPaymentMethod}
+                onChange={(event) => {
+                  setEditingPaymentMethod(
+                    event.target.value as NonNullable<PaymentInput["method"]>,
+                  );
+                  setPaymentEditError(null);
+                }}
+                className="app-field h-11 w-full rounded-xl px-3 py-2"
+              >
+                {PAYMENT_METHOD_OPTIONS.map((method) => (
+                  <option key={method} value={method}>
+                    {formatLocalizedPaymentMethod(method)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="edit-payment-date">Payment date</Label>
+              <Input
+                id="edit-payment-date"
+                type="date"
+                value={editingPaymentDate}
+                onChange={(event) => {
+                  setEditingPaymentDate(event.target.value);
+                  setPaymentEditError(null);
+                }}
+              />
+            </div>
+
+            {paymentEditError ? (
+              <p className="text-sm text-[#b45309]">{paymentEditError}</p>
+            ) : null}
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={closeEditPaymentModal}
+                disabled={updatePayment.isPending}
+              >
+                {t("common.cancel")}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleUpdatePayment()}
+                disabled={updatePayment.isPending}
+              >
+                {updatePayment.isPending ? "Updating..." : "Update Payment"}
               </Button>
             </div>
           </div>

@@ -5,6 +5,7 @@ import {
 } from "@prisma/client";
 import prisma from "../config/db.config.js";
 import { getInventoryInsights } from "./inventoryInsights.service.js";
+import { enqueueNotificationCreation } from "../queues/jobs/notification.jobs.js";
 
 const PAYMENT_DUE_LOOKAHEAD_DAYS = 2;
 const SUBSCRIPTION_WARNING_DAYS = 5;
@@ -152,6 +153,15 @@ export const createNotification = async ({
     }
     throw error;
   }
+};
+
+export const dispatchNotification = async (input: CreateNotificationInput) => {
+  const queued = await enqueueNotificationCreation(input);
+  if (queued.queued) {
+    return null;
+  }
+
+  return createNotification(input);
 };
 
 export const listNotifications = async (userId: number, limit = 10) => {
@@ -306,7 +316,7 @@ export const syncNotifications = async (params: {
       dueInvoices
         .filter((invoice) => invoice.due_date)
         .map((invoice) =>
-          createNotification({
+          dispatchNotification({
             userId,
             businessId,
             type: "payment",
@@ -325,7 +335,7 @@ export const syncNotifications = async (params: {
         )
         .slice(0, 15)
         .map((insight) =>
-          createNotification({
+          dispatchNotification({
             userId,
             businessId,
             type: "inventory",
@@ -348,7 +358,7 @@ export const syncNotifications = async (params: {
     subscription.status !== SubscriptionStatus.EXPIRED &&
     subscriptionEnd <= subscriptionThreshold
   ) {
-    await createNotification({
+    await dispatchNotification({
       userId,
       businessId,
       type: "subscription",

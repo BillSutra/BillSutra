@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import { API_URL, ADMIN_LOGIN_URL } from "./apiEndPoints";
-import { getStoredAdminToken } from "./adminAuth";
+import { clearAdminToken, getStoredAdminToken } from "./adminAuth";
 
 export type AdminLoginResponse = {
   user: {
@@ -11,6 +11,7 @@ export type AdminLoginResponse = {
     role: "SUPER_ADMIN";
   };
   token: string;
+  expiresAt?: number;
 };
 
 export type AdminBusinessSummary = {
@@ -106,6 +107,7 @@ export type AdminAccessPaymentRecord = {
   status: "pending" | "approved" | "rejected" | "success";
   name?: string | null;
   utr?: string | null;
+  proofFileId?: string | null;
   proofUrl?: string | null;
   proofMimeType?: string | null;
   proofOriginalName?: string | null;
@@ -129,9 +131,12 @@ export type AdminAccessPaymentRecord = {
 
 const adminApiClient = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
 });
 
 adminApiClient.interceptors.request.use((config) => {
+  config.withCredentials = true;
+
   if (typeof window !== "undefined") {
     const token = getStoredAdminToken();
     if (token) {
@@ -144,12 +149,35 @@ adminApiClient.interceptors.request.use((config) => {
   return config;
 });
 
+adminApiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (typeof window !== "undefined") {
+      const status = Number(error?.response?.status ?? 0);
+      if (status === 401 || status === 403) {
+        clearAdminToken();
+        if (!window.location.pathname.startsWith("/admin/login")) {
+          window.location.assign("/admin/login");
+        }
+      }
+    }
+
+    return Promise.reject(error);
+  },
+);
+
 export const loginSuperAdmin = async (payload: {
   email: string;
   password: string;
 }) => {
-  const response = await axios.post(ADMIN_LOGIN_URL, payload);
+  const response = await axios.post(ADMIN_LOGIN_URL, payload, {
+    withCredentials: true,
+  });
   return response.data.data as AdminLoginResponse;
+};
+
+export const logoutSuperAdmin = async () => {
+  await adminApiClient.post("/admin/logout");
 };
 
 export const fetchAdminBusinesses = async () => {

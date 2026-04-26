@@ -4,15 +4,51 @@ Configuration for the Face Recognition Service
 import os
 from pathlib import Path
 
+
+def _parse_bool(value: str, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_allowed_origins():
+    raw_origins = (
+        os.getenv("FACE_SERVICE_ALLOWED_ORIGINS")
+        or os.getenv("FRONTEND_URL")
+        or os.getenv("APP_URL")
+        or os.getenv("CLIENT_URL")
+        or "http://localhost:3000,http://127.0.0.1:3000"
+    )
+
+    origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+    return origins or ["http://localhost:3000", "http://127.0.0.1:3000"]
+
 # Service Configuration
 SERVICE_PORT = int(os.getenv("FACE_SERVICE_PORT", 5001))
 SERVICE_HOST = os.getenv("FACE_SERVICE_HOST", "localhost")
 DEBUG_MODE = os.getenv("DEBUG_MODE", "False").lower() == "true"
 REQUEST_TIMEOUT = 30  # seconds for request processing timeout
+ALLOWED_ORIGINS = _parse_allowed_origins()
+FACE_SERVICE_API_KEY = os.getenv("FACE_SERVICE_API_KEY", "").strip()
+FACE_SERVICE_ENFORCE_API_KEY = _parse_bool(
+    os.getenv("FACE_SERVICE_ENFORCE_API_KEY", "false"),
+    default=False,
+)
+FACE_SERVICE_ENFORCE_INTERNAL_CLIENT = _parse_bool(
+    os.getenv("FACE_SERVICE_ENFORCE_INTERNAL_CLIENT", "false"),
+    default=False,
+)
+FACE_SERVICE_INTERNAL_CLIENT_HEADER = "X-Face-Service-Client"
+FACE_SERVICE_INTERNAL_CLIENT_VALUE = os.getenv(
+    "FACE_SERVICE_INTERNAL_CLIENT_VALUE",
+    "billsutra-backend",
+).strip() or "billsutra-backend"
 
 # Face Recognition Parameters
-FACE_RECOGNITION_DISTANCE_THRESHOLD = 0.45
-MIN_CONFIDENCE_LEVEL = 0.82
+FACE_RECOGNITION_DISTANCE_THRESHOLD = float(
+    os.getenv("FACE_RECOGNITION_DISTANCE_THRESHOLD", "0.60")
+)
+MIN_CONFIDENCE_LEVEL = float(os.getenv("MIN_CONFIDENCE_LEVEL", "0.70"))
 MAX_FACE_DETECTION_ATTEMPTS = 5
 FACE_DETECTION_TIMEOUT = 30
 

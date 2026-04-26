@@ -7,7 +7,11 @@ const PurchasesPage = async () => {
   const name = session?.user?.name?.trim() ?? "";
 
   return (
-    <PurchasesClient name={name} image={session?.user?.image || undefined} />
+    <PurchasesClient
+      name={name}
+      image={session?.user?.image || undefined}
+      mode="dashboard"
+    />
   );
 };
 

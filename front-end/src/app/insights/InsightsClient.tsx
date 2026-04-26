@@ -3,7 +3,6 @@
 import React, {
   startTransition,
   useDeferredValue,
-  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -126,15 +125,6 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
     token.trim().length > 0 &&
     token !== "undefined" &&
     token !== "null";
-
-  useEffect(() => {
-    if (!hasValidSessionToken) {
-      window.localStorage.removeItem("token");
-      return;
-    }
-
-    window.localStorage.setItem("token", token);
-  }, [hasValidSessionToken, token]);
 
   useDashboardRealtime({
     enabled: hydrated && hasValidSessionToken && DASHBOARD_REALTIME_ENABLED,

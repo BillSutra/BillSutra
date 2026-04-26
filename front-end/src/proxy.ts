@@ -27,7 +27,13 @@ export async function proxy(request: NextRequest) {
       return NextResponse.next();
     }
 
-    return NextResponse.redirect(new URL("/admin/login", request.url));
+    // Transitional admin auth rollout:
+    // the previous route guard depended on a JS-readable cookie. New admin
+    // sessions use backend-set HttpOnly cookies, which are intentionally not
+    // available to this frontend proxy. We therefore allow the route through
+    // and let the protected backend API decide auth, while still honoring the
+    // legacy cookie if it exists.
+    return NextResponse.next();
   }
 
   const token = await getToken({
@@ -42,6 +48,14 @@ export async function proxy(request: NextRequest) {
   }
 
   const role = (token as { user?: { role?: string } } | null)?.user?.role;
+  const isEmailVerified = (
+    token as { user?: { is_email_verified?: boolean | null } } | null
+  )?.user?.is_email_verified;
+
+  if (role !== "WORKER" && isEmailVerified === false) {
+    return NextResponse.redirect(new URL("/verify-email", request.url));
+  }
+
   if (pathname.startsWith("/workers") && role !== "ADMIN") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }

@@ -17,6 +17,11 @@ import {
   captureAnalyticsEvent,
   resetAnalyticsUser,
 } from "@/lib/observability/client";
+import { logoutCurrentSession } from "@/lib/apiClient";
+import {
+  clearLegacyStoredToken,
+  clearSecureAuthBootstrapped,
+} from "@/lib/secureAuth";
 
 const LogoutModal = ({
   open,
@@ -27,12 +32,20 @@ const LogoutModal = ({
 }) => {
   const { t } = useI18n();
 
-  const logoutUser = () => {
+  const logoutUser = async () => {
     captureAnalyticsEvent("auth_logout", {
       source: "logout_modal",
     });
     resetAnalyticsUser();
-    signOut({
+    try {
+      await logoutCurrentSession();
+    } catch {
+      // Best-effort: NextAuth sign-out should still proceed even if the
+      // transitional backend logout endpoint is temporarily unavailable.
+    }
+    clearLegacyStoredToken();
+    clearSecureAuthBootstrapped();
+    await signOut({
       callbackUrl: "/login",
       redirect: true,
     });

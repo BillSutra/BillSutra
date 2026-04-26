@@ -37,8 +37,8 @@ const InventoryPredictionDrawer = ({
 
   const purchaseHref =
     inventoryItem && prediction
-      ? `/purchases?productId=${inventoryItem.product.id}&warehouseId=${inventoryItem.warehouse.id}&quantity=${prediction.recommended_reorder_quantity}&unitCost=${prediction.unit_cost}&productLabel=${encodeURIComponent(`${inventoryItem.product.name} - ${inventoryItem.product.sku}`)}`
-      : "/purchases";
+      ? `/purchases/new?productId=${inventoryItem.product.id}&warehouseId=${inventoryItem.warehouse.id}&quantity=${prediction.recommended_reorder_quantity}&unitCost=${prediction.unit_cost}&productLabel=${encodeURIComponent(`${inventoryItem.product.name} - ${inventoryItem.product.sku}`)}`
+      : "/purchases/new";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

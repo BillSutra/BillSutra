@@ -458,6 +458,13 @@ class FaceRecognitionEngine:
             confidence = float(np.clip(confidence, 0, 1))
 
             self.logger.debug(f"Face distance: {face_distance:.4f}, Confidence: {confidence:.4f}")
+            self.logger.info(
+                "Face similarity score | distance=%.4f | confidence=%.4f | threshold=%.4f | min_confidence=%.4f",
+                face_distance,
+                confidence,
+                FACE_RECOGNITION_DISTANCE_THRESHOLD,
+                MIN_CONFIDENCE_LEVEL,
+            )
 
             matched = face_distance < FACE_RECOGNITION_DISTANCE_THRESHOLD
 

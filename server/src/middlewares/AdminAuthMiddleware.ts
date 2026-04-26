@@ -1,28 +1,41 @@
 import jwt from "jsonwebtoken";
 import type { NextFunction, Request, Response } from "express";
+import { parseCookies } from "../lib/authCookies.js";
 
-const AdminAuthMiddleware = (
+const ADMIN_AUTH_COOKIE_NAME = "bill_sutra_admin_session";
+
+const getAdminTokenFromRequest = (req: Request) => {
+  const authHeader = req.headers.authorization;
+  const headerToken =
+    typeof authHeader === "string" &&
+    authHeader.trim().toLowerCase().startsWith("bearer ")
+      ? authHeader.trim().slice("bearer ".length).trim()
+      : null;
+
+  const cookieToken =
+    parseCookies(req.headers.cookie).get(ADMIN_AUTH_COOKIE_NAME) ?? null;
+
+  return {
+    headerToken,
+    cookieToken,
+  };
+};
+
+const verifyAdminToken = (
+  token: string,
   req: Request,
   res: Response,
   next: NextFunction,
-): void => {
-  const authHeader = req.headers.authorization;
-
-  if (!authHeader) {
-    res.status(401).json({ status: 401, message: "Unauthorized" });
-    return;
-  }
-
-  const token = authHeader.split(" ")[1];
-
-  if (!token) {
-    res.status(401).json({ status: 401, message: "Unauthorized" });
-    return;
-  }
-
+) => {
   jwt.verify(token, process.env.JWT_SECRET as string, (error, decoded) => {
     if (error || !decoded || typeof decoded === "string") {
-      res.status(401).json({ status: 401, message: "Unauthorized" });
+      res.status(401).json({
+        status: 401,
+        message:
+          error instanceof jwt.TokenExpiredError
+            ? "Session expired. Please login again."
+            : "Unauthorized",
+      });
       return;
     }
 
@@ -46,6 +59,26 @@ const AdminAuthMiddleware = (
 
     next();
   });
+};
+
+const AdminAuthMiddleware = (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void => {
+  const { headerToken, cookieToken } = getAdminTokenFromRequest(req);
+
+  if (headerToken) {
+    verifyAdminToken(headerToken, req, res, next);
+    return;
+  }
+
+  if (cookieToken) {
+    verifyAdminToken(cookieToken, req, res, next);
+    return;
+  }
+
+  res.status(401).json({ status: 401, message: "Unauthorized" });
 };
 
 export default AdminAuthMiddleware;

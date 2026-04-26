@@ -19,6 +19,10 @@ export type AuthSuccessPayload = {
   token: string;
 };
 
+export type EmailVerificationResult = AuthSuccessPayload & {
+  expiresAt?: number;
+};
+
 export type PasskeyCredentialRecord = {
   id: number;
   label: string;
@@ -57,7 +61,11 @@ const extractMessage = (error: unknown, fallback: string) => {
 
 export const requestOtpLoginCode = async (email: string) => {
   try {
-    const response = await axios.post(`${API_URL}/auth/otp/send`, { email });
+    const response = await axios.post(
+      `${API_URL}/auth/otp/send`,
+      { email },
+      { withCredentials: true },
+    );
     return response.data.data as { retryAfter: number; expiresIn: number };
   } catch (error) {
     const nextError = new Error(
@@ -81,6 +89,8 @@ export const verifyOtpLoginCode = async (email: string, code: string) => {
     const response = await axios.post(`${API_URL}/auth/otp/verify`, {
       email,
       code,
+    }, {
+      withCredentials: true,
     });
     return (response.data.data ?? response.data) as AuthSuccessPayload;
   } catch (error) {
@@ -95,6 +105,7 @@ export const requestPasskeyAuthenticationOptions = async <TOptions>(
     const response = await axios.post(
       `${API_URL}/auth/passkeys/authenticate/options`,
       { email },
+      { withCredentials: true },
     );
     return response.data.data as PasskeyOptionsResponse<TOptions>;
   } catch (error) {
@@ -117,6 +128,7 @@ export const verifyPasskeyAuthentication = async (
         challenge_id: challengeId,
         response: responsePayload,
       },
+      { withCredentials: true },
     );
     return (response.data.data ?? response.data) as AuthSuccessPayload;
   } catch (error) {
@@ -170,5 +182,37 @@ export const removePasskey = async (id: number) => {
     await apiClient.delete(`/auth/passkeys/${id}`);
   } catch (error) {
     throw new Error(extractMessage(error, "Unable to remove passkey."));
+  }
+};
+
+export const verifyEmailAddress = async (token: string) => {
+  try {
+    const response = await axios.get(`${API_URL}/auth/verify-email`, {
+      params: { token },
+      withCredentials: true,
+    });
+    return (response.data.data ?? response.data) as EmailVerificationResult;
+  } catch (error) {
+    throw new Error(extractMessage(error, "Unable to verify email."));
+  }
+};
+
+export const resendVerificationEmail = async () => {
+  try {
+    const response = await apiClient.post("/auth/resend-verification");
+    return response.data.data as { retryAfter?: number } | undefined;
+  } catch (error) {
+    const nextError = new Error(
+      extractMessage(error, "Unable to resend verification email."),
+    ) as RetryableError;
+
+    if (axios.isAxiosError(error)) {
+      const data = error.response?.data as
+        | { data?: { retryAfter?: number } }
+        | undefined;
+      nextError.retryAfter = data?.data?.retryAfter;
+    }
+
+    throw nextError;
   }
 };

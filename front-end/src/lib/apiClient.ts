@@ -26,37 +26,78 @@ import {
 import { normalizeListResponse } from "./normalizeListResponse";
 import { captureApiFailure } from "./observability/shared";
 import { normalizeGstin } from "./gstin";
-
-const normalizeAuthToken = (rawToken: string | null | undefined) => {
-  if (!rawToken) return null;
-  const token = rawToken.trim();
-  if (!token) return null;
-  if (token === "undefined" || token === "null") return null;
-  if (token === "Bearer undefined" || token === "Bearer null") return null;
-  return token;
-};
+import {
+  bootstrapSecureAuthSession,
+  clearLegacyStoredToken,
+  clearSecureAuthBootstrapped,
+  getLegacyStoredToken,
+  hasSecureAuthBootstrap,
+  isAuthTokenExpired,
+  isSecureAuthSessionExpired,
+  isCookieOnlyAuthEnabled,
+  isSecureAuthEnabled,
+  normalizeAuthToken,
+  refreshSecureAuthSession,
+  requestClientLogout,
+  setLegacyStoredToken,
+} from "./secureAuth";
 
 export const apiClient = axios.create({
   baseURL: API_URL,
+  withCredentials: true,
 });
+
+const isFaceAuthenticationRequest = (requestUrl: string) =>
+  requestUrl.includes("/face/authenticate");
 
 apiClient.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
-    let token = normalizeAuthToken(window.localStorage.getItem("token"));
+    config.withCredentials = true;
+    const secureAuthEnabled = isSecureAuthEnabled();
+    const secureCookieReady = secureAuthEnabled && hasSecureAuthBootstrap();
+    const secureCookieExpired =
+      secureCookieReady && isSecureAuthSessionExpired();
+    const session = !isCookieOnlyAuthEnabled() ? await getSession() : null;
+    const sessionToken = normalizeAuthToken(
+      (session?.user as { token?: string } | undefined)?.token ?? null,
+    );
 
-    if (!token) {
-      const session = await getSession();
-      token = normalizeAuthToken(
-        (session?.user as { token?: string } | undefined)?.token ?? null,
-      );
-      if (token) {
-        window.localStorage.setItem("token", token);
+    let token =
+      !secureCookieReady || !secureAuthEnabled
+        ? sessionToken ?? getLegacyStoredToken()
+        : null;
+
+    if (sessionToken) {
+      setLegacyStoredToken(sessionToken);
+    } else if (!token) {
+      clearLegacyStoredToken();
+    }
+
+    if (secureCookieExpired) {
+      const refreshed = await refreshSecureAuthSession();
+      if (!refreshed) {
+        requestClientLogout("refresh_expired");
+        return Promise.reject(new axios.CanceledError("Session expired"));
+      }
+    } else if (!secureCookieReady && token && isAuthTokenExpired(token)) {
+      if (secureAuthEnabled) {
+        const refreshed = await refreshSecureAuthSession();
+        if (refreshed) {
+          if (config.headers?.Authorization) {
+            delete config.headers.Authorization;
+          }
+          return config;
+        }
+
+        requestClientLogout("refresh_expired");
+        return Promise.reject(new axios.CanceledError("Session expired"));
       } else {
-        window.localStorage.removeItem("token");
+        requestClientLogout("token_expired");
+        return Promise.reject(new axios.CanceledError("Session expired"));
       }
     }
 
-    if (token) {
+    if (!secureCookieReady && token && !isAuthTokenExpired(token)) {
       const header = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
       config.headers.Authorization = header;
     } else if (config.headers?.Authorization) {
@@ -68,7 +109,7 @@ apiClient.interceptors.request.use(async (config) => {
 
 apiClient.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     captureApiFailure(error);
 
     if (typeof window !== "undefined") {
@@ -100,6 +141,92 @@ apiClient.interceptors.response.use(
             },
           }),
         );
+      }
+
+      const originalRequest = error?.config as
+        | (typeof error.config & { _retry?: boolean })
+        | undefined;
+      const requestUrl =
+        typeof originalRequest?.url === "string" ? originalRequest.url : "";
+      const isRefreshRequest =
+        requestUrl.includes("/auth/refresh") ||
+        requestUrl.includes("/auth/logout") ||
+        requestUrl.includes("/auth/session/bootstrap");
+      const isFaceAuthRequest = isFaceAuthenticationRequest(requestUrl);
+
+      if (
+        isSecureAuthEnabled() &&
+        status === 401 &&
+        !isRefreshRequest &&
+        !isFaceAuthRequest &&
+        originalRequest &&
+        !originalRequest._retry
+      ) {
+        originalRequest._retry = true;
+
+        try {
+          const refreshed = await refreshSecureAuthSession();
+          if (!refreshed) {
+            throw new Error("Unable to refresh session");
+          }
+
+          if (originalRequest.headers?.Authorization) {
+            delete originalRequest.headers.Authorization;
+          }
+
+          originalRequest.withCredentials = true;
+          return apiClient(originalRequest);
+        } catch (refreshError) {
+          captureApiFailure(refreshError);
+
+          clearSecureAuthBootstrapped();
+          const session = await getSession();
+          const sessionToken = normalizeAuthToken(
+            (session?.user as { token?: string } | undefined)?.token ?? null,
+          );
+
+          if (sessionToken && !isAuthTokenExpired(sessionToken)) {
+            setLegacyStoredToken(sessionToken);
+
+            const bootstrapped = await bootstrapSecureAuthSession(sessionToken);
+            if (bootstrapped) {
+              if (originalRequest.headers?.Authorization) {
+                delete originalRequest.headers.Authorization;
+              }
+
+              originalRequest.withCredentials = true;
+              return apiClient(originalRequest);
+            }
+
+            originalRequest.headers = originalRequest.headers ?? {};
+            originalRequest.headers.Authorization = sessionToken.startsWith(
+              "Bearer ",
+            )
+              ? sessionToken
+              : `Bearer ${sessionToken}`;
+            originalRequest.withCredentials = true;
+            return apiClient(originalRequest);
+          }
+
+          const legacyToken = getLegacyStoredToken();
+          if (legacyToken && !isAuthTokenExpired(legacyToken)) {
+            originalRequest.headers = originalRequest.headers ?? {};
+            originalRequest.headers.Authorization = legacyToken.startsWith(
+              "Bearer ",
+            )
+              ? legacyToken
+              : `Bearer ${legacyToken}`;
+            originalRequest.withCredentials = true;
+            return apiClient(originalRequest);
+          }
+
+          clearLegacyStoredToken();
+          requestClientLogout("refresh_expired");
+        }
+      }
+
+      if (status === 401 && !isRefreshRequest && !isFaceAuthRequest) {
+        requestClientLogout("unauthorized");
       }
     }
 
@@ -588,12 +715,16 @@ export type WorkerHistoryParams = {
 export type Purchase = {
   id: number;
   purchase_date: string;
+  supplierId?: number | null;
+  warehouseId?: number | null;
   subtotal: string;
   tax: string;
   total: string;
   totalAmount: number;
   paidAmount: number;
   pendingAmount: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
   paymentStatus: "PAID" | "PARTIALLY_PAID" | "UNPAID";
   paymentDate?: string | null;
   paymentMethod?:
@@ -609,13 +740,31 @@ export type Purchase = {
   warehouse?: { id: number; name: string } | null;
   items: Array<{
     id: number;
+    purchaseId?: number | null;
     product_id?: number | null;
+    productId?: number | null;
     name: string;
     quantity: number;
     unit_cost: string;
+    costPrice?: number;
     tax_rate?: string | null;
     line_total: string;
+    total?: number;
   }>;
+};
+
+export type PurchaseListParams = {
+  page?: number;
+  limit?: number;
+  search?: string | null;
+};
+
+export type PurchaseListResponse = {
+  purchases: Purchase[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 };
 
 export type PurchaseInput = {
@@ -706,6 +855,7 @@ export type Invoice = {
   date: string;
   due_date?: string | null;
   status: string;
+  computedStatus?: "PAID" | "PARTIAL" | "UNPAID";
   subtotal: string;
   total_base?: string | null;
   tax: string;
@@ -720,6 +870,7 @@ export type Invoice = {
   total: string;
   grand_total?: string | null;
   notes?: string | null;
+  totalPaid?: number;
   customer?: Customer | null;
   payments: Array<{
     id: number;
@@ -1065,6 +1216,8 @@ export type PaymentInput = {
   paid_at?: string | Date;
 };
 
+export type PaymentUpdateInput = Partial<Omit<PaymentInput, "invoice_id">>;
+
 export type AccessPaymentRecord = {
   id: string;
   userId: number;
@@ -1075,6 +1228,7 @@ export type AccessPaymentRecord = {
   status: "pending" | "approved" | "rejected" | "success";
   name?: string | null;
   utr?: string | null;
+  proofFileId?: string | null;
   proofUrl?: string | null;
   proofMimeType?: string | null;
   proofOriginalName?: string | null;
@@ -2456,9 +2610,52 @@ export const fetchWorkerHistory = async (
   return response.data.data as WorkerHistoryResponse;
 };
 
-export const fetchPurchases = async (): Promise<Purchase[]> => {
-  const response = await apiClient.get("/purchases");
-  return response.data.data as Purchase[];
+export const fetchPurchases = async (
+  params?: PurchaseListParams,
+): Promise<Purchase[]> => {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.search) searchParams.set("search", params.search);
+
+  const query = searchParams.toString();
+  const response = await apiClient.get(query ? `/purchases?${query}` : "/purchases");
+  const payload = response.data?.data;
+  return normalizeListResponse<Purchase>(
+    payload?.purchases ?? payload?.items ?? payload,
+  );
+};
+
+export const fetchPurchasesPage = async (
+  params?: PurchaseListParams,
+): Promise<PurchaseListResponse> => {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set("page", String(params.page));
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.search) searchParams.set("search", params.search);
+
+  const query = searchParams.toString();
+  const response = await apiClient.get(query ? `/purchases?${query}` : "/purchases");
+  const payload = response.data?.data;
+  const purchases = normalizeListResponse<Purchase>(
+    payload?.purchases ?? payload?.items ?? payload,
+  );
+
+  return {
+    purchases,
+    total: typeof payload?.total === "number" ? payload.total : purchases.length,
+    page: typeof payload?.page === "number" ? payload.page : (params?.page ?? 1),
+    limit:
+      typeof payload?.limit === "number"
+        ? payload.limit
+        : (params?.limit ?? purchases.length),
+    totalPages: typeof payload?.totalPages === "number" ? payload.totalPages : 1,
+  };
+};
+
+export const fetchPurchase = async (id: number): Promise<Purchase> => {
+  const response = await apiClient.get(`/purchases/${id}`);
+  return response.data.data as Purchase;
 };
 
 export const createPurchase = async (
@@ -2549,6 +2746,13 @@ export const deleteInvoice = async (invoiceId: number): Promise<void> => {
 
 export const createPayment = async (payload: PaymentInput): Promise<void> => {
   await apiClient.post("/payments", payload);
+};
+
+export const updatePayment = async (
+  paymentId: number,
+  payload: PaymentUpdateInput,
+): Promise<void> => {
+  await apiClient.put(`/payments/${paymentId}`, payload);
 };
 
 export const fetchAccessPaymentStatus =
@@ -3181,6 +3385,10 @@ export const fetchSecurityActivity = async (): Promise<
 
 export const logoutAllDevices = async (): Promise<void> => {
   await apiClient.post("/security/logout-all");
+};
+
+export const logoutCurrentSession = async (): Promise<void> => {
+  await apiClient.post("/auth/logout");
 };
 
 export const fetchTemplates = async (): Promise<TemplateRecord[]> => {

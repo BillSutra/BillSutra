@@ -6,6 +6,7 @@ declare module "next-auth" {
     id: string;
     provider?: string | null;
     token?: string | null;
+    is_email_verified?: boolean | null;
     role?: "ADMIN" | "WORKER" | null;
     businessId?: string | null;
     accountType?: "OWNER" | "WORKER" | null;

@@ -1,5 +1,9 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
+import {
+  getCookieValue,
+  ACCESS_TOKEN_COOKIE_NAME,
+} from "../lib/authCookies.js";
 import { resolveAuthUserFromDecoded } from "../lib/authSession.js";
 
 const normalizeToken = (raw?: unknown) => {
@@ -19,9 +23,10 @@ const AuthSseMiddleware = (
   res: Response,
   next: NextFunction,
 ): void => {
-  const headerToken = req.headers?.authorization?.split(" ")[1];
+  const headerToken = normalizeToken(req.headers?.authorization);
   const queryToken = normalizeToken(req.query.token);
-  const token = normalizeToken(headerToken ?? queryToken ?? undefined);
+  const cookieToken = getCookieValue(req, ACCESS_TOKEN_COOKIE_NAME);
+  const token = headerToken ?? queryToken ?? cookieToken ?? undefined;
 
   if (!token) {
     res.status(401).json({ status: 401, message: "Unauthorized" });
@@ -43,6 +48,15 @@ const AuthSseMiddleware = (
       }
 
       req.user = authUser;
+
+      if (authUser.accountType === "OWNER" && !authUser.isEmailVerified) {
+        res.status(403).json({
+          status: 403,
+          message: "Please verify your email to continue.",
+          code: "EMAIL_VERIFICATION_REQUIRED",
+        });
+        return;
+      }
 
       if (authUser.role === "WORKER") {
         res.status(403).json({

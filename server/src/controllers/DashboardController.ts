@@ -16,6 +16,11 @@ import {
   getCachedMetrics,
   setCachedMetrics,
 } from "../services/dashboardMetricsCache.js";
+import {
+  buildDashboardMetricsRedisKey,
+  buildDashboardOverviewRedisKey,
+} from "../redis/cacheKeys.js";
+import { getCache, setCache } from "../redis/cache.js";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 const resolveRecordedTotal = (totalAmount: unknown, total: unknown) => {
@@ -227,6 +232,11 @@ class DashboardController {
       if (!userId) {
         return sendResponse(res, 401, { message: "Unauthorized" });
       }
+      const redisCacheKey = buildDashboardOverviewRedisKey(userId, req.query);
+      const redisCached = await getCache(redisCacheKey);
+      if (redisCached) {
+        return sendResponse(res, 200, { data: redisCached });
+      }
       const data = await buildDashboardOverview({
         userId,
         filters: {
@@ -236,6 +246,8 @@ class DashboardController {
           granularity: req.query.granularity,
         },
       });
+
+      void setCache(redisCacheKey, data, 60);
 
       return sendResponse(res, 200, { data });
     } catch (error) {
@@ -255,6 +267,13 @@ class DashboardController {
       }
 
       const cacheKey = buildMetricsCacheKey(userId, req.query);
+      const redisCacheKey = buildDashboardMetricsRedisKey(userId, req.query);
+      const redisCached = await getCache(redisCacheKey);
+      if (redisCached) {
+        setCachedMetrics(cacheKey, redisCached);
+        return sendResponse(res, 200, { data: redisCached });
+      }
+
       const cached = getCachedMetrics(cacheKey);
       if (cached) {
         return sendResponse(res, 200, { data: cached });
@@ -271,6 +290,7 @@ class DashboardController {
       });
 
       setCachedMetrics(cacheKey, data);
+      void setCache(redisCacheKey, data, 60);
 
       return sendResponse(res, 200, { data });
     } catch (error) {

@@ -89,12 +89,16 @@ export type PurchaseSuggestionGroup = {
 };
 
 const buildExpectedRunoutDate = (daysUntilStockout: number) => {
-  if (!Number.isFinite(daysUntilStockout) || daysUntilStockout >= 999) {
+  if (
+    !Number.isFinite(daysUntilStockout) ||
+    daysUntilStockout >= 999 ||
+    daysUntilStockout > 3650
+  ) {
     return null;
   }
 
   const next = new Date();
-  next.setDate(next.getDate() + Math.max(daysUntilStockout, 0));
+  next.setDate(next.getDate() + Math.max(Math.round(daysUntilStockout), 0));
   return next.toISOString();
 };
 

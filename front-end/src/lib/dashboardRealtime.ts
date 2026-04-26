@@ -15,6 +15,7 @@ export const dashboardQueryKeys = [
   ["dashboard", "productSales"],
   ["dashboard", "paymentMethods"],
   ["dashboard", "forecast"],
+  ["reports", "summary"],
   ["inventory-demand", "alerts"],
   ["inventory-demand", "predictions"],
 ] as const;

@@ -138,7 +138,7 @@ const FULL_INVOICE_SECTIONS: SectionKey[] = [
 export const CURATED_TEMPLATE_PRESETS: TemplatePreset[] = [
   {
     id: "professional",
-    variant: "classic",
+    variant: "classicBusiness",
     name: "Classic Business Invoice",
     description:
       "Traditional borders and a structured layout for formal business billing.",
@@ -244,6 +244,30 @@ export const CURATED_TEMPLATE_PRESETS: TemplatePreset[] = [
       "indian modern gst invoice",
       "one page gst invoice",
       "standard gst invoice",
+    ],
+  },
+  {
+    id: "simple-resume",
+    variant: "simpleResume",
+    name: "Simple Resume",
+    description:
+      "Minimal black-and-white retail invoice with strong dividers and a clean print-first hierarchy.",
+    bestFor:
+      "Best for kirana stores, retail counters, and businesses that want an elegant monochrome invoice.",
+    layout: "stacked",
+    defaultSections: FULL_INVOICE_SECTIONS,
+    theme: {
+      primaryColor: "#111111",
+      fontFamily: "var(--font-sora)",
+      tableStyle: "minimal",
+    },
+    preferredSourceNames: ["Simple Resume"],
+    aliases: [
+      "simple resume",
+      "simple-resume",
+      "minimal black and white invoice",
+      "retail black white invoice",
+      "modern monochrome invoice",
     ],
   },
   {

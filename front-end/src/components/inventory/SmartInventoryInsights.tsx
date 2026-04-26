@@ -57,7 +57,7 @@ const buildPrefillHref = (insight: InventoryInsight) => {
   }
   params.set("source", "smart_inventory_insights");
 
-  return `/purchases?${params.toString()}`;
+  return `/purchases/new?${params.toString()}`;
 };
 
 const renderActionLabel = (insight: InventoryInsight) => {
@@ -101,7 +101,7 @@ const InsightCard = ({ insight }: { insight: InventoryInsight }) => (
         <Link href={buildPrefillHref(insight)}>{renderActionLabel(insight)}</Link>
       </Button>
       <Button asChild type="button" variant="ghost">
-        <Link href={`/purchases?${new URLSearchParams({ source: "smart_inventory_insights" }).toString()}`}>
+        <Link href={`/purchases/new?${new URLSearchParams({ source: "smart_inventory_insights" }).toString()}`}>
           Open purchases
         </Link>
       </Button>

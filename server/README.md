@@ -278,6 +278,23 @@ RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxx
 - `PORT`: API port (defaults to `7000` if not provided).
 - `FRONTEND_URL`, `CORS_ORIGIN`, `CORS_ORIGINS`: CORS allowlist configuration.
 - `RESEND_API_KEY`: required only for email features (OTP, reset, transactional emails).
+- `FACE_SERVICE_URL`: base URL for the Python face-recognition service. Defaults to `http://localhost:5001`.
+- `FACE_RECOGNITION_TIMEOUT_MS`: timeout for backend-to-face-service requests.
+- `FACE_SERVICE_API_KEY`: optional shared secret if the face service is configured to enforce API keys.
+- `FACE_ENCRYPTION_KEY`: required for face registration and for decrypting encrypted stored face encodings. Must resolve to exactly 32 bytes.
+
+### Face Recognition Prerequisites
+
+Face login depends on a separate local service in [`face_recognition_service/`](../face_recognition_service/README.md).
+
+Typical local startup:
+
+```bash
+cd face_recognition_service
+python app.py
+```
+
+The service should respond on `http://localhost:5001/health` before `/api/face/authenticate` can succeed.
 
 ---
 

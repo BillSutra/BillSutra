@@ -8,6 +8,9 @@ const ReportSummary = () => {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["reports", "summary"],
     queryFn: fetchReportsSummary,
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   if (isLoading) {

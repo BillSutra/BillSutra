@@ -19,12 +19,14 @@ import Footer from "./sections/Footer";
 import TemplateBanner from "./templates/TemplateBanner";
 import TemplateBold from "./templates/TemplateBold";
 import TemplateClassic from "./templates/TemplateClassic";
+import TemplateClassicBusinessInvoice from "./templates/TemplateClassicBusinessInvoice";
 import TemplateCompact from "./templates/TemplateCompact";
 import TemplateGST from "./templates/TemplateGST";
 import TemplateHeaderLeft from "./templates/TemplateHeaderLeft";
 import TemplateIndianGst from "./templates/TemplateIndianGst";
 import TemplateIndianModern from "./templates/TemplateIndianModern";
 import TemplateModern from "./templates/TemplateModern";
+import TemplateSimpleResume from "./templates/TemplateSimpleResume";
 import TemplateSplit from "./templates/TemplateSplit";
 import TemplateHalfPage from "./templates/TemplateHalfPage";
 import TemplateMini from "./templates/TemplateMini";
@@ -90,9 +92,11 @@ export const InvoiceSectionRenderer = ({
 
 const TEMPLATE_MAP = {
   classic: TemplateClassic,
+  classicBusiness: TemplateClassicBusinessInvoice,
   modern: TemplateModern,
   indianGst: TemplateIndianGst,
   indianModern: TemplateIndianModern,
+  simpleResume: TemplateSimpleResume,
   gst: TemplateGST,
   headerLeft: TemplateHeaderLeft,
   banner: TemplateBanner,

@@ -1,9 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { API_URL } from "@/lib/apiEndPoints";
 import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
+import {
+  getLegacyStoredToken,
+  hasSecureAuthBootstrap,
+  isCookieOnlyAuthEnabled,
+  isSecureAuthEnabled,
+  refreshSecureAuthSession,
+} from "@/lib/secureAuth";
 
 type UseDashboardRealtimeOptions = {
   enabled?: boolean;
@@ -25,19 +32,34 @@ export const useDashboardRealtime = ({
 }: UseDashboardRealtimeOptions) => {
   const queryClient = useQueryClient();
   const debounceRef = useRef<number | null>(null);
+  const refreshInFlightRef = useRef<Promise<boolean> | null>(null);
+  const [preferCookieAuth, setPreferCookieAuth] = useState(false);
 
   const authToken = useMemo(() => {
     const direct = normalizeToken(token);
     if (direct) return direct;
-    if (typeof window === "undefined") return null;
-    return normalizeToken(window.localStorage.getItem("token"));
+    return getLegacyStoredToken();
   }, [token]);
 
   useEffect(() => {
-    if (!enabled || !authToken) return undefined;
+    if (!enabled) return undefined;
 
-    const url = `${API_URL}/dashboard/stream?token=${encodeURIComponent(authToken)}`;
-    const source = new EventSource(url);
+    const secureCookieStream =
+      preferCookieAuth ||
+      isCookieOnlyAuthEnabled() ||
+      (isSecureAuthEnabled() && hasSecureAuthBootstrap());
+
+    if (!secureCookieStream && !authToken) {
+      return undefined;
+    }
+
+    const url = secureCookieStream
+      ? `${API_URL}/dashboard/stream`
+      : `${API_URL}/dashboard/stream?token=${encodeURIComponent(authToken as string)}`;
+    const source = secureCookieStream
+      ? new EventSource(url, { withCredentials: true })
+      : new EventSource(url);
+    let disposed = false;
 
     const scheduleInvalidate = () => {
       if (debounceRef.current) return;
@@ -54,10 +76,27 @@ export const useDashboardRealtime = ({
     source.addEventListener("connected", handleConnected);
 
     source.onerror = () => {
+      if (!secureCookieStream && isSecureAuthEnabled()) {
+        if (!refreshInFlightRef.current) {
+          refreshInFlightRef.current = refreshSecureAuthSession()
+            .then((refreshed) => {
+              if (refreshed && !disposed) {
+                setPreferCookieAuth(true);
+              }
+              return refreshed;
+            })
+            .finally(() => {
+              refreshInFlightRef.current = null;
+            });
+        }
+        return;
+      }
+
       scheduleInvalidate();
     };
 
     return () => {
+      disposed = true;
       source.removeEventListener("dashboard:update", handleUpdate);
       source.removeEventListener("connected", handleConnected);
       source.close();
@@ -66,5 +105,5 @@ export const useDashboardRealtime = ({
         debounceRef.current = null;
       }
     };
-  }, [authToken, debounceMs, enabled, queryClient]);
+  }, [authToken, debounceMs, enabled, preferCookieAuth, queryClient]);
 };

@@ -28,6 +28,10 @@ import {
   updateUserProfile,
   type UserProfile,
 } from "@/lib/apiClient";
+import {
+  clearLegacyStoredToken,
+  clearSecureAuthBootstrapped,
+} from "@/lib/secureAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -673,7 +677,8 @@ const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
     try {
       await deleteUserAccount();
       if (typeof window !== "undefined") {
-        window.localStorage.removeItem("token");
+        clearLegacyStoredToken();
+        clearSecureAuthBootstrapped();
         window.sessionStorage.setItem(
           "account_deleted_message",
           t("profilePage.deleteAccountDeletedMessage"),

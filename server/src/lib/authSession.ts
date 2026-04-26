@@ -218,7 +218,7 @@ export const ensureBusinessForUser = async (
 };
 
 export const buildOwnerAuthUser = async (
-  user: Pick<User, "id" | "email" | "name">,
+  user: Pick<User, "id" | "email" | "name" | "is_email_verified">,
 ): Promise<AuthUser> => {
   const [business, sessionVersion] = await Promise.all([
     ensureBusinessForUser(user.id, user.name),
@@ -231,6 +231,7 @@ export const buildOwnerAuthUser = async (
     actorId: `owner:${user.id}`,
     businessId: business.id,
     sessionVersion: sessionVersion ?? 0,
+    isEmailVerified: user.is_email_verified,
     role: "ADMIN",
     accountType: "OWNER",
     name: user.name,
@@ -280,6 +281,7 @@ export const buildWorkerAuthUser = async (
     actorId: `worker:${worker.id}`,
     businessId: worker.businessId,
     sessionVersion: ownerSessionVersion ?? 0,
+    isEmailVerified: true,
     role: worker.role === "ADMIN" ? "ADMIN" : "WORKER",
     accountType: "WORKER",
     name: worker.name,
@@ -288,10 +290,63 @@ export const buildWorkerAuthUser = async (
   };
 };
 
+const DEFAULT_ACCESS_TOKEN_TTL = "15m";
+
+const parseDurationToMs = (value: string, fallbackMs: number) => {
+  const normalized = value.trim().toLowerCase();
+
+  if (!normalized) {
+    return fallbackMs;
+  }
+
+  if (/^\d+$/.test(normalized)) {
+    return Number(normalized) * 1000;
+  }
+
+  const match = normalized.match(/^(\d+)(ms|s|m|h|d)$/);
+  if (!match) {
+    return fallbackMs;
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2];
+
+  switch (unit) {
+    case "ms":
+      return amount;
+    case "s":
+      return amount * 1000;
+    case "m":
+      return amount * 60 * 1000;
+    case "h":
+      return amount * 60 * 60 * 1000;
+    case "d":
+      return amount * 24 * 60 * 60 * 1000;
+    default:
+      return fallbackMs;
+  }
+};
+
+export const getAccessTokenTtl = () =>
+  process.env.ACCESS_TOKEN_TTL?.trim() || DEFAULT_ACCESS_TOKEN_TTL;
+
+export const getAccessTokenMaxAgeMs = () =>
+  parseDurationToMs(getAccessTokenTtl(), 15 * 60 * 1000);
+
+export const getAccessTokenExpiresAt = () =>
+  Date.now() + getAccessTokenMaxAgeMs();
+
 export const signAuthToken = (authUser: AuthUser) =>
-  jwt.sign(authUser, process.env.JWT_SECRET as string, {
-    expiresIn: "365d",
-  });
+  jwt.sign(
+    {
+      ...authUser,
+      token_type: "access_v2",
+    },
+    process.env.JWT_SECRET as string,
+    {
+      expiresIn: getAccessTokenTtl() as jwt.SignOptions["expiresIn"],
+    },
+  );
 
 export const createAuthBearerToken = (authUser: AuthUser) =>
   `Bearer ${signAuthToken(authUser)}`;
@@ -303,49 +358,79 @@ export const resolveAuthUserFromDecoded = async (
     return null;
   }
 
+  const decodedRecord = decoded as Record<string, unknown>;
+
   const ownerUserId =
-    normalizeNumber((decoded as Record<string, unknown>).ownerUserId) ??
-    normalizeNumber((decoded as Record<string, unknown>).id);
-  const email = normalizeString((decoded as Record<string, unknown>).email);
-  const name = normalizeString((decoded as Record<string, unknown>).name);
+    normalizeNumber(decodedRecord.ownerUserId) ??
+    normalizeNumber(decodedRecord.id);
+  const email = normalizeString(decodedRecord.email);
+  const name = normalizeString(decodedRecord.name);
 
   if (!ownerUserId || !email || !name) {
     return null;
   }
 
-  const businessId = normalizeString(
-    (decoded as Record<string, unknown>).businessId,
-  );
-  const sessionVersion =
-    normalizeNumber((decoded as Record<string, unknown>).sessionVersion) ?? 0;
-  const workerId = normalizeString(
-    (decoded as Record<string, unknown>).workerId,
-  );
-  const role =
-    normalizeString((decoded as Record<string, unknown>).role) === "WORKER"
-      ? "WORKER"
-      : "ADMIN";
+  const businessId = normalizeString(decodedRecord.businessId);
+  const sessionVersion = normalizeNumber(decodedRecord.sessionVersion) ?? 0;
+  const tokenEmailVerification: boolean | null =
+    typeof decodedRecord.isEmailVerified === "boolean"
+      ? decodedRecord.isEmailVerified
+      : typeof decodedRecord.is_email_verified === "boolean"
+        ? decodedRecord.is_email_verified
+        : null;
+  const workerId = normalizeString(decodedRecord.workerId);
+  const role = normalizeString(decodedRecord.role) === "WORKER" ? "WORKER" : "ADMIN";
   const accountType =
-    normalizeString((decoded as Record<string, unknown>).accountType) ===
-    "WORKER"
-      ? "WORKER"
-      : "OWNER";
+    normalizeString(decodedRecord.accountType) === "WORKER" ? "WORKER" : "OWNER";
 
   if (
     !businessId ||
     (accountType === "OWNER" && isLegacyBusinessId(businessId))
   ) {
-    return buildOwnerAuthUser({ id: ownerUserId, email, name });
+    const owner = await prisma.user.findUnique({
+      where: { id: ownerUserId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        is_email_verified: true,
+      },
+    });
+
+    if (!owner) {
+      return null;
+    }
+
+    return buildOwnerAuthUser(owner);
+  }
+
+  let isEmailVerified =
+    tokenEmailVerification ?? (accountType === "WORKER");
+
+  if (accountType === "OWNER") {
+    const owner = await prisma.user.findUnique({
+      where: { id: ownerUserId },
+      select: {
+        is_email_verified: true,
+      },
+    });
+
+    if (!owner) {
+      return null;
+    }
+
+    isEmailVerified = owner.is_email_verified;
   }
 
   return {
     id: ownerUserId,
     ownerUserId,
     actorId:
-      normalizeString((decoded as Record<string, unknown>).actorId) ??
+      normalizeString(decodedRecord.actorId) ??
       (workerId ? `worker:${workerId}` : `owner:${ownerUserId}`),
     businessId,
     sessionVersion,
+    isEmailVerified,
     role,
     accountType,
     name,

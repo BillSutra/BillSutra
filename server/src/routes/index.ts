@@ -22,6 +22,7 @@ import UserTemplateController from "../controllers/UserTemplateController.js";
 import UserSavedTemplateController from "../controllers/UserSavedTemplateController.js";
 import PublicInvoiceController from "../controllers/PublicInvoiceController.js";
 import LogoController from "../controllers/LogoController.js";
+import SecureFilesController from "../controllers/SecureFilesController.js";
 import WorkersController from "../controllers/WorkersController.js";
 import WorkerPanelController from "../controllers/WorkerPanelController.js";
 import SubscriptionController from "../controllers/SubscriptionController.js";
@@ -66,6 +67,7 @@ import {
   authRegisterSchema,
   authForgotSchema,
   authResetSchema,
+  authVerifyEmailQuerySchema,
   passkeyAuthenticateOptionsSchema,
   passkeyAuthenticateVerifySchema,
   passkeyRegisterOptionsSchema,
@@ -87,6 +89,7 @@ import {
   productCreateSchema,
   productUpdateSchema,
   paymentCreateSchema,
+  paymentUpdateSchema,
   purchaseCreateSchema,
   purchaseUpdateSchema,
   saleCreateSchema,
@@ -113,6 +116,7 @@ import assistantRoutes from "../modules/assistant/assistant.routes.js";
 import copilotRoutes from "../modules/copilot/copilot.routes.js";
 import ExportController from "../modules/export/export.controller.js";
 import faceRecognitionRoutes from "./faceRecognition.js";
+import * as FaceRecognitionController from "../controllers/FaceRecognitionController.js";
 
 const router = Router();
 const readRouteParam = (value: string | string[] | undefined) =>
@@ -158,6 +162,7 @@ router.post(
   validate({ body: adminLoginSchema }),
   AdminController.login,
 );
+router.post("/admin/logout", AdminAuthMiddleware, AdminController.logout);
 router.get("/admin/summary", AdminAuthMiddleware, AdminController.summary);
 router.get(
   "/admin/businesses",
@@ -229,6 +234,25 @@ router.post(
   validate({ body: authRegisterSchema }),
   AuthController.register,
 );
+router.get(
+  "/auth/verify-email",
+  authRateLimiter,
+  validate({ query: authVerifyEmailQuerySchema }),
+  AuthController.verifyEmail,
+);
+router.post(
+  "/auth/resend-verification",
+  authRateLimiter,
+  AuthMiddleware,
+  AuthController.resendVerification,
+);
+router.post("/auth/refresh", authRateLimiter, AuthController.refresh);
+router.post(
+  "/auth/session/bootstrap",
+  authRateLimiter,
+  AuthController.bootstrapSecureSession,
+);
+router.post("/auth/logout", AuthController.logout);
 router.post(
   "/auth/forgot-password",
   validate({ body: authForgotSchema }),
@@ -296,6 +320,12 @@ router.post(
 );
 
 // Public invoice view
+router.get(
+  "/secure-files/:id",
+  validate({ params: stringIdParamSchema }),
+  SecureFilesController.show,
+);
+
 router.get(
   "/invoice/:id/pdf",
   validate({
@@ -727,6 +757,12 @@ router.use("/forecast", forecastRoutes);
 router.use("/inventory-demand", inventoryDemandRoutes);
 
 // Face Recognition
+router.delete(
+  "/face-data/:id",
+  AuthMiddleware,
+  validate({ params: idParamSchema }),
+  FaceRecognitionController.deleteFaceData,
+);
 router.use("/face", faceRecognitionRoutes);
 
 // Assistant
@@ -770,6 +806,13 @@ router.post(
   RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
   validate({ body: paymentCreateSchema }),
   PaymentsController.store,
+);
+router.put(
+  "/payments/:id",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
+  validate({ params: idParamSchema, body: paymentUpdateSchema }),
+  PaymentsController.update,
 );
 router.post(
   "/payments/access/razorpay/order",

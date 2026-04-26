@@ -54,6 +54,10 @@ import {
 } from "@/lib/apiClient";
 import { isValidIndianState } from "@/lib/indianAddress";
 import { useI18n } from "@/providers/LanguageProvider";
+import {
+  clearLegacyStoredToken,
+  clearSecureAuthBootstrapped,
+} from "@/lib/secureAuth";
 
 type SettingsControlCenterProps = {
   name: string;
@@ -737,9 +741,8 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     mutationFn: logoutAllDevices,
     onSuccess: async () => {
       toast.success("All devices logged out successfully.");
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem("token");
-      }
+      clearLegacyStoredToken();
+      clearSecureAuthBootstrapped();
       await signOut({ callbackUrl: "/login" });
     },
     onError: (error) => {

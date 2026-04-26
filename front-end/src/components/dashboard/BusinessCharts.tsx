@@ -57,6 +57,9 @@ const BusinessCharts = () => {
   const { data, isLoading } = useQuery({
     queryKey: ["reports", "summary"],
     queryFn: fetchReportsSummary,
+    staleTime: 0,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   const billedBase = data?.total_billed ? Number(data.total_billed) / 6 : 52000;

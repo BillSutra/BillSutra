@@ -1,25 +1,18 @@
 import type { Request, Response } from "express";
-import path from "path";
-import { fileURLToPath } from "url";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
 import { storageProvider } from "../services/storage/storage.provider.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { UPLOADS_ROOT, resolveUploadPath } from "../lib/uploadPaths.js";
 
 /**
  * Derive the absolute file path from the stored public URL.
  *
- * Stored URL format:  /uploads/logos/<userId>/<filename>
- * Absolute path:      <server-root>/uploads/logos/<userId>/<filename>
- *
- * We resolve relative to the compiled/run location, going up to server root.
+ * Stored URL format:  /uploads/public/logos/<userId>/<filename>
+ * Absolute path:      <server-root>/uploads/public/logos/<userId>/<filename>
  */
 const urlToFilePath = (url: string): string => {
-  // Strip leading slash and resolve from server root
-  const relative = url.replace(/^\//, "");
-  return path.resolve(__dirname, "../../../", relative);
+  const relative = url.replace(/^\//, "").replace(/^uploads\//, "");
+  return resolveUploadPath(UPLOADS_ROOT, relative);
 };
 
 class LogoController {
@@ -70,7 +63,7 @@ class LogoController {
       });
     }
 
-    const { url, filePath } = await storageProvider.save(userId, req.file);
+    const { url } = await storageProvider.save(userId, req.file);
 
     await prisma.businessProfile.upsert({
       where: { user_id: userId },
@@ -84,7 +77,7 @@ class LogoController {
 
     return sendResponse(res, 201, {
       message: "Logo uploaded successfully.",
-      data: { logo_url: url, filePath },
+      data: { logo_url: url },
     });
   }
 

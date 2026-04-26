@@ -49,6 +49,7 @@ import {
   fetchAdminBusinesses,
   fetchAdminSummary,
   fetchAdminWorkers,
+  logoutSuperAdmin,
 } from "@/lib/adminApiClient";
 import { cn } from "@/lib/utils";
 
@@ -345,7 +346,12 @@ export default function AdminDashboardClient() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await logoutSuperAdmin();
+    } catch {
+      // Best-effort: still clear legacy artifacts and navigate away.
+    }
     clearAdminToken();
     router.replace("/admin/login");
   };
