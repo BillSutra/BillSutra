@@ -997,6 +997,15 @@ const invoiceItemSchema = z.object({
   gst_type: z.enum(["CGST_SGST", "IGST", "NONE"]).optional(),
 });
 
+const invoiceTemplateSnapshotSchema = z.object({
+  templateId: z.string().trim().min(1).max(120).nullable().optional(),
+  templateName: z.string().trim().min(1).max(120).nullable().optional(),
+  enabledSections: z.array(z.string().trim().min(1).max(64)).min(1).max(20),
+  sectionOrder: z.array(z.string().trim().min(1).max(64)).max(20).optional(),
+  theme: z.record(z.string(), z.unknown()).nullable().optional(),
+  designConfig: z.record(z.string(), z.unknown()).nullable().optional(),
+});
+
 export const invoiceCreateSchema = z.object({
   customer_id: z.coerce.number().int().positive(),
   date: z.coerce.date().optional(),
@@ -1010,6 +1019,7 @@ export const invoiceCreateSchema = z.object({
   payment_date: z.coerce.date().optional(),
   payment_method: z.nativeEnum(PaymentMethod).optional(),
   notes: z.string().optional(),
+  template_snapshot: invoiceTemplateSnapshotSchema.optional(),
   sync_sales: z.boolean().optional(),
   warehouse_id: z.coerce.number().int().positive().optional(),
   items: z.array(invoiceItemSchema).min(1),
@@ -1021,14 +1031,8 @@ export const invoiceUpdateSchema = z.object({
   notes: z.string().optional(),
 });
 
-const invoicePreviewPayloadSchema = z.object({
-  templateId: z.string().trim().min(1).max(120).nullable().optional(),
-  templateName: z.string().trim().min(1).max(120).nullable().optional(),
+const invoicePreviewPayloadSchema = invoiceTemplateSnapshotSchema.extend({
   data: z.record(z.string(), z.unknown()),
-  enabledSections: z.array(z.string().trim().min(1).max(64)).min(1).max(20),
-  sectionOrder: z.array(z.string().trim().min(1).max(64)).max(20).optional(),
-  theme: z.record(z.string(), z.unknown()).nullable().optional(),
-  designConfig: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
 export const invoiceEmailRequestSchema = z.object({

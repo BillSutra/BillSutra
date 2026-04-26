@@ -5,6 +5,7 @@ let faceDataTablePromise: Promise<void> | null = null;
 let schemaCompatibilityPromise: Promise<void> | null = null;
 let userPreferenceCompatibilityPromise: Promise<void> | null = null;
 let emailLogCompatibilityPromise: Promise<void> | null = null;
+let invoiceTemplateCompatibilityPromise: Promise<void> | null = null;
 
 const ensureInvoiceDiscountMetadataColumnsInternal = async () => {
   await prisma.$executeRawUnsafe(`
@@ -442,6 +443,13 @@ const ensureEmailLogCompatibilityInternal = async () => {
   `);
 };
 
+const ensureInvoiceTemplateCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "invoices"
+      ADD COLUMN IF NOT EXISTS "template_snapshot" JSONB;
+  `);
+};
+
 const ensureBillingInventoryCompatibilityInternal = async () => {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "user_preferences"
@@ -593,6 +601,18 @@ export const ensureEmailLogCompatibility = async () => {
   await emailLogCompatibilityPromise;
 };
 
+export const ensureInvoiceTemplateCompatibility = async () => {
+  if (!invoiceTemplateCompatibilityPromise) {
+    invoiceTemplateCompatibilityPromise =
+      ensureInvoiceTemplateCompatibilityInternal().catch((error) => {
+        invoiceTemplateCompatibilityPromise = null;
+        throw error;
+      });
+  }
+
+  await invoiceTemplateCompatibilityPromise;
+};
+
 export const ensureSchemaCompatibility = async () => {
   if (!schemaCompatibilityPromise) {
     schemaCompatibilityPromise = (async () => {
@@ -603,6 +623,7 @@ export const ensureSchemaCompatibility = async () => {
       await ensureFaceDataTable();
       await ensureUserPreferenceCompatibility();
       await ensureEmailLogCompatibility();
+      await ensureInvoiceTemplateCompatibility();
     })().catch((error) => {
       schemaCompatibilityPromise = null;
       throw error;

@@ -1,4 +1,5 @@
 import type { Invoice, InvoiceInput } from "@/lib/apiClient";
+import type { InvoiceRenderPayload } from "@/lib/invoiceRenderPayload";
 
 export const submitInvoiceCheckout = async (
   createInvoice: (payload: InvoiceInput) => Promise<Invoice>,
@@ -18,7 +19,7 @@ const normalizeInvoiceCheckoutEmail = (value?: string | null) => {
 
 type SendInvoiceCheckoutEmail = (
   invoiceId: number,
-  payload: { email?: string },
+  payload: { email?: string; preview_payload?: InvoiceRenderPayload },
 ) => Promise<{
   invoiceId: number;
   status?: string;
@@ -32,14 +33,26 @@ export const runInvoiceCheckoutPipeline = async ({
   sendInvoiceEmail,
   payload,
   customerEmail,
+  previewPayload,
 }: {
   createInvoice: (payload: InvoiceInput) => Promise<Invoice>;
   sendInvoiceEmail: SendInvoiceCheckoutEmail;
   payload: InvoiceInput;
   customerEmail?: string | null;
+  previewPayload?: InvoiceRenderPayload | null;
 }) => {
   const invoice = await submitInvoiceCheckout(createInvoice, payload);
   const emailRecipient = normalizeInvoiceCheckoutEmail(customerEmail);
+  const normalizedPreviewPayload = previewPayload
+    ? {
+        ...previewPayload,
+        data: {
+          ...previewPayload.data,
+          invoiceNumber:
+            invoice.invoice_number || previewPayload.data.invoiceNumber,
+        },
+      }
+    : null;
 
   if (!emailRecipient) {
     return {
@@ -47,12 +60,14 @@ export const runInvoiceCheckoutPipeline = async ({
       emailRecipient: null,
       emailResult: null,
       emailError: null,
+      previewPayload: normalizedPreviewPayload,
     };
   }
 
   try {
     const emailResult = await sendInvoiceEmail(invoice.id, {
       email: emailRecipient,
+      preview_payload: normalizedPreviewPayload ?? undefined,
     });
 
     return {
@@ -60,6 +75,7 @@ export const runInvoiceCheckoutPipeline = async ({
       emailRecipient,
       emailResult,
       emailError: null,
+      previewPayload: normalizedPreviewPayload,
     };
   } catch (emailError) {
     return {
@@ -67,6 +83,7 @@ export const runInvoiceCheckoutPipeline = async ({
       emailRecipient,
       emailResult: null,
       emailError,
+      previewPayload: normalizedPreviewPayload,
     };
   }
 };

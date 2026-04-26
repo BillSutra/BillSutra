@@ -39,7 +39,6 @@ import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTempla
 import {
   fetchBusinessProfile,
   fetchCustomers,
-  fetchInvoicePdfFile,
   sendInvoiceEmail,
   fetchUserSettingsPreferences,
   type BusinessProfileRecord,
@@ -48,12 +47,15 @@ import {
   type InvoiceInput,
   type Product,
 } from "@/lib/apiClient";
+import { API_URL } from "@/lib/apiEndPoints";
 import {
   formatBusinessAddressFromRecord,
   formatCustomerAddressFromRecord,
 } from "@/lib/indianAddress";
 import { getStateFromGstin } from "@/lib/gstin";
+import { buildInvoiceRenderPayload } from "@/lib/invoiceRenderPayload";
 import { runInvoiceCheckoutPipeline } from "@/lib/invoiceCheckout";
+import { getLegacyStoredToken } from "@/lib/secureAuth";
 import { resolveBackendAssetUrl } from "@/lib/backendAssetUrl";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
@@ -488,6 +490,7 @@ const mapSimpleBillToInvoice = ({
   paymentMethod,
   totalAmount,
   notes,
+  templateSnapshot,
   items,
 }: {
   customerId: number;
@@ -501,6 +504,7 @@ const mapSimpleBillToInvoice = ({
   paymentMethod: InvoicePaymentMethod;
   totalAmount: number;
   notes: string;
+  templateSnapshot?: InvoiceInput["template_snapshot"];
   items: InvoiceItemForm[];
 }): InvoiceInput => {
   const normalizedPaidAmount =
@@ -522,6 +526,7 @@ const mapSimpleBillToInvoice = ({
     payment_method: paymentStatus === "UNPAID" ? undefined : paymentMethod,
     payment_date: paymentStatus === "UNPAID" ? undefined : paymentDate,
     notes: notes.trim() || undefined,
+    template_snapshot: templateSnapshot ?? undefined,
     status: mapPaymentStatusToInvoiceStatus(paymentStatus),
     sync_sales: true,
     items: items.filter(isInvoiceItemReady).map((item) => ({
@@ -790,6 +795,37 @@ const ExistingInvoicePreview = ({
       </A4PreviewStack>
     </div>
   );
+};
+
+const parsePdfDownloadFileName = (
+  contentDisposition: string | null,
+  fallback: string,
+) => {
+  if (!contentDisposition) return fallback;
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    return decodeURIComponent(utf8Match[1]).replace(/"/g, "");
+  }
+
+  const basicMatch = contentDisposition.match(/filename="?([^";]+)"?/i);
+  if (basicMatch?.[1]) {
+    return basicMatch[1];
+  }
+
+  return fallback;
+};
+
+type GeneratedPreviewSnapshot = {
+  data: InvoicePreviewData;
+  previewKey: string;
+  templateRenderKey: string;
+  templateId?: string | null;
+  templateName?: string | null;
+  enabledSections: SectionKey[];
+  sectionOrder: SectionKey[];
+  theme: InvoiceTheme;
+  designConfig: ReturnType<typeof normalizeDesignConfig>;
 };
 
 /*
@@ -1564,6 +1600,8 @@ const SimpleBillClient = ({
   const [generatedInvoice, setGeneratedInvoice] = useState<Invoice | null>(
       null,
     );
+  const [generatedPreviewSnapshot, setGeneratedPreviewSnapshot] =
+    useState<GeneratedPreviewSnapshot | null>(null);
   const [isAssigningWalkIn, setIsAssigningWalkIn] = useState(false);
   const [shortcutActiveItemId, setShortcutActiveItemId] = useState<
     string | null
@@ -1768,6 +1806,7 @@ const SimpleBillClient = ({
       pricesInclusiveOfTax,
     ],
   );
+  const hasUnsavedChanges = hasDraftContent && !isSubmitting;
   const isInitialLoading = productsLoading;
   const hasDataLoadError = productsError;
   const taxMode: TaxMode = gstEnabled ? selectedTaxMode : "NONE";
@@ -1957,6 +1996,27 @@ const SimpleBillClient = ({
     : activeTemplate.enabledSections;
   const activeTheme = activeTemplate.theme;
   const activeDesignConfig = activeTemplate.designConfig;
+  const currentInvoiceRenderPayload = useMemo(
+    () =>
+      buildInvoiceRenderPayload({
+        templateId: activeTemplate.templateId,
+        templateName: activeTemplate.templateName,
+        data: invoicePreviewData,
+        enabledSections: activeEnabledSections,
+        sectionOrder: activeSectionOrder,
+        theme: activeTheme,
+        designConfig: activeDesignConfig,
+      }),
+    [
+      activeDesignConfig,
+      activeEnabledSections,
+      activeSectionOrder,
+      activeTemplate.templateId,
+      activeTemplate.templateName,
+      activeTheme,
+      invoicePreviewData,
+    ],
+  );
   const templateRenderKey = useMemo(
     () =>
       [
@@ -1980,6 +2040,20 @@ const SimpleBillClient = ({
       activeTheme.tableStyle,
     ],
   );
+  const activePreviewSnapshot =
+    hasUnsavedChanges || !generatedPreviewSnapshot
+      ? {
+          data: invoicePreviewData,
+          previewKey: previewRefreshKey,
+          templateRenderKey,
+          templateId: activeTemplate.templateId,
+          templateName: activeTemplate.templateName,
+          enabledSections: activeEnabledSections,
+          sectionOrder: activeSectionOrder,
+          theme: activeTheme,
+          designConfig: activeDesignConfig,
+        }
+      : generatedPreviewSnapshot;
 
   useEffect(() => {
     const storedUsage = window.localStorage.getItem(PRODUCT_USAGE_KEY);
@@ -2152,9 +2226,8 @@ const SimpleBillClient = ({
       selectedTaxMode,
     ],
   );
-
   useEffect(() => {
-    if (!hasDraftContent) {
+    if (!hasUnsavedChanges) {
       window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
       return;
     }
@@ -2164,12 +2237,12 @@ const SimpleBillClient = ({
       JSON.stringify(currentDraft),
     );
   }, [
-    hasDraftContent,
+    hasUnsavedChanges,
     currentDraft,
   ]);
 
   useEffect(() => {
-    if (!hasDraftContent) {
+    if (!hasUnsavedChanges) {
       return;
     }
 
@@ -2181,7 +2254,38 @@ const SimpleBillClient = ({
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [copy.leaveWarning, hasDraftContent]);
+  }, [copy.leaveWarning, hasUnsavedChanges]);
+
+  const resetBillWorkspace = useCallback(
+    ({
+      keepGeneratedInvoice = false,
+      toastMessage,
+    }: {
+      keepGeneratedInvoice?: boolean;
+      toastMessage?: string;
+    } = {}) => {
+      const today = todayInputValue();
+      setCustomerSearch("");
+      setDebouncedCustomerSearch("");
+      setAddingCustomer(false);
+      setNewCustomerName("");
+      setNewCustomerPhone("");
+      setNewCustomerEmail("");
+      setBillState(createInitialBillState(today));
+      if (!keepGeneratedInvoice) {
+        setGeneratedInvoice(null);
+        setGeneratedPreviewSnapshot(null);
+      }
+      setPreviewOpen(false);
+      setProductSearchOpen(false);
+      setShortcutActiveItemId(null);
+      window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
+      if (toastMessage) {
+        toast.success(toastMessage);
+      }
+    },
+    [],
+  );
 
   const updateItem = useCallback(
     (id: string, patch: Partial<SimpleBillItem>) => {
@@ -2907,6 +3011,14 @@ const SimpleBillClient = ({
         paymentMethod: selectedPaymentMethod,
         totalAmount,
         notes,
+        templateSnapshot: {
+          templateId: activeTemplate.templateId,
+          templateName: activeTemplate.templateName,
+          enabledSections: activeEnabledSections,
+          sectionOrder: activeSectionOrder,
+          theme: activeTheme,
+          designConfig: activeDesignConfig,
+        },
         items: invoiceItems,
       });
 
@@ -2916,6 +3028,7 @@ const SimpleBillClient = ({
           sendInvoiceEmail(invoiceId, payload),
         payload: invoicePayload,
         customerEmail: customer.email ?? null,
+        previewPayload: currentInvoiceRenderPayload,
       });
       const createdInvoice = checkoutResult.invoice;
       const billItems: SimpleBillItem[] = validItems.map((item) => ({
@@ -2930,10 +3043,19 @@ const SimpleBillClient = ({
 
       saveProductUsage(billItems);
       saveLastBill(customer, billItems);
-      selectCustomer(customer);
+      setGeneratedPreviewSnapshot({
+        data: invoicePreviewData,
+        previewKey: previewRefreshKey,
+        templateRenderKey,
+        templateId: activeTemplate.templateId,
+        templateName: activeTemplate.templateName,
+        enabledSections: [...activeEnabledSections],
+        sectionOrder: [...activeSectionOrder],
+        theme: { ...activeTheme },
+        designConfig: activeDesignConfig,
+      });
       setGeneratedInvoice(createdInvoice);
-      setPreviewOpen(true);
-      setProductSearchOpen(false);
+      resetBillWorkspace({ keepGeneratedInvoice: true });
       toast.success(copy.toastBillGenerated);
       if (checkoutResult.emailResult && checkoutResult.emailRecipient) {
         toast.success(
@@ -2949,7 +3071,19 @@ const SimpleBillClient = ({
           ),
         );
       }
-      window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
+      try {
+        await downloadInvoicePdf(
+          createdInvoice.id,
+          createdInvoice.invoice_number || invoicePreviewData.invoiceNumber,
+        );
+        toast.success(copy.toastPdfDownloaded);
+      } catch (error) {
+        toast.error(
+          error instanceof Error && error.message.trim()
+            ? error.message
+            : copy.toastPdfError,
+        );
+      }
       router.refresh();
     } catch (error) {
       toast.error(parseApiErrorMessage(error, copy.toastGenerateError));
@@ -2960,21 +3094,8 @@ const SimpleBillClient = ({
   };
 
   const handleCreateNewBill = useCallback(() => {
-    const today = todayInputValue();
-    setCustomerSearch("");
-    setDebouncedCustomerSearch("");
-    setAddingCustomer(false);
-    setNewCustomerName("");
-    setNewCustomerPhone("");
-    setNewCustomerEmail("");
-    setBillState(createInitialBillState(today));
-    setGeneratedInvoice(null);
-    setPreviewOpen(false);
-    setProductSearchOpen(false);
-    setShortcutActiveItemId(null);
-    window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
-    toast.success(copy.toastNewBillReady);
-  }, [copy.toastNewBillReady]);
+    resetBillWorkspace({ toastMessage: copy.toastNewBillReady });
+  }, [copy.toastNewBillReady, resetBillWorkspace]);
 
   const focusQuantityShortcutTarget = useCallback(() => {
     const fallbackItemId =
@@ -3045,18 +3166,8 @@ const SimpleBillClient = ({
   }, [focusPaymentShortcutTarget, payment, paymentStatus, updateBillState]);
 
   const handlePrintBill = () => {
-    if (!generatedInvoice) {
+    if (!generatedInvoice || !generatedPreviewSnapshot) {
       toast.error(copy.toastGenerateBeforePrint);
-      return;
-    }
-
-    if (!hasCustomerContext) {
-      toast.error(copy.toastSelectCustomerFirst);
-      return;
-    }
-
-    if (validItems.length === 0) {
-      toast.error(copy.toastAddItem);
       return;
     }
 
@@ -3064,38 +3175,80 @@ const SimpleBillClient = ({
     toast.success(copy.toastPrintReady);
   };
 
+  const downloadInvoicePdf = useCallback(
+    async (invoiceId: number, invoiceNumber?: string | null) => {
+      const fallbackFileName = `${invoiceNumber || `invoice-${invoiceId}`}.pdf`;
+      const token = getLegacyStoredToken();
+      const headers = new Headers({
+        Accept: "application/pdf",
+      });
+
+      if (token) {
+        headers.set(
+          "Authorization",
+          token.startsWith("Bearer ") ? token : `Bearer ${token}`,
+        );
+      }
+
+      const response = await fetch(`${API_URL}/invoices/${invoiceId}/pdf`, {
+        method: "GET",
+        credentials: "include",
+        headers,
+      });
+
+      if (!response.ok) {
+        const errorBlob = await response.blob().catch(() => null);
+        let message = copy.toastPdfError;
+
+        if (errorBlob) {
+          const errorText = await errorBlob.text().catch(() => "");
+          if (errorText) {
+            try {
+              const parsed = JSON.parse(errorText) as { message?: string };
+              message = parsed.message?.trim() || message;
+            } catch {
+              message = errorText.trim() || message;
+            }
+          }
+        }
+
+        throw new Error(message);
+      }
+
+      const pdfBlob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = parsePdfDownloadFileName(
+        response.headers.get("content-disposition"),
+        fallbackFileName,
+      );
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(objectUrl);
+    },
+    [copy.toastPdfError],
+  );
+
   const handleDownloadBill = async () => {
     if (!generatedInvoice) {
       toast.error(copy.toastGenerateBeforePrint);
       return;
     }
 
-    if (!hasCustomerContext) {
-      toast.error(copy.toastSelectCustomerFirst);
-      return;
-    }
-
-    if (validItems.length === 0) {
-      toast.error(copy.toastAddItem);
-      return;
-    }
-
     try {
-      const { blob, fileName } = await fetchInvoicePdfFile(
+      await downloadInvoicePdf(
         generatedInvoice.id,
         generatedInvoice.invoice_number || invoicePreviewData.invoiceNumber,
       );
-      const blobUrl = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = blobUrl;
-      anchor.download = fileName;
-      document.body.appendChild(anchor);
-      anchor.click();
-      anchor.remove();
-      URL.revokeObjectURL(blobUrl);
       toast.success(copy.toastPdfDownloaded);
-    } catch {
-      toast.error(copy.toastPdfError);
+    } catch (error) {
+      toast.error(
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : copy.toastPdfError,
+      );
     }
   };
 
@@ -4293,16 +4446,20 @@ const SimpleBillClient = ({
 
           <div className="mt-4">
             <ExistingInvoicePreview
-              data={invoicePreviewData}
-              previewKey={previewRefreshKey}
-              templateRenderKey={templateRenderKey}
-              hasItems={validItems.length > 0}
-              templateId={activeTemplate.templateId}
-              templateName={activeTemplate.templateName}
-              enabledSections={activeEnabledSections}
-              sectionOrder={activeSectionOrder}
-              theme={activeTheme}
-              designConfig={activeDesignConfig}
+              data={activePreviewSnapshot.data}
+              previewKey={activePreviewSnapshot.previewKey}
+              templateRenderKey={activePreviewSnapshot.templateRenderKey}
+              hasItems={
+                hasUnsavedChanges
+                  ? validItems.length > 0
+                  : Boolean(generatedPreviewSnapshot)
+              }
+              templateId={activePreviewSnapshot.templateId}
+              templateName={activePreviewSnapshot.templateName}
+              enabledSections={activePreviewSnapshot.enabledSections}
+              sectionOrder={activePreviewSnapshot.sectionOrder}
+              theme={activePreviewSnapshot.theme}
+              designConfig={activePreviewSnapshot.designConfig}
               emptyMessage={copy.previewEmpty}
             />
           </div>
@@ -4419,13 +4576,28 @@ const SimpleBillClient = ({
       >
         <div className="printable">
           <InvoicePrint
-            data={invoicePreviewData}
-            templateId={activeTemplate.templateId}
-            templateName={activeTemplate.templateName}
-            enabledSections={activeEnabledSections}
-            sectionOrder={activeSectionOrder}
-            theme={activeTheme}
-            designConfig={activeDesignConfig}
+            data={generatedPreviewSnapshot?.data ?? activePreviewSnapshot.data}
+            templateId={
+              generatedPreviewSnapshot?.templateId ??
+              activePreviewSnapshot.templateId
+            }
+            templateName={
+              generatedPreviewSnapshot?.templateName ??
+              activePreviewSnapshot.templateName
+            }
+            enabledSections={
+              generatedPreviewSnapshot?.enabledSections ??
+              activePreviewSnapshot.enabledSections
+            }
+            sectionOrder={
+              generatedPreviewSnapshot?.sectionOrder ??
+              activePreviewSnapshot.sectionOrder
+            }
+            theme={generatedPreviewSnapshot?.theme ?? activePreviewSnapshot.theme}
+            designConfig={
+              generatedPreviewSnapshot?.designConfig ??
+              activePreviewSnapshot.designConfig
+            }
           />
         </div>
       </div>

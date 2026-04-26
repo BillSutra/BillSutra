@@ -597,6 +597,7 @@ model Invoice {
   grand_total Decimal @default(0) @map("grand_total") @db.Decimal(12, 2)
 
   notes String?
+  template_snapshot Json?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

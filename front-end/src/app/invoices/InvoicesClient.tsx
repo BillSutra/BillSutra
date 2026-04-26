@@ -1633,6 +1633,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           sendInvoiceEmailMutation.mutateAsync({
             invoiceId,
             email: payload.email ?? "",
+            previewPayload: payload.preview_payload ?? null,
           }),
         payload: {
           customer_id: Number(form.customer_id),
@@ -1652,6 +1653,14 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
               : (form.payment_method || undefined),
           payment_date: effectivePaymentDate,
           tax_mode: taxMode,
+          template_snapshot: {
+            templateId: activeTemplate.templateId,
+            templateName: activeTemplate.templateName,
+            enabledSections: activeEnabledSections,
+            sectionOrder: activeSectionOrder,
+            theme: activeTheme,
+            designConfig: activeDesignConfig,
+          },
           sync_sales: true,
           warehouse_id: form.warehouse_id
             ? Number(form.warehouse_id)
@@ -1665,6 +1674,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           })),
         },
         customerEmail: selectedCustomer?.email ?? null,
+        previewPayload: currentInvoiceRenderPayload,
       });
       const createdInvoice = checkoutResult.invoice;
       const createdInvoiceRenderPayload = buildInvoiceRenderPayload({

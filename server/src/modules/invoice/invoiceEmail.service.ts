@@ -6,6 +6,7 @@ import { emitDashboardUpdate } from "../../services/dashboardRealtime.js";
 import { createPdfAttachment } from "../../services/mailService.js";
 import { computeInvoicePaymentSnapshotFromPayments } from "../../utils/invoicePaymentSnapshot.js";
 import {
+  buildInvoicePdfPreviewPayload,
   generateInvoicePdf,
   getInvoice,
   markInvoiceAsSent,
@@ -110,13 +111,63 @@ export const deliverInvoiceEmail = async ({
     where: { user_id: userId },
     select: {
       business_name: true,
+      address: true,
+      address_line1: true,
+      city: true,
+      state: true,
+      pincode: true,
       email: true,
       phone: true,
+      website: true,
+      logo_url: true,
+      tax_id: true,
       currency: true,
+      show_logo_on_invoice: true,
+      show_tax_number: true,
+      show_payment_qr: true,
     },
   });
-  const pdfBuffer = previewPayload
-    ? await renderInvoicePreviewPdfBuffer(previewPayload)
+  const resolvedPreviewPayload =
+    previewPayload ??
+    buildInvoicePdfPreviewPayload({
+      invoice: invoiceDetails,
+      company: businessProfile,
+      customerProfile: invoiceDetails.customer
+        ? {
+            customer_type:
+              typeof invoiceDetails.customer.customer_type === "string"
+                ? invoiceDetails.customer.customer_type
+                : null,
+            business_name:
+              typeof invoiceDetails.customer.business_name === "string"
+                ? invoiceDetails.customer.business_name
+                : null,
+            gstin:
+              typeof invoiceDetails.customer.gstin === "string"
+                ? invoiceDetails.customer.gstin
+                : null,
+            address_line1:
+              typeof invoiceDetails.customer.address_line1 === "string"
+                ? invoiceDetails.customer.address_line1
+                : null,
+            city:
+              typeof invoiceDetails.customer.city === "string"
+                ? invoiceDetails.customer.city
+                : null,
+            state:
+              typeof invoiceDetails.customer.state === "string"
+                ? invoiceDetails.customer.state
+                : null,
+            pincode:
+              typeof invoiceDetails.customer.pincode === "string"
+                ? invoiceDetails.customer.pincode
+                : null,
+          }
+        : null,
+    }) ??
+    undefined;
+  const pdfBuffer = resolvedPreviewPayload
+    ? await renderInvoicePreviewPdfBuffer(resolvedPreviewPayload)
     : (await generateInvoicePdf(userId, invoiceId)).buffer;
 
   await sendEmail(
@@ -158,7 +209,7 @@ export const deliverInvoiceEmail = async ({
         invoiceDetails.invoice_number,
       ),
       currency: businessProfile?.currency ?? "INR",
-      preview_payload: previewPayload ?? undefined,
+      preview_payload: resolvedPreviewPayload,
       items: invoiceDetails.items.map((item) => ({
         name: item.name,
         quantity: Number(item.quantity ?? 0),

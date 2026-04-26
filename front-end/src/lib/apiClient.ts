@@ -899,6 +899,7 @@ export type Invoice = {
   total: string;
   grand_total?: string | null;
   notes?: string | null;
+  template_snapshot?: InvoiceTemplateSnapshot | null;
   totalPaid?: number;
   customer?: Customer | null;
   payments: Array<{
@@ -930,6 +931,15 @@ export type Invoice = {
     igst_amount?: string | null;
     total: string;
   }>;
+};
+
+export type InvoiceTemplateSnapshot = {
+  templateId?: string | null;
+  templateName?: string | null;
+  enabledSections: string[];
+  sectionOrder?: string[];
+  theme?: Record<string, unknown> | null;
+  designConfig?: Record<string, unknown> | null;
 };
 
 export type InvoiceBootstrap = {
@@ -975,6 +985,7 @@ export type InvoiceInput = {
   is_tax_inclusive?: boolean;
   status?: string | null;
   notes?: string | null;
+  template_snapshot?: InvoiceTemplateSnapshot | null;
   sync_sales?: boolean;
   warehouse_id?: number | null;
   items: Array<{
