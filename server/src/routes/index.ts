@@ -67,6 +67,7 @@ import {
   authRegisterSchema,
   authForgotSchema,
   authResetSchema,
+  authVerifyEmailQuerySchema,
   passkeyAuthenticateOptionsSchema,
   passkeyAuthenticateVerifySchema,
   passkeyRegisterOptionsSchema,
@@ -232,6 +233,18 @@ router.post(
   authRateLimiter,
   validate({ body: authRegisterSchema }),
   AuthController.register,
+);
+router.get(
+  "/auth/verify-email",
+  authRateLimiter,
+  validate({ query: authVerifyEmailQuerySchema }),
+  AuthController.verifyEmail,
+);
+router.post(
+  "/auth/resend-verification",
+  authRateLimiter,
+  AuthMiddleware,
+  AuthController.resendVerification,
 );
 router.post("/auth/refresh", authRateLimiter, AuthController.refresh);
 router.post(

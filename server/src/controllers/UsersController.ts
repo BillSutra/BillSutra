@@ -294,6 +294,7 @@ class UsersController {
     const business = await findBusinessByOwnerIdIfAvailable(userId);
 
     await prisma.passwordResetToken.deleteMany({ where: { user_id: userId } });
+    await prisma.emailVerificationToken.deleteMany({ where: { user_id: userId } });
     await prisma.recurringInvoiceTemplate.deleteMany({
       where: { user_id: userId },
     });

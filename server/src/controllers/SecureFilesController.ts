@@ -5,6 +5,7 @@ import type { Request, Response } from "express";
 import { findUploadedFileById } from "../services/uploadedFiles.service.js";
 import {
   LEGACY_PAYMENT_PROOFS_ROOT,
+  PRIVATE_EXPORTS_ROOT,
   PRIVATE_PAYMENT_PROOFS_ROOT,
   isPathInsideRoot,
 } from "../lib/uploadPaths.js";
@@ -188,6 +189,7 @@ class SecureFilesController {
 
     const absoluteFilePath = path.resolve(fileRecord.file_path);
     const isAllowedPath =
+      isPathInsideRoot(PRIVATE_EXPORTS_ROOT, absoluteFilePath) ||
       isPathInsideRoot(PRIVATE_PAYMENT_PROOFS_ROOT, absoluteFilePath) ||
       isPathInsideRoot(LEGACY_PAYMENT_PROOFS_ROOT, absoluteFilePath);
 

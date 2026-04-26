@@ -29,7 +29,13 @@ const verifyAdminToken = (
 ) => {
   jwt.verify(token, process.env.JWT_SECRET as string, (error, decoded) => {
     if (error || !decoded || typeof decoded === "string") {
-      res.status(401).json({ status: 401, message: "Unauthorized" });
+      res.status(401).json({
+        status: 401,
+        message:
+          error instanceof jwt.TokenExpiredError
+            ? "Session expired. Please login again."
+            : "Unauthorized",
+      });
       return;
     }
 

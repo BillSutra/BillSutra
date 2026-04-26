@@ -9,18 +9,20 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/92 hover:shadow-md dark:shadow-[0_12px_26px_-18px_rgba(123,161,207,0.45)]",
-        default: "bg-primary text-primary-foreground shadow-sm hover:bg-primary/92 hover:shadow-md dark:shadow-[0_12px_26px_-18px_rgba(123,161,207,0.45)]",
+        primary:
+          "bg-primary text-primary-foreground shadow-sm hover:bg-primary/92 hover:shadow-md dark:bg-blue-600 dark:text-white dark:hover:bg-blue-500 dark:shadow-[0_16px_30px_-18px_rgba(37,99,235,0.45)]",
+        default:
+          "bg-primary text-primary-foreground shadow-sm hover:bg-primary/92 hover:shadow-md dark:bg-blue-600 dark:text-white dark:hover:bg-blue-500 dark:shadow-[0_16px_30px_-18px_rgba(37,99,235,0.45)]",
         danger:
           "bg-red-600 text-white shadow-sm hover:bg-red-700 hover:shadow-md focus-visible:ring-red-500/30",
         destructive:
           "bg-destructive text-white shadow-sm hover:bg-destructive/90 hover:shadow-md focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
-          "border border-border/80 bg-card/90 text-foreground shadow-sm hover:border-primary/30 hover:bg-accent/60 hover:text-accent-foreground dark:border-white/8 dark:bg-card/80 dark:hover:border-primary/35 dark:hover:bg-accent/85",
+          "border border-border/80 bg-card/90 text-foreground shadow-sm hover:border-primary/30 hover:bg-accent/60 hover:text-accent-foreground dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:hover:border-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-white",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80 dark:bg-secondary/92 dark:hover:bg-secondary/78",
+          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80 dark:bg-zinc-800 dark:text-white dark:hover:bg-zinc-700",
         ghost:
-          "hover:bg-accent/70 hover:text-accent-foreground dark:hover:bg-accent/72",
+          "hover:bg-accent/70 hover:text-accent-foreground dark:hover:bg-zinc-800 dark:hover:text-white",
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {

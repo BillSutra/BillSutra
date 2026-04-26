@@ -33,6 +33,7 @@ type ProductRowProps = {
   item: CartItem;
   matchedProduct: Product | null;
   allowNegativeStock: boolean;
+  isShortcutActive: boolean;
   quantityInputRef: (node: HTMLInputElement | null) => void;
   priceInputRef: (node: HTMLInputElement | null) => void;
   onUpdateItem: (id: string, patch: Partial<CartItem>) => void;
@@ -40,6 +41,7 @@ type ProductRowProps = {
   onAdjustQuantity: (id: string, delta: number) => void;
   onCommitQuantity: (id: string) => void;
   formatMoney: (amount: number) => string;
+  onActivate: (id: string) => void;
 };
 
 export default function ProductRow({
@@ -47,6 +49,7 @@ export default function ProductRow({
   item,
   matchedProduct,
   allowNegativeStock,
+  isShortcutActive,
   quantityInputRef,
   priceInputRef,
   onUpdateItem,
@@ -54,6 +57,7 @@ export default function ProductRow({
   onAdjustQuantity,
   onCommitQuantity,
   formatMoney,
+  onActivate,
 }: ProductRowProps) {
   const quantityValue = toQuantity(item.quantity);
   const priceValue = toAmount(item.price);
@@ -69,7 +73,15 @@ export default function ProductRow({
     quantityValue > stockOnHand;
 
   return (
-    <div className="rounded-2xl border border-border/60 bg-background/80 p-3 shadow-sm shadow-black/[0.02]">
+    <div
+      className={cn(
+        "rounded-2xl border border-border/60 bg-background/80 p-3 shadow-sm shadow-black/[0.02] transition-colors",
+        isShortcutActive &&
+          "border-primary/60 bg-primary/5 shadow-[0_0_0_1px_rgba(59,130,246,0.16)]",
+      )}
+      onMouseDownCapture={() => onActivate(item.id)}
+      onFocusCapture={() => onActivate(item.id)}
+    >
       <div className="hidden grid-cols-[minmax(0,1.8fr)_9rem_10rem_9rem_auto] items-center gap-3 px-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground md:grid">
         <span>{isHindi ? "प्रोडक्ट" : "Product"}</span>
         <span className="text-center">{isHindi ? "मात्रा" : "Qty"}</span>

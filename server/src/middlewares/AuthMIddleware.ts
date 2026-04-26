@@ -23,8 +23,24 @@ const workerAllowedRoutes = [
   { prefix: "/users/password", methods: ["PUT"] },
 ];
 
+const unverifiedAllowedRoutes = [
+  { prefix: "/users/me", methods: ["GET"] },
+  { prefix: "/users/password", methods: ["PUT"] },
+  { prefix: "/auth/resend-verification", methods: ["POST"] },
+];
+
 const isWorkerRequestAllowed = (path: string, method: string) =>
   workerAllowedRoutes.some((route) => {
+    if (!(path === route.prefix || path.startsWith(`${route.prefix}/`))) {
+      return false;
+    }
+
+    if (!route.methods) return true;
+    return route.methods.includes(method.toUpperCase());
+  });
+
+const isUnverifiedRequestAllowed = (path: string, method: string) =>
+  unverifiedAllowedRoutes.some((route) => {
     if (!(path === route.prefix || path.startsWith(`${route.prefix}/`))) {
       return false;
     }
@@ -48,7 +64,15 @@ const verifyResolvedToken = async (
 
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET as string);
-  } catch {
+  } catch (error) {
+    if (error instanceof jwt.TokenExpiredError) {
+      res.status(401).json({
+        status: 401,
+        message: "Session expired. Please login again.",
+      });
+      return true;
+    }
+
     return false;
   }
 
@@ -82,6 +106,19 @@ const verifyResolvedToken = async (
       accountType: authUser.accountType,
       role: authUser.role,
     });
+
+    if (
+      authUser.accountType === "OWNER" &&
+      !authUser.isEmailVerified &&
+      !isUnverifiedRequestAllowed(req.path, req.method)
+    ) {
+      res.status(403).json({
+        status: 403,
+        message: "Please verify your email to continue.",
+        code: "EMAIL_VERIFICATION_REQUIRED",
+      });
+      return true;
+    }
 
     if (
       authUser.role === "WORKER" &&

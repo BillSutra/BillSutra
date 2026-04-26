@@ -15,6 +15,13 @@ export type WelcomeEmailData = {
   login_url: string;
 };
 
+export type VerifyEmailData = {
+  email: string;
+  user_name: string;
+  verify_url: string;
+  expires_in_minutes: number;
+};
+
 export type PasswordResetEmailData = {
   email: string;
   user_name: string;
@@ -102,7 +109,8 @@ export type ExportReadyEmailData = {
   format: string;
   exported_count: number;
   file_name: string;
-  attachment: MailAttachment;
+  attachment?: MailAttachment;
+  download_url?: string | null;
 };
 
 export type DeleteDataConfirmationEmailData = {
@@ -123,8 +131,25 @@ export type PaymentAccessApprovedEmailData = {
   status_page_url: string;
 };
 
+export type MonthlySalesReportEmailData = {
+  email: string;
+  user_name: string;
+  report_month_label: string;
+  invoices_issued: number;
+  total_billed: number;
+  total_collected: number;
+  sales_count: number;
+  total_sales: number;
+  purchases_count: number;
+  total_purchases: number;
+  profit: number;
+  overdue_count: number;
+  reports_url: string;
+};
+
 export type EmailTemplateDataMap = {
   welcome: WelcomeEmailData;
+  verify_email: VerifyEmailData;
   password_reset: PasswordResetEmailData;
   otp_login: OtpLoginEmailData;
   invoice_sent: InvoiceSentEmailData;
@@ -133,6 +158,7 @@ export type EmailTemplateDataMap = {
   delete_data_confirmation: DeleteDataConfirmationEmailData;
   delete_account_confirmation: DeleteAccountConfirmationEmailData;
   payment_access_approved: PaymentAccessApprovedEmailData;
+  monthly_sales_report: MonthlySalesReportEmailData;
 };
 
 export type EmailType = keyof EmailTemplateDataMap;

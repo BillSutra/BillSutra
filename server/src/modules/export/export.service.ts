@@ -1,9 +1,9 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import prisma from "../../config/db.config.js";
-import { sendEmail } from "../../emails/index.js";
 import XLSX from "xlsx";
 import { launchPuppeteerBrowser } from "../../lib/launchPuppeteerBrowser.js";
 import { enqueueExportEmailDelivery } from "../../queues/jobs/export.jobs.js";
+import { sendExportEmail as sendExportEmailNotification } from "../../services/email.service.js";
 
 export type ExportResource = "products" | "customers" | "invoices";
 export type ExportFormat = "csv" | "xlsx" | "pdf" | "json";
@@ -978,30 +978,6 @@ const logExport = async (
   }
 };
 
-const sendExportEmail = async (
-  recipientEmail: string,
-  recipientName: string,
-  fileName: string,
-  contentType: string,
-  content: Buffer,
-  payload: ExportPayload,
-  exportedCount: number,
-) => {
-  await sendEmail("export_ready", {
-    email: recipientEmail,
-    user_name: recipientName,
-    resource: payload.resource,
-    format: payload.format,
-    exported_count: exportedCount,
-    file_name: fileName,
-    attachment: {
-      filename: fileName,
-      content,
-      contentType,
-    },
-  });
-};
-
 export const executeQueuedExportEmail = async (
   authUser: { id: number; email?: string; actorId?: string },
   payload: ExportPayload,
@@ -1018,15 +994,16 @@ export const executeQueuedExportEmail = async (
 
   await logExport(prisma, authUser, payload, result.exportedCount);
 
-  await sendExportEmail(
+  await sendExportEmailNotification({
+    userId: authUser.id,
     recipientEmail,
-    authUser.actorId ?? `User ${authUser.id}`,
-    result.fileName,
-    result.contentType,
-    result.content,
+    recipientName: authUser.actorId ?? `User ${authUser.id}`,
+    fileName: result.fileName,
+    contentType: result.contentType,
+    content: result.content,
     payload,
-    result.exportedCount,
-  );
+    exportedCount: result.exportedCount,
+  });
 
   return {
     delivery: "email" as const,

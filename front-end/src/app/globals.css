@@ -111,66 +111,66 @@
 
 .dark {
   /* Dedicated dark palette:
-     softer contrast than black/white, layered surfaces, and muted fintech accents. */
-  --background: #11161d;
-  --foreground: #e7ecf3;
-  --bg: #11161d;
-  --text: #e7ecf3;
-  --card-bg: #171d25;
-  --input-bg: #1b2330;
-  --text-muted: #97a7b9;
-  --line: #2a3442;
+     stronger zinc hierarchy for clearer page/card/elevated separation. */
+  --background: #09090b;
+  --foreground: #ffffff;
+  --bg: #09090b;
+  --text: #ffffff;
+  --card-bg: #18181b;
+  --input-bg: #18181b;
+  --text-muted: #a1a1aa;
+  --line: #3f3f46;
   --invoice-text: #1f1b16;
-  --card: #171d25;
-  --card-foreground: #e7ecf3;
-  --popover: #1b2330;
-  --popover-foreground: #e7ecf3;
-  --primary: #7ba1cf;
-  --primary-foreground: #0f151d;
-  --secondary: #1b2330;
-  --secondary-foreground: #d8e2ee;
-  --muted: #18202b;
-  --muted-foreground: #97a7b9;
-  --accent: #202937;
-  --accent-foreground: #dbe5f2;
+  --card: #18181b;
+  --card-foreground: #ffffff;
+  --popover: #18181b;
+  --popover-foreground: #ffffff;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --secondary: #27272a;
+  --secondary-foreground: #ffffff;
+  --muted: #27272a;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: #ffffff;
   --destructive: #d47b7b;
-  --border: #2a3442;
-  --input: #2a3442;
-  --ring: #7b9dc2;
-  --chart-1: #7ea9d8;
-  --chart-2: #7fb690;
-  --chart-3: #d0a86a;
-  --chart-4: #94a7bf;
-  --chart-5: #c97f77;
-  --sidebar: #121821;
-  --sidebar-foreground: #e7ecf3;
-  --sidebar-primary: #7ba1cf;
-  --sidebar-primary-foreground: #0f151d;
-  --sidebar-accent: #1b2430;
-  --sidebar-accent-foreground: #d8e2ee;
-  --sidebar-border: #27303d;
-  --sidebar-ring: #6f8fb4;
+  --border: #3f3f46;
+  --input: #3f3f46;
+  --ring: #3b82f6;
+  --chart-1: #60a5fa;
+  --chart-2: #34d399;
+  --chart-3: #fbbf24;
+  --chart-4: #c4b5fd;
+  --chart-5: #f87171;
+  --sidebar: #111113;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #2563eb;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #18181b;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #27272a;
+  --sidebar-ring: #3b82f6;
   --dashboard-bg:
-    radial-gradient(circle at top, rgba(123, 161, 207, 0.12), transparent 28%),
-    linear-gradient(180deg, #10151c 0%, #131922 52%, #161d27 100%);
+    radial-gradient(circle at top, rgba(37, 99, 235, 0.12), transparent 28%),
+    linear-gradient(180deg, #09090b 0%, #111113 54%, #18181b 100%);
   --dashboard-grid: radial-gradient(
-    rgba(144, 162, 184, 0.11) 0.5px,
+    rgba(113, 113, 122, 0.14) 0.5px,
     transparent 0.5px
   );
-  --dashboard-surface: #171d25;
-  --dashboard-surface-muted: #1d2530;
-  --dashboard-surface-border: #2a3442;
-  --dashboard-text: #e7ecf3;
-  --dashboard-text-muted: #98a8ba;
-  --dashboard-text-subtle: #74869d;
-  --dashboard-accent: #7ba1cf;
-  --app-surface: rgba(23, 29, 37, 0.8);
-  --app-surface-strong: rgba(27, 34, 44, 0.95);
-  --app-surface-muted: rgba(31, 40, 52, 0.9);
-  --app-surface-border: rgba(53, 66, 84, 0.88);
-  --app-shadow: 0 30px 72px -46px rgba(1, 4, 9, 0.72);
-  --app-shadow-soft: 0 18px 42px -30px rgba(1, 4, 9, 0.55);
-  --app-kicker: #8fa1b4;
+  --dashboard-surface: #18181b;
+  --dashboard-surface-muted: #27272a;
+  --dashboard-surface-border: #3f3f46;
+  --dashboard-text: #ffffff;
+  --dashboard-text-muted: #a1a1aa;
+  --dashboard-text-subtle: #71717a;
+  --dashboard-accent: #3b82f6;
+  --app-surface: rgba(24, 24, 27, 0.92);
+  --app-surface-strong: rgba(24, 24, 27, 0.97);
+  --app-surface-muted: rgba(39, 39, 42, 0.95);
+  --app-surface-border: rgba(63, 63, 70, 0.92);
+  --app-shadow: 0 28px 60px -42px rgba(0, 0, 0, 0.72);
+  --app-shadow-soft: 0 18px 36px -28px rgba(0, 0, 0, 0.62);
+  --app-kicker: #71717a;
 }
 
 @layer base {
@@ -323,34 +323,34 @@
   }
 
   .dark .dashboard-root {
-    --primary: #7ba1cf;
-    --primary-foreground: #0f151d;
-    --ring: #7b9dc2;
+    --primary: #2563eb;
+    --primary-foreground: #ffffff;
+    --ring: #3b82f6;
     --dashboard-bg:
       radial-gradient(
         circle at top,
-        rgba(123, 161, 207, 0.12),
+        rgba(37, 99, 235, 0.12),
         transparent 28%
       ),
-      linear-gradient(180deg, #10151c 0%, #131922 54%, #161d27 100%);
+      linear-gradient(180deg, #09090b 0%, #111113 54%, #18181b 100%);
     --dashboard-grid: radial-gradient(
-      rgba(144, 162, 184, 0.11) 0.6px,
+      rgba(113, 113, 122, 0.14) 0.6px,
       transparent 0.6px
     );
-    --dashboard-surface: #171d25;
-    --dashboard-surface-muted: #1d2530;
-    --dashboard-surface-border: #2a3442;
-    --dashboard-text: #e7ecf3;
-    --dashboard-text-muted: #98a8ba;
-    --dashboard-text-subtle: #74869d;
-    --dashboard-accent: #7ba1cf;
-    --app-surface: rgba(23, 29, 37, 0.82);
-    --app-surface-strong: rgba(27, 34, 44, 0.96);
-    --app-surface-muted: rgba(31, 40, 52, 0.9);
-    --app-surface-border: rgba(53, 66, 84, 0.9);
-    --app-shadow: 0 30px 72px -46px rgba(1, 4, 9, 0.72);
-    --app-shadow-soft: 0 18px 42px -30px rgba(1, 4, 9, 0.55);
-    --app-kicker: #8fa1b4;
+    --dashboard-surface: #18181b;
+    --dashboard-surface-muted: #27272a;
+    --dashboard-surface-border: #3f3f46;
+    --dashboard-text: #ffffff;
+    --dashboard-text-muted: #a1a1aa;
+    --dashboard-text-subtle: #71717a;
+    --dashboard-accent: #3b82f6;
+    --app-surface: rgba(24, 24, 27, 0.92);
+    --app-surface-strong: rgba(24, 24, 27, 0.97);
+    --app-surface-muted: rgba(39, 39, 42, 0.95);
+    --app-surface-border: rgba(63, 63, 70, 0.92);
+    --app-shadow: 0 28px 60px -42px rgba(0, 0, 0, 0.72);
+    --app-shadow-soft: 0 18px 36px -28px rgba(0, 0, 0, 0.62);
+    --app-kicker: #71717a;
   }
 
   .dashboard-root::before {
@@ -682,6 +682,10 @@
       var(--app-shadow-soft),
       inset 0 1px 0 color-mix(in oklab, white 18%, transparent);
     backdrop-filter: blur(12px);
+    transition:
+      background-color 200ms ease,
+      border-color 200ms ease,
+      box-shadow 200ms ease;
   }
 
   .app-panel-muted {
@@ -695,6 +699,10 @@
       var(--app-shadow-soft),
       inset 0 1px 0 color-mix(in oklab, white 16%, transparent);
     backdrop-filter: blur(10px);
+    transition:
+      background-color 200ms ease,
+      border-color 200ms ease,
+      box-shadow 200ms ease;
   }
 
   .app-chip {
@@ -733,6 +741,10 @@
       var(--app-shadow-soft),
       inset 0 1px 0 color-mix(in oklab, white 14%, transparent);
     border-radius: 1rem;
+    transition:
+      background-color 200ms ease,
+      border-color 200ms ease,
+      box-shadow 200ms ease;
   }
 
   .app-loading-skeleton {
@@ -765,11 +777,11 @@
   }
 
   .dark .app-field {
-    border-color: color-mix(in oklab, var(--line) 88%, transparent);
-    background: color-mix(in oklab, var(--input-bg) 96%, transparent);
+    border-color: #3f3f46;
+    background: #18181b;
     box-shadow:
-      0 10px 24px -20px rgba(1, 4, 9, 0.6),
-      inset 0 1px 0 rgba(255, 255, 255, 0.035);
+      0 10px 24px -20px rgba(0, 0, 0, 0.55),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .app-field::placeholder {
@@ -786,8 +798,45 @@
       inset 0 1px 0 color-mix(in oklab, white 10%, transparent);
   }
 
+  .dark .app-field:focus,
+  .dark .app-field:focus-visible {
+    border-color: #3b82f6;
+    box-shadow:
+      0 0 0 1px #3b82f6,
+      0 0 0 4px rgba(59, 130, 246, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
   .app-field:hover {
     border-color: color-mix(in oklab, var(--ring) 34%, var(--line));
+  }
+
+  .dark .app-field:hover {
+    border-color: #52525b;
+  }
+
+  .dark .app-panel,
+  .dark .app-list-item {
+    border-color: #3f3f46;
+    background: linear-gradient(180deg, rgba(39, 39, 42, 0.82), #18181b);
+    box-shadow:
+      0 22px 44px -32px rgba(0, 0, 0, 0.68),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .dark .app-panel-muted,
+  .dark .app-empty-state {
+    border-color: #3f3f46;
+    background: linear-gradient(180deg, #27272a, #18181b);
+    box-shadow:
+      0 16px 32px -28px rgba(0, 0, 0, 0.58),
+      inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  }
+
+  .dark .app-chip {
+    border-color: #3f3f46;
+    background: #27272a;
+    color: #a1a1aa;
   }
 
   .app-scrollbar {

@@ -49,6 +49,15 @@ const AuthSseMiddleware = (
 
       req.user = authUser;
 
+      if (authUser.accountType === "OWNER" && !authUser.isEmailVerified) {
+        res.status(403).json({
+          status: 403,
+          message: "Please verify your email to continue.",
+          code: "EMAIL_VERIFICATION_REQUIRED",
+        });
+        return;
+      }
+
       if (authUser.role === "WORKER") {
         res.status(403).json({
           status: 403,

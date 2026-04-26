@@ -6,6 +6,7 @@ import { sendResponse } from "../utils/sendResponse.js";
 
 const ADMIN_AUTH_COOKIE_NAME = "bill_sutra_admin_session";
 const isProd = process.env.NODE_ENV === "production";
+const ADMIN_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 const parseOwnerUserId = (ownerId: string) => {
   const parsed = Number.parseInt(ownerId, 10);
@@ -17,7 +18,7 @@ const readRouteParam = (value: string | string[] | undefined) =>
 
 const createAdminToken = (payload: AdminAuthUser) =>
   `Bearer ${jwt.sign(payload, process.env.JWT_SECRET as string, {
-    expiresIn: "30d",
+    expiresIn: "1d",
   })}`;
 
 const setAdminAuthCookie = (res: Response, token: string) => {
@@ -30,7 +31,7 @@ const setAdminAuthCookie = (res: Response, token: string) => {
     secure: isProd,
     sameSite: "strict",
     path: "/",
-    maxAge: 30 * 24 * 60 * 60 * 1000,
+    maxAge: ADMIN_TOKEN_TTL_MS,
   });
 };
 
@@ -83,6 +84,7 @@ class AdminController {
       data: {
         user: authUser,
         token,
+        expiresAt: Date.now() + ADMIN_TOKEN_TTL_MS,
       },
     });
   }

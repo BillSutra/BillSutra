@@ -19,6 +19,24 @@ export type SendInvoiceReminderJobData = {
   requestedEmail?: string | null;
 };
 
+export type SendWelcomeEmailJobData = {
+  userId: number;
+};
+
+export type SendEmailVerificationEmailJobData = {
+  userId: number;
+  rawToken: string;
+};
+
+export type SendPlanApprovedEmailJobData = {
+  paymentId: string;
+};
+
+export type SendMonthlySalesReportEmailJobData = {
+  userId: number;
+  monthKey: string;
+};
+
 export type SendExportEmailJobData = {
   userId: number;
   actorId?: string;
@@ -38,6 +56,10 @@ export type DefaultQueueJobDataMap = {
   generateInvoicePDF: GenerateInvoicePdfJobData;
   sendInvoiceEmail: SendInvoiceEmailJobData;
   sendInvoiceReminderEmail: SendInvoiceReminderJobData;
+  sendWelcomeEmail: SendWelcomeEmailJobData;
+  sendEmailVerificationEmail: SendEmailVerificationEmailJobData;
+  sendPlanApprovedEmail: SendPlanApprovedEmailJobData;
+  sendMonthlySalesReportEmail: SendMonthlySalesReportEmailJobData;
   sendExportEmail: SendExportEmailJobData;
   createNotification: CreateNotificationJobData;
 };

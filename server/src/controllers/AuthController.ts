@@ -32,6 +32,7 @@ import {
   buildOwnerAuthUser,
   buildWorkerAuthUser,
   ensureBusinessForUser,
+  getAccessTokenExpiresAt,
   getUserSessionVersionIfAvailable,
   resolveAuthUserFromDecoded,
 } from "../lib/authSession.js";
@@ -59,7 +60,13 @@ import {
   toStoredPublicKey,
 } from "../lib/modernAuth.js";
 import { sendEmail } from "../emails/index.js";
-import { buildLoginUrl, buildResetPasswordUrl } from "../lib/appUrls.js";
+import { buildResetPasswordUrl } from "../lib/appUrls.js";
+import { dispatchWelcomeEmail } from "../services/email.service.js";
+import {
+  consumeEmailVerificationToken,
+  dispatchFreshVerificationEmail,
+  getEmailVerificationResendState,
+} from "../services/emailVerification.service.js";
 
 type SerializableOwnerUser = Pick<
   User,
@@ -110,11 +117,13 @@ const buildOwnerAuthResponse = async (
 ) => {
   const authUser = await buildOwnerAuthUser(user);
   const { accessToken } = await issueAuthCookies(res, authUser);
+  const expiresAt = getAccessTokenExpiresAt();
 
   return {
     message,
     user: serializeOwnerUser(user, authUser),
     token: `Bearer ${accessToken}`,
+    expiresAt,
   };
 };
 
@@ -245,35 +254,122 @@ class AuthController {
           provider: "credentials",
         },
         select: authUserSelect,
-      });
+        });
 
       await ensureBusinessForUser(user.id, body.name);
-
-      try {
-        await sendEmail("welcome", {
-          email: user.email,
-          user_name: user.name,
-          login_url: buildLoginUrl(user.email),
+      void dispatchWelcomeEmail(user.id);
+      void dispatchFreshVerificationEmail(user.id).catch((error) => {
+        console.warn("[auth] verification email dispatch failed", {
+          userId: user.id,
+          message: error instanceof Error ? error.message : String(error),
         });
-      } catch {
-        // Registration should succeed even if the welcome email fails.
-      }
-
-      return sendResponse(res, 200, {
-        message: "Registration successful",
-        user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          provider: user.provider,
-          image: user.image,
-          is_email_verified: user.is_email_verified,
-          role: "ADMIN",
-          accountType: "OWNER",
-        },
       });
+
+      return sendResponse(
+        res,
+        200,
+        await buildOwnerAuthResponse(
+          res,
+          user,
+          "Registration successful",
+        ),
+      );
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
+    }
+  }
+
+  static async verifyEmail(req: Request, res: Response) {
+    try {
+      const rawToken =
+        typeof req.query.token === "string" ? req.query.token.trim() : "";
+
+      if (!rawToken) {
+        return sendResponse(res, 400, {
+          message: "Verification token is required",
+        });
+      }
+
+      const result = await consumeEmailVerificationToken(rawToken);
+
+      if (result.status === "invalid") {
+        return sendResponse(res, 400, {
+          message: "Verification link is invalid",
+          code: "EMAIL_VERIFICATION_INVALID",
+        });
+      }
+
+      if (result.status === "expired") {
+        return sendResponse(res, 410, {
+          message: "Verification link expired. Request a new one.",
+          code: "EMAIL_VERIFICATION_EXPIRED",
+        });
+      }
+
+      return sendResponse(
+        res,
+        200,
+        await buildOwnerAuthResponse(
+          res,
+          result.user,
+          "Email verified successfully",
+        ),
+      );
+    } catch {
+      return sendResponse(res, 500, {
+        message: "Unable to verify email",
+      });
+    }
+  }
+
+  static async resendVerification(req: Request, res: Response) {
+    try {
+      if (!req.user?.id) {
+        return sendResponse(res, 401, { message: "Unauthorized" });
+      }
+
+      if (req.user.accountType === "WORKER") {
+        return sendResponse(res, 403, {
+          message: "Worker accounts do not require email verification",
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: req.user.id },
+        select: {
+          id: true,
+          email: true,
+          is_email_verified: true,
+        },
+      });
+
+      if (!user) {
+        return sendResponse(res, 404, { message: "User not found" });
+      }
+
+      if (user.is_email_verified) {
+        return sendResponse(res, 200, {
+          message: "Email is already verified",
+        });
+      }
+
+      const resendState = await getEmailVerificationResendState(user.id);
+      if (!resendState.allowed) {
+        return sendResponse(res, 429, {
+          message: `Please wait ${resendState.retryAfterSeconds}s before requesting another verification email.`,
+          retryAfter: resendState.retryAfterSeconds,
+        });
+      }
+
+      await dispatchFreshVerificationEmail(user.id);
+
+      return sendResponse(res, 200, {
+        message: "Verification email sent",
+      });
+    } catch {
+      return sendResponse(res, 500, {
+        message: "Unable to resend verification email",
+      });
     }
   }
 
@@ -292,6 +388,7 @@ class AuthController {
         data: {
           token: `Bearer ${refreshed.accessToken}`,
           source: "cookie",
+          expiresAt: getAccessTokenExpiresAt(),
         },
       });
     } catch {
@@ -328,6 +425,7 @@ class AuthController {
           "Secure cookie session bootstrapped. Legacy bearer tokens remain supported during the transition.",
         data: {
           token: `Bearer ${issued.accessToken}`,
+          expiresAt: getAccessTokenExpiresAt(),
         },
       });
     } catch {
@@ -505,6 +603,7 @@ class AuthController {
           workerId: worker.id,
         },
         token: `Bearer ${accessToken}`,
+        expiresAt: getAccessTokenExpiresAt(),
       });
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });

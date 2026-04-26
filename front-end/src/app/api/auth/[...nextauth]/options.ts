@@ -26,6 +26,7 @@ export type CustomUser = User & {
   id: string;
   provider?: string | null;
   token?: string | null;
+  is_email_verified?: boolean | null;
   role?: "ADMIN" | "WORKER" | null;
   businessId?: string | null;
   accountType?: "OWNER" | "WORKER" | null;
@@ -39,6 +40,7 @@ type AuthPayloadUser = {
   email?: string | null;
   provider?: string | null;
   image?: string | null;
+  is_email_verified?: boolean | null;
   role?: "ADMIN" | "WORKER" | null;
   businessId?: string | null;
   accountType?: "OWNER" | "WORKER" | null;
@@ -74,6 +76,7 @@ const mapAuthPayloadToUser = (
     image: user.image ?? null,
     provider: user.provider ?? fallbackProvider,
     token: exposeAccessTokenToClient ? authPayload?.token ?? null : null,
+    is_email_verified: user.is_email_verified ?? null,
     role: user.role ?? null,
     businessId: user.businessId ?? null,
     accountType: user.accountType ?? user.account_type ?? null,
@@ -238,6 +241,7 @@ export const authOptions: AuthOptions = {
           user.token = mappedUser.token;
           user.provider = mappedUser.provider;
           user.role = mappedUser.role;
+          user.is_email_verified = mappedUser.is_email_verified;
           user.businessId = mappedUser.businessId;
           user.accountType = mappedUser.accountType;
           user.workerId = mappedUser.workerId;

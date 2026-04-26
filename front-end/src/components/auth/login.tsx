@@ -29,6 +29,10 @@ import {
   verifyOtpLoginCode,
   verifyPasskeyAuthentication,
 } from "@/lib/authClient";
+import {
+  bootstrapSecureAuthSession,
+  isSecureAuthEnabled,
+} from "@/lib/secureAuth";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
 import { captureFrontendException } from "@/lib/observability/shared";
 import { Eye, EyeOff, LoaderCircle, Camera } from "lucide-react";
@@ -145,11 +149,16 @@ export default function Login({
   const callbackUrl = isWorkerMode ? "/sales" : "/dashboard";
 
   const completeTokenLogin = useCallback(
-    async (rawToken: unknown) => {
+    async (
+      rawToken: unknown,
+      options?: {
+        isEmailVerified?: boolean | null;
+      },
+    ) => {
       const token = normalizeToken(rawToken);
       if (!token) {
         toast.error("A valid login token was not returned.");
-        return;
+        return false;
       }
 
       setIsSigningIn(true);
@@ -163,8 +172,18 @@ export default function Login({
           throw new Error("Unable to create your session.");
         }
 
-        router.push(callbackUrl);
+        if (isSecureAuthEnabled()) {
+          await bootstrapSecureAuthSession(token);
+        }
+
+        const destination =
+          !isWorkerMode && options?.isEmailVerified === false
+            ? "/verify-email"
+            : callbackUrl;
+
+        router.push(destination);
         router.refresh();
+        return true;
       } catch (error) {
         captureFrontendException(error, {
           tags: {
@@ -177,11 +196,12 @@ export default function Login({
             ? error.message
             : "Unable to complete sign in.";
         toast.error(message);
+        return false;
       } finally {
         setIsSigningIn(false);
       }
     },
-    [callbackUrl, mode, router],
+    [callbackUrl, isWorkerMode, mode, router],
   );
 
   const identifierServerError = asErrorText(
@@ -263,7 +283,12 @@ export default function Login({
         mode,
       });
       toast.success(state.message);
-      void completeTokenLogin(state.data?.token);
+      void completeTokenLogin(state.data?.token, {
+        isEmailVerified:
+          typeof state.data?.user?.is_email_verified === "boolean"
+            ? state.data.user.is_email_verified
+            : null,
+      });
     }
   }, [completeTokenLogin, mode, state]);
 
@@ -334,7 +359,12 @@ export default function Login({
         method: "passkey",
         mode,
       });
-      await completeTokenLogin(authPayload.token);
+      await completeTokenLogin(authPayload.token, {
+        isEmailVerified:
+          typeof authPayload.user?.is_email_verified === "boolean"
+            ? authPayload.user.is_email_verified
+            : null,
+      });
     } catch (error) {
       captureAnalyticsEvent("auth_login_failed", {
         method: "passkey",
@@ -452,7 +482,12 @@ export default function Login({
           method: "otp",
           mode,
         });
-        await completeTokenLogin(authPayload.token);
+        await completeTokenLogin(authPayload.token, {
+          isEmailVerified:
+            typeof authPayload.user?.is_email_verified === "boolean"
+              ? authPayload.user.is_email_verified
+              : null,
+        });
       } catch (error) {
         captureAnalyticsEvent("auth_login_failed", {
           method: "otp",
@@ -624,8 +659,17 @@ export default function Login({
         <FaceLoginModal
           isOpen={isFaceLoginOpen}
           onClose={() => setIsFaceLoginOpen(false)}
-          onSuccess={(auth) => {
-            void completeTokenLogin(auth.token);
+          onSuccess={async (auth) => {
+            const completed = await completeTokenLogin(auth.token, {
+              isEmailVerified:
+                typeof auth.user?.is_email_verified === "boolean"
+                  ? auth.user.is_email_verified
+                  : null,
+            });
+            if (completed) {
+              setIsFaceLoginOpen(false);
+            }
+            return completed;
           }}
           email={identifier}
         />

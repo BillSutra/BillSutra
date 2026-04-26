@@ -21,7 +21,10 @@ const Page = async () => {
         email,
         provider: session.user?.provider ?? "credentials",
         image: session.user?.image ?? null,
-        is_email_verified: false,
+        is_email_verified:
+          typeof session.user?.is_email_verified === "boolean"
+            ? session.user.is_email_verified
+            : false,
       }}
     />
   );

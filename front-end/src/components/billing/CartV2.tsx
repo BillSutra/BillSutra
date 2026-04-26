@@ -34,6 +34,7 @@ export type CartV2Props = {
   allowNegativeStock: boolean;
   productSearchOpen: boolean;
   productSearchFocusToken: number;
+  shortcutActiveItemId: string | null;
   itemQuantityRefs: MutableRefObject<Record<string, HTMLInputElement | null>>;
   itemPriceRefs: MutableRefObject<Record<string, HTMLInputElement | null>>;
   onProductSearchOpenChange: (open: boolean) => void;
@@ -46,6 +47,7 @@ export type CartV2Props = {
   commitItemQuantity: (id: string) => void;
   formatMoney: (amount: number) => string;
   onFocusPrimaryItem: () => void;
+  onShortcutActiveItemChange: (itemId: string) => void;
 };
 
 export default function CartV2({
@@ -57,6 +59,7 @@ export default function CartV2({
   allowNegativeStock,
   productSearchOpen,
   productSearchFocusToken,
+  shortcutActiveItemId,
   itemQuantityRefs,
   itemPriceRefs,
   onProductSearchOpenChange,
@@ -69,6 +72,7 @@ export default function CartV2({
   commitItemQuantity,
   formatMoney,
   onFocusPrimaryItem,
+  onShortcutActiveItemChange,
 }: CartV2Props) {
   const activeItems = items.filter(
     (item) => item.name.trim() || item.price.trim() || item.productId,
@@ -172,6 +176,7 @@ export default function CartV2({
                 item={item}
                 matchedProduct={matchedProduct}
                 allowNegativeStock={allowNegativeStock}
+                isShortcutActive={shortcutActiveItemId === item.id}
                 quantityInputRef={(node) =>
                   assignItemInputRef(itemQuantityRefs, item.id, node)
                 }
@@ -183,6 +188,7 @@ export default function CartV2({
                 onAdjustQuantity={adjustItemQuantity}
                 onCommitQuantity={commitItemQuantity}
                 formatMoney={formatMoney}
+                onActivate={onShortcutActiveItemChange}
               />
             );
           })}

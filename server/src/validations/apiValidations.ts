@@ -9,6 +9,47 @@ import {
 import { normalizeIndianState } from "../lib/indianAddress.js";
 import { getStateFromGstin, normalizeGstin } from "../lib/gstin.js";
 
+const PASSWORD_MIN_LENGTH = 8;
+const STRONG_PASSWORD_RULES = [
+  {
+    regex: /.{8,}/,
+    message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
+  },
+  {
+    regex: /[A-Z]/,
+    message: "Password must include at least 1 uppercase letter",
+  },
+  {
+    regex: /[a-z]/,
+    message: "Password must include at least 1 lowercase letter",
+  },
+  {
+    regex: /\d/,
+    message: "Password must include at least 1 number",
+  },
+  {
+    regex: /[@$!%*?&]/,
+    message: "Password must include at least 1 special character",
+  },
+] as const;
+
+const strongPasswordSchema = z
+  .string()
+  .min(
+    PASSWORD_MIN_LENGTH,
+    `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
+  )
+  .superRefine((value, ctx) => {
+    STRONG_PASSWORD_RULES.forEach((rule) => {
+      if (!rule.regex.test(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: rule.message,
+        });
+      }
+    });
+  });
+
 export const idParamSchema = z.object({
   id: z.coerce.number().int().positive(),
 });
@@ -59,8 +100,8 @@ export const authRegisterSchema = z
   .object({
     name: z.string().min(2),
     email: z.string().email(),
-    password: z.string().min(6),
-    confirm_password: z.string().min(6),
+    password: strongPasswordSchema,
+    confirm_password: z.string().min(PASSWORD_MIN_LENGTH),
   })
   .refine((data) => data.password === data.confirm_password, {
     message: "Passwords do not match",
@@ -69,6 +110,10 @@ export const authRegisterSchema = z
 
 export const authForgotSchema = z.object({
   email: z.string().email(),
+});
+
+export const authVerifyEmailQuerySchema = z.object({
+  token: z.string().trim().min(32).max(191),
 });
 
 const webAuthnRegistrationResponseSchema = z.object({

@@ -5,14 +5,16 @@ import prisma from "../config/db.config.js";
 import { hashSecretValue } from "./modernAuth.js";
 import {
   getUserSessionVersionIfAvailable,
+  getAccessTokenMaxAgeMs,
   resolveAuthUserFromDecoded,
   signAuthToken,
 } from "./authSession.js";
 
 export const ACCESS_TOKEN_COOKIE_NAME = "bill_sutra_access_token";
 export const REFRESH_TOKEN_COOKIE_NAME = "bill_sutra_refresh_token";
+export const ACCESS_TOKEN_COOKIE_ALIAS = "accessToken";
+export const REFRESH_TOKEN_COOKIE_ALIAS = "refreshToken";
 
-const DEFAULT_ACCESS_TOKEN_TTL = "15m";
 const DEFAULT_REFRESH_TOKEN_TTL = "7d";
 const TABLE_CACHE_TTL_MS = 60_000;
 
@@ -80,14 +82,8 @@ const isRefreshTokensTableMissingError = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError &&
   error.code === "P2021";
 
-export const getAccessTokenTtl = () =>
-  process.env.ACCESS_TOKEN_TTL?.trim() || DEFAULT_ACCESS_TOKEN_TTL;
-
 export const getRefreshTokenTtl = () =>
   process.env.REFRESH_TOKEN_TTL?.trim() || DEFAULT_REFRESH_TOKEN_TTL;
-
-export const getAccessTokenMaxAgeMs = () =>
-  parseDurationToMs(getAccessTokenTtl(), 15 * 60 * 1000);
 
 export const getRefreshTokenMaxAgeMs = () =>
   parseDurationToMs(getRefreshTokenTtl(), 7 * 24 * 60 * 60 * 1000);
@@ -145,7 +141,20 @@ export const parseCookies = (cookieHeader?: string | null) => {
 export const getCookieValue = (req: Request, cookieName: string) =>
   parseCookies(req.headers.cookie).get(cookieName) ?? null;
 
-export const clearAuthCookies = (res: Response) => {
+const getCookieValueFromNames = (req: Request, cookieNames: string[]) => {
+  const cookies = parseCookies(req.headers.cookie);
+
+  for (const cookieName of cookieNames) {
+    const value = cookies.get(cookieName);
+    if (value) {
+      return value;
+    }
+  }
+
+  return null;
+};
+
+const clearCookieNames = (res: Response, cookieNames: string[]) => {
   const cookieOptions = {
     httpOnly: true,
     secure: isProd,
@@ -153,28 +162,49 @@ export const clearAuthCookies = (res: Response) => {
     path: "/",
   };
 
-  res.clearCookie(ACCESS_TOKEN_COOKIE_NAME, cookieOptions);
-  res.clearCookie(REFRESH_TOKEN_COOKIE_NAME, cookieOptions);
+  cookieNames.forEach((cookieName) => {
+    res.clearCookie(cookieName, cookieOptions);
+  });
+};
+
+const setCookieNames = (
+  res: Response,
+  cookieNames: string[],
+  value: string,
+  maxAge: number,
+) => {
+  cookieNames.forEach((cookieName) => {
+    res.cookie(cookieName, value, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: "strict",
+      path: "/",
+      maxAge,
+    });
+  });
+};
+
+export const clearAuthCookies = (res: Response) => {
+  clearCookieNames(res, [ACCESS_TOKEN_COOKIE_NAME, ACCESS_TOKEN_COOKIE_ALIAS]);
+  clearCookieNames(res, [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS]);
 };
 
 const setAccessCookie = (res: Response, accessToken: string) => {
-  res.cookie(ACCESS_TOKEN_COOKIE_NAME, accessToken, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "strict",
-    path: "/",
-    maxAge: getAccessTokenMaxAgeMs(),
-  });
+  setCookieNames(
+    res,
+    [ACCESS_TOKEN_COOKIE_NAME, ACCESS_TOKEN_COOKIE_ALIAS],
+    accessToken,
+    getAccessTokenMaxAgeMs(),
+  );
 };
 
 const setRefreshCookie = (res: Response, refreshToken: string) => {
-  res.cookie(REFRESH_TOKEN_COOKIE_NAME, refreshToken, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "strict",
-    path: "/",
-    maxAge: getRefreshTokenMaxAgeMs(),
-  });
+  setCookieNames(
+    res,
+    [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
+    refreshToken,
+    getRefreshTokenMaxAgeMs(),
+  );
 };
 
 const signRefreshToken = (authUser: AuthUser) =>
@@ -302,7 +332,10 @@ export const revokeAllRefreshTokensForUser = async (userId: number) => {
 };
 
 export const revokeRefreshTokenFromRequest = async (req: Request) => {
-  const refreshToken = getCookieValue(req, REFRESH_TOKEN_COOKIE_NAME);
+  const refreshToken = getCookieValueFromNames(req, [
+    REFRESH_TOKEN_COOKIE_NAME,
+    REFRESH_TOKEN_COOKIE_ALIAS,
+  ]);
   if (!refreshToken) {
     return false;
   }
@@ -312,7 +345,10 @@ export const revokeRefreshTokenFromRequest = async (req: Request) => {
 };
 
 export const refreshAuthCookies = async (req: Request, res: Response) => {
-  const refreshToken = getCookieValue(req, REFRESH_TOKEN_COOKIE_NAME);
+  const refreshToken = getCookieValueFromNames(req, [
+    REFRESH_TOKEN_COOKIE_NAME,
+    REFRESH_TOKEN_COOKIE_ALIAS,
+  ]);
   if (!refreshToken) {
     logAuth("refresh_failed", { reason: "missing_cookie" }, "warn");
     return null;
@@ -403,10 +439,11 @@ export const resolveAccessTokenFromRequest = (req: Request) => {
       : null;
 
   const cookieToken = getCookieValue(req, ACCESS_TOKEN_COOKIE_NAME);
+  const cookieAliasToken = getCookieValue(req, ACCESS_TOKEN_COOKIE_ALIAS);
 
   return {
     headerToken,
-    cookieToken,
+    cookieToken: cookieToken ?? cookieAliasToken,
   };
 };
 

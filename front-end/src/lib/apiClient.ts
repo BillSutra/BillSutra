@@ -27,14 +27,19 @@ import { normalizeListResponse } from "./normalizeListResponse";
 import { captureApiFailure } from "./observability/shared";
 import { normalizeGstin } from "./gstin";
 import {
+  bootstrapSecureAuthSession,
   clearLegacyStoredToken,
   clearSecureAuthBootstrapped,
   getLegacyStoredToken,
   hasSecureAuthBootstrap,
+  isAuthTokenExpired,
+  isSecureAuthSessionExpired,
   isCookieOnlyAuthEnabled,
   isSecureAuthEnabled,
-  markSecureAuthBootstrapped,
   normalizeAuthToken,
+  refreshSecureAuthSession,
+  requestClientLogout,
+  setLegacyStoredToken,
 } from "./secureAuth";
 
 export const apiClient = axios.create({
@@ -42,30 +47,57 @@ export const apiClient = axios.create({
   withCredentials: true,
 });
 
-const refreshClient = axios.create({
-  baseURL: API_URL,
-  withCredentials: true,
-});
+const isFaceAuthenticationRequest = (requestUrl: string) =>
+  requestUrl.includes("/face/authenticate");
 
 apiClient.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
     config.withCredentials = true;
     const secureAuthEnabled = isSecureAuthEnabled();
     const secureCookieReady = secureAuthEnabled && hasSecureAuthBootstrap();
+    const secureCookieExpired =
+      secureCookieReady && isSecureAuthSessionExpired();
+    const session = !isCookieOnlyAuthEnabled() ? await getSession() : null;
+    const sessionToken = normalizeAuthToken(
+      (session?.user as { token?: string } | undefined)?.token ?? null,
+    );
 
-    let token = getLegacyStoredToken();
+    let token =
+      !secureCookieReady || !secureAuthEnabled
+        ? sessionToken ?? getLegacyStoredToken()
+        : null;
 
-    if (!token && !isCookieOnlyAuthEnabled()) {
-      const session = await getSession();
-      token = normalizeAuthToken(
-        (session?.user as { token?: string } | undefined)?.token ?? null,
-      );
-      if (!token) {
-        clearLegacyStoredToken();
+    if (sessionToken) {
+      setLegacyStoredToken(sessionToken);
+    } else if (!token) {
+      clearLegacyStoredToken();
+    }
+
+    if (secureCookieExpired) {
+      const refreshed = await refreshSecureAuthSession();
+      if (!refreshed) {
+        requestClientLogout("refresh_expired");
+        return Promise.reject(new axios.CanceledError("Session expired"));
+      }
+    } else if (!secureCookieReady && token && isAuthTokenExpired(token)) {
+      if (secureAuthEnabled) {
+        const refreshed = await refreshSecureAuthSession();
+        if (refreshed) {
+          if (config.headers?.Authorization) {
+            delete config.headers.Authorization;
+          }
+          return config;
+        }
+
+        requestClientLogout("refresh_expired");
+        return Promise.reject(new axios.CanceledError("Session expired"));
+      } else {
+        requestClientLogout("token_expired");
+        return Promise.reject(new axios.CanceledError("Session expired"));
       }
     }
 
-    if (!secureCookieReady && token) {
+    if (!secureCookieReady && token && !isAuthTokenExpired(token)) {
       const header = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
       config.headers.Authorization = header;
     } else if (config.headers?.Authorization) {
@@ -120,23 +152,23 @@ apiClient.interceptors.response.use(
         requestUrl.includes("/auth/refresh") ||
         requestUrl.includes("/auth/logout") ||
         requestUrl.includes("/auth/session/bootstrap");
+      const isFaceAuthRequest = isFaceAuthenticationRequest(requestUrl);
 
       if (
         isSecureAuthEnabled() &&
         status === 401 &&
         !isRefreshRequest &&
+        !isFaceAuthRequest &&
         originalRequest &&
         !originalRequest._retry
       ) {
         originalRequest._retry = true;
 
         try {
-          const refreshResponse = await refreshClient.post("/auth/refresh");
-          const refreshedToken = normalizeAuthToken(
-            refreshResponse.data?.data?.token ?? null,
-          );
-
-          markSecureAuthBootstrapped();
+          const refreshed = await refreshSecureAuthSession();
+          if (!refreshed) {
+            throw new Error("Unable to refresh session");
+          }
 
           if (originalRequest.headers?.Authorization) {
             delete originalRequest.headers.Authorization;
@@ -147,10 +179,37 @@ apiClient.interceptors.response.use(
         } catch (refreshError) {
           captureApiFailure(refreshError);
 
-          const legacyToken = getLegacyStoredToken();
           clearSecureAuthBootstrapped();
+          const session = await getSession();
+          const sessionToken = normalizeAuthToken(
+            (session?.user as { token?: string } | undefined)?.token ?? null,
+          );
 
-          if (legacyToken) {
+          if (sessionToken && !isAuthTokenExpired(sessionToken)) {
+            setLegacyStoredToken(sessionToken);
+
+            const bootstrapped = await bootstrapSecureAuthSession(sessionToken);
+            if (bootstrapped) {
+              if (originalRequest.headers?.Authorization) {
+                delete originalRequest.headers.Authorization;
+              }
+
+              originalRequest.withCredentials = true;
+              return apiClient(originalRequest);
+            }
+
+            originalRequest.headers = originalRequest.headers ?? {};
+            originalRequest.headers.Authorization = sessionToken.startsWith(
+              "Bearer ",
+            )
+              ? sessionToken
+              : `Bearer ${sessionToken}`;
+            originalRequest.withCredentials = true;
+            return apiClient(originalRequest);
+          }
+
+          const legacyToken = getLegacyStoredToken();
+          if (legacyToken && !isAuthTokenExpired(legacyToken)) {
             originalRequest.headers = originalRequest.headers ?? {};
             originalRequest.headers.Authorization = legacyToken.startsWith(
               "Bearer ",
@@ -162,7 +221,12 @@ apiClient.interceptors.response.use(
           }
 
           clearLegacyStoredToken();
+          requestClientLogout("refresh_expired");
         }
+      }
+
+      if (status === 401 && !isRefreshRequest && !isFaceAuthRequest) {
+        requestClientLogout("unauthorized");
       }
     }
 

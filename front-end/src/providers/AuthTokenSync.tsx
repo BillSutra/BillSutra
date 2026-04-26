@@ -1,16 +1,17 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import axios from "axios";
 import { useSession } from "next-auth/react";
-import { API_URL } from "@/lib/apiEndPoints";
 import {
+  bootstrapSecureAuthSession,
   clearLegacyStoredToken,
   clearSecureAuthBootstrapped,
   hasSecureAuthBootstrap,
+  isAuthTokenExpired,
   isSecureAuthEnabled,
-  markSecureAuthBootstrapped,
   normalizeAuthToken,
+  refreshSecureAuthSession,
+  requestClientLogout,
 } from "@/lib/secureAuth";
 
 type SessionUserWithToken = {
@@ -36,6 +37,24 @@ const AuthTokenSync = () => {
       return;
     }
 
+    if (isAuthTokenExpired(token)) {
+      if (!isSecureAuthEnabled()) {
+        requestClientLogout("token_expired");
+        return;
+      }
+
+      if (hasSecureAuthBootstrap()) {
+        return;
+      }
+
+      void refreshSecureAuthSession().then((refreshed) => {
+        if (!refreshed) {
+          requestClientLogout("refresh_expired");
+        }
+      });
+      return;
+    }
+
     if (!isSecureAuthEnabled() || hasSecureAuthBootstrap()) {
       return;
     }
@@ -46,21 +65,13 @@ const AuthTokenSync = () => {
 
     bootstrappingTokenRef.current = token;
 
-    void axios
-      .post(
-        `${API_URL}/auth/session/bootstrap`,
-        {},
-        {
-          withCredentials: true,
-          headers: {
-            Authorization: token.startsWith("Bearer ")
-              ? token
-              : `Bearer ${token}`,
-          },
-        },
-      )
-      .then(() => {
-        markSecureAuthBootstrapped();
+    void bootstrapSecureAuthSession(token)
+      .then((bootstrapped) => {
+        if (bootstrapped) {
+          return;
+        }
+
+        bootstrappingTokenRef.current = null;
       })
       .catch(() => {
         bootstrappingTokenRef.current = null;

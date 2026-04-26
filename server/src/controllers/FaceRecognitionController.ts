@@ -4,7 +4,7 @@ import { Prisma, AuthMethod } from "@prisma/client";
 
 import prisma from "../config/db.config.js";
 import AppError from "../utils/AppError.js";
-import { buildOwnerAuthUser } from "../lib/authSession.js";
+import { buildOwnerAuthUser, getAccessTokenExpiresAt } from "../lib/authSession.js";
 import { issueAuthCookies } from "../lib/authCookies.js";
 import { recordAuthEvent } from "../lib/modernAuth.js";
 import { sendResponse } from "../utils/sendResponse.js";
@@ -840,6 +840,12 @@ export const authenticateFace = async (req: Request, res: Response) => {
       distance: payload.distance,
       processing_time_ms: payload.processing_time_ms,
     });
+    console.log("Face similarity score:", {
+      userId: user.id,
+      confidence: payload.confidence,
+      distance: payload.distance,
+      matched: payload.matched,
+    });
 
     if (!payload.matched) {
       await recordAuthEvent({
@@ -887,6 +893,7 @@ export const authenticateFace = async (req: Request, res: Response) => {
       id: user.id,
       email: user.email,
       name: user.name,
+      is_email_verified: user.is_email_verified,
     });
     const { accessToken } = await issueAuthCookies(res, authUser);
     const token = `Bearer ${accessToken}`;
@@ -895,14 +902,17 @@ export const authenticateFace = async (req: Request, res: Response) => {
       success: true,
       message: faceServiceResponse.message || "Face authenticated successfully.",
       data: {
+        userId: user.id,
         user: {
           id: user.id,
           email: user.email,
           name: user.name,
           image: user.image,
           provider: "face_recognition",
+          is_email_verified: user.is_email_verified,
         },
         token,
+        expiresAt: getAccessTokenExpiresAt(),
         matched: true,
         confidence: payload.confidence,
         distance: payload.distance,

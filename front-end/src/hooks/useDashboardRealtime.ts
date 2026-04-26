@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { API_URL } from "@/lib/apiEndPoints";
 import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
@@ -9,6 +9,7 @@ import {
   hasSecureAuthBootstrap,
   isCookieOnlyAuthEnabled,
   isSecureAuthEnabled,
+  refreshSecureAuthSession,
 } from "@/lib/secureAuth";
 
 type UseDashboardRealtimeOptions = {
@@ -31,6 +32,8 @@ export const useDashboardRealtime = ({
 }: UseDashboardRealtimeOptions) => {
   const queryClient = useQueryClient();
   const debounceRef = useRef<number | null>(null);
+  const refreshInFlightRef = useRef<Promise<boolean> | null>(null);
+  const [preferCookieAuth, setPreferCookieAuth] = useState(false);
 
   const authToken = useMemo(() => {
     const direct = normalizeToken(token);
@@ -42,6 +45,7 @@ export const useDashboardRealtime = ({
     if (!enabled) return undefined;
 
     const secureCookieStream =
+      preferCookieAuth ||
       isCookieOnlyAuthEnabled() ||
       (isSecureAuthEnabled() && hasSecureAuthBootstrap());
 
@@ -55,6 +59,7 @@ export const useDashboardRealtime = ({
     const source = secureCookieStream
       ? new EventSource(url, { withCredentials: true })
       : new EventSource(url);
+    let disposed = false;
 
     const scheduleInvalidate = () => {
       if (debounceRef.current) return;
@@ -71,10 +76,27 @@ export const useDashboardRealtime = ({
     source.addEventListener("connected", handleConnected);
 
     source.onerror = () => {
+      if (!secureCookieStream && isSecureAuthEnabled()) {
+        if (!refreshInFlightRef.current) {
+          refreshInFlightRef.current = refreshSecureAuthSession()
+            .then((refreshed) => {
+              if (refreshed && !disposed) {
+                setPreferCookieAuth(true);
+              }
+              return refreshed;
+            })
+            .finally(() => {
+              refreshInFlightRef.current = null;
+            });
+        }
+        return;
+      }
+
       scheduleInvalidate();
     };
 
     return () => {
+      disposed = true;
       source.removeEventListener("dashboard:update", handleUpdate);
       source.removeEventListener("connected", handleConnected);
       source.close();
@@ -83,5 +105,5 @@ export const useDashboardRealtime = ({
         debounceRef.current = null;
       }
     };
-  }, [authToken, debounceMs, enabled, queryClient]);
+  }, [authToken, debounceMs, enabled, preferCookieAuth, queryClient]);
 };

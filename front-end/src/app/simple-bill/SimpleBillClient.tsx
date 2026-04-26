@@ -33,6 +33,7 @@ import {
   useCreateInvoiceMutation,
   useProductsQuery,
 } from "@/hooks/useInventoryQueries";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import {
   fetchBusinessProfile,
@@ -1553,13 +1554,21 @@ const SimpleBillClient = ({
   const [productSearchOpen, setProductSearchOpen] = useState(false);
   const [productSearchFocusToken, setProductSearchFocusToken] = useState(0);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [resetShortcutConfirmOpen, setResetShortcutConfirmOpen] =
+    useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [generatedInvoice, setGeneratedInvoice] = useState<Invoice | null>(
-    null,
-  );
+      null,
+    );
   const [isAssigningWalkIn, setIsAssigningWalkIn] = useState(false);
+  const [shortcutActiveItemId, setShortcutActiveItemId] = useState<
+    string | null
+  >(null);
   const [productUsage, setProductUsage] = useState<Record<number, number>>({});
   const submitLockRef = useRef(false);
+  const customerSearchInputRef = useRef<HTMLInputElement | null>(null);
+  const discountInputRef = useRef<HTMLInputElement | null>(null);
+  const paymentMethodRef = useRef<HTMLSelectElement | null>(null);
   const newCustomerPhoneRef = useRef<HTMLInputElement | null>(null);
   const itemQuantityRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const itemPriceRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -1789,6 +1798,18 @@ const SimpleBillClient = ({
     [discount, discountType, totals.subtotal],
   );
   const selectedPaymentMethod = toInvoicePaymentMethod(payment);
+  const shortcutHint = isHindi
+    ? "शॉर्टकट: Alt+B प्रोडक्ट खोज, Alt+Q मात्रा, Alt+D डिस्काउंट, Alt+S ड्राफ्ट सेव, Alt+P पेमेंट सेक्शन, Alt+M पेमेंट मेथड, Alt+R नया बिल, Ctrl+Enter बिल बनाएं। एक्टिव लाइन हटाने के लिए Delete दबाएं।"
+    : "Shortcuts: Alt+B product search, Alt+Q quantity, Alt+D discount, Alt+S save draft, Alt+P payment section, Alt+M payment method, Alt+R new bill, Ctrl+Enter generate bill. Press Delete to remove the active line item.";
+  const draftSavedMessage = isHindi
+    ? "ड्राफ्ट सेव हो गया।"
+    : "Draft saved.";
+  const draftEmptyMessage = isHindi
+    ? "सेव करने के लिए अभी कोई ड्राफ्ट नहीं है।"
+    : "There is no draft to save yet.";
+  const resetShortcutDescription = isHindi
+    ? "क्या आप यह बिल रीसेट करके नया बिल शुरू करना चाहते हैं?"
+    : "Reset this bill and start a new one?";
   const previewInvoiceDate = useMemo(
     () =>
       formatDate(invoiceDate ? `${invoiceDate}T00:00:00` : new Date(), {
@@ -2083,13 +2104,8 @@ const SimpleBillClient = ({
     setCustomerSearch(customerLabel(selectedCustomer));
   }, [selectedCustomer]);
 
-  useEffect(() => {
-    if (!hasDraftContent) {
-      window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
-      return;
-    }
-
-    const draft: SimpleBillDraft = {
+  const currentDraft = useMemo<SimpleBillDraft>(
+    () => ({
       invoiceDate,
       customerSearch,
       selectedCustomerId,
@@ -2110,29 +2126,42 @@ const SimpleBillClient = ({
       taxMode: selectedTaxMode,
       notes,
       items,
-    };
+    }),
+    [
+      addingCustomer,
+      customerSearch,
+      discount,
+      discountMode,
+      gstEnabled,
+      invoiceDate,
+      items,
+      newCustomerEmail,
+      newCustomerName,
+      newCustomerPhone,
+      notes,
+      paidAmount,
+      payment,
+      paymentDate,
+      paymentStatus,
+      selectedCustomer,
+      selectedCustomerId,
+      selectedTaxMode,
+    ],
+  );
 
-    window.localStorage.setItem(SIMPLE_BILL_DRAFT_KEY, JSON.stringify(draft));
+  useEffect(() => {
+    if (!hasDraftContent) {
+      window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(
+      SIMPLE_BILL_DRAFT_KEY,
+      JSON.stringify(currentDraft),
+    );
   }, [
-    addingCustomer,
-    customerSearch,
-    discount,
-    discountMode,
-    gstEnabled,
-    selectedTaxMode,
     hasDraftContent,
-    invoiceDate,
-    items,
-    newCustomerName,
-    newCustomerPhone,
-    newCustomerEmail,
-    notes,
-    payment,
-    paymentDate,
-    paymentStatus,
-    paidAmount,
-    selectedCustomer,
-    selectedCustomerId,
+    currentDraft,
   ]);
 
   useEffect(() => {
@@ -2590,6 +2619,29 @@ const SimpleBillClient = ({
     setNewCustomerEmail("");
   }, []);
 
+  const saveCurrentDraft = useCallback(
+    (showToast = true) => {
+      if (!hasDraftContent) {
+        if (showToast) {
+          toast.info(draftEmptyMessage);
+        }
+        return false;
+      }
+
+      window.localStorage.setItem(
+        SIMPLE_BILL_DRAFT_KEY,
+        JSON.stringify(currentDraft),
+      );
+
+      if (showToast) {
+        toast.success(draftSavedMessage);
+      }
+
+      return true;
+    },
+    [currentDraft, draftEmptyMessage, draftSavedMessage, hasDraftContent],
+  );
+
   const loadLastBill = () => {
     const stored = window.localStorage.getItem(LAST_BILL_KEY);
     if (!stored) {
@@ -2840,9 +2892,78 @@ const SimpleBillClient = ({
     setGeneratedInvoice(null);
     setPreviewOpen(false);
     setProductSearchOpen(false);
+    setShortcutActiveItemId(null);
     window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
     toast.success(copy.toastNewBillReady);
   }, [copy.toastNewBillReady]);
+
+  const focusQuantityShortcutTarget = useCallback(() => {
+    const fallbackItemId =
+      shortcutActiveItemId && items.some((item) => item.id === shortcutActiveItemId)
+        ? shortcutActiveItemId
+        : items.find(isSimpleBillItemActive)?.id ?? items[0]?.id ?? null;
+
+    if (!fallbackItemId) {
+      if (!productsLocked) {
+        openProductSearch();
+      }
+      return;
+    }
+
+    setShortcutActiveItemId(fallbackItemId);
+    itemQuantityRefs.current[fallbackItemId]?.focus();
+  }, [items, openProductSearch, productsLocked, shortcutActiveItemId]);
+
+  const removeShortcutActiveItem = useCallback(() => {
+    const fallbackItemId =
+      shortcutActiveItemId && items.some((item) => item.id === shortcutActiveItemId)
+        ? shortcutActiveItemId
+        : items.find(isSimpleBillItemActive)?.id ?? null;
+
+    if (!fallbackItemId) {
+      return;
+    }
+
+    const itemIndex = items.findIndex((item) => item.id === fallbackItemId);
+    const nextItemId =
+      items[itemIndex + 1]?.id ?? items[itemIndex - 1]?.id ?? null;
+
+    removeItem(fallbackItemId);
+    setShortcutActiveItemId(nextItemId);
+
+    if (nextItemId) {
+      window.setTimeout(() => {
+        itemQuantityRefs.current[nextItemId]?.focus();
+      }, 0);
+    }
+  }, [items, removeItem, shortcutActiveItemId]);
+
+  const focusPaymentShortcutTarget = useCallback(() => {
+    if (paymentStatus !== "UNPAID" && paymentMethodRef.current) {
+      paymentMethodRef.current.focus();
+      return;
+    }
+
+    (
+      document.getElementById("simple-payment-status-paid") as HTMLButtonElement | null
+    )?.focus();
+  }, [paymentStatus]);
+
+  const cyclePaymentMethod = useCallback(() => {
+    if (paymentStatus === "UNPAID") {
+      focusPaymentShortcutTarget();
+      return;
+    }
+
+    const order: PaymentChoice[] = ["CASH", "UPI", "ONLINE"];
+    const currentIndex = order.indexOf(payment);
+    const nextPayment = order[(currentIndex + 1) % order.length] ?? "CASH";
+
+    updateBillState({ paymentMethod: nextPayment });
+    window.setTimeout(() => {
+      paymentMethodRef.current?.focus();
+    }, 0);
+  }, [focusPaymentShortcutTarget, payment, paymentStatus, updateBillState]);
 
   const handlePrintBill = () => {
     if (!generatedInvoice) {
@@ -2912,6 +3033,117 @@ const SimpleBillClient = ({
     openProductSearch();
   }, [openProductSearch]);
 
+  useEffect(() => {
+    if (
+      !shortcutActiveItemId ||
+      !items.some((item) => item.id === shortcutActiveItemId)
+    ) {
+      setShortcutActiveItemId(
+        items.find(isSimpleBillItemActive)?.id ?? items[0]?.id ?? null,
+      );
+    }
+  }, [items, shortcutActiveItemId]);
+
+  const shortcutBindings = useMemo(
+    () => [
+      {
+        key: "b",
+        altKey: true,
+        preventDefault: true,
+        handler: () => {
+          if (productsLocked) {
+            customerSearchInputRef.current?.focus();
+            return;
+          }
+
+          openProductSearch();
+        },
+      },
+      {
+        key: "q",
+        altKey: true,
+        preventDefault: true,
+        handler: () => {
+          focusQuantityShortcutTarget();
+        },
+      },
+      {
+        key: "d",
+        altKey: true,
+        preventDefault: true,
+        handler: () => {
+          discountInputRef.current?.focus();
+        },
+      },
+      {
+        key: "s",
+        altKey: true,
+        preventDefault: true,
+        handler: () => {
+          saveCurrentDraft();
+        },
+      },
+      {
+        key: "Enter",
+        ctrlKey: true,
+        preventDefault: true,
+        enabled: canGenerateBill && !isSubmitting,
+        handler: () => {
+          void handleGenerateBill();
+        },
+      },
+      {
+        key: "p",
+        altKey: true,
+        preventDefault: true,
+        handler: () => {
+          focusPaymentShortcutTarget();
+        },
+      },
+      {
+        key: "m",
+        altKey: true,
+        preventDefault: true,
+        handler: () => {
+          cyclePaymentMethod();
+        },
+      },
+      {
+        key: "Delete",
+        preventDefault: true,
+        enabled: items.length > 0,
+        handler: () => {
+          removeShortcutActiveItem();
+        },
+      },
+      {
+        key: "r",
+        altKey: true,
+        preventDefault: true,
+        handler: () => {
+          setResetShortcutConfirmOpen(true);
+        },
+      },
+    ],
+    [
+      canGenerateBill,
+      cyclePaymentMethod,
+      focusPaymentShortcutTarget,
+      focusQuantityShortcutTarget,
+      handleGenerateBill,
+      isSubmitting,
+      items.length,
+      openProductSearch,
+      productsLocked,
+      removeShortcutActiveItem,
+      saveCurrentDraft,
+    ],
+  );
+
+  useKeyboardShortcuts({
+    shortcuts: shortcutBindings,
+  });
+
   return (
     <DashboardLayout
       name={displayName}
@@ -2934,6 +3166,9 @@ const SimpleBillClient = ({
                 {isHindi
                   ? "बिल नंबर सेव करते समय अपने आप बनेगा"
                   : "Bill number is generated automatically when you save."}
+              </p>
+              <p className="mt-2 rounded-lg border border-border/60 bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
+                {shortcutHint}
               </p>
             </div>
             <div className="grid gap-2">
@@ -3017,6 +3252,7 @@ const SimpleBillClient = ({
             </Label>
             <Input
               id="simple-customer"
+              ref={customerSearchInputRef}
               value={customerSearch}
               onFocus={() => setCustomerSuggestionsOpen(true)}
               onBlur={() =>
@@ -3153,6 +3389,7 @@ const SimpleBillClient = ({
               allowNegativeStock={allowNegativeStock}
               productSearchOpen={productSearchOpen}
               productSearchFocusToken={productSearchFocusToken}
+              shortcutActiveItemId={shortcutActiveItemId}
               itemQuantityRefs={itemQuantityRefs}
               itemPriceRefs={itemPriceRefs}
               onProductSearchOpenChange={closeProductSearch}
@@ -3165,6 +3402,7 @@ const SimpleBillClient = ({
               commitItemQuantity={commitItemQuantity}
               formatMoney={formatMoney}
               onFocusPrimaryItem={focusPrimaryCartItem}
+              onShortcutActiveItemChange={setShortcutActiveItemId}
             />
           ) : null}
 
@@ -3528,6 +3766,7 @@ const SimpleBillClient = ({
                     </Label>
                     <Input
                       id="simple-discount"
+                      ref={discountInputRef}
                       type="number"
                       inputMode="decimal"
                       min="0"
@@ -3721,6 +3960,7 @@ const SimpleBillClient = ({
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-3">
                   <Button
+                    id="simple-payment-status-paid"
                     type="button"
                     variant={paymentStatus === "PAID" ? "default" : "outline"}
                     className="h-10"
@@ -3739,6 +3979,7 @@ const SimpleBillClient = ({
                     {copy.paymentStatusPaid}
                   </Button>
                   <Button
+                    id="simple-payment-status-partial"
                     type="button"
                     variant={
                       paymentStatus === "PARTIALLY_PAID" ? "default" : "outline"
@@ -3762,6 +4003,7 @@ const SimpleBillClient = ({
                     {copy.paymentStatusPartial}
                   </Button>
                   <Button
+                    id="simple-payment-status-unpaid"
                     type="button"
                     variant={paymentStatus === "UNPAID" ? "default" : "outline"}
                     className="h-10"
@@ -3784,6 +4026,7 @@ const SimpleBillClient = ({
                       </Label>
                       <select
                         id="simple-payment-method"
+                        ref={paymentMethodRef}
                         value={payment}
                         onChange={(event) =>
                           updateBillState({
@@ -4032,6 +4275,38 @@ const SimpleBillClient = ({
               </Button>
             </div>
           </form>
+        </Modal>
+        <Modal
+          open={resetShortcutConfirmOpen}
+          onOpenChange={setResetShortcutConfirmOpen}
+          title={isHindi ? "बिल रीसेट करें" : "Reset bill"}
+          description={resetShortcutDescription}
+        >
+          <div className="grid gap-4">
+            <p className="text-sm text-muted-foreground">
+              {isHindi
+                ? "यह Alt+R शॉर्टकट के लिए कन्फर्मेशन है। ब्राउज़र रीलोड शॉर्टकट वैसे ही रहेगा।"
+                : "This confirmation is for the Alt+R shortcut. Browser reload shortcuts remain unchanged."}
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setResetShortcutConfirmOpen(false)}
+              >
+                {isHindi ? "रद्द करें" : "Cancel"}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => {
+                  setResetShortcutConfirmOpen(false);
+                  handleCreateNewBill();
+                }}
+              >
+                {isHindi ? "नया बिल शुरू करें" : "Start new bill"}
+              </Button>
+            </div>
+          </div>
         </Modal>
       </div>
       <div

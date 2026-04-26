@@ -9,6 +9,7 @@ declare global {
     actorId: string;
     businessId: string;
     sessionVersion: number;
+    isEmailVerified: boolean;
     role: "ADMIN" | "WORKER";
     accountType: "OWNER" | "WORKER";
     name: string;

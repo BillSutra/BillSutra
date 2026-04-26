@@ -133,6 +133,25 @@ const publicInvoiceInclude = {
   },
 } satisfies Prisma.InvoiceInclude;
 
+const invoicePaymentSelect = {
+  id: true,
+  amount: true,
+  method: true,
+  provider: true,
+  transaction_id: true,
+  reference: true,
+  paid_at: true,
+  created_at: true,
+} satisfies Prisma.PaymentSelect;
+
+const invoiceInclude = {
+  customer: true,
+  items: true,
+  payments: {
+    select: invoicePaymentSelect,
+  },
+} satisfies Prisma.InvoiceInclude;
+
 type PublicInvoiceRecord = Prisma.InvoiceGetPayload<{
   include: typeof publicInvoiceInclude;
 }>;
@@ -555,7 +574,7 @@ const formatDate = (value: Date | null | undefined) => {
 
 const attachInvoiceGstMetadata = async <
   T extends
-    | (Prisma.InvoiceGetPayload<{ include: { customer: true; items: true; payments: true } }> & {
+    | (Prisma.InvoiceGetPayload<{ include: typeof invoiceInclude }> & {
         [key: string]: unknown;
       })
     | null,
@@ -1231,7 +1250,7 @@ export const listInvoices = async (
 
   const invoices = await prisma.invoice.findMany({
     where,
-    include: { customer: true, items: true, payments: true },
+    include: invoiceInclude,
     orderBy: { createdAt: "desc" },
   });
 
@@ -1427,7 +1446,12 @@ export const createInvoice = async (
     try {
       invoice = await tx.invoice.create({
         data: invoiceCreateData,
-        include: { items: true, payments: true },
+        include: {
+          items: true,
+          payments: {
+            select: invoicePaymentSelect,
+          },
+        },
       });
     } catch (error) {
       const shouldRetryWithoutInvoiceInventoryFields =
@@ -1463,7 +1487,12 @@ export const createInvoice = async (
           ...fallbackInvoiceCreateData,
           items: { create: fallbackItemPayload },
         },
-        include: { items: true, payments: true },
+        include: {
+          items: true,
+          payments: {
+            select: invoicePaymentSelect,
+          },
+        },
       });
     }
 
@@ -1520,6 +1549,7 @@ export const createInvoice = async (
           method: paymentState.paymentMethod,
           paid_at: paymentState.paymentDate ?? new Date(),
         },
+        select: invoicePaymentSelect,
       });
     }
 
@@ -1608,7 +1638,7 @@ export const getInvoice = async (userId: number, id: number) => {
 
   const invoice = await prisma.invoice.findFirst({
     where: { id, user_id: userId },
-    include: { customer: true, items: true, payments: true },
+    include: invoiceInclude,
   });
 
   return attachInvoiceGstMetadata(invoice);
@@ -1864,7 +1894,7 @@ export const duplicateInvoice = async (userId: number, id: number) => {
           })),
         },
       },
-      include: { customer: true, items: true, payments: true },
+      include: invoiceInclude,
     });
 
     return duplicated;
@@ -1877,7 +1907,9 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
     include: {
       customer: true,
       items: true,
-      payments: true,
+      payments: {
+        select: invoicePaymentSelect,
+      },
     },
   });
 

@@ -50,6 +50,7 @@ model User {
   preferences                 UserPreference?
   notifications               Notification[]
   extra_entries               ExtraEntry[]
+  email_verification_tokens   EmailVerificationToken[]
 
   session_version Int @default(0)
 
@@ -805,6 +806,20 @@ model RefreshToken {
 
   @@index([user_id, expires_at])
   @@map("refresh_tokens")
+}
+
+model EmailVerificationToken {
+  id String @id @default(cuid()) @db.VarChar(191)
+
+  user    User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user_id Int
+
+  token_hash String   @unique @db.VarChar(191)
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  @@index([user_id, expires_at])
+  @@map("email_verification_tokens")
 }
 
 model UploadedFile {

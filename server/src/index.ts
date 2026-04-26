@@ -2,6 +2,7 @@ import "dotenv/config";
 import { createServer } from "http";
 import app from "./app.js";
 import { startInventoryInsightsCron } from "./jobs/inventoryInsights.job.js";
+import { startMonthlySalesReportCron } from "./jobs/monthlySalesReport.job.js";
 import { startRecurringInvoiceCron } from "./jobs/recurringInvoice.job.js";
 import { ensureSchemaCompatibility } from "./lib/schemaCompatibility.js";
 import {
@@ -30,6 +31,7 @@ await ensureSchemaCompatibility();
 initServerObservability();
 startRecurringInvoiceCron();
 startInventoryInsightsCron();
+startMonthlySalesReportCron();
 
 const server = createServer(app);
 

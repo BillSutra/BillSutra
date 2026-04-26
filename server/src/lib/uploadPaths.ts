@@ -8,6 +8,7 @@ export const UPLOADS_ROOT = path.resolve(__dirname, "../../uploads");
 export const PUBLIC_UPLOADS_ROOT = path.join(UPLOADS_ROOT, "public");
 export const PRIVATE_UPLOADS_ROOT = path.join(UPLOADS_ROOT, "private");
 export const PUBLIC_LOGOS_ROOT = path.join(PUBLIC_UPLOADS_ROOT, "logos");
+export const PRIVATE_EXPORTS_ROOT = path.join(PRIVATE_UPLOADS_ROOT, "exports");
 export const PRIVATE_PAYMENT_PROOFS_ROOT = path.join(
   PRIVATE_UPLOADS_ROOT,
   "payment-proofs",

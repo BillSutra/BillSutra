@@ -48,6 +48,14 @@ export async function proxy(request: NextRequest) {
   }
 
   const role = (token as { user?: { role?: string } } | null)?.user?.role;
+  const isEmailVerified = (
+    token as { user?: { is_email_verified?: boolean | null } } | null
+  )?.user?.is_email_verified;
+
+  if (role !== "WORKER" && isEmailVerified === false) {
+    return NextResponse.redirect(new URL("/verify-email", request.url));
+  }
+
   if (pathname.startsWith("/workers") && role !== "ADMIN") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }

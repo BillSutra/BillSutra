@@ -12,6 +12,7 @@ import SessionProvider from "../providers/sessionProvider";
 import { Toaster } from "@/components/ui/sonner";
 import QueryProvider from "../providers/QueryProvider";
 import AuthTokenSync from "../providers/AuthTokenSync";
+import AuthSessionGuard from "../providers/AuthSessionGuard";
 import RealtimeInvoiceProvider from "../providers/RealtimeInvoiceProvider";
 import { NotificationProvider } from "@/providers/NotificationProvider";
 import ThemeProvider from "@/components/theme-provider";
@@ -109,6 +110,7 @@ export default async function RootLayout({
               <QueryProvider>
                 <NotificationProvider>
                   <AuthTokenSync />
+                  <AuthSessionGuard />
                   <RealtimeInvoiceProvider />
                   <ObservabilityProvider />
                   <UpgradePromptDialog />

@@ -14,13 +14,13 @@ import {
 } from "../config/accessPlans.js";
 import AppError from "../utils/AppError.js";
 import { paymentProofStorage } from "./storage/paymentProofStorage.js";
-import { getBackendAppUrl, getFrontendAppUrl } from "../lib/appUrls.js";
-import { sendEmail } from "../emails/index.js";
+import { getBackendAppUrl } from "../lib/appUrls.js";
 import {
   applySubscriptionGrant,
   getSubscriptionSnapshot,
   hasPaidAccess,
 } from "./subscription.service.js";
+import { dispatchPlanApprovedEmail } from "./email.service.js";
 import {
   buildSecureFileUrl,
   deleteUploadedFileById,
@@ -789,21 +789,8 @@ export const reviewAdminUpiPayment = async ({
     });
   }
 
-  if (nextStatus === AccessPaymentStatus.APPROVED && payment.user.email) {
-    try {
-      await sendEmail("payment_access_approved", {
-        email: payment.user.email,
-        user_name: payment.user.name,
-        plan_name: payment.plan_id === "pro-plus" ? "Pro Plus" : "Pro",
-        amount: Number(payment.amount),
-        status_page_url: `${getFrontendAppUrl()}/payments`,
-      });
-    } catch (error) {
-      console.warn("[payments] approval email failed", {
-        paymentId: payment.id,
-        error: error instanceof Error ? error.message : error,
-      });
-    }
+  if (nextStatus === AccessPaymentStatus.APPROVED) {
+    void dispatchPlanApprovedEmail(payment.id);
   }
 
   return serializePayment(updated);

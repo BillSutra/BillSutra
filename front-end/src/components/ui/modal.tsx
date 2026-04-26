@@ -31,7 +31,7 @@ const Modal = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          "rounded-xl border border-border/80 bg-card/95 text-card-foreground shadow-[0_24px_56px_-40px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:shadow-[0_30px_66px_-42px_rgba(1,4,9,0.78)]",
+          "rounded-xl border border-border/80 bg-card/95 text-card-foreground shadow-[0_24px_56px_-40px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-[0_30px_66px_-42px_rgba(0,0,0,0.8)]",
           contentClassName,
         )}
       >

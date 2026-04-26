@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import { useSession } from "next-auth/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -12,6 +12,7 @@ import {
   isCookieOnlyAuthEnabled,
   isSecureAuthEnabled,
   normalizeAuthToken,
+  refreshSecureAuthSession,
 } from "@/lib/secureAuth";
 
 type SessionUserWithToken = {
@@ -32,6 +33,8 @@ const RealtimeInvoiceProvider = () => {
   const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
   const debounceRef = useRef<number | null>(null);
+  const refreshInFlightRef = useRef<Promise<boolean> | null>(null);
+  const [preferCookieAuth, setPreferCookieAuth] = useState(false);
 
   const authToken = useMemo(() => {
     const sessionToken = normalizeSocketToken(
@@ -53,6 +56,7 @@ const RealtimeInvoiceProvider = () => {
     }
 
     const secureCookieSocket =
+      preferCookieAuth ||
       isCookieOnlyAuthEnabled() ||
       (isSecureAuthEnabled() && hasSecureAuthBootstrap());
 
@@ -70,6 +74,7 @@ const RealtimeInvoiceProvider = () => {
     });
 
     socketRef.current = socket;
+    let disposed = false;
 
     const invalidateInvoiceState = () => {
       if (debounceRef.current) {
@@ -104,10 +109,24 @@ const RealtimeInvoiceProvider = () => {
     socket.on("invoice_paid", invalidateInvoiceState);
     socket.on("dashboard_updated", invalidateDashboardOnly);
     socket.on("connect_error", () => {
-      // Realtime is best-effort only. API fetching remains the fallback path.
+      if (!secureCookieSocket && isSecureAuthEnabled()) {
+        if (!refreshInFlightRef.current) {
+          refreshInFlightRef.current = refreshSecureAuthSession()
+            .then((refreshed) => {
+              if (refreshed && !disposed) {
+                setPreferCookieAuth(true);
+              }
+              return refreshed;
+            })
+            .finally(() => {
+              refreshInFlightRef.current = null;
+            });
+        }
+      }
     });
 
     return () => {
+      disposed = true;
       socket.off("invoice_updated", invalidateInvoiceState);
       socket.off("payment_added", invalidateInvoiceState);
       socket.off("invoice_paid", invalidateInvoiceState);
@@ -119,7 +138,7 @@ const RealtimeInvoiceProvider = () => {
         debounceRef.current = null;
       }
     };
-  }, [authToken, queryClient, status]);
+  }, [authToken, preferCookieAuth, queryClient, status]);
 
   return null;
 };

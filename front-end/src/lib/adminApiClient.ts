@@ -2,7 +2,7 @@
 
 import axios from "axios";
 import { API_URL, ADMIN_LOGIN_URL } from "./apiEndPoints";
-import { getStoredAdminToken } from "./adminAuth";
+import { clearAdminToken, getStoredAdminToken } from "./adminAuth";
 
 export type AdminLoginResponse = {
   user: {
@@ -11,6 +11,7 @@ export type AdminLoginResponse = {
     role: "SUPER_ADMIN";
   };
   token: string;
+  expiresAt?: number;
 };
 
 export type AdminBusinessSummary = {
@@ -147,6 +148,23 @@ adminApiClient.interceptors.request.use((config) => {
 
   return config;
 });
+
+adminApiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (typeof window !== "undefined") {
+      const status = Number(error?.response?.status ?? 0);
+      if (status === 401 || status === 403) {
+        clearAdminToken();
+        if (!window.location.pathname.startsWith("/admin/login")) {
+          window.location.assign("/admin/login");
+        }
+      }
+    }
+
+    return Promise.reject(error);
+  },
+);
 
 export const loginSuperAdmin = async (payload: {
   email: string;

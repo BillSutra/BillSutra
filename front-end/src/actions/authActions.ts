@@ -43,10 +43,12 @@ export async function registerAction(prevState: unknown, formdata: FormData) {
     });
     return {
       status: 200,
-      message:
-        response.data?.message ?? "Registration successful. Check your inbox.",
+      message: response.data?.message ?? "Registration successful.",
       errors: {},
-      data: {},
+      data: {
+        token: response.data?.data?.token ?? response.data?.token ?? null,
+        user: response.data?.data?.user ?? response.data?.user ?? null,
+      },
     };
   } catch (error) {
     if (error instanceof AxiosError) {
@@ -134,6 +136,7 @@ export async function loginAction(prevState: unknown, formData: FormData) {
         identifier: rawIdentifier,
         password: formData.get("password"),
         token: authPayload?.token ?? null,
+        user: authPayload?.user ?? null,
       },
     };
   } catch (error) {
@@ -189,6 +192,7 @@ export async function workerLoginAction(prevState: unknown, formData: FormData) 
         identifier: rawIdentifier,
         password: formData.get("password"),
         token: authPayload?.token ?? null,
+        user: authPayload?.user ?? null,
       },
     };
   } catch (error) {
