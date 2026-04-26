@@ -18,18 +18,18 @@ const Navbar = () => {
   ];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md transition-all duration-200 dark:shadow-[0_14px_32px_-28px_rgba(0,0,0,0.82)]">
+    <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/88 backdrop-blur-md transition-all duration-200 shadow-[0_14px_32px_-28px_rgba(15,23,42,0.12)] dark:border-zinc-800 dark:bg-zinc-950/90 dark:shadow-[0_14px_32px_-28px_rgba(0,0,0,0.82)]">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
         <Link href="/" className="min-w-0">
           <BrandLogo showTagline={false} priority />
         </Link>
 
-        <nav className="hidden items-center gap-7 text-sm text-zinc-400 md:flex">
+        <nav className="hidden items-center gap-7 text-sm text-slate-500 md:flex dark:text-zinc-400">
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="transition-all duration-200 hover:text-white"
+              className="transition-all duration-200 hover:text-slate-950 dark:hover:text-white"
             >
               {item.label}
             </Link>
@@ -42,7 +42,7 @@ const Navbar = () => {
           <Button
             asChild
             variant="outline"
-            className="hidden rounded-xl border-zinc-700 bg-zinc-900 text-white hover:border-zinc-600 hover:bg-zinc-800 md:inline-flex"
+            className="hidden rounded-xl border-slate-200 bg-white text-slate-900 hover:border-slate-300 hover:bg-slate-50 md:inline-flex dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
           >
             <Link href="/login">{t("landing.nav.login")}</Link>
           </Button>

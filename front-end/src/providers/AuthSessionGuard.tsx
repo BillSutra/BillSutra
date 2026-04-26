@@ -13,7 +13,7 @@ import {
   isSecureAuthEnabled,
   isCookieOnlyAuthEnabled,
   normalizeAuthToken,
-  refreshSecureAuthSession,
+  refreshSecureAuthSessionDetailed,
 } from "@/lib/secureAuth";
 
 type SessionUserWithToken = {
@@ -99,8 +99,8 @@ const AuthSessionGuard = () => {
       const refreshLeadMs = 60 * 1000;
       const delayMs = Math.max(0, secureExpiresAt - Date.now() - refreshLeadMs);
       const timeoutId = window.setTimeout(() => {
-        void refreshSecureAuthSession().then((refreshed) => {
-          if (!refreshed) {
+        void refreshSecureAuthSessionDetailed().then((result) => {
+          if (!result.ok && result.reason === "auth_invalid") {
             void performLogout();
           }
         });
@@ -130,8 +130,8 @@ const AuthSessionGuard = () => {
       return undefined;
     }
 
-    void refreshSecureAuthSession().then((refreshed) => {
-      if (!refreshed) {
+    void refreshSecureAuthSessionDetailed().then((result) => {
+      if (!result.ok && result.reason === "auth_invalid") {
         void performLogout();
       }
     });

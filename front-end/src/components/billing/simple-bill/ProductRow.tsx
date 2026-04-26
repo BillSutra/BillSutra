@@ -33,6 +33,7 @@ type ProductRowProps = {
   item: CartItem;
   matchedProduct: Product | null;
   allowNegativeStock: boolean;
+  gstEnabled: boolean;
   isShortcutActive: boolean;
   quantityInputRef: (node: HTMLInputElement | null) => void;
   priceInputRef: (node: HTMLInputElement | null) => void;
@@ -49,6 +50,7 @@ export default function ProductRow({
   item,
   matchedProduct,
   allowNegativeStock,
+  gstEnabled,
   isShortcutActive,
   quantityInputRef,
   priceInputRef,
@@ -61,7 +63,10 @@ export default function ProductRow({
 }: ProductRowProps) {
   const quantityValue = toQuantity(item.quantity);
   const priceValue = toAmount(item.price);
-  const lineTotal = quantityValue * priceValue;
+  const gstRateValue = gstEnabled ? toAmount(item.gstRate) : 0;
+  const lineSubtotal = quantityValue * priceValue;
+  const lineTax = gstEnabled ? (lineSubtotal * gstRateValue) / 100 : 0;
+  const lineTotal = lineSubtotal + lineTax;
   const stockOnHand =
     matchedProduct && Number.isFinite(Number(matchedProduct.stock_on_hand))
       ? Number(matchedProduct.stock_on_hand)
@@ -82,15 +87,30 @@ export default function ProductRow({
       onMouseDownCapture={() => onActivate(item.id)}
       onFocusCapture={() => onActivate(item.id)}
     >
-      <div className="hidden grid-cols-[minmax(0,1.8fr)_9rem_10rem_9rem_auto] items-center gap-3 px-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground md:grid">
-        <span>{isHindi ? "प्रोडक्ट" : "Product"}</span>
-        <span className="text-center">{isHindi ? "मात्रा" : "Qty"}</span>
-        <span className="text-right">{isHindi ? "कीमत" : "Price"}</span>
-        <span className="text-right">{isHindi ? "लाइन टोटल" : "Line total"}</span>
-        <span className="text-right">{isHindi ? "हटाएं" : "Remove"}</span>
+      <div
+        className={cn(
+          "hidden items-center gap-3 px-1 pb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground md:grid",
+          gstEnabled
+            ? "md:grid-cols-[minmax(0,1.7fr)_9rem_10rem_7rem_9rem_auto]"
+            : "md:grid-cols-[minmax(0,1.8fr)_9rem_10rem_9rem_auto]",
+        )}
+      >
+        <span>{isHindi ? "Product" : "Product"}</span>
+        <span className="text-center">{isHindi ? "Qty" : "Qty"}</span>
+        <span className="text-right">{isHindi ? "Price" : "Price"}</span>
+        {gstEnabled ? <span className="text-right">GST %</span> : null}
+        <span className="text-right">{isHindi ? "Line total" : "Line total"}</span>
+        <span className="text-right">{isHindi ? "Remove" : "Remove"}</span>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1.8fr)_9rem_10rem_9rem_auto] md:items-center">
+      <div
+        className={cn(
+          "grid gap-3 md:items-center",
+          gstEnabled
+            ? "md:grid-cols-[minmax(0,1.7fr)_9rem_10rem_7rem_9rem_auto]"
+            : "md:grid-cols-[minmax(0,1.8fr)_9rem_10rem_9rem_auto]",
+        )}
+      >
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="truncate text-sm font-semibold text-foreground">
@@ -106,10 +126,10 @@ export default function ProductRow({
             >
               {item.productId
                 ? isHindi
-                  ? "सेव्ड प्रोडक्ट"
+                  ? "Saved product"
                   : "Saved product"
                 : isHindi
-                  ? "कस्टम आइटम"
+                  ? "Custom item"
                   : "Custom item"}
             </span>
             {matchedProduct && stockOnHand !== null ? (
@@ -125,10 +145,10 @@ export default function ProductRow({
               >
                 {stockOnHand <= 0
                   ? isHindi
-                    ? "स्टॉक खत्म"
+                    ? "Out of stock"
                     : "Out of stock"
                   : isHindi
-                    ? `स्टॉक ${stockOnHand}`
+                    ? `Stock ${stockOnHand}`
                     : `Stock ${stockOnHand}`}
               </span>
             ) : null}
@@ -136,15 +156,15 @@ export default function ProductRow({
           <p className="mt-1 text-xs text-muted-foreground">
             {matchedProduct
               ? [matchedProduct.sku, matchedProduct.barcode].filter(Boolean).join(" | ") ||
-                (isHindi ? "SKU उपलब्ध नहीं" : "SKU not available")
+                (isHindi ? "SKU not available" : "SKU not available")
               : isHindi
-                ? "मैनुअल एंट्री"
+                ? "Manual entry"
                 : "Manual entry"}
           </p>
           {stockExceeded ? (
             <p className="mt-2 text-xs font-medium text-amber-700">
               {isHindi
-                ? `केवल ${stockOnHand} स्टॉक में है. इनवॉइस बनाने से पहले मात्रा कम करें.`
+                ? `Only ${stockOnHand} in stock. Reduce quantity before generating the bill.`
                 : `Only ${stockOnHand} in stock. Reduce quantity before generating the bill.`}
             </p>
           ) : null}
@@ -155,7 +175,7 @@ export default function ProductRow({
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-background hover:text-foreground"
             onClick={() => onAdjustQuantity(item.id, -1)}
-            aria-label={isHindi ? "मात्रा घटाएं" : "Decrease quantity"}
+            aria-label={isHindi ? "Decrease quantity" : "Decrease quantity"}
           >
             <Minus size={14} />
           </button>
@@ -183,13 +203,13 @@ export default function ProductRow({
             }}
             className="h-8 w-14 border-0 bg-transparent px-0 text-center text-sm font-semibold shadow-none focus-visible:ring-0"
             inputMode="decimal"
-            aria-label={isHindi ? "मात्रा" : "Quantity"}
+            aria-label={isHindi ? "Quantity" : "Quantity"}
           />
           <button
             type="button"
             className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-background hover:text-foreground"
             onClick={() => onAdjustQuantity(item.id, 1)}
-            aria-label={isHindi ? "मात्रा बढ़ाएं" : "Increase quantity"}
+            aria-label={isHindi ? "Increase quantity" : "Increase quantity"}
           >
             <Plus size={14} />
           </button>
@@ -215,15 +235,45 @@ export default function ProductRow({
               className="h-auto w-24 border-0 bg-transparent px-0 py-0 text-right text-sm font-medium shadow-none focus-visible:ring-0"
               inputMode="decimal"
               placeholder="0.00"
-              aria-label={isHindi ? "कीमत" : "Price"}
+              aria-label={isHindi ? "Price" : "Price"}
             />
           </div>
         </div>
 
+        {gstEnabled ? (
+          <div className="rounded-xl border border-border/60 bg-background px-3 py-2">
+            <div className="flex items-center justify-end gap-1">
+              <Input
+                value={item.gstRate}
+                onChange={(event) =>
+                  onUpdateItem(item.id, {
+                    gstRate: sanitizeDecimalInput(event.target.value),
+                  })
+                }
+                onBlur={() => {
+                  if (!item.gstRate.trim()) {
+                    onUpdateItem(item.id, { gstRate: "0" });
+                  }
+                }}
+                onFocus={(event) => event.target.select()}
+                className="h-auto w-16 border-0 bg-transparent px-0 py-0 text-right text-sm font-medium shadow-none focus-visible:ring-0"
+                inputMode="decimal"
+                placeholder="0"
+                aria-label="GST percentage"
+              />
+              <span className="text-sm text-muted-foreground">%</span>
+            </div>
+          </div>
+        ) : null}
+
         <div className="text-right">
           <p className="text-sm font-semibold text-foreground">{formatMoney(lineTotal)}</p>
           <p className="text-[11px] text-muted-foreground">
-            {isHindi ? "मात्रा x कीमत" : "Quantity x price"}
+            {gstEnabled
+              ? `${formatMoney(lineSubtotal)} + ${formatMoney(lineTax)} GST`
+              : isHindi
+                ? "Quantity x price"
+                : "Quantity x price"}
           </p>
         </div>
 
@@ -233,7 +283,7 @@ export default function ProductRow({
             variant="ghost"
             size="icon"
             className="h-9 w-9 rounded-full text-muted-foreground hover:text-rose-600"
-            aria-label={isHindi ? "आइटम हटाएं" : "Remove item"}
+            aria-label={isHindi ? "Remove item" : "Remove item"}
             onClick={() => onRemoveItem(item.id)}
           >
             <Trash2 size={15} />

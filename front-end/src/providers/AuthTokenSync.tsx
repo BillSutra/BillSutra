@@ -10,7 +10,7 @@ import {
   isAuthTokenExpired,
   isSecureAuthEnabled,
   normalizeAuthToken,
-  refreshSecureAuthSession,
+  refreshSecureAuthSessionDetailed,
   requestClientLogout,
 } from "@/lib/secureAuth";
 
@@ -47,8 +47,8 @@ const AuthTokenSync = () => {
         return;
       }
 
-      void refreshSecureAuthSession().then((refreshed) => {
-        if (!refreshed) {
+      void refreshSecureAuthSessionDetailed().then((result) => {
+        if (!result.ok && result.reason === "auth_invalid") {
           requestClientLogout("refresh_expired");
         }
       });

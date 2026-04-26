@@ -2,8 +2,11 @@ import "dotenv/config";
 import { createServer } from "http";
 import app from "./app.js";
 import { startInventoryInsightsCron } from "./jobs/inventoryInsights.job.js";
+import { startInvoiceReminderCron } from "./jobs/invoiceReminder.job.js";
+import { startLowStockAlertCron } from "./jobs/lowStockAlert.job.js";
 import { startMonthlySalesReportCron } from "./jobs/monthlySalesReport.job.js";
 import { startRecurringInvoiceCron } from "./jobs/recurringInvoice.job.js";
+import { startWeeklyReportCron } from "./jobs/weeklyReport.job.js";
 import { ensureSchemaCompatibility } from "./lib/schemaCompatibility.js";
 import {
   flushObservability,
@@ -32,6 +35,9 @@ initServerObservability();
 startRecurringInvoiceCron();
 startInventoryInsightsCron();
 startMonthlySalesReportCron();
+startInvoiceReminderCron();
+startWeeklyReportCron();
+startLowStockAlertCron();
 
 const server = createServer(app);
 

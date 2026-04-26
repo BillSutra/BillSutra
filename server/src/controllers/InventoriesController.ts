@@ -9,11 +9,38 @@ import {
 import { dispatchNotification } from "../services/notification.service.js";
 import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
 import { applyInventoryDelta } from "../services/inventoryValidation.service.js";
+import { listInventoryIssuesForUser } from "../services/inventoryIssue.service.js";
 
 type InventoryAdjustInput = z.infer<typeof inventoryAdjustSchema>;
 type InventoryQueryInput = z.infer<typeof inventoryQuerySchema>;
 
 class InventoriesController {
+  static async issues(req: Request, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    try {
+      const resolvedQuery = typeof req.query.resolved === "string"
+        ? req.query.resolved.trim().toLowerCase()
+        : undefined;
+      const resolved =
+        resolvedQuery === "true"
+          ? true
+          : resolvedQuery === "false"
+            ? false
+            : undefined;
+
+      const issues = await listInventoryIssuesForUser({ userId, resolved });
+      return sendResponse(res, 200, { data: issues });
+    } catch {
+      return sendResponse(res, 500, {
+        message: "Failed to load inventory issues",
+      });
+    }
+  }
+
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
     if (!userId) {

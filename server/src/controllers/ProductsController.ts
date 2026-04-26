@@ -12,6 +12,52 @@ import {
 type ProductCreateInput = z.infer<typeof productCreateSchema>;
 type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
 
+const buildQuickProductSku = (productName: string) => {
+  const base = productName
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 6);
+  const prefix = base || "ITEM";
+  const suffix = `${Date.now().toString().slice(-4)}${Math.floor(
+    Math.random() * 90 + 10,
+  )}`;
+  return `${prefix}-${suffix}`;
+};
+
+const resolveProductSku = async ({
+  userId,
+  preferredSku,
+  productName,
+}: {
+  userId: number;
+  preferredSku?: string;
+  productName: string;
+}) => {
+  const requestedSku = preferredSku?.trim();
+  if (requestedSku) {
+    return requestedSku;
+  }
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const candidateSku = buildQuickProductSku(productName);
+    const existingProduct = await prisma.product.findFirst({
+      where: {
+        user_id: userId,
+        sku: candidateSku,
+      },
+      select: { id: true },
+    });
+
+    if (!existingProduct) {
+      return candidateSku;
+    }
+  }
+
+  return `${buildQuickProductSku(productName)}-${Math.floor(
+    Math.random() * 900 + 100,
+  )}`;
+};
+
 class ProductsController {
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
@@ -140,12 +186,18 @@ class ProductsController {
       }
     }
 
+    const resolvedSku = await resolveProductSku({
+      userId,
+      preferredSku: sku,
+      productName: name,
+    });
+
     const product = await prisma.product.create({
       data: {
         user_id: userId,
         category_id,
         name,
-        sku,
+        sku: resolvedSku,
         barcode,
         gst_rate,
         price,

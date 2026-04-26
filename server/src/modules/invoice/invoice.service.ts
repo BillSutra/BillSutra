@@ -23,11 +23,11 @@ import {
 import {
   applyBillingSaleInventoryAdjustments,
   getBillingInventorySchemaSupport,
-  getBillingInventorySettings,
   restoreBillingSaleInventoryAdjustments,
   resolveBillingProducts,
   resolveBillingWarehouse,
 } from "../../services/billingInventorySync.service.js";
+import { enqueueInventorySanitization } from "../../queues/jobs/inventory.jobs.js";
 
 const INVOICE_STATUS = {
   DRAFT: "DRAFT",
@@ -1366,7 +1366,7 @@ export const createInvoice = async (
         ? PAYMENT_STATUS.PARTIALLY_PAID
         : PAYMENT_STATUS.UNPAID;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const schemaSupport = syncSales
       ? await getBillingInventorySchemaSupport(tx)
       : {
@@ -1374,9 +1374,6 @@ export const createInvoice = async (
           invoiceItemNonInventoryFlag: false,
           saleItemNonInventoryFlag: false,
         };
-    const inventorySettings = syncSales
-      ? await getBillingInventorySettings(tx, userId)
-      : null;
     const warehouse = syncSales
       ? await resolveBillingWarehouse(tx, userId, payload.warehouse_id)
       : null;
@@ -1553,6 +1550,14 @@ export const createInvoice = async (
       });
     }
 
+    let negativeInventoryProducts: Array<{
+      productId: number;
+      warehouseId: number;
+      stockOnHand: number;
+      inventoryQuantity: number | null;
+      issueDetected: boolean;
+    }> = [];
+
     if (syncSales) {
       const saleItems = resolvedItems.map((item, index) => ({
         product_id: item.product_id,
@@ -1619,18 +1624,51 @@ export const createInvoice = async (
         });
       }
 
-      await applyBillingSaleInventoryAdjustments({
+      negativeInventoryProducts = await applyBillingSaleInventoryAdjustments({
         tx,
         warehouseId: warehouse?.id as number,
         items: resolvedItems,
-        allowNegativeStock: inventorySettings?.allowNegativeStock,
+        allowNegativeStock: true,
         referenceId: invoice.id,
         referenceType: "invoice",
       });
     }
 
-    return invoice;
+    return {
+      invoice,
+      negativeInventoryProducts,
+    };
   });
+
+  const uniqueNegativeProducts = Array.from(
+    new Map(
+      result.negativeInventoryProducts
+        .filter((item) => item.issueDetected)
+        .map((item) => [`${item.productId}:${item.warehouseId}`, item]),
+    ).values(),
+  );
+
+  await Promise.all(
+    uniqueNegativeProducts.map(async (item) => {
+      const queueResult = await enqueueInventorySanitization({
+        productId: item.productId,
+        warehouseId: item.warehouseId,
+        triggeredBy: "invoice",
+        referenceId: result.invoice.id,
+      });
+
+      if (!queueResult.queued) {
+        console.warn("[inventory] reconciliation queue unavailable after invoice", {
+          invoiceId: result.invoice.id,
+          productId: item.productId,
+          warehouseId: item.warehouseId,
+          reason: queueResult.reason,
+        });
+      }
+    }),
+  );
+
+  return result.invoice;
 };
 
 export const getInvoice = async (userId: number, id: number) => {

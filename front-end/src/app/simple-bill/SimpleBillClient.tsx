@@ -14,13 +14,13 @@ import {
   Download,
   Plus,
   Printer,
-  ReceiptText,
   Trash2,
 } from "lucide-react";
 import CartV2Component from "@/components/billing/CartV2";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
+import InvoiceCheckoutAction from "@/components/invoice/InvoiceCheckoutAction";
 import { normalizeDesignConfig } from "@/components/invoice/DesignConfigContext";
 import InvoicePrint from "@/components/invoice/InvoicePrint";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,7 @@ import {
   useCustomerSearchQuery,
   useCreateCustomerMutation,
   useCreateInvoiceMutation,
+  useCreateProductMutation,
   useProductsQuery,
 } from "@/hooks/useInventoryQueries";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -39,6 +40,7 @@ import {
   fetchBusinessProfile,
   fetchCustomers,
   fetchInvoicePdfFile,
+  sendInvoiceEmail,
   fetchUserSettingsPreferences,
   type BusinessProfileRecord,
   type Customer,
@@ -51,6 +53,7 @@ import {
   formatCustomerAddressFromRecord,
 } from "@/lib/indianAddress";
 import { getStateFromGstin } from "@/lib/gstin";
+import { runInvoiceCheckoutPipeline } from "@/lib/invoiceCheckout";
 import { resolveBackendAssetUrl } from "@/lib/backendAssetUrl";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
@@ -1537,6 +1540,7 @@ const SimpleBillClient = ({
   });
   const createCustomer = useCreateCustomerMutation();
   const createInvoice = useCreateInvoiceMutation();
+  const createProduct = useCreateProductMutation();
   const [billState, setBillState] = useState<BillState>(() =>
     createInitialBillState(initialInvoiceDate),
   );
@@ -2344,13 +2348,19 @@ const SimpleBillClient = ({
     setProductSearchOpen(open);
   }, []);
 
-  const addProductToBill = useCallback(
-    (product: Product) => {
+  const insertProductIntoBill = useCallback(
+    (
+      product: Product,
+      options?: {
+        ignoreStockGuard?: boolean;
+      },
+    ) => {
       const stockOnHand = Number(product.stock_on_hand) || 0;
       const productPrice = Number(product.price) || 0;
       const productTaxRate = String(Number(product.gst_rate) || 0);
+      const ignoreStockGuard = options?.ignoreStockGuard ?? false;
 
-      if (!allowNegativeStock && stockOnHand <= 0) {
+      if (!ignoreStockGuard && !allowNegativeStock && stockOnHand <= 0) {
         toast.error(`${product.name} is out of stock.`);
         return;
       }
@@ -2366,7 +2376,11 @@ const SimpleBillClient = ({
         if (existingIndex >= 0) {
           const existingItem = current.items[existingIndex];
           const currentQuantity = Math.max(1, Number(existingItem.quantity) || 1);
-          if (!allowNegativeStock && currentQuantity >= stockOnHand) {
+          if (
+            !ignoreStockGuard &&
+            !allowNegativeStock &&
+            currentQuantity >= stockOnHand
+          ) {
             blockedByStock = true;
             return current;
           }
@@ -2435,6 +2449,13 @@ const SimpleBillClient = ({
       }, 0);
     },
     [allowNegativeStock, selectedTaxMode, updateBillState],
+  );
+
+  const addProductToBill = useCallback(
+    (product: Product) => {
+      insertProductIntoBill(product);
+    },
+    [insertProductIntoBill],
   );
 
   const addManualItemToBill = useCallback(
@@ -2523,6 +2544,43 @@ const SimpleBillClient = ({
       }, 0);
     },
     [gstRate, selectedTaxMode, updateBillState],
+  );
+
+  const handleQuickCreateProduct = useCallback(
+    async ({
+      name,
+      price,
+      gstRate: productGstRate,
+    }: {
+      name: string;
+      price: number;
+      gstRate: number;
+    }) => {
+      const trimmedName = name.trim();
+      if (!trimmedName) {
+        throw new Error("Enter a product name.");
+      }
+
+      if (!(price > 0)) {
+        throw new Error("Enter a valid selling price.");
+      }
+
+      try {
+        const createdProduct = await createProduct.mutateAsync({
+          name: trimmedName,
+          price,
+          gst_rate: Math.max(0, productGstRate || 0),
+        });
+
+        insertProductIntoBill(createdProduct, { ignoreStockGuard: true });
+        toast.success("Product added.");
+      } catch (error) {
+        throw new Error(
+          parseApiErrorMessage(error, "Could not create product."),
+        );
+      }
+    },
+    [createProduct, insertProductIntoBill],
   );
 
   const handleCustomerSearch = (value: string) => {
@@ -2852,7 +2910,14 @@ const SimpleBillClient = ({
         items: invoiceItems,
       });
 
-      const createdInvoice = await createInvoice.mutateAsync(invoicePayload);
+      const checkoutResult = await runInvoiceCheckoutPipeline({
+        createInvoice: createInvoice.mutateAsync,
+        sendInvoiceEmail: (invoiceId, payload) =>
+          sendInvoiceEmail(invoiceId, payload),
+        payload: invoicePayload,
+        customerEmail: customer.email ?? null,
+      });
+      const createdInvoice = checkoutResult.invoice;
       const billItems: SimpleBillItem[] = validItems.map((item) => ({
         id: item.product_id || createItem().id,
         productId: item.product_id ? Number(item.product_id) : undefined,
@@ -2870,6 +2935,20 @@ const SimpleBillClient = ({
       setPreviewOpen(true);
       setProductSearchOpen(false);
       toast.success(copy.toastBillGenerated);
+      if (checkoutResult.emailResult && checkoutResult.emailRecipient) {
+        toast.success(
+          checkoutResult.emailResult.queued
+            ? `Email queued for ${checkoutResult.emailResult.email ?? checkoutResult.emailRecipient}`
+            : `Email sent to ${checkoutResult.emailResult.email ?? checkoutResult.emailRecipient}`,
+        );
+      } else if (checkoutResult.emailError && checkoutResult.emailRecipient) {
+        toast.error(
+          parseApiErrorMessage(
+            checkoutResult.emailError,
+            `Invoice created, but email could not be sent to ${checkoutResult.emailRecipient}.`,
+          ),
+        );
+      }
       window.localStorage.removeItem(SIMPLE_BILL_DRAFT_KEY);
       router.refresh();
     } catch (error) {
@@ -3387,6 +3466,7 @@ const SimpleBillClient = ({
               productsLoading={productsLoading}
               productsError={productsError}
               allowNegativeStock={allowNegativeStock}
+              gstEnabled={gstEnabled}
               productSearchOpen={productSearchOpen}
               productSearchFocusToken={productSearchFocusToken}
               shortcutActiveItemId={shortcutActiveItemId}
@@ -3396,6 +3476,8 @@ const SimpleBillClient = ({
               onRetryProducts={handleRetryDataLoad}
               onAddProduct={addProductToBill}
               onAddManualItem={addManualItemToBill}
+              onQuickCreateProduct={handleQuickCreateProduct}
+              creatingProduct={createProduct.isPending}
               updateItem={updateItem}
               removeItem={removeItem}
               adjustItemQuantity={adjustItemQuantity}
@@ -4095,21 +4177,42 @@ const SimpleBillClient = ({
                 </div>
               </div>
 
-              <Button
-                type="button"
-                size="lg"
-                className="h-12 w-full bg-slate-900 text-base font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200"
+              <InvoiceCheckoutAction
+                itemCount={validItems.length}
+                isLoading={isSubmitting || createInvoice.isPending}
                 disabled={
                   isSubmitting ||
                   createInvoice.isPending ||
                   createCustomer.isPending ||
                   !canGenerateBill
                 }
-                onClick={() => void handleGenerateBill()}
-              >
-                <ReceiptText size={18} />
-                {isSubmitting ? copy.generatingBill : copy.generateAndSaveBill}
-              </Button>
+                buttonLabel={t("invoiceComposer.checkout")}
+                loadingLabel={t("invoiceComposer.generating")}
+                readyLabel={
+                  isHindi
+                    ? "सब तैयार है। अब बिल चेकआउट किया जा सकता है।"
+                    : "Everything looks ready for checkout."
+                }
+                missingLabel={
+                  isHindi
+                    ? "आगे बढ़ने के लिए कम से कम एक प्रोडक्ट जोड़ें।"
+                    : "Add at least one product to continue."
+                }
+                readyHint={
+                  isHindi
+                    ? "कस्टमर, प्रोडक्ट और पेमेंट देखकर यही checkout button इस्तेमाल करें।"
+                    : "Review customer, products, and payment here, then use the same checkout flow."
+                }
+                missingHint={
+                  isHindi
+                    ? "चेकआउट सक्षम करने के लिए पहले वैध आइटम जोड़ें।"
+                    : "Add valid bill items first to enable checkout."
+                }
+                itemCountLabel={t("invoiceComposer.lineItemsCount", {
+                  count: validItems.length,
+                })}
+                onCheckout={() => void handleGenerateBill()}
+              />
 
               {generatedInvoice ? (
                 <div className="rounded-xl border border-border/70 bg-background/70 p-3">

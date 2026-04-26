@@ -18,6 +18,7 @@ import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import InvoiceCompactMetaPanel from "@/components/invoice/InvoiceCompactMetaPanel";
 import A4PreviewStack from "@/components/invoice/A4PreviewStack";
 import InvoiceForm from "@/components/invoice/InvoiceForm";
+import InvoiceCheckoutAction from "@/components/invoice/InvoiceCheckoutAction";
 import InvoiceTable from "@/components/invoice/InvoiceTable";
 import InvoiceTotals from "@/components/invoice/InvoiceTotals";
 import InvoiceDraftPanel from "@/components/invoice/InvoiceDraftPanel";
@@ -78,6 +79,7 @@ import {
   getDiscountValidationMessage,
 } from "@/lib/invoiceDiscount";
 import { resolveBackendAssetUrl } from "@/lib/backendAssetUrl";
+import { runInvoiceCheckoutPipeline } from "@/lib/invoiceCheckout";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   InvoiceDraft,
@@ -1582,47 +1584,6 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     t,
   ]);
 
-  const autoSendInvoiceEmail = useCallback(
-    async (
-      invoiceId: number,
-      invoiceNumber: string | null,
-      email: string,
-      previewPayload?: InvoiceRenderPayload | null,
-    ) => {
-      const recipient = email.trim();
-      if (!recipient || !isValidEmailAddress(recipient)) {
-        return;
-      }
-
-      try {
-        const response = await sendInvoiceEmailMutation.mutateAsync({
-          invoiceId,
-          email: recipient,
-          previewPayload,
-        });
-        setLastCreatedCustomerEmail(response.email ?? recipient);
-        captureAnalyticsEvent("invoice_email_sent", {
-          invoiceId,
-          invoiceNumber,
-          source: "auto-checkout",
-        });
-        toast.success(
-          response.queued
-            ? `Email queued for ${response.email ?? recipient}`
-            : `Email sent to ${response.email ?? recipient}`,
-        );
-      } catch (error) {
-        toast.error(
-          parseServerErrors(
-            error,
-            `Invoice created, but email could not be sent to ${recipient}.`,
-          ),
-        );
-      }
-    },
-    [parseServerErrors, sendInvoiceEmailMutation],
-  );
-
   const submitInvoice = useCallback(async () => {
     if (createInvoice.isPending || checkoutAutomationPending) return;
 
@@ -1666,34 +1627,46 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             form.date ||
             new Date().toISOString().slice(0, 10));
 
-      const createdInvoice = await createInvoice.mutateAsync({
-        customer_id: Number(form.customer_id),
-        date: form.date || undefined,
-        due_date: form.due_date || undefined,
-        discount: Number(form.discount) || undefined,
-        discount_type: form.discount_type,
-        status: mapPaymentStatusToInvoiceStatus(form.payment_status),
-        payment_status: form.payment_status,
-        amount_paid:
-          form.payment_status === "UNPAID"
-            ? undefined
-            : Math.max(0, effectivePaidAmount),
-        payment_method:
-          form.payment_status === "UNPAID"
-            ? undefined
-            : (form.payment_method || undefined),
-        payment_date: effectivePaymentDate,
-        tax_mode: taxMode,
-        sync_sales: true,
-        warehouse_id: form.warehouse_id ? Number(form.warehouse_id) : undefined,
-        items: items.map((item) => ({
-          product_id: item.product_id ? Number(item.product_id) : undefined,
-          name: item.name.trim(),
-          quantity: Number(item.quantity),
-          price: Number(item.price),
-          tax_rate: item.tax_rate ? Number(item.tax_rate) : undefined,
-        })),
+      const checkoutResult = await runInvoiceCheckoutPipeline({
+        createInvoice: createInvoice.mutateAsync,
+        sendInvoiceEmail: (invoiceId, payload) =>
+          sendInvoiceEmailMutation.mutateAsync({
+            invoiceId,
+            email: payload.email ?? "",
+          }),
+        payload: {
+          customer_id: Number(form.customer_id),
+          date: form.date || undefined,
+          due_date: form.due_date || undefined,
+          discount: Number(form.discount) || undefined,
+          discount_type: form.discount_type,
+          status: mapPaymentStatusToInvoiceStatus(form.payment_status),
+          payment_status: form.payment_status,
+          amount_paid:
+            form.payment_status === "UNPAID"
+              ? undefined
+              : Math.max(0, effectivePaidAmount),
+          payment_method:
+            form.payment_status === "UNPAID"
+              ? undefined
+              : (form.payment_method || undefined),
+          payment_date: effectivePaymentDate,
+          tax_mode: taxMode,
+          sync_sales: true,
+          warehouse_id: form.warehouse_id
+            ? Number(form.warehouse_id)
+            : undefined,
+          items: items.map((item) => ({
+            product_id: item.product_id ? Number(item.product_id) : undefined,
+            name: item.name.trim(),
+            quantity: Number(item.quantity),
+            price: Number(item.price),
+            tax_rate: item.tax_rate ? Number(item.tax_rate) : undefined,
+          })),
+        },
+        customerEmail: selectedCustomer?.email ?? null,
       });
+      const createdInvoice = checkoutResult.invoice;
       const createdInvoiceRenderPayload = buildInvoiceRenderPayload({
         ...currentInvoiceRenderPayload,
         data: {
@@ -1711,7 +1684,12 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           ? new Date(createdInvoice.date).toISOString().slice(0, 10)
           : form.date || new Date().toISOString().slice(0, 10),
       );
-      setLastCreatedCustomerEmail(selectedCustomer?.email ?? null);
+      setLastCreatedCustomerEmail(
+        checkoutResult.emailResult?.email ??
+          checkoutResult.emailRecipient ??
+          selectedCustomer?.email ??
+          null,
+      );
       setInvoiceEmailRecipient(selectedCustomer?.email?.trim() ?? "");
       setInvoiceEmailError(null);
       captureAnalyticsEvent("invoice_created", {
@@ -1735,12 +1713,23 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         toast.error(t("invoice.pdfError"));
       }
 
-      if (selectedCustomer?.email?.trim()) {
-        await autoSendInvoiceEmail(
-          createdInvoice.id,
-          createdInvoice.invoice_number,
-          selectedCustomer.email,
-          createdInvoiceRenderPayload,
+      if (checkoutResult.emailResult && checkoutResult.emailRecipient) {
+        captureAnalyticsEvent("invoice_email_sent", {
+          invoiceId: createdInvoice.id,
+          invoiceNumber: createdInvoice.invoice_number,
+          source: "auto-checkout",
+        });
+        toast.success(
+          checkoutResult.emailResult.queued
+            ? `Email queued for ${checkoutResult.emailResult.email ?? checkoutResult.emailRecipient}`
+            : `Email sent to ${checkoutResult.emailResult.email ?? checkoutResult.emailRecipient}`,
+        );
+      } else if (checkoutResult.emailError && checkoutResult.emailRecipient) {
+        toast.error(
+          parseServerErrors(
+            checkoutResult.emailError,
+            `Invoice created, but email could not be sent to ${checkoutResult.emailRecipient}.`,
+          ),
         );
       }
 
@@ -1751,7 +1740,6 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
       setCheckoutAutomationPending(false);
     }
   }, [
-    autoSendInvoiceEmail,
     checkoutAutomationPending,
     createInvoice,
     currentInvoiceRenderPayload,
@@ -2238,6 +2226,35 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     </Card>
   );
 
+  const checkoutActionNode = (
+    <FirstTimeHint
+      id="bill-step-generate"
+      message="When the customer and products are ready, use this button to create the bill."
+      position="bottom"
+    >
+      <InvoiceCheckoutAction
+        buttonId="bill-create-button"
+        itemCount={items.length}
+        isLoading={createInvoice.isPending || checkoutAutomationPending}
+        disabled={
+          createInvoice.isPending || checkoutAutomationPending || items.length === 0
+        }
+        buttonLabel={t("invoiceComposer.checkout")}
+        loadingLabel={t("invoiceComposer.generating")}
+        readyLabel={helperCopy.reviewReady}
+        missingLabel={helperCopy.reviewMissing}
+        readyHint={t("invoiceComposer.keyboardCheckout", {
+          key: shortcutModifierLabel,
+        })}
+        missingHint={helperCopy.reviewMissingHelp}
+        itemCountLabel={t("invoiceComposer.lineItemsCount", {
+          count: items.length,
+        })}
+        onCheckout={() => void submitInvoice()}
+      />
+    </FirstTimeHint>
+  );
+
   const totalsWorkspaceNode = (
     <InvoiceTotals
       totals={totals}
@@ -2347,51 +2364,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             )
       }
       className="xl:max-w-none"
-      action={
-        <FirstTimeHint
-          id="bill-step-generate"
-          message="When the customer and products are ready, use this button to create the bill."
-          position="bottom"
-        >
-          <div className="mt-6 grid gap-3">
-            <Button
-              id="bill-create-button"
-              type="button"
-              size="lg"
-              className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
-              disabled={
-                createInvoice.isPending ||
-                checkoutAutomationPending ||
-                items.length === 0
-              }
-              onClick={() => void submitInvoice()}
-            >
-              {createInvoice.isPending || checkoutAutomationPending
-                ? t("invoiceComposer.generating")
-                : t("invoiceComposer.checkout")}
-            </Button>
-            <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
-              <span>
-                {items.length === 0
-                  ? helperCopy.reviewMissing
-                  : helperCopy.reviewReady}
-              </span>
-              <span className="font-semibold">
-                {t("invoiceComposer.lineItemsCount", {
-                  count: items.length,
-                })}
-              </span>
-            </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {items.length === 0
-                ? helperCopy.reviewMissingHelp
-                : t("invoiceComposer.keyboardCheckout", {
-                    key: shortcutModifierLabel,
-                  })}
-            </p>
-          </div>
-        </FirstTimeHint>
-      }
+      action={checkoutActionNode}
     />
   );
 
@@ -2846,51 +2819,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
                     )
               }
               className="xl:max-w-[390px]"
-              action={
-                <FirstTimeHint
-                  id="bill-step-generate"
-                  message="When the customer and products are ready, use this button to create the bill."
-                  position="bottom"
-                >
-                  <div className="mt-6 grid gap-3">
-                    <Button
-                      id="bill-create-button"
-                      type="button"
-                      size="lg"
-                      className="h-15 rounded-[1.2rem] text-base font-semibold shadow-[0_24px_48px_-28px_rgba(37,99,235,0.45)]"
-                      disabled={
-                        createInvoice.isPending ||
-                        checkoutAutomationPending ||
-                        items.length === 0
-                      }
-                      onClick={() => void submitInvoice()}
-                    >
-                      {createInvoice.isPending || checkoutAutomationPending
-                        ? t("invoiceComposer.generating")
-                        : t("invoiceComposer.checkout")}
-                    </Button>
-                    <div className="flex items-center justify-between rounded-[1.15rem] bg-emerald-50 px-4 py-3 text-sm text-emerald-800 ring-1 ring-emerald-200/80 dark:bg-emerald-950/20 dark:text-emerald-100 dark:ring-emerald-900/40">
-                      <span>
-                        {items.length === 0
-                          ? helperCopy.reviewMissing
-                          : helperCopy.reviewReady}
-                      </span>
-                      <span className="font-semibold">
-                        {t("invoiceComposer.lineItemsCount", {
-                          count: items.length,
-                        })}
-                      </span>
-                    </div>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                      {items.length === 0
-                        ? helperCopy.reviewMissingHelp
-                        : t("invoiceComposer.keyboardCheckout", {
-                            key: shortcutModifierLabel,
-                          })}
-                    </p>
-                  </div>
-                </FirstTimeHint>
-              }
+              action={checkoutActionNode}
             />
 
             <div className="grid gap-6">

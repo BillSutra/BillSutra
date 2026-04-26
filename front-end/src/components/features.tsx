@@ -1,6 +1,5 @@
 "use client";
 
-import { Card, CardContent } from "@/components/ui/card";
 import {
   BarChart3,
   Bot,
@@ -10,6 +9,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useI18n } from "@/providers/LanguageProvider";
+import FeatureCard from "@/components/feature-card";
 
 const Features = () => {
   const { t } = useI18n();
@@ -19,31 +19,43 @@ const Features = () => {
       title: t("landing.features.items.simpleBillingTitle"),
       description: t("landing.features.items.simpleBillingDescription"),
       icon: Sparkles,
+      tone:
+        "border-blue-200 bg-[linear-gradient(135deg,#eff6ff,#dbeafe)] text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300",
     },
     {
       title: t("landing.features.items.inventoryManagementTitle"),
       description: t("landing.features.items.inventoryManagementDescription"),
       icon: Boxes,
+      tone:
+        "border-emerald-200 bg-[linear-gradient(135deg,#ecfdf5,#d1fae5)] text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
     },
     {
       title: t("landing.features.items.analyticsDashboardTitle"),
       description: t("landing.features.items.analyticsDashboardDescription"),
       icon: BarChart3,
+      tone:
+        "border-violet-200 bg-[linear-gradient(135deg,#f5f3ff,#ede9fe)] text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300",
     },
     {
       title: t("landing.features.items.gstInvoicesTitle"),
       description: t("landing.features.items.gstInvoicesDescription"),
       icon: ReceiptText,
+      tone:
+        "border-amber-200 bg-[linear-gradient(135deg,#fff7ed,#ffedd5)] text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300",
     },
     {
       title: t("landing.features.items.aiAssistantTitle"),
       description: t("landing.features.items.aiAssistantDescription"),
       icon: Bot,
+      tone:
+        "border-fuchsia-200 bg-[linear-gradient(135deg,#fdf4ff,#fae8ff)] text-fuchsia-700 dark:border-fuchsia-500/20 dark:bg-fuchsia-500/10 dark:text-fuchsia-300",
     },
     {
       title: t("landing.features.items.secureReliableTitle"),
       description: t("landing.features.items.secureReliableDescription"),
       icon: ShieldCheck,
+      tone:
+        "border-slate-200 bg-[linear-gradient(135deg,#f8fafc,#e2e8f0)] text-slate-700 dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-300",
     },
   ];
 
@@ -70,27 +82,14 @@ const Features = () => {
 
         <div className="mt-10 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {features.map((feature) => (
-            <Card
+            <FeatureCard
               key={feature.title}
-              className="group overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_24px_56px_-42px_rgba(15,23,42,0.14)] transition-all duration-200 hover:-translate-y-1 hover:border-blue-200 hover:shadow-[0_30px_66px_-40px_rgba(37,99,235,0.16)] dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-blue-500/20 dark:hover:shadow-[0_24px_58px_-40px_rgba(0,0,0,0.54)]"
-            >
-              <CardContent className="relative flex h-full flex-col gap-4 p-6">
-                <div className="absolute right-0 top-0 h-28 w-28 rounded-full bg-[radial-gradient(circle_at_center,rgba(37,99,235,0.12),rgba(37,99,235,0))] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-                <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-[0_18px_36px_-28px_rgba(37,99,235,0.5)]">
-                  <feature.icon size={20} />
-                </span>
-                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500">
-                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                  {t("landing.features.cardEyebrow")}
-                </div>
-                <h3 className="text-xl font-semibold tracking-tight text-slate-950 dark:text-white">
-                  {feature.title}
-                </h3>
-                <p className="text-sm leading-6 text-slate-600 dark:text-zinc-400">
-                  {feature.description}
-                </p>
-              </CardContent>
-            </Card>
+              eyebrow={t("landing.features.cardEyebrow")}
+              title={feature.title}
+              description={feature.description}
+              icon={feature.icon}
+              tone={feature.tone}
+            />
           ))}
         </div>
       </div>

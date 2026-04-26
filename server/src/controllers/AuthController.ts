@@ -646,6 +646,13 @@ class AuthController {
           email: user.email,
           user_name: user.name,
           reset_url: buildResetPasswordUrl(token, user.email),
+        }, {
+          audit: {
+            userId: user.id,
+            metadata: {
+              flow: "password_reset",
+            },
+          },
         });
       } catch {
         await prisma.passwordResetToken.deleteMany({

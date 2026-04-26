@@ -3,6 +3,8 @@ type EmailLayoutInput = {
   title: string;
   intro: string;
   sections: string[];
+  brandName?: string;
+  brandLogoUrl?: string | null;
   cta?: {
     label: string;
     url: string;
@@ -71,6 +73,8 @@ export const createEmailLayout = ({
   title,
   intro,
   sections,
+  brandName = "BillSutra",
+  brandLogoUrl,
   cta,
   footer,
 }: EmailLayoutInput) => `<!doctype html>
@@ -86,9 +90,20 @@ export const createEmailLayout = ({
     </div>
     <div style="margin:0 auto;max-width:680px;overflow:hidden;border:1px solid #e7e5e4;border-radius:20px;background:#ffffff;">
       <div style="background:linear-gradient(135deg,#0f172a,#1d4ed8);padding:28px 32px;color:#ffffff;">
-        <p style="margin:0 0 8px;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.8;">
-          BillSutra
-        </p>
+        <div style="display:flex;align-items:center;gap:12px;margin:0 0 12px;">
+          ${
+            brandLogoUrl
+              ? `
+                <div style="display:flex;height:42px;width:42px;align-items:center;justify-content:center;border-radius:12px;background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.18);overflow:hidden;">
+                  <img src="${escapeHtml(brandLogoUrl)}" alt="${escapeHtml(brandName)} logo" style="max-width:100%;max-height:100%;display:block;" />
+                </div>
+              `
+              : ""
+          }
+          <p style="margin:0;font-size:12px;letter-spacing:0.18em;text-transform:uppercase;opacity:0.8;">
+            ${escapeHtml(brandName)}
+          </p>
+        </div>
         <h1 style="margin:0;font-size:28px;line-height:1.2;">${escapeHtml(title)}</h1>
         <p style="margin:12px 0 0;font-size:15px;line-height:1.6;opacity:0.92;">
           ${escapeHtml(intro)}

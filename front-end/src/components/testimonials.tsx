@@ -1,7 +1,8 @@
 "use client";
 
-import { Quote, Star, Store, Truck, WalletCards } from "lucide-react";
+import { Store, Truck, WalletCards } from "lucide-react";
 import { useI18n } from "@/providers/LanguageProvider";
+import TestimonialCard from "@/components/testimonial-card";
 
 const Testimonials = () => {
   const { t } = useI18n();
@@ -27,18 +28,27 @@ const Testimonials = () => {
       name: t("landing.testimonials.items.one.name"),
       role: t("landing.testimonials.items.one.role"),
       icon: Store,
+      initials: "PS",
+      accent:
+        "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300",
     },
     {
       quote: t("landing.testimonials.items.two.quote"),
       name: t("landing.testimonials.items.two.name"),
       role: t("landing.testimonials.items.two.role"),
       icon: Truck,
+      initials: "AM",
+      accent:
+        "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
     },
     {
       quote: t("landing.testimonials.items.three.quote"),
       name: t("landing.testimonials.items.three.name"),
       role: t("landing.testimonials.items.three.role"),
       icon: WalletCards,
+      initials: "NV",
+      accent:
+        "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300",
     },
   ];
 
@@ -78,33 +88,14 @@ const Testimonials = () => {
 
         <div className="mt-10 grid gap-5 lg:grid-cols-3">
           {testimonials.map((item) => (
-            <article
+            <TestimonialCard
               key={item.name}
-              className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-[0_24px_60px_-46px_rgba(15,23,42,0.12)] dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-[0_22px_52px_-42px_rgba(0,0,0,0.48)]"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-[0_18px_36px_-28px_rgba(37,99,235,0.52)]">
-                  <item.icon className="h-5 w-5" />
-                </div>
-                <Quote className="h-5 w-5 text-amber-500" />
-              </div>
-
-              <div className="mt-5 flex items-center gap-1 text-amber-500">
-                {Array.from({ length: 5 }).map((_, index) => (
-                  <Star key={index} className="h-4 w-4 fill-current" />
-                ))}
-              </div>
-
-              <p className="mt-4 text-base leading-7 text-slate-700 dark:text-zinc-300">
-                {item.quote}
-              </p>
-              <div className="mt-6">
-                <p className="text-sm font-semibold text-slate-950 dark:text-white">
-                  {item.name}
-                </p>
-                <p className="mt-1 text-sm text-zinc-500">{item.role}</p>
-              </div>
-            </article>
+              quote={item.quote}
+              name={item.name}
+              role={item.role}
+              initials={item.initials}
+              accent={item.accent}
+            />
           ))}
         </div>
       </div>

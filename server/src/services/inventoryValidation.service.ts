@@ -1,6 +1,10 @@
 import { Prisma } from "@prisma/client";
 import type { StockReason } from "@prisma/client";
 import AppError from "../utils/AppError.js";
+import {
+  resolveInventoryIssuesForProduct,
+  upsertInventoryIssue,
+} from "./inventoryIssue.service.js";
 
 type TransactionClient = Prisma.TransactionClient;
 
@@ -93,10 +97,11 @@ export const applyInventoryDelta = async (params: {
   }
 
   let nextInventoryQuantity: number | null = null;
+  let currentInventoryQuantity: number | null = null;
 
   if (warehouseId) {
     const inventoryRow = await lockInventoryRow(tx, warehouseId, productId);
-    const currentInventoryQuantity = toWholeQuantity(inventoryRow?.quantity ?? 0);
+    currentInventoryQuantity = toWholeQuantity(inventoryRow?.quantity ?? 0);
     nextInventoryQuantity = currentInventoryQuantity + delta;
 
     if (!allowNegativeStock && delta < 0 && nextInventoryQuantity < 0) {
@@ -135,8 +140,53 @@ export const applyInventoryDelta = async (params: {
     },
   });
 
+  if (delta < 0 && nextProductQuantity < 0) {
+    await upsertInventoryIssue({
+      tx,
+      productId,
+      type: "NEGATIVE_AFTER_SALE",
+      quantity: Math.abs(nextProductQuantity),
+      metadata: {
+        warehouseId: warehouseId ?? null,
+        reason,
+        note: note ?? null,
+        stockOnHand: nextProductQuantity,
+        inventoryQuantity: nextInventoryQuantity,
+      },
+    });
+  }
+
+  if (delta > 0 && currentProductQuantity < 0) {
+    await upsertInventoryIssue({
+      tx,
+      productId,
+      type: "NEGATIVE_BEFORE_PURCHASE",
+      quantity: Math.abs(currentProductQuantity),
+      metadata: {
+        warehouseId: warehouseId ?? null,
+        reason,
+        note: note ?? null,
+        stockOnHandBeforePurchase: currentProductQuantity,
+        stockOnHandAfterPurchase: nextProductQuantity,
+        inventoryQuantityBeforePurchase: currentInventoryQuantity,
+        inventoryQuantityAfterPurchase: nextInventoryQuantity,
+      },
+    });
+  }
+
+  if (nextProductQuantity >= 0) {
+    await resolveInventoryIssuesForProduct({
+      tx,
+      productId,
+      types: ["NEGATIVE_AFTER_SALE", "NEGATIVE_BEFORE_PURCHASE"],
+    });
+  }
+
   return {
+    productId,
+    warehouseId: warehouseId ?? null,
     stockOnHand: nextProductQuantity,
     inventoryQuantity: nextInventoryQuantity,
+    issueDetected: nextProductQuantity < 0,
   };
 };

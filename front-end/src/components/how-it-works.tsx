@@ -43,12 +43,14 @@ const HowItWorks = () => {
           </p>
         </div>
 
-        <div className="mt-10 grid gap-5 md:grid-cols-3">
+        <div className="relative mt-10 grid gap-5 md:grid-cols-3">
+          <div className="pointer-events-none absolute left-[16.5%] right-[16.5%] top-10 hidden h-px bg-[linear-gradient(90deg,rgba(37,99,235,0.14),rgba(37,99,235,0.45),rgba(37,99,235,0.14))] md:block" />
           {steps.map((step) => (
             <Card
               key={step.step}
-              className="relative overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-[0_24px_60px_-46px_rgba(15,23,42,0.12)] dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-[0_22px_52px_-42px_rgba(0,0,0,0.48)]"
+              className="relative overflow-hidden rounded-[1.85rem] border border-slate-200 bg-white shadow-[0_24px_60px_-46px_rgba(15,23,42,0.12)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_30px_70px_-46px_rgba(37,99,235,0.16)] dark:border-zinc-800 dark:bg-zinc-900 dark:hover:shadow-[0_24px_58px_-42px_rgba(0,0,0,0.48)]"
             >
+              <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,rgba(37,99,235,0.95),rgba(99,102,241,0.65),rgba(56,189,248,0.75))]" />
               <CardContent className="p-6">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-[0_18px_36px_-28px_rgba(37,99,235,0.52)]">
                   <step.icon className="h-5 w-5" />

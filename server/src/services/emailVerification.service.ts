@@ -67,6 +67,13 @@ export const sendVerificationEmail = async ({
     user_name: user.name,
     verify_url: buildVerifyEmailUrl(rawToken),
     expires_in_minutes: Math.ceil(EMAIL_VERIFICATION_TTL_MS / 60000),
+  }, {
+    audit: {
+      userId: user.id,
+      metadata: {
+        flow: "verify_email",
+      },
+    },
   });
 };
 

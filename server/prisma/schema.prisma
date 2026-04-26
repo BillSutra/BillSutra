@@ -51,6 +51,7 @@ model User {
   notifications               Notification[]
   extra_entries               ExtraEntry[]
   email_verification_tokens   EmailVerificationToken[]
+  email_logs                  EmailLog[]
 
   session_version Int @default(0)
 
@@ -70,6 +71,10 @@ model UserPreference {
   notification_payment_reminders  Boolean @default(true)
   notification_low_stock_alerts   Boolean @default(true)
   notification_due_invoice_alerts Boolean @default(true)
+  email_payment_reminders_enabled Boolean @default(true)
+  email_payment_reminder_offsets  String  @default("1,3,7") @db.VarChar(64)
+  email_weekly_reports_enabled    Boolean @default(true)
+  email_low_stock_alerts_enabled  Boolean @default(true)
   allowNegativeStock              Boolean @default(true) @map("allow_negative_stock")
 
   backup_auto_enabled Boolean @default(false)
@@ -296,6 +301,7 @@ model Customer {
   invoices                    Invoice[]
   recurring_invoice_templates RecurringInvoiceTemplate[]
   sales                       Sale[]
+  email_logs                  EmailLog[]
 
   @@index([user_id])
   @@map("customers")
@@ -370,6 +376,7 @@ model Product {
 
   stock_on_hand Int @default(0)
   reorder_level Int @default(0)
+  lastAutoCorrectedAt DateTime? @map("last_auto_corrected_at")
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -379,6 +386,7 @@ model Product {
   invoiceItems  InvoiceItem[]
   movements     StockMovement[]
   inventories   Inventory[]
+  inventoryIssues InventoryIssue[]
 
   @@unique([user_id, barcode])
   @@unique([user_id, sku])
@@ -387,6 +395,25 @@ model Product {
   @@index([user_id, name])
   @@index([user_id, category_id])
   @@map("products")
+}
+
+model InventoryIssue {
+  id Int @id @default(autoincrement())
+
+  product    Product @relation(fields: [product_id], references: [id], onDelete: Cascade)
+  product_id Int
+
+  type     InventoryIssueType
+  quantity Int
+  resolved Boolean  @default(false)
+  metadata Json?
+  resolved_at DateTime?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([product_id, resolved, type])
+  @@index([resolved, created_at])
+  @@map("inventory_issues")
 }
 
 model Warehouse {
@@ -576,6 +603,7 @@ model Invoice {
 
   items    InvoiceItem[]
   payments Payment[]
+  email_logs EmailLog[]
 
   @@unique([user_id, invoice_number])
   @@index([user_id])
@@ -822,6 +850,37 @@ model EmailVerificationToken {
   @@map("email_verification_tokens")
 }
 
+model EmailLog {
+  id String @id @default(cuid()) @db.VarChar(191)
+
+  user    User? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  user_id Int?
+
+  invoice    Invoice? @relation(fields: [invoice_id], references: [id], onDelete: SetNull)
+  invoice_id Int?
+
+  customer    Customer? @relation(fields: [customer_id], references: [id], onDelete: SetNull)
+  customer_id Int?
+
+  type                String              @db.VarChar(64)
+  status              EmailDeliveryStatus @default(PENDING)
+  recipient_email     String              @db.VarChar(191)
+  subject             String?             @db.VarChar(191)
+  provider_message_id String?             @db.VarChar(191)
+  error_message       String?             @db.VarChar(1000)
+  metadata            Json?
+  sent_at             DateTime?
+  created_at          DateTime            @default(now())
+  updated_at          DateTime            @updatedAt
+
+  @@index([user_id, created_at])
+  @@index([invoice_id, type, created_at])
+  @@index([customer_id, created_at])
+  @@index([type, status, created_at])
+  @@index([recipient_email, created_at])
+  @@map("email_logs")
+}
+
 model UploadedFile {
   id String @id @default(cuid()) @db.VarChar(191)
 
@@ -987,6 +1046,11 @@ enum StockReason {
   DAMAGE
 }
 
+enum InventoryIssueType {
+  NEGATIVE_AFTER_SALE
+  NEGATIVE_BEFORE_PURCHASE
+}
+
 enum SaleStatus {
   DRAFT
   COMPLETED
@@ -1070,4 +1134,10 @@ enum NotificationType {
   CUSTOMER
   SUBSCRIPTION
   WORKER
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
 }

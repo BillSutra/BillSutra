@@ -33,3 +33,29 @@ export const enqueueMonthlySalesReportEmail = async (params: {
     data: params,
     jobId: `email:monthly-report:${params.userId}:${params.monthKey}`,
   });
+
+export const enqueuePaymentReceivedEmail = async (params: {
+  paymentId: number;
+}) =>
+  enqueueDefaultJob({
+    jobName: "sendPaymentReceivedEmail",
+    data: params,
+    jobId: `email:payment-received:${params.paymentId}`,
+  });
+
+export const enqueueWeeklyReportEmail = async (params: {
+  userId: number;
+  weekKey: string;
+}) =>
+  enqueueDefaultJob({
+    jobName: "sendWeeklyReportEmail",
+    data: params,
+    jobId: `email:weekly-report:${params.userId}:${params.weekKey}`,
+  });
+
+export const enqueueLowStockAlertEmail = async (params: { userId: number }) =>
+  enqueueDefaultJob({
+    jobName: "sendLowStockAlertEmail",
+    data: params,
+    jobId: `email:low-stock:${params.userId}:${new Date().toISOString().slice(0, 10)}`,
+  });

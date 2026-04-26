@@ -972,10 +972,10 @@ export const userSavedTemplateUpdateSchema = z
 
 export const productCreateSchema = z.object({
   name: z.string().min(2),
-  sku: z.string().min(1),
+  sku: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   price: z.coerce.number().nonnegative(),
   cost: z.coerce.number().nonnegative().optional(),
-  barcode: z.string().min(1).optional(),
+  barcode: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   gst_rate: z.coerce.number().nonnegative().optional(),
   stock_on_hand: z.coerce.number().int().optional(),
   reorder_level: z.coerce.number().int().optional(),

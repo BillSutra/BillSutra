@@ -4,6 +4,7 @@ import type { InvoiceEmailPreviewPayload } from "../../emails/types.js";
 import { buildPublicInvoiceUrl } from "../../lib/appUrls.js";
 import { emitDashboardUpdate } from "../../services/dashboardRealtime.js";
 import { createPdfAttachment } from "../../services/mailService.js";
+import { computeInvoicePaymentSnapshotFromPayments } from "../../utils/invoicePaymentSnapshot.js";
 import {
   generateInvoicePdf,
   getInvoice,
@@ -182,6 +183,15 @@ export const deliverInvoiceEmail = async ({
           pdfBuffer,
         ),
       ],
+      audit: {
+        userId,
+        invoiceId: invoiceDetails.id,
+        customerId: invoiceDetails.customer?.id ?? null,
+        metadata: {
+          flow: "invoice_sent",
+          invoiceNumber: invoiceDetails.invoice_number,
+        },
+      },
     },
   );
 
@@ -200,10 +210,14 @@ export const deliverInvoiceReminderEmail = async ({
   userId,
   invoiceId,
   requestedEmail,
+  reminderStage = "manual",
+  daysUntilDue,
 }: {
   userId: number;
   invoiceId: number;
   requestedEmail?: string | null;
+  reminderStage?: "upcoming" | "due_today" | "overdue" | "manual";
+  daysUntilDue?: number | null;
 }) => {
   const invoice = await getInvoice(userId, invoiceId);
   if (!invoice) {
@@ -230,19 +244,55 @@ export const deliverInvoiceReminderEmail = async ({
     where: { user_id: userId },
     select: {
       business_name: true,
+      logo_url: true,
       currency: true,
     },
   });
+  const paidAmount = invoice.payments.reduce(
+    (sum, payment) => sum + Number(payment.amount ?? 0),
+    0,
+  );
+  const paymentSnapshot = computeInvoicePaymentSnapshotFromPayments({
+    total: invoice.total,
+    status: invoice.status,
+    dueDate: invoice.due_date,
+    payments: invoice.payments,
+    now: new Date(),
+  });
+  const amountDue = Math.max(Number(invoice.total ?? 0) - paidAmount, 0);
 
   await sendEmail("invoice_reminder", {
     email: recipientEmail,
     customer_name: invoice.customer?.name ?? "Customer",
     invoice_id: invoice.invoice_number,
-    amount: Number(invoice.total ?? 0),
+    amount: amountDue,
     due_date: invoice.due_date,
     business_name: businessProfile?.business_name ?? "BillSutra",
+    business_logo_url: businessProfile?.logo_url ?? null,
+    payment_status:
+      paymentSnapshot.paymentStatus === "PAID"
+        ? "Paid"
+        : paymentSnapshot.paymentStatus === "PARTIAL"
+          ? "Partially paid"
+          : paymentSnapshot.isOverdue
+            ? "Overdue"
+            : "Pending",
+    reminder_stage: reminderStage,
+    days_until_due: daysUntilDue ?? null,
     invoice_url: buildPublicInvoiceUrl(invoice.id, invoice.invoice_number),
     currency: businessProfile?.currency ?? "INR",
+  }, {
+    audit: {
+      userId,
+      invoiceId: invoice.id,
+      customerId: invoice.customer?.id ?? null,
+      metadata: {
+        flow: "invoice_reminder",
+        reminderStage,
+        daysUntilDue: daysUntilDue ?? null,
+        invoiceNumber: invoice.invoice_number,
+      },
+    },
   });
 
   return {

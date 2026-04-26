@@ -241,6 +241,13 @@ export const sendWelcomeEmail = async ({ userId }: { userId: number }) => {
     email: user.email,
     user_name: user.name,
     login_url: buildLoginUrl(user.email),
+  }, {
+    audit: {
+      userId: user.id,
+      metadata: {
+        flow: "welcome",
+      },
+    },
   });
 };
 
@@ -253,6 +260,7 @@ export const sendPlanApprovedEmail = async ({
     where: { id: paymentId },
     select: {
       id: true,
+      user_id: true,
       plan_id: true,
       amount: true,
       status: true,
@@ -280,6 +288,14 @@ export const sendPlanApprovedEmail = async ({
     plan_name: planNameMap[payment.plan_id] ?? payment.plan_id,
     amount: Number(payment.amount),
     status_page_url: `${getFrontendAppUrl()}/payments`,
+  }, {
+    audit: {
+      userId: payment.user_id,
+      metadata: {
+        flow: "plan_approved",
+        paymentId: payment.id,
+      },
+    },
   });
 };
 
@@ -311,6 +327,14 @@ export const sendMonthlyReportEmail = async ({
     profit: report.profit,
     overdue_count: report.overdueCount,
     reports_url: `${getFrontendAppUrl()}/reports`,
+  }, {
+    audit: {
+      userId: user.id,
+      metadata: {
+        flow: "monthly_sales_report",
+        monthKey: report.monthKey,
+      },
+    },
   });
 };
 
@@ -363,6 +387,16 @@ export const sendExportEmail = async (params: {
     file_name: params.fileName,
     attachment,
     download_url: downloadUrl,
+  }, {
+    audit: {
+      userId: params.userId,
+      metadata: {
+        flow: "export_ready",
+        resource: params.payload.resource,
+        format: params.payload.format,
+        exportedCount: params.exportedCount,
+      },
+    },
   });
 };
 

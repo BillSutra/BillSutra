@@ -1625,30 +1625,31 @@
                                 "getStarted":  "मुफ्त शुरू करें"
                             },
                     "hero":  {
-                                 "kicker":  "बिलिंग, इन्वेंटरी और एनालिटिक्स एक ही जगह",
-                                 "title":  "BillSutra के साथ अपना बिज़नेस स्मार्ट तरीके से चलाएं",
-                                 "description":  "बिलिंग, इन्वेंटरी और एनालिटिक्स — सब कुछ एक ही प्लेटफॉर्म में।",
+                                 "kicker":  "भारत के 2,500+ बिज़नेस का भरोसा",
+                                 "title":  "अपने बिज़नेस को अव्यवस्था से बाहर निकालें",
+                                 "description":  "बिल, स्टॉक और पेमेंट को notebooks, spreadsheets और WhatsApp में संभालना बंद करें। BillSutra आपको एक ऐसी साफ़ system देता है जिससे billing तेज़ होती है, cash flow सुरक्षित रहता है और रोज़ का तनाव कम होता है।",
                                  "primaryCta":  "मुफ्त शुरू करें",
                                  "secondaryCta":  "डेमो देखें",
-                                 "fast":  "तेज़ सेटअप",
-                                 "secure":  "सुरक्षित डेटा",
-                                 "reliable":  "हर दिन भरोसेमंद",
-                                 "trustedBy":  "2,500+ बढ़ते बिज़नेस का भरोसा",
-                                 "lossAversion":  "मैनुअल बिलिंग में समय और पैसा बर्बाद होना बंद करें",
-                                 "miniCardLabel":  "तेज़ काम करने वाली टीमें",
-                                 "miniCardValue":  "मालिक बिना रिपोर्ट का इंतज़ार किए बिक्री, स्टॉक और कलेक्शन देख सकते हैं।",
-                                 "miniCardTwoLabel":  "तेज़ निर्णय",
-                                 "miniCardTwoValue":  "समस्या बनने से पहले पता चल जाता है कि ध्यान कहां देना है।",
-                                 "previewLabel":  "लाइव डैशबोर्ड प्रीव्यू",
-                                 "previewTitle":  "पूरा बिज़नेस एक नज़र में",
-                                 "previewSubtitle":  "एक ही स्क्रीन से बिक्री, स्टॉक और कलेक्शन ट्रैक करें",
-                                 "live":  "लाइव वर्कस्पेस",
+                                 "fast":  "कुछ मिनट में बिलिंग शुरू",
+                                 "secure":  "डिफ़ॉल्ट रूप से सुरक्षित",
+                                 "reliable":  "रोज़ के काम के लिए बना",
+                                 "trustedBy":  "2,500+ बिज़नेस का भरोसा",
+                                 "urgency":  "एक और दिन मैनुअल उलझन में मत गंवाइए",
+                                 "microNote":  "क्रेडिट कार्ड की जरूरत नहीं। सेटअप कुछ ही मिनट में।",
+                                 "miniCardLabel":  "मालिक को तुरंत साफ़ नज़र",
+                                 "miniCardValue":  "बिना किसी रिपोर्ट का इंतज़ार किए बिक्री, कलेक्शन और स्टॉक की स्थिति देखिए।",
+                                 "miniCardTwoLabel":  "AI से तेज़ मार्गदर्शन",
+                                 "miniCardTwoValue":  "भुगतान अटकने या स्टॉक खत्म होने से पहले जानिए कि सबसे पहले क्या संभालना है।",
+                                 "previewLabel":  "लाइव कमांड सेंटर",
+                                 "previewTitle":  "अब आपका बिज़नेस कंट्रोल में रहेगा",
+                                 "previewSubtitle":  "Dashboard, billing, inventory और AI guidance एक ही operating system में।",
+                                 "live":  "लाइव प्रीव्यू",
                                  "metricOneLabel":  "आज की बिलिंग",
                                  "metricOneValue":  "₹48,200",
-                                 "metricTwoLabel":  "कलेक्शन",
+                                 "metricTwoLabel":  "वसूली पूरी",
                                  "metricTwoValue":  "86% क्लियर",
-                                 "metricThreeLabel":  "स्टॉक हेल्थ",
-                                 "metricThreeValue":  "12 अलर्ट",
+                                 "metricThreeLabel":  "लो स्टॉक अलर्ट",
+                                 "metricThreeValue":  "12 एक्टिव",
                                  "chartTitle":  "बिक्री ट्रेंड",
                                  "chartRange":  "पिछले 7 दिन",
                                  "chartBadge":  "इस हफ्ते",
@@ -1661,33 +1662,60 @@
                                                      "6":  "शनि",
                                                      "7":  "रवि"
                                                  },
-                                 "sidePanelTitle":  "आज का वर्कफ़्लो",
-                                 "sidePanelDescription":  "टीम अभी किस काम पर ध्यान दे रही है",
-                                 "flowOneTitle":  "Invoice #BS-2048 भेजा गया",
-                                 "flowOneDescription":  "ग्राहक को GST-ready invoice और payment link तुरंत मिल गया।",
-                                 "flowOneStatus":  "भेजा गया",
-                                 "flowTwoTitle":  "कुकिंग ऑयल का स्टॉक कम है",
-                                 "flowTwoDescription":  "शेल्फ खाली होने से पहले restock reminder आ गया।",
-                                 "flowTwoStatus":  "अलर्ट",
-                                 "flowThreeTitle":  "साप्ताहिक रिपोर्ट तैयार है",
-                                 "flowThreeDescription":  "मालिक कुछ मिनटों में बिक्री, pending payments और best sellers देख सकता है।",
-                                 "flowThreeStatus":  "तैयार"
+                                 "sidePanelTitle":  "प्रायोरिटी फीड",
+                                 "sidePanelDescription":  "अभी सबसे पहले किस पर ध्यान देना है",
+                                 "flowOneTitle":  "कलेक्शन रिमाइंडर अपने आप ट्रिगर हुआ",
+                                 "flowOneDescription":  "Pending invoice overdue होने से पहले टीम ने follow-up कर लिया।",
+                                 "flowOneStatus":  "रिकवर",
+                                 "flowTwoTitle":  "कुकिंग ऑयल का stockout टला",
+                                 "flowTwoDescription":  "Fast-moving shelf खाली होने से पहले restock सुझा दिया गया।",
+                                 "flowTwoStatus":  "सुरक्षित",
+                                 "flowThreeTitle":  "AI साप्ताहिक summary तैयार है",
+                                 "flowThreeDescription":  "मालिक कुछ मिनट में profit, pending collections और best sellers देख सकता है।",
+                                 "flowThreeStatus":  "तैयार",
+                                 "aiInsightTitle":  "AI ने cash-flow risk पकड़ लिया",
+                                 "aiInsightDescription":  "दो customer accounts में pending collections बढ़ रहे हैं। अभी follow-up करें और इस हफ्ते का cash बचाइए।"
                              },
+                    "trust":  {
+                                  "items":  {
+                                                "businesses":  {
+                                                                   "value":  "2,500+",
+                                                                   "label":  "ऑनबोर्ड बिज़नेस"
+                                                               },
+                                                "uptime":  {
+                                                               "value":  "99.9%",
+                                                               "label":  "प्लेटफॉर्म अपटाइम"
+                                                           },
+                                                "rating":  {
+                                                               "value":  "4.8/5",
+                                                               "label":  "औसत रेटिंग"
+                                                           },
+                                                "setup":  {
+                                                              "value":  "पहले दिन से",
+                                                              "label":  "टीम सेटअप सपोर्ट"
+                                                          }
+                                            }
+                              },
                     "problem":  {
                                     "kicker":  "समस्या",
-                                    "title":  "मैनुअल काम ग्रोथ को धीमा कर देता है",
-                                    "description":  "जब बिलिंग, इन्वेंटरी और रिपोर्ट अलग-अलग जगह होती हैं, तो टीम ग्राहक पर ध्यान देने के बजाय गलतियां सुधारने में समय लगाती है।",
+                                    "title":  "मैनुअल काम समय, पैसा और भरोसा तीनों खा जाता है",
+                                    "description":  "जब बिलिंग, स्टॉक और रिपोर्ट अलग-अलग जगहों पर होते हैं, तो टीम हमेशा reactive बनी रहती है। गलतियां बढ़ती हैं, follow-up छूटते हैं और मालिक को सही समय पर साफ़ नज़र नहीं मिलती।",
                                     "items":  {
                                                   "one":  "मैनुअल बिलिंग धीमी होती है",
-                                                  "two":  "कैलकुलेशन में गलतियां होती हैं",
-                                                  "three":  "सही ट्रैकिंग न होने से फैसले कमजोर पड़ते हैं"
+                                                  "two":  "स्टॉक की गड़बड़ी महंगी पड़ती है",
+                                                  "three":  "मिस्ड पेमेंट cash flow बिगाड़ते हैं"
                                               },
-                                    "lossTitle":  "इसकी कीमत क्या है",
-                                    "lossDescription":  "लेट invoice, छूटे हुए stock alerts और साफ नंबर न होने से cash flow और confidence दोनों धीरे-धीरे कमजोर होते हैं।",
+                                    "agitations":  {
+                                                       "one":  "स्टाफ invoice बनाने में इतना समय लगाता है कि ग्राहक इंतज़ार करते रहते हैं।",
+                                                       "two":  "स्टॉक की गलतियां counter पर awkward situation, urgent calls और lost sales पैदा करती हैं।",
+                                                       "three":  "छूटा follow-up और धुंधले numbers cash flow को जरूरत से ज़्यादा risky बना देते हैं।"
+                                                   },
+                                    "lossTitle":  "आप बार-बार क्या खोते हैं",
+                                    "lossDescription":  "हर manual delay के साथ follow-up बढ़ता है, guesswork बढ़ता है और सही समय पर confidence घटता जाता है।",
                                     "solutionKicker":  "समाधान",
-                                    "solutionTitle":  "BillSutra यह सब एक ही जगह ठीक करता है",
-                                    "solutionDescription":  "तेज़ी से बिल बनाएं, स्टॉक सही रखें और spreadsheets या अलग-अलग apps के बिना बिज़नेस performance साफ़ देखें।",
-                                    "solutionOne":  "लाइव totals और tax-ready structure के साथ सेकंडों में invoice बनाएं।",
+                                    "solutionTitle":  "BillSutra पूरी उलझन एक ही जगह खत्म करता है",
+                                    "solutionDescription":  "Billing, stock, collections, reporting और AI guidance को एक ऐसे operating system में लाइए जिसे आपकी टीम रोज़ आसानी से चला सके।",
+                                    "solutionOne":  "लाइव totals और GST-ready structure के साथ सेकंडों में invoice बनाएं।",
                                     "solutionTwo":  "स्टॉक, payments और customer balances को एक जुड़े हुए workflow में ट्रैक करें।",
                                     "solutionThree":  "समस्या बढ़ने से पहले dashboard से सही action लें।",
                                     "promiseLabel":  "टीमें क्यों बदलती हैं",
@@ -1697,8 +1725,8 @@
                     "features":  {
                                      "kicker":  "मुख्य फीचर्स",
                                      "trustedBy":  "स्टाफ के लिए तेज़। मालिकों के लिए साफ़। हर दिन भरोसेमंद।",
-                                     "title":  "बिलिंग, ट्रैकिंग और ग्रोथ के लिए ज़रूरी सब कुछ",
-                                     "description":  "हर फीचर का मकसद है कि रोज़ का काम तेज़ हो, friction कम हो और नंबरों पर आपका भरोसा बढ़े।",
+                                     "title":  "बिलिंग, ट्रैकिंग और स्केल के लिए ज़रूरी सब कुछ",
+                                     "description":  "हर फीचर का मकसद friction कम करना, workflow तेज़ करना और रोज़ के decisions को आसान बनाना है।",
                                      "cardEyebrow":  "कोर वर्कफ़्लो",
                                      "items":  {
                                                    "simpleBillingTitle":  "सिंपल बिलिंग",
@@ -1717,11 +1745,11 @@
                                  },
                     "preview":  {
                                     "kicker":  "लाइव प्रोडक्ट प्रीव्यू",
-                                    "title":  "यह असली सॉफ्टवेयर जैसा लगता है, क्योंकि यह रोज़ के काम के लिए बना है",
-                                    "description":  "आपकी टीम dashboard से billing और reports तक बिना context खोए तेज़ी से काम कर सकती है।",
+                                    "title":  "बिलिंग, स्टॉक और फैसलों के लिए एक असली operating system",
+                                    "description":  "आपकी टीम dashboard से billing और reports तक बिना context, speed या control खोए काम कर सकती है।",
                                     "surfaceLabel":  "असली इंटरफेस स्नैपशॉट",
                                     "surfaceTitle":  "Dashboard, billing और reports एक ही flow में",
-                                    "surfaceStatus":  "रियल टाइम अपडेट",
+                                    "surfaceStatus":  "लाइव प्रीव्यू",
                                     "dashboardTitle":  "डैशबोर्ड",
                                     "dashboardDescription":  "मालिक के लिए बिक्री, कलेक्शन और stock pressure का साफ़ view।",
                                     "dashboardPointOne":  "Revenue, receivables और low stock के quick metrics",
@@ -1738,10 +1766,37 @@
                                     "pointTwo":  "स्टाफ को ऐसा तेज़ workflow दें जिसे सीखना भी आसान हो।",
                                     "pointThree":  "मालिक को समस्या महंगी होने से पहले साफ़ numbers दें।"
                                 },
+                    "ai":  {
+                               "kicker":  "AI assistant",
+                               "title":  "अपने AI बिज़नेस असिस्टेंट से मिलिए",
+                               "description":  "साधारण भाषा में सवाल पूछिए और profit, stock, receivables और invoices के जवाब तुरंत पाइए, बिना dashboard खंगाले।",
+                               "chatLabel":  "BillSutra AI से पूछें",
+                               "chatTitle":  "आपका finance और operations copilot",
+                               "userQuestion":  "इस हफ्ते हमने कितना profit कमाया, और सबसे पहले क्या ठीक करना चाहिए?",
+                               "assistantAnswer":  "इस हफ्ते profit 12.4% ऊपर है। सबसे तेज़ असर के लिए ₹94,500 pending collections पर follow-up करें और weekend rush से पहले 6 fast-moving items reorder करें।",
+                               "followupLabel":  "AI जवाब",
+                               "typingLabel":  "BillSutra AI अगला action तैयार कर रहा है",
+                               "inputPlaceholder":  "Profit, stock, payments या invoices के बारे में पूछें...",
+                               "primaryCta":  "AI Assistant आज़माएं",
+                               "secondaryCta":  "लाइव प्रोडक्ट देखें",
+                               "prompts":  {
+                                               "one":  "इस हफ्ते profit कितना है?",
+                                               "two":  "कौन से products low stock में हैं?",
+                                               "three":  "सेकंडों में invoice बनाओ"
+                                           },
+                               "capabilities":  {
+                                                    "profitTitle":  "कुछ सेकंड में profit answers",
+                                                    "profitDescription":  "Weekly profit, slow days और top products जैसे जवाब बिना कई reports खोले पाएं।",
+                                                    "stockTitle":  "Sales खोने से पहले low-stock warning",
+                                                    "stockDescription":  "कौन से fast-moving items तुरंत replenish करने हैं, यह पहले से जानिए।",
+                                                    "invoiceTitle":  "मांग पर invoice guidance",
+                                                    "invoiceDescription":  "AI से अगला billing step, dues summary या सही workflow के लिए तुरंत दिशा पाएं।"
+                                                }
+                           },
                     "howItWorks":  {
                                        "kicker":  "यह कैसे काम करता है",
                                        "title":  "तीन आसान स्टेप में शुरू करें",
-                                       "description":  "लंबा setup project नहीं चाहिए। आपकी टीम पहले दिन से काम शुरू कर सकती है।",
+                                       "description":  "लंबा setup project नहीं चाहिए। अकाउंट बनाइए, products जोड़िए और पहले दिन से billing शुरू कीजिए।",
                                        "stepReady":  "कुछ ही मिनटों में तैयार",
                                        "steps":  {
                                                      "one":  {
@@ -1763,8 +1818,8 @@
                                    },
                     "testimonials":  {
                                          "kicker":  "सोशल प्रूफ",
-                                         "title":  "जब बिलिंग की स्पीड और accuracy मायने रखती है, तब बिज़नेस BillSutra पर भरोसा करते हैं",
-                                         "description":  "रिटेल काउंटर से लेकर distributors तक, टीमें BillSutra के साथ तेज़ काम करती हैं और कंट्रोल में रहती हैं।",
+                                         "title":  "जब billing की speed और accuracy मायने रखती है, तब बिज़नेस BillSutra पर भरोसा करते हैं",
+                                         "description":  "रिटेल counters से लेकर distributors तक, टीमें BillSutra के साथ तेज़ काम करती हैं, cash जल्दी recover करती हैं और कंट्रोल में रहती हैं।",
                                          "statOneLabel":  "बिज़नेस",
                                          "statOneValue":  "2,500+",
                                          "statTwoLabel":  "औसत रेटिंग",
@@ -1792,12 +1847,13 @@
                     "cta":  {
                                 "kicker":  "आज ही शुरू करें",
                                 "title":  "आज ही अपने बिज़नेस को स्मार्ट तरीके से मैनेज करना शुरू करें",
-                                "description":  "ऐसे बिज़नेस में शामिल हों जो तेज़ बिलिंग, बेहतर ट्रैकिंग और साफ़ फैसले चाहते हैं, बिना extra operational chaos के।",
+                                "description":  "ऐसे बिज़नेस में शामिल हों जो तेज़ billing, बेहतर tracking और साफ़ decisions चाहते हैं, बिना extra operational chaos के।",
+                                "microNote":  "क्रेडिट कार्ड की जरूरत नहीं। आज ही मुफ्त शुरू करें।",
                                 "primaryCta":  "मुफ्त शुरू करें",
                                 "secondaryCta":  "डेमो देखें"
                             },
                     "footer":  {
-                                   "description":  "BillSutra बढ़ते बिज़नेस को बिलिंग, इन्वेंटरी और एनालिटिक्स एक bilingual workspace में चलाने में मदद करता है।",
+                                   "description":  "BillSutra बढ़ते बिज़नेस को billing, inventory और analytics एक bilingual workspace में चलाने में मदद करता है।",
                                    "product":  "प्रोडक्ट",
                                    "company":  "कंपनी",
                                    "resources":  "संसाधन",
@@ -1819,7 +1875,8 @@
                                                  "terms":  "शर्तें"
                                              },
                                    "copyright":  "© 2026 BillSutra. सर्वाधिकार सुरक्षित।"
-                               }
+                               },
+                    "floatingAi":  "AI Assistant आज़माएं"
                 },
     "auth":  {
                  "loginPage":  {

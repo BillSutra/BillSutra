@@ -37,7 +37,7 @@ import {
   isCookieOnlyAuthEnabled,
   isSecureAuthEnabled,
   normalizeAuthToken,
-  refreshSecureAuthSession,
+  refreshSecureAuthSessionDetailed,
   requestClientLogout,
   setLegacyStoredToken,
 } from "./secureAuth";
@@ -74,22 +74,26 @@ apiClient.interceptors.request.use(async (config) => {
     }
 
     if (secureCookieExpired) {
-      const refreshed = await refreshSecureAuthSession();
-      if (!refreshed) {
-        requestClientLogout("refresh_expired");
+      const refreshResult = await refreshSecureAuthSessionDetailed();
+      if (!refreshResult.ok) {
+        if (refreshResult.reason === "auth_invalid") {
+          requestClientLogout("refresh_expired");
+        }
         return Promise.reject(new axios.CanceledError("Session expired"));
       }
     } else if (!secureCookieReady && token && isAuthTokenExpired(token)) {
       if (secureAuthEnabled) {
-        const refreshed = await refreshSecureAuthSession();
-        if (refreshed) {
+        const refreshResult = await refreshSecureAuthSessionDetailed();
+        if (refreshResult.ok) {
           if (config.headers?.Authorization) {
             delete config.headers.Authorization;
           }
           return config;
         }
 
-        requestClientLogout("refresh_expired");
+        if (refreshResult.reason === "auth_invalid") {
+          requestClientLogout("refresh_expired");
+        }
         return Promise.reject(new axios.CanceledError("Session expired"));
       } else {
         requestClientLogout("token_expired");
@@ -144,7 +148,11 @@ apiClient.interceptors.response.use(
       }
 
       const originalRequest = error?.config as
-        | (typeof error.config & { _retry?: boolean })
+        | (typeof error.config & {
+            _retry?: boolean;
+            _authRefreshTransientFailure?: boolean;
+            _authRefreshInvalid?: boolean;
+          })
         | undefined;
       const requestUrl =
         typeof originalRequest?.url === "string" ? originalRequest.url : "";
@@ -165,8 +173,14 @@ apiClient.interceptors.response.use(
         originalRequest._retry = true;
 
         try {
-          const refreshed = await refreshSecureAuthSession();
-          if (!refreshed) {
+          const refreshResult = await refreshSecureAuthSessionDetailed();
+          if (!refreshResult.ok) {
+            if (refreshResult.reason !== "auth_invalid") {
+              originalRequest._authRefreshTransientFailure = true;
+              return Promise.reject(error);
+            }
+
+            originalRequest._authRefreshInvalid = true;
             throw new Error("Unable to refresh session");
           }
 
@@ -185,7 +199,11 @@ apiClient.interceptors.response.use(
             (session?.user as { token?: string } | undefined)?.token ?? null,
           );
 
-          if (sessionToken && !isAuthTokenExpired(sessionToken)) {
+          if (
+            originalRequest._authRefreshInvalid &&
+            sessionToken &&
+            !isAuthTokenExpired(sessionToken)
+          ) {
             setLegacyStoredToken(sessionToken);
 
             const bootstrapped = await bootstrapSecureAuthSession(sessionToken);
@@ -209,7 +227,11 @@ apiClient.interceptors.response.use(
           }
 
           const legacyToken = getLegacyStoredToken();
-          if (legacyToken && !isAuthTokenExpired(legacyToken)) {
+          if (
+            originalRequest._authRefreshInvalid &&
+            legacyToken &&
+            !isAuthTokenExpired(legacyToken)
+          ) {
             originalRequest.headers = originalRequest.headers ?? {};
             originalRequest.headers.Authorization = legacyToken.startsWith(
               "Bearer ",
@@ -220,12 +242,19 @@ apiClient.interceptors.response.use(
             return apiClient(originalRequest);
           }
 
-          clearLegacyStoredToken();
-          requestClientLogout("refresh_expired");
+          if (originalRequest._authRefreshInvalid) {
+            clearLegacyStoredToken();
+            requestClientLogout("refresh_expired");
+          }
         }
       }
 
-      if (status === 401 && !isRefreshRequest && !isFaceAuthRequest) {
+      if (
+        status === 401 &&
+        !isRefreshRequest &&
+        !isFaceAuthRequest &&
+        (!isSecureAuthEnabled() || originalRequest?._authRefreshInvalid)
+      ) {
         requestClientLogout("unauthorized");
       }
     }
@@ -325,7 +354,7 @@ export type ProductImportConfirmResult = {
 
 export type ProductInput = {
   name: string;
-  sku: string;
+  sku?: string;
   price: number;
   cost?: number | null;
   barcode?: string | null;

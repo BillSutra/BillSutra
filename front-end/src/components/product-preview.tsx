@@ -67,9 +67,10 @@ const ProductPreview = () => {
           </p>
         </div>
 
-        <Card className="mt-10 overflow-hidden rounded-[2rem] border border-white/80 bg-white/84 shadow-[0_36px_84px_-52px_rgba(15,23,42,0.22)] dark:border-zinc-800 dark:bg-zinc-900/92 dark:shadow-[0_28px_70px_-44px_rgba(0,0,0,0.58)]">
+        <Card className="group mt-10 overflow-hidden rounded-[2.2rem] border border-white/80 bg-white/88 shadow-[0_36px_84px_-52px_rgba(15,23,42,0.22)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_46px_94px_-52px_rgba(37,99,235,0.26)] dark:border-zinc-800 dark:bg-zinc-900/92 dark:hover:shadow-[0_30px_74px_-44px_rgba(0,0,0,0.58)]">
           <CardContent className="p-5 sm:p-6">
-            <div className="rounded-[1.7rem] border border-slate-200 bg-slate-50 p-5 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="relative rounded-[1.7rem] border border-slate-200 bg-slate-50 p-5 dark:border-zinc-800 dark:bg-zinc-950">
+              <div className="absolute right-5 top-5 h-24 w-24 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.16),rgba(59,130,246,0))] opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-zinc-500">
@@ -79,7 +80,7 @@ const ProductPreview = () => {
                     {t("landing.preview.surfaceTitle")}
                   </p>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-700 shadow-[0_10px_20px_-16px_rgba(37,99,235,0.18)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
                   <CreditCard className="h-3.5 w-3.5 text-blue-500" />
                   {t("landing.preview.surfaceStatus")}
                 </div>
@@ -89,7 +90,7 @@ const ProductPreview = () => {
                 {previewCards.map((card) => (
                   <div
                     key={card.title}
-                    className="rounded-[1.55rem] border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+                    className="rounded-[1.55rem] border border-slate-200 bg-white p-4 shadow-[0_18px_36px_-28px_rgba(15,23,42,0.1)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_26px_48px_-30px_rgba(37,99,235,0.14)] dark:border-zinc-800 dark:bg-zinc-900"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className={`rounded-2xl border px-3 py-3 ${card.tone}`}>
@@ -132,7 +133,7 @@ const ProductPreview = () => {
                 ].map((item) => (
                   <div
                     key={item}
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 shadow-[0_12px_24px_-22px_rgba(15,23,42,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_34px_-24px_rgba(37,99,235,0.12)] dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
                   >
                     {item}
                   </div>

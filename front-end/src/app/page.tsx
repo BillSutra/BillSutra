@@ -7,6 +7,9 @@ import Benefits from "@/components/benefits";
 import Cta from "@/components/cta";
 import Footer from "@/components/footer";
 import Testimonials from "@/components/testimonials";
+import TrustStrip from "@/components/trust-strip";
+import AIAssistantSection from "@/components/ai-assistant-section";
+import FloatingAiCta from "@/components/floating-ai-cta";
 import AccountDeletedNotice from "@/components/account/AccountDeletedNotice";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
@@ -29,13 +32,16 @@ export default async function LandingPage() {
       <AccountDeletedNotice />
       <Navbar />
       <Hero />
+      <TrustStrip />
       <Benefits />
-      <Features />
       <ProductPreview />
+      <Features />
+      <AIAssistantSection />
       <Testimonials />
       <HowItWorks />
       <Cta />
       <Footer />
+      <FloatingAiCta />
     </div>
   );
 }
