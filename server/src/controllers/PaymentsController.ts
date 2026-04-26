@@ -24,6 +24,7 @@ import {
   captureServerException,
   captureServerMessage,
 } from "../lib/observability.js";
+import { dispatchPaymentReceivedEmail } from "../services/notificationEmail.service.js";
 import { computeInvoiceStatus } from "../utils/invoicePaymentSnapshot.js";
 
 type PaymentCreateInput = z.infer<typeof paymentCreateSchema>;
@@ -636,6 +637,21 @@ class PaymentsController {
           totalPaid: result.paidAmount,
           status: result.invoiceStatus,
           computedStatus,
+        });
+
+        void dispatchPaymentReceivedEmail(result.payment.id).catch((error) => {
+          captureServerMessage("Payment receipt email dispatch failed", req, {
+            level: "warning",
+            tags: {
+              flow: "payments.store",
+              payment_id: result.payment.id,
+              invoice_id: result.invoiceId,
+            },
+            extra: {
+              userId,
+              error: error instanceof Error ? error.message : String(error),
+            },
+          });
         });
       } else {
         logPaymentEvent("duplicate", req, {

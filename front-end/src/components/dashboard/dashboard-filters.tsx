@@ -45,12 +45,12 @@ const DashboardFilters = ({
   return (
     <div
       className={cn(
-        "flex w-full flex-col gap-2 rounded-2xl border border-border bg-card/90 px-3 py-2 shadow-sm backdrop-blur sm:w-auto sm:flex-row sm:flex-wrap sm:items-center",
+        "flex w-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white/95 px-3 py-2 shadow-[0_12px_28px_-22px_rgba(15,23,42,0.12)] sm:w-auto sm:flex-row sm:flex-wrap sm:items-center dark:border-zinc-800 dark:bg-zinc-950/95",
         className,
       )}
     >
       <div className="overflow-x-auto pb-1 sm:pb-0">
-        <div className="flex min-w-max items-center gap-1 rounded-xl border border-border bg-muted/60 p-1">
+        <div className="flex min-w-max items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-zinc-800 dark:bg-zinc-900">
           {(Object.keys(presetLabels) as DashboardRangePreset[]).map((preset) => (
             <Button
               key={preset}
@@ -68,8 +68,8 @@ const DashboardFilters = ({
               disabled={disabled}
               className={`h-7 px-3 text-xs ${
                 filters.range === preset
-                  ? "bg-foreground text-background hover:bg-foreground/90"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  ? "bg-primary text-white hover:bg-primary/92"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
               }`}
             >
               {presetLabels[preset]}
@@ -79,7 +79,7 @@ const DashboardFilters = ({
       </div>
 
       <div className="overflow-x-auto pb-1 sm:pb-0">
-        <div className="flex min-w-max items-center gap-1 rounded-xl border border-border bg-muted/60 p-1">
+        <div className="flex min-w-max items-center gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-zinc-800 dark:bg-zinc-900">
           {(Object.keys(granularityLabels) as DashboardGranularity[]).map((preset) => (
             <Button
               key={preset}
@@ -90,8 +90,8 @@ const DashboardFilters = ({
               disabled={disabled}
               className={`h-7 px-3 text-xs ${
                 filters.granularity === preset
-                  ? "bg-foreground text-background hover:bg-foreground/90"
-                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
+                  ? "bg-primary text-white hover:bg-primary/92"
+                  : "text-muted-foreground hover:bg-accent/50 hover:text-foreground dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
               }`}
             >
               {granularityLabels[preset]}
@@ -101,25 +101,25 @@ const DashboardFilters = ({
       </div>
 
       {filters.range === "custom" && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card/80 px-2 py-1">
-          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-2 py-1 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.1)] dark:border-zinc-800 dark:bg-zinc-900">
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground dark:text-zinc-400">
             Start
             <input
               type="date"
               value={filters.startDate ?? ""}
               onChange={(event) => update({ startDate: event.target.value })}
               disabled={disabled}
-              className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm"
+              className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-white dark:[color-scheme:dark]"
             />
           </label>
-          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <label className="flex items-center gap-2 text-xs font-medium text-muted-foreground dark:text-zinc-400">
             End
             <input
               type="date"
               value={filters.endDate ?? ""}
               onChange={(event) => update({ endDate: event.target.value })}
               disabled={disabled}
-              className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm"
+              className="rounded-lg border border-border bg-background px-2 py-1 text-xs text-foreground shadow-sm dark:border-zinc-700 dark:bg-zinc-950 dark:text-white dark:[color-scheme:dark]"
             />
           </label>
         </div>

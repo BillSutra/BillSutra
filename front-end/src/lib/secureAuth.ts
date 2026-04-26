@@ -6,6 +6,18 @@ export const SECURE_AUTH_BOOTSTRAPPED_KEY = "bill_sutra_secure_auth_bootstrapped
 export const SECURE_AUTH_EXPIRES_AT_KEY = "bill_sutra_secure_auth_expires_at";
 export const AUTH_LOGOUT_EVENT = "billsutra:auth-logout";
 
+export type SecureAuthRefreshResult = {
+  ok: boolean;
+  reason:
+    | "success"
+    | "disabled"
+    | "auth_invalid"
+    | "server_error"
+    | "network_error";
+  expiresAt?: number | null;
+  status?: number;
+};
+
 export const isSecureAuthEnabled = () => Env.USE_SECURE_AUTH === "true";
 export const isCookieAuthEnabled = isSecureAuthEnabled;
 export const isCookieOnlyAuthEnabled = () => Env.USE_COOKIE_AUTH === "true";
@@ -224,33 +236,56 @@ export const bootstrapSecureAuthSession = async (rawToken: string) => {
   }
 };
 
-export const refreshSecureAuthSession = async () => {
-  if (typeof window === "undefined" || !isSecureAuthEnabled()) {
-    return false;
-  }
-
-  try {
-    const response = await fetch(`${API_URL}/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-    });
-
-    if (!response.ok) {
-      return false;
+export const refreshSecureAuthSessionDetailed =
+  async (): Promise<SecureAuthRefreshResult> => {
+    if (typeof window === "undefined" || !isSecureAuthEnabled()) {
+      return {
+        ok: false,
+        reason: "disabled",
+      };
     }
 
-    const payload = (await response.json().catch(() => null)) as
-      | { data?: { expiresAt?: number | null } }
-      | null;
+    try {
+      const response = await fetch(`${API_URL}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+      });
 
-    setSecureAuthExpiresAt(
-      typeof payload?.data?.expiresAt === "number"
-        ? payload.data.expiresAt
-        : null,
-    );
-    markSecureAuthBootstrapped();
-    return true;
-  } catch {
-    return false;
-  }
-};
+      if (!response.ok) {
+        return {
+          ok: false,
+          reason:
+            response.status === 401 || response.status === 403
+              ? "auth_invalid"
+              : "server_error",
+          status: response.status,
+        };
+      }
+
+      const payload = (await response.json().catch(() => null)) as
+        | { data?: { expiresAt?: number | null } }
+        | null;
+
+      const expiresAt =
+        typeof payload?.data?.expiresAt === "number"
+          ? payload.data.expiresAt
+          : null;
+
+      setSecureAuthExpiresAt(expiresAt);
+      markSecureAuthBootstrapped();
+      return {
+        ok: true,
+        reason: "success",
+        expiresAt,
+        status: response.status,
+      };
+    } catch {
+      return {
+        ok: false,
+        reason: "network_error",
+      };
+    }
+  };
+
+export const refreshSecureAuthSession = async () =>
+  (await refreshSecureAuthSessionDetailed()).ok;

@@ -3,6 +3,9 @@ import prisma from "../config/db.config.js";
 let extraEntriesTablePromise: Promise<void> | null = null;
 let faceDataTablePromise: Promise<void> | null = null;
 let schemaCompatibilityPromise: Promise<void> | null = null;
+let userPreferenceCompatibilityPromise: Promise<void> | null = null;
+let emailLogCompatibilityPromise: Promise<void> | null = null;
+let invoiceTemplateCompatibilityPromise: Promise<void> | null = null;
 
 const ensureInvoiceDiscountMetadataColumnsInternal = async () => {
   await prisma.$executeRawUnsafe(`
@@ -302,6 +305,151 @@ const ensureFaceDataTableInternal = async () => {
   `);
 };
 
+const ensureUserPreferenceCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "user_preferences"
+      ADD COLUMN IF NOT EXISTS "email_payment_reminders_enabled" BOOLEAN NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS "email_payment_reminder_offsets" VARCHAR(64) NOT NULL DEFAULT '1,3,7',
+      ADD COLUMN IF NOT EXISTS "email_weekly_reports_enabled" BOOLEAN NOT NULL DEFAULT true,
+      ADD COLUMN IF NOT EXISTS "email_low_stock_alerts_enabled" BOOLEAN NOT NULL DEFAULT true;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE "user_preferences"
+    SET
+      "email_payment_reminders_enabled" = COALESCE("email_payment_reminders_enabled", true),
+      "email_payment_reminder_offsets" = COALESCE(NULLIF("email_payment_reminder_offsets", ''), '1,3,7'),
+      "email_weekly_reports_enabled" = COALESCE("email_weekly_reports_enabled", true),
+      "email_low_stock_alerts_enabled" = COALESCE("email_low_stock_alerts_enabled", true);
+  `);
+};
+
+const ensureEmailLogCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type
+        WHERE typname = 'EmailDeliveryStatus'
+      ) THEN
+        CREATE TYPE "EmailDeliveryStatus" AS ENUM ('PENDING', 'SENT', 'FAILED');
+      END IF;
+    END $$;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "email_logs" (
+      "id" VARCHAR(191) NOT NULL,
+      "user_id" INTEGER,
+      "invoice_id" INTEGER,
+      "customer_id" INTEGER,
+      "type" VARCHAR(64) NOT NULL,
+      "status" "EmailDeliveryStatus" NOT NULL DEFAULT 'PENDING',
+      "recipient_email" VARCHAR(191) NOT NULL,
+      "subject" VARCHAR(191),
+      "provider_message_id" VARCHAR(191),
+      "error_message" VARCHAR(1000),
+      "metadata" JSONB,
+      "sent_at" TIMESTAMP(3),
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+      CONSTRAINT "email_logs_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "email_logs"
+      ADD COLUMN IF NOT EXISTS "user_id" INTEGER,
+      ADD COLUMN IF NOT EXISTS "invoice_id" INTEGER,
+      ADD COLUMN IF NOT EXISTS "customer_id" INTEGER,
+      ADD COLUMN IF NOT EXISTS "type" VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS "status" "EmailDeliveryStatus" NOT NULL DEFAULT 'PENDING',
+      ADD COLUMN IF NOT EXISTS "recipient_email" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "subject" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "provider_message_id" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "error_message" VARCHAR(1000),
+      ADD COLUMN IF NOT EXISTS "metadata" JSONB,
+      ADD COLUMN IF NOT EXISTS "sent_at" TIMESTAMP(3),
+      ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "email_logs_user_id_created_at_idx"
+    ON "email_logs"("user_id", "created_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "email_logs_invoice_id_type_created_at_idx"
+    ON "email_logs"("invoice_id", "type", "created_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "email_logs_customer_id_created_at_idx"
+    ON "email_logs"("customer_id", "created_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "email_logs_type_status_created_at_idx"
+    ON "email_logs"("type", "status", "created_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "email_logs_recipient_email_created_at_idx"
+    ON "email_logs"("recipient_email", "created_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'email_logs_user_id_fkey'
+          AND table_name = 'email_logs'
+      ) THEN
+        ALTER TABLE "email_logs"
+        ADD CONSTRAINT "email_logs_user_id_fkey"
+        FOREIGN KEY ("user_id") REFERENCES "users"("id")
+        ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'email_logs_invoice_id_fkey'
+          AND table_name = 'email_logs'
+      ) THEN
+        ALTER TABLE "email_logs"
+        ADD CONSTRAINT "email_logs_invoice_id_fkey"
+        FOREIGN KEY ("invoice_id") REFERENCES "invoices"("id")
+        ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'email_logs_customer_id_fkey'
+          AND table_name = 'email_logs'
+      ) THEN
+        ALTER TABLE "email_logs"
+        ADD CONSTRAINT "email_logs_customer_id_fkey"
+        FOREIGN KEY ("customer_id") REFERENCES "customers"("id")
+        ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+};
+
+const ensureInvoiceTemplateCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "invoices"
+      ADD COLUMN IF NOT EXISTS "template_snapshot" JSONB;
+  `);
+};
+
 const ensureBillingInventoryCompatibilityInternal = async () => {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "user_preferences"
@@ -327,6 +475,80 @@ const ensureBillingInventoryCompatibilityInternal = async () => {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS "invoices_warehouse_id_idx"
     ON "invoices"("warehouse_id");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "products"
+      ADD COLUMN IF NOT EXISTS "last_auto_corrected_at" TIMESTAMP(3);
+  `);
+};
+
+const ensureInventoryIssueCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type
+        WHERE typname = 'InventoryIssueType'
+      ) THEN
+        CREATE TYPE "InventoryIssueType" AS ENUM (
+          'NEGATIVE_AFTER_SALE',
+          'NEGATIVE_BEFORE_PURCHASE'
+        );
+      END IF;
+    END $$;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "inventory_issues" (
+      "id" SERIAL NOT NULL,
+      "product_id" INTEGER NOT NULL,
+      "type" "InventoryIssueType" NOT NULL,
+      "quantity" INTEGER NOT NULL,
+      "resolved" BOOLEAN NOT NULL DEFAULT false,
+      "metadata" JSONB,
+      "resolved_at" TIMESTAMP(3),
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+      CONSTRAINT "inventory_issues_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "inventory_issues"
+      ADD COLUMN IF NOT EXISTS "metadata" JSONB,
+      ADD COLUMN IF NOT EXISTS "resolved_at" TIMESTAMP(3),
+      ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "inventory_issues_product_id_resolved_type_idx"
+    ON "inventory_issues"("product_id", "resolved", "type");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "inventory_issues_resolved_created_at_idx"
+    ON "inventory_issues"("resolved", "created_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'inventory_issues_product_id_fkey'
+          AND table_name = 'inventory_issues'
+      ) THEN
+        ALTER TABLE "inventory_issues"
+        ADD CONSTRAINT "inventory_issues_product_id_fkey"
+        FOREIGN KEY ("product_id") REFERENCES "products"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
   `);
 };
 
@@ -354,13 +576,54 @@ export const ensureFaceDataTable = async () => {
   await faceDataTablePromise;
 };
 
+export const ensureUserPreferenceCompatibility = async () => {
+  if (!userPreferenceCompatibilityPromise) {
+    userPreferenceCompatibilityPromise =
+      ensureUserPreferenceCompatibilityInternal().catch((error) => {
+        userPreferenceCompatibilityPromise = null;
+        throw error;
+      });
+  }
+
+  await userPreferenceCompatibilityPromise;
+};
+
+export const ensureEmailLogCompatibility = async () => {
+  if (!emailLogCompatibilityPromise) {
+    emailLogCompatibilityPromise = ensureEmailLogCompatibilityInternal().catch(
+      (error) => {
+        emailLogCompatibilityPromise = null;
+        throw error;
+      },
+    );
+  }
+
+  await emailLogCompatibilityPromise;
+};
+
+export const ensureInvoiceTemplateCompatibility = async () => {
+  if (!invoiceTemplateCompatibilityPromise) {
+    invoiceTemplateCompatibilityPromise =
+      ensureInvoiceTemplateCompatibilityInternal().catch((error) => {
+        invoiceTemplateCompatibilityPromise = null;
+        throw error;
+      });
+  }
+
+  await invoiceTemplateCompatibilityPromise;
+};
+
 export const ensureSchemaCompatibility = async () => {
   if (!schemaCompatibilityPromise) {
     schemaCompatibilityPromise = (async () => {
       await ensureInvoiceDiscountMetadataColumnsInternal();
       await ensureBillingInventoryCompatibilityInternal();
+      await ensureInventoryIssueCompatibilityInternal();
       await ensureExtraEntriesTable();
       await ensureFaceDataTable();
+      await ensureUserPreferenceCompatibility();
+      await ensureEmailLogCompatibility();
+      await ensureInvoiceTemplateCompatibility();
     })().catch((error) => {
       schemaCompatibilityPromise = null;
       throw error;

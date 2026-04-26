@@ -10,17 +10,17 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-primary text-primary-foreground shadow-sm hover:bg-primary/92 hover:shadow-md dark:bg-blue-600 dark:text-white dark:hover:bg-blue-500 dark:shadow-[0_16px_30px_-18px_rgba(37,99,235,0.45)]",
+          "bg-primary text-primary-foreground shadow-[0_14px_28px_-18px_rgba(37,99,235,0.38)] hover:bg-primary/92 hover:shadow-[0_18px_34px_-18px_rgba(37,99,235,0.44)] dark:bg-blue-600 dark:text-white dark:hover:bg-blue-500 dark:shadow-[0_16px_30px_-18px_rgba(37,99,235,0.45)]",
         default:
-          "bg-primary text-primary-foreground shadow-sm hover:bg-primary/92 hover:shadow-md dark:bg-blue-600 dark:text-white dark:hover:bg-blue-500 dark:shadow-[0_16px_30px_-18px_rgba(37,99,235,0.45)]",
+          "bg-primary text-primary-foreground shadow-[0_14px_28px_-18px_rgba(37,99,235,0.38)] hover:bg-primary/92 hover:shadow-[0_18px_34px_-18px_rgba(37,99,235,0.44)] dark:bg-blue-600 dark:text-white dark:hover:bg-blue-500 dark:shadow-[0_16px_30px_-18px_rgba(37,99,235,0.45)]",
         danger:
           "bg-red-600 text-white shadow-sm hover:bg-red-700 hover:shadow-md focus-visible:ring-red-500/30",
         destructive:
           "bg-destructive text-white shadow-sm hover:bg-destructive/90 hover:shadow-md focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
-          "border border-border/80 bg-card/90 text-foreground shadow-sm hover:border-primary/30 hover:bg-accent/60 hover:text-accent-foreground dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:hover:border-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-white",
+          "border border-border/80 bg-card text-foreground shadow-sm hover:border-primary/25 hover:bg-accent/70 hover:text-foreground hover:shadow-[0_12px_24px_-20px_rgba(15,23,42,0.12)] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:hover:border-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-white",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80 dark:bg-zinc-800 dark:text-white dark:hover:bg-zinc-700",
+          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/88 hover:shadow-[0_12px_24px_-20px_rgba(37,99,235,0.18)] dark:bg-zinc-800 dark:text-white dark:hover:bg-zinc-700",
         ghost:
           "hover:bg-accent/70 hover:text-accent-foreground dark:hover:bg-zinc-800 dark:hover:text-white",
         link: "text-primary underline-offset-4 hover:underline",

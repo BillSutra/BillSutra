@@ -143,7 +143,7 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
                 canCollapseSection ? (
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-1 text-left text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-muted-foreground/80 transition hover:bg-card/65 hover:text-foreground"
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-1 text-left text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-slate-400 transition-all duration-200 hover:bg-white hover:text-slate-700 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
                     aria-expanded={isExpanded}
                     onClick={() =>
                       setCollapsedSections((current) => ({
@@ -161,7 +161,7 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
                     <span className="truncate">{section.title}</span>
                   </button>
                 ) : (
-                  <p className="px-3 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-muted-foreground/80">
+                  <p className="px-3 text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-slate-400 dark:text-zinc-500">
                     {section.title}
                   </p>
                 )
@@ -208,7 +208,7 @@ const AppSidebar = ({
     <>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 hidden border-r border-sidebar-border/80 bg-sidebar/92 text-sidebar-foreground shadow-[0_18px_45px_-38px_rgba(17,37,63,0.2)] backdrop-blur-xl dark:shadow-[0_18px_48px_-36px_rgba(1,4,9,0.82)] lg:block",
+          "fixed inset-y-0 left-0 z-40 hidden border-r border-slate-200 bg-slate-100/95 text-sidebar-foreground shadow-[0_18px_40px_-34px_rgba(15,23,42,0.12)] backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-[0_18px_45px_-38px_rgba(1,4,9,0.82)] lg:block",
           collapsed ? "w-20" : "w-60",
         )}
       >
@@ -240,7 +240,7 @@ const AppSidebar = ({
 
       <div
         className={cn(
-          "fixed inset-0 z-40 bg-background/62 backdrop-blur-sm transition-opacity lg:hidden",
+          "fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-sm transition-opacity dark:bg-zinc-950/70 lg:hidden",
           mobileOpen ? "opacity-100" : "pointer-events-none opacity-0",
         )}
         onClick={onCloseMobile}
@@ -248,7 +248,7 @@ const AppSidebar = ({
 
       <aside
         className={cn(
-          "app-scrollbar fixed top-0 left-0 z-50 h-full w-72 overflow-y-auto border-r border-sidebar-border/80 bg-sidebar/96 text-sidebar-foreground shadow-[0_20px_48px_-32px_rgba(1,4,9,0.78)] transition-transform duration-200 lg:hidden",
+          "app-scrollbar fixed top-0 left-0 z-50 h-full w-72 overflow-y-auto border-r border-slate-200 bg-slate-100 text-sidebar-foreground shadow-[0_20px_44px_-32px_rgba(15,23,42,0.16)] transition-transform duration-200 dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-[0_20px_48px_-32px_rgba(1,4,9,0.78)] lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >

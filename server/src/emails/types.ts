@@ -98,6 +98,25 @@ export type InvoiceReminderEmailData = {
   amount: number;
   due_date?: Date | string | null;
   business_name: string;
+  business_logo_url?: string | null;
+  payment_status?: string | null;
+  reminder_stage?: "upcoming" | "due_today" | "overdue" | "manual";
+  days_until_due?: number | null;
+  invoice_url?: string | null;
+  currency?: string;
+};
+
+export type PaymentReceivedEmailData = {
+  email: string;
+  customer_name: string;
+  invoice_id: string;
+  amount_received: number;
+  total_amount: number;
+  amount_outstanding: number;
+  paid_at: Date | string;
+  payment_method?: string | null;
+  business_name: string;
+  business_logo_url?: string | null;
   invoice_url?: string | null;
   currency?: string;
 };
@@ -147,6 +166,35 @@ export type MonthlySalesReportEmailData = {
   reports_url: string;
 };
 
+export type WeeklyReportEmailData = {
+  email: string;
+  user_name: string;
+  report_week_label: string;
+  invoices_issued: number;
+  total_billed: number;
+  total_collected: number;
+  pending_amount: number;
+  profit: number;
+  overdue_count: number;
+  reports_url: string;
+};
+
+export type LowStockAlertEmailData = {
+  email: string;
+  user_name: string;
+  business_name: string;
+  business_logo_url?: string | null;
+  inventory_url: string;
+  insights: Array<{
+    product_name: string;
+    stock_left: number;
+    threshold?: number | null;
+    severity: "critical" | "warning" | "info";
+    warehouse_name?: string | null;
+    suggested_quantity?: number | null;
+  }>;
+};
+
 export type EmailTemplateDataMap = {
   welcome: WelcomeEmailData;
   verify_email: VerifyEmailData;
@@ -154,11 +202,14 @@ export type EmailTemplateDataMap = {
   otp_login: OtpLoginEmailData;
   invoice_sent: InvoiceSentEmailData;
   invoice_reminder: InvoiceReminderEmailData;
+  payment_received: PaymentReceivedEmailData;
   export_ready: ExportReadyEmailData;
   delete_data_confirmation: DeleteDataConfirmationEmailData;
   delete_account_confirmation: DeleteAccountConfirmationEmailData;
   payment_access_approved: PaymentAccessApprovedEmailData;
   monthly_sales_report: MonthlySalesReportEmailData;
+  weekly_report: WeeklyReportEmailData;
+  low_stock_alert: LowStockAlertEmailData;
 };
 
 export type EmailType = keyof EmailTemplateDataMap;

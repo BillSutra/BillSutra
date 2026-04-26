@@ -32,6 +32,7 @@ export type CartV2Props = {
   productsLoading: boolean;
   productsError: boolean;
   allowNegativeStock: boolean;
+  gstEnabled: boolean;
   productSearchOpen: boolean;
   productSearchFocusToken: number;
   shortcutActiveItemId: string | null;
@@ -41,6 +42,12 @@ export type CartV2Props = {
   onRetryProducts: () => void;
   onAddProduct: (product: Product) => void;
   onAddManualItem: (item: { name: string; quantity: number; price: number }) => void;
+  onQuickCreateProduct: (item: {
+    name: string;
+    price: number;
+    gstRate: number;
+  }) => Promise<void>;
+  creatingProduct: boolean;
   updateItem: (id: string, patch: Partial<CartItem>) => void;
   removeItem: (id: string) => void;
   adjustItemQuantity: (id: string, delta: number) => void;
@@ -57,6 +64,7 @@ export default function CartV2({
   productsLoading,
   productsError,
   allowNegativeStock,
+  gstEnabled,
   productSearchOpen,
   productSearchFocusToken,
   shortcutActiveItemId,
@@ -66,6 +74,8 @@ export default function CartV2({
   onRetryProducts,
   onAddProduct,
   onAddManualItem,
+  onQuickCreateProduct,
+  creatingProduct,
   updateItem,
   removeItem,
   adjustItemQuantity,
@@ -89,6 +99,19 @@ export default function CartV2({
         Math.max(0, Number.isFinite(price) ? price : 0)
     );
   }, 0);
+  const gstTotal = gstEnabled
+    ? activeItems.reduce((sum, item) => {
+        const quantity = Number(item.quantity);
+        const price = Number(item.price);
+        const gstRate = Number(item.gstRate);
+        const lineSubtotal =
+          Math.max(0, Number.isFinite(quantity) ? quantity : 0) *
+          Math.max(0, Number.isFinite(price) ? price : 0);
+        const lineGst = Number.isFinite(gstRate) ? (lineSubtotal * gstRate) / 100 : 0;
+        return sum + Math.max(0, lineGst);
+      }, 0)
+    : 0;
+  const grandTotal = subtotal + gstTotal;
 
   return (
     <div className="mt-4 overflow-hidden rounded-[1.2rem] border border-border/65 bg-background/95 shadow-sm">
@@ -96,18 +119,18 @@ export default function CartV2({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-sm font-semibold text-foreground">
-              {isHindi ? "वर्तमान बिल" : "Current Bill"}
+              {isHindi ? "Current Bill" : "Current Bill"}
             </p>
             <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
               {isHindi
-                ? `${activeItemCount} आइटम`
+                ? `${activeItemCount} item`
                 : `${activeItemCount} ${activeItemCount === 1 ? "item" : "items"}`}
             </span>
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
             {isHindi
-              ? "प्रोडक्ट जोड़ें, मात्रा बदलें, और कुल राशि तुरंत देखें."
-              : "Add products, edit quantity and price, and keep totals in sync."}
+              ? "Products add karein, quantity aur price edit karein, aur totals live dekhein."
+              : "Add products, edit quantity, price, and GST, and keep totals in sync."}
           </p>
         </div>
         <Button
@@ -117,7 +140,7 @@ export default function CartV2({
           className="h-8 rounded-full px-3 text-xs font-medium"
           onClick={onFocusPrimaryItem}
         >
-          {isHindi ? "प्रोडक्ट जोड़ें" : "Add product"}
+          {isHindi ? "Add product" : "Add product"}
         </Button>
       </div>
 
@@ -128,16 +151,16 @@ export default function CartV2({
           </div>
           <div className="grid gap-1">
             <p className="text-sm font-semibold text-foreground">
-              {isHindi ? "अभी तक कोई प्रोडक्ट नहीं जोड़ा गया" : "No products added yet"}
+              {isHindi ? "No products added yet" : "No products added yet"}
             </p>
             <p className="text-sm text-muted-foreground">
               {isHindi
-                ? "प्रोडक्ट खोजें, बारकोड स्कैन करें, या मैनुअल आइटम जोड़कर बिल बनाना शुरू करें."
+                ? "Product search kholiye, barcode scan kijiye, ya manual item add karke billing shuru kijiye."
                 : "Search products, scan a barcode, or add a manual item to start billing."}
             </p>
           </div>
           <Button type="button" variant="outline" onClick={onFocusPrimaryItem}>
-            {isHindi ? "प्रोडक्ट खोज खोलें" : "Focus product search"}
+            {isHindi ? "Focus product search" : "Focus product search"}
           </Button>
         </div>
       ) : (
@@ -145,21 +168,26 @@ export default function CartV2({
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-foreground">
-                {isHindi ? "लाइव बिल सारांश" : "Live bill summary"}
+                {isHindi ? "Live bill summary" : "Live bill summary"}
               </p>
               <p className="text-xs text-muted-foreground">
                 {isHindi
-                  ? "मात्रा और कीमत बदलते ही कुल राशि तुरंत अपडेट होती है."
-                  : "Totals update instantly as quantity and price change."}
+                  ? "Quantity, price, aur GST change karte hi bill update hota hai."
+                  : "Totals update instantly as quantity, price, and GST change."}
               </p>
             </div>
             <div className="text-right">
               <p className="text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                {isHindi ? "सबटोटल" : "Subtotal"}
+                {gstEnabled ? "Total" : "Subtotal"}
               </p>
               <p className="text-lg font-semibold text-foreground">
-                {formatMoney(subtotal)}
+                {formatMoney(gstEnabled ? grandTotal : subtotal)}
               </p>
+              {gstEnabled ? (
+                <p className="text-[11px] text-muted-foreground">
+                  {`${formatMoney(subtotal)} + ${formatMoney(gstTotal)} GST`}
+                </p>
+              ) : null}
             </div>
           </div>
 
@@ -176,6 +204,7 @@ export default function CartV2({
                 item={item}
                 matchedProduct={matchedProduct}
                 allowNegativeStock={allowNegativeStock}
+                gstEnabled={gstEnabled}
                 isShortcutActive={shortcutActiveItemId === item.id}
                 quantityInputRef={(node) =>
                   assignItemInputRef(itemQuantityRefs, item.id, node)
@@ -206,6 +235,8 @@ export default function CartV2({
         onRetryProducts={onRetryProducts}
         onAddProduct={onAddProduct}
         onAddManualItem={onAddManualItem}
+        onQuickCreateProduct={onQuickCreateProduct}
+        creatingProduct={creatingProduct}
       />
     </div>
   );

@@ -114,6 +114,8 @@ import forecastRoutes from "../modules/forecast/forecast.routes.js";
 import inventoryDemandRoutes from "../modules/inventory-demand/inventoryDemand.routes.js";
 import assistantRoutes from "../modules/assistant/assistant.routes.js";
 import copilotRoutes from "../modules/copilot/copilot.routes.js";
+import LandingAssistantController from "../modules/landing-assistant/landingAssistant.controller.js";
+import { landingAssistantQuerySchema } from "../modules/landing-assistant/landingAssistant.schema.js";
 import ExportController from "../modules/export/export.controller.js";
 import faceRecognitionRoutes from "./faceRecognition.js";
 import * as FaceRecognitionController from "../controllers/FaceRecognitionController.js";
@@ -732,6 +734,7 @@ router.get(
   validate({ query: inventoryQuerySchema }),
   InventoriesController.index,
 );
+router.get("/inventories/issues", AuthMiddleware, InventoriesController.issues);
 router.post(
   "/inventories/adjust",
   AuthMiddleware,
@@ -764,6 +767,12 @@ router.delete(
   FaceRecognitionController.deleteFaceData,
 );
 router.use("/face", faceRecognitionRoutes);
+
+router.post(
+  "/assistant",
+  validate({ body: landingAssistantQuerySchema }),
+  LandingAssistantController.query,
+);
 
 // Assistant
 router.use(

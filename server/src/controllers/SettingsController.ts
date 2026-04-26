@@ -3,6 +3,7 @@ import { AuthMethod, Prisma } from "@prisma/client";
 import prisma from "../config/db.config.js";
 import { sendResponse } from "../utils/sendResponse.js";
 import { recordAuthEvent } from "../lib/modernAuth.js";
+import { ensureUserPreferenceCompatibility } from "../lib/schemaCompatibility.js";
 import {
   clearAuthCookies,
   revokeAllRefreshTokensForUser,
@@ -82,13 +83,15 @@ const mapPreferenceResponse = (pref: {
 });
 
 const getOrCreatePreference = async (userId: number) =>
-  prisma.userPreference.upsert({
-    where: { user_id: userId },
-    update: {},
-    create: {
-      user_id: userId,
-    },
-  });
+  ensureUserPreferenceCompatibility().then(() =>
+    prisma.userPreference.upsert({
+      where: { user_id: userId },
+      update: {},
+      create: {
+        user_id: userId,
+      },
+    }),
+  );
 
 class SettingsController {
   static async preferences(req: Request, res: Response) {
@@ -111,6 +114,7 @@ class SettingsController {
     }
 
     const body = (req.body ?? {}) as SettingsPayload;
+    await ensureUserPreferenceCompatibility();
 
     const updated = await prisma.userPreference.upsert({
       where: { user_id: userId },

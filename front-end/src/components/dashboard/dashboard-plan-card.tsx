@@ -70,20 +70,20 @@ const UsageBar = ({
   const progress = getUsageProgress(value, limit);
 
   return (
-    <div className="rounded-[1.35rem] border border-border/70 bg-background/75 p-4">
+    <div className="rounded-[1.35rem] border border-border/70 bg-background/75 p-4 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium text-foreground">{label}</p>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+        <p className="text-sm font-medium text-foreground dark:text-white">{label}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground dark:text-zinc-400">
           {value}/{limit}
         </p>
       </div>
-      <div className="mt-3 h-2 rounded-full bg-muted">
+      <div className="mt-3 h-2 rounded-full bg-muted dark:bg-zinc-800">
         <div
           className={cn("h-full rounded-full transition-all", usageTone[tone].bar)}
           style={{ width: `${progress}%` }}
         />
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">{progress}% of Free plan limit used</p>
+      <p className="mt-2 text-xs text-muted-foreground dark:text-zinc-400">{progress}% of Free plan limit used</p>
     </div>
   );
 };
@@ -119,10 +119,10 @@ const DashboardPlanCard = ({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="app-kicker">Your plan</p>
-          <h3 className="mt-2 text-lg font-semibold text-foreground">
+          <h3 className="mt-2 text-lg font-semibold text-foreground dark:text-white">
             Free plan with upgrade cues that match your usage
           </h3>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+          <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground dark:text-zinc-400">
             {usageMessage} {usageTone[tone].copy}
           </p>
         </div>
@@ -157,15 +157,14 @@ const DashboardPlanCard = ({
           return (
             <div
               key={preview.title}
-              className="relative overflow-hidden rounded-[1.45rem] border border-border/70 bg-background/75 p-4"
+              className="relative overflow-hidden rounded-[1.45rem] border border-border/70 bg-background/75 p-4 dark:border-zinc-800 dark:bg-zinc-900"
             >
-              <div className="absolute inset-x-5 top-3 h-8 rounded-full bg-gradient-to-r from-transparent via-white/75 to-transparent blur-md" />
               <div className="relative">
-                <div className="inline-flex rounded-2xl border border-border/70 bg-card/80 p-2 text-primary shadow-sm">
+                <div className="inline-flex rounded-2xl border border-border/70 bg-card/80 p-2 text-primary shadow-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-blue-400 dark:shadow-none">
                   <Icon className="size-4" />
                 </div>
-                <p className="mt-4 text-sm font-semibold text-foreground">{preview.title}</p>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                <p className="mt-4 text-sm font-semibold text-foreground dark:text-white">{preview.title}</p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground dark:text-zinc-400">
                   {preview.description}
                 </p>
                 <div className="mt-3 inline-flex rounded-full border border-dashed border-sky-300 bg-sky-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-200">
@@ -184,11 +183,11 @@ const DashboardPlanCard = ({
             <ArrowRight size={16} />
           </Link>
         </Button>
-        <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-border/70 bg-background/75 px-3 py-2 text-xs font-medium text-muted-foreground">
+        <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-border/70 bg-background/75 px-3 py-2 text-xs font-medium text-muted-foreground dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
           <Receipt className="size-4" />
           Upgrade when billing volume grows past 50 invoices/month
         </div>
-        <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-border/70 bg-background/75 px-3 py-2 text-xs font-medium text-muted-foreground">
+        <div className="inline-flex flex-wrap items-center gap-2 rounded-full border border-border/70 bg-background/75 px-3 py-2 text-xs font-medium text-muted-foreground dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
           <Package className="size-4" />
           Product storage nudges kick in as you approach 100 items
         </div>

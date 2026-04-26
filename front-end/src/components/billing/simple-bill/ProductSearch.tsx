@@ -35,6 +35,12 @@ type ManualItemInput = {
   price: number;
 };
 
+type QuickCreateProductInput = {
+  name: string;
+  price: number;
+  gstRate: number;
+};
+
 type ProductSearchProps = {
   open: boolean;
   isHindi: boolean;
@@ -45,6 +51,8 @@ type ProductSearchProps = {
   onRetryProducts: () => void;
   onAddProduct: (product: Product) => void;
   onAddManualItem: (item: ManualItemInput) => void;
+  onQuickCreateProduct: (item: QuickCreateProductInput) => Promise<void>;
+  creatingProduct: boolean;
 };
 
 export default function ProductSearch({
@@ -57,6 +65,8 @@ export default function ProductSearch({
   onRetryProducts,
   onAddProduct,
   onAddManualItem,
+  onQuickCreateProduct,
+  creatingProduct,
 }: ProductSearchProps) {
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const debounceTimeoutRef = useRef<number | null>(null);
@@ -66,6 +76,11 @@ export default function ProductSearch({
   const [manualName, setManualName] = useState("");
   const [manualQuantity, setManualQuantity] = useState("1");
   const [manualPrice, setManualPrice] = useState("");
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  const [quickCreateName, setQuickCreateName] = useState("");
+  const [quickCreatePrice, setQuickCreatePrice] = useState("");
+  const [quickCreateGstRate, setQuickCreateGstRate] = useState("0");
+  const [quickCreateError, setQuickCreateError] = useState("");
 
   useEffect(() => {
     return () => {
@@ -109,6 +124,11 @@ export default function ProductSearch({
     setManualName("");
     setManualQuantity("1");
     setManualPrice("");
+    setQuickCreateOpen(false);
+    setQuickCreateName("");
+    setQuickCreatePrice("");
+    setQuickCreateGstRate("0");
+    setQuickCreateError("");
     onOpenChange(false);
   };
 
@@ -158,6 +178,15 @@ export default function ProductSearch({
     () => resolveExactMatch(listedProducts, query),
     [listedProducts, query],
   );
+  const canQuickCreateProduct = Boolean(query.trim()) && !exactMatch;
+
+  const openQuickCreatePanel = (nameToUse = query.trim()) => {
+    setQuickCreateName(nameToUse);
+    setQuickCreatePrice("");
+    setQuickCreateGstRate("0");
+    setQuickCreateError("");
+    setQuickCreateOpen(true);
+  };
 
   const handleSubmitSearch = () => {
     const highlightedProduct =
@@ -173,6 +202,48 @@ export default function ProductSearch({
 
     if (listedProducts.length === 1) {
       addProductAndClose(listedProducts[0]);
+      return;
+    }
+
+    if (canQuickCreateProduct) {
+      openQuickCreatePanel(query.trim());
+    }
+  };
+
+  const handleQuickCreateProduct = async () => {
+    const normalizedName = quickCreateName.trim() || query.trim();
+    const normalizedPrice = Number(quickCreatePrice);
+    const normalizedGstRate = Number(quickCreateGstRate || "0");
+
+    if (!normalizedName) {
+      setQuickCreateError("Enter a product name.");
+      return;
+    }
+
+    if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
+      setQuickCreateError("Enter a valid selling price.");
+      return;
+    }
+
+    if (!Number.isFinite(normalizedGstRate) || normalizedGstRate < 0) {
+      setQuickCreateError("Enter a valid GST percentage.");
+      return;
+    }
+
+    try {
+      setQuickCreateError("");
+      await onQuickCreateProduct({
+        name: normalizedName,
+        price: normalizedPrice,
+        gstRate: normalizedGstRate,
+      });
+      resetAndClose();
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message.trim()
+          : "Could not create product.";
+      setQuickCreateError(message);
     }
   };
 
@@ -183,10 +254,10 @@ export default function ProductSearch({
     <Modal
       open={open}
       onOpenChange={handleOpenChange}
-      title={isHindi ? "प्रोडक्ट जोड़ें" : "Add product"}
+      title={isHindi ? "Product add karein" : "Add product"}
       description={
         isHindi
-          ? "नाम, SKU, या बारकोड से खोजें. बारकोड स्कैनर सीधे इसी इनपुट में काम करेगा."
+          ? "Naam, SKU, ya barcode se search karein. Scanner bhi isi field me kaam karega."
           : "Search by name, SKU, or barcode. Barcode scanners can type directly into this field."
       }
       contentClassName="max-w-3xl"
@@ -196,17 +267,17 @@ export default function ProductSearch({
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-foreground">
-                {isHindi ? "प्रोडक्ट खोज" : "Product search"}
+                {isHindi ? "Product search" : "Product search"}
               </p>
               <p className="text-xs text-muted-foreground">
                 {isHindi
-                  ? "एंटर दबाकर चुना हुआ प्रोडक्ट तुरंत बिल में जोड़ें."
+                  ? "Enter dabakar highlighted product seedha bill me add karein."
                   : "Press Enter to add the highlighted product instantly."}
               </p>
             </div>
             <span className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700">
               <ScanLine size={14} />
-              {isHindi ? "बारकोड-रेडी" : "Barcode-ready"}
+              {isHindi ? "Barcode-ready" : "Barcode-ready"}
             </span>
           </div>
 
@@ -242,7 +313,7 @@ export default function ProductSearch({
               }}
               placeholder={
                 isHindi
-                  ? "नाम, SKU, या बारकोड से खोजें"
+                  ? "Name, SKU, ya barcode se search karein"
                   : "Search by name, SKU, or barcode"
               }
               className="h-12 rounded-xl border-border/70 bg-background pl-10 text-sm"
@@ -254,34 +325,69 @@ export default function ProductSearch({
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
                 <p className="text-destructive">
                   {isHindi
-                    ? "प्रोडक्ट लोड नहीं हो पाए. फिर से कोशिश करें."
+                    ? "Products load nahin ho paaye. Dobara try karein."
                     : "Products could not be loaded. Please try again."}
                 </p>
                 <Button type="button" variant="outline" size="sm" onClick={onRetryProducts}>
-                  {isHindi ? "फिर से लोड करें" : "Retry"}
+                  {isHindi ? "Retry" : "Retry"}
                 </Button>
               </div>
             ) : isSearchingProducts || (!debouncedQuery && productsLoading) ? (
               <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
                 <Loader2 size={16} className="animate-spin" />
-                {isHindi ? "प्रोडक्ट लोड हो रहे हैं..." : "Loading products..."}
+                {isHindi ? "Products load ho rahe hain..." : "Loading products..."}
               </div>
             ) : listedProducts.length === 0 ? (
-              <div className="grid gap-1 px-4 py-6 text-center">
-                <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-dashed border-border/70 bg-muted/30 text-muted-foreground">
-                  <Package2 size={18} />
+              <div className="grid gap-3 px-4 py-6 text-center">
+                <div className="grid gap-1">
+                  <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-full border border-dashed border-border/70 bg-muted/30 text-muted-foreground">
+                    <Package2 size={18} />
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {isHindi ? "Koi matching product nahin mila" : "No matching products"}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {isHindi
+                      ? "Naya product save karke turant bill me jodiye ya niche custom item add kijiye."
+                      : "Save it as a product right now or add it as a custom item below."}
+                  </p>
                 </div>
-                <p className="text-sm font-semibold text-foreground">
-                  {isHindi ? "कोई मैच नहीं मिला" : "No matching products"}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  {isHindi
-                    ? "कस्टम आइटम के रूप में नीचे से मैनुअल एंट्री कर सकते हैं."
-                    : "You can still add it manually as a custom item below."}
-                </p>
+                {canQuickCreateProduct ? (
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => openQuickCreatePanel(query.trim())}
+                    >
+                      {`+ Add "${query.trim()}"`}
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="max-h-80 overflow-y-auto py-2">
+                {canQuickCreateProduct ? (
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between gap-3 border-b border-border/60 px-4 py-3 text-left transition hover:bg-accent/45"
+                    onClick={() => openQuickCreatePanel(query.trim())}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground">
+                        {`+ Add "${query.trim()}"`}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {isHindi
+                          ? "Saved product banega aur seedha bill me add ho jayega."
+                          : "Create a saved product and drop it straight into this bill."}
+                      </p>
+                    </div>
+                    <span className="rounded-full bg-primary/10 px-2.5 py-1 text-[11px] font-medium text-primary">
+                      {isHindi ? "Quick add" : "Quick add"}
+                    </span>
+                  </button>
+                ) : null}
                 {listedProducts.map((product, index) => {
                   const isHighlighted = index === highlightedIndex;
                   const stockOnHand = Number(product.stock_on_hand) || 0;
@@ -313,16 +419,16 @@ export default function ProductSearch({
                           >
                             {isOutOfStock
                               ? isHindi
-                                ? "स्टॉक खत्म"
+                                ? "Out of stock"
                                 : "Out of stock"
                               : isHindi
-                                ? `स्टॉक ${stockOnHand}`
+                                ? `Stock ${stockOnHand}`
                                 : `Stock ${stockOnHand}`}
                           </span>
                         </div>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {[product.sku, product.barcode].filter(Boolean).join(" | ") ||
-                            (isHindi ? "SKU उपलब्ध नहीं" : "SKU not available")}
+                            (isHindi ? "SKU not available" : "SKU not available")}
                         </p>
                       </div>
                       <div className="text-right">
@@ -341,44 +447,130 @@ export default function ProductSearch({
           </div>
         </div>
 
+        {quickCreateOpen ? (
+          <div className="rounded-2xl border border-border/70 bg-background/70 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {isHindi ? "Naya product create karein" : "Create product"}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {isHindi
+                    ? "Product save hote hi bill me select ho jayega."
+                    : "The new product will be saved and selected in the bill immediately."}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setQuickCreateOpen(false);
+                  setQuickCreateError("");
+                }}
+              >
+                {isHindi ? "Cancel" : "Cancel"}
+              </Button>
+            </div>
+
+            <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1.2fr)_10rem_8rem_auto] md:items-end">
+              <div className="grid gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  {isHindi ? "Product name" : "Product name"}
+                </label>
+                <Input
+                  value={quickCreateName}
+                  onChange={(event) => setQuickCreateName(event.target.value)}
+                  className="h-11"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  {isHindi ? "Selling price" : "Selling price"}
+                </label>
+                <Input
+                  value={quickCreatePrice}
+                  onChange={(event) =>
+                    setQuickCreatePrice(sanitizeDecimalInput(event.target.value))
+                  }
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  className="h-11"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  GST %
+                </label>
+                <Input
+                  value={quickCreateGstRate}
+                  onChange={(event) =>
+                    setQuickCreateGstRate(
+                      sanitizeDecimalInput(event.target.value),
+                    )
+                  }
+                  inputMode="decimal"
+                  placeholder="0"
+                  className="h-11"
+                />
+              </div>
+              <Button
+                type="button"
+                className="h-11 font-semibold"
+                onClick={() => void handleQuickCreateProduct()}
+                disabled={creatingProduct}
+              >
+                {creatingProduct ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    {isHindi ? "Saving..." : "Saving..."}
+                  </>
+                ) : isHindi ? (
+                  "Save product"
+                ) : (
+                  "Save product"
+                )}
+              </Button>
+            </div>
+
+            {quickCreateError ? (
+              <p className="mt-3 text-sm text-destructive">{quickCreateError}</p>
+            ) : null}
+          </div>
+        ) : null}
+
         <div className="rounded-2xl border border-dashed border-border/70 bg-muted/20 p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-foreground">
-                {isHindi ? "मैनुअल एंट्री" : "Manual entry"}
+                {isHindi ? "Manual entry" : "Manual entry"}
               </p>
               <p className="text-xs text-muted-foreground">
                 {isHindi
-                  ? "अगर प्रोडक्ट सेव नहीं है तो कस्टम आइटम जोड़ें."
+                  ? "Agar product save nahin hai to custom item add karein."
                   : "Add a custom item if the product is not saved yet."}
               </p>
             </div>
             <span className="rounded-full bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
-              {isHindi ? "फॉलबैक" : "Fallback"}
+              {isHindi ? "Fallback" : "Fallback"}
             </span>
           </div>
 
           <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_8rem_10rem_auto] md:items-end">
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">
-                {isHindi ? "आइटम नाम" : "Item name"}
+                {isHindi ? "Item name" : "Item name"}
               </label>
               <Input
                 value={manualName}
                 onChange={(event) => setManualName(event.target.value)}
-                placeholder={
-                  query.trim()
-                    ? query.trim()
-                    : isHindi
-                      ? "कस्टम आइटम नाम"
-                      : "Custom item name"
-                }
+                placeholder={query.trim() ? query.trim() : "Custom item name"}
                 className="h-11"
               />
             </div>
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">
-                {isHindi ? "मात्रा" : "Quantity"}
+                {isHindi ? "Quantity" : "Quantity"}
               </label>
               <Input
                 value={manualQuantity}
@@ -391,7 +583,7 @@ export default function ProductSearch({
             </div>
             <div className="grid gap-1.5">
               <label className="text-xs font-medium text-muted-foreground">
-                {isHindi ? "कीमत" : "Price"}
+                {isHindi ? "Price" : "Price"}
               </label>
               <Input
                 value={manualPrice}
@@ -413,7 +605,7 @@ export default function ProductSearch({
                 !(Number(manualPrice) > 0)
               }
             >
-              {isHindi ? "कस्टम आइटम जोड़ें" : "Add custom item"}
+              {isHindi ? "Add custom item" : "Add custom item"}
             </Button>
           </div>
         </div>

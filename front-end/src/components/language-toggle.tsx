@@ -27,7 +27,7 @@ const LanguageToggle = ({ className }: { className?: string }) => {
       {(
         [
           { id: "en", label: "EN", fullLabel: t("common.english") },
-          { id: "hi", label: "HI", fullLabel: t("common.hindi") },
+          { id: "hi", label: "हिंदी", fullLabel: t("common.hindi") },
         ] as const
       ).map((option) => {
         const active = language === option.id;
@@ -41,7 +41,7 @@ const LanguageToggle = ({ className }: { className?: string }) => {
             aria-label={option.fullLabel}
             disabled={isSavingLanguage}
             className={cn(
-              "relative rounded-xl px-3 py-1.5 text-xs font-semibold tracking-[0.16em] transition-all duration-200",
+              "relative rounded-xl px-3 py-1.5 text-xs font-semibold tracking-[0.08em] transition-all duration-200",
               active
                 ? "bg-foreground text-background shadow-sm"
                 : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",

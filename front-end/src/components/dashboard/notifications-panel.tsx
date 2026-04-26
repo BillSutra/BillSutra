@@ -53,15 +53,15 @@ const NotificationsPanel = ({
     >
       <CardHeader className="dashboard-chart-content gap-2">
         <div className="flex items-center gap-3">
-          <div className="rounded-2xl border border-border/70 bg-card/80 p-2 text-primary shadow-sm">
+          <div className="rounded-2xl border border-slate-200 bg-white p-2 text-primary shadow-[0_10px_22px_-18px_rgba(37,99,235,0.18)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-blue-400">
             <BellRing size={18} />
           </div>
           <div>
             <p className="app-kicker">Attention center</p>
-            <CardTitle className="mt-1 text-xl text-foreground">Notifications & alerts</CardTitle>
+            <CardTitle className="mt-1 text-xl text-foreground dark:text-white">Notifications & alerts</CardTitle>
           </div>
         </div>
-        <p className="text-sm leading-6 text-muted-foreground">
+        <p className="text-sm leading-6 text-muted-foreground dark:text-zinc-400">
           Review stock issues, unpaid invoices, and supplier reminders.
         </p>
         <DashboardCardStatus
@@ -92,17 +92,17 @@ const NotificationsPanel = ({
                     key={notification.id}
                     type="button"
                     onClick={() => router.push(notification.redirectUrl)}
-                    className="rounded-[1.35rem] border border-border/70 bg-background/75 px-4 py-3 text-left shadow-[0_14px_30px_-24px_rgba(15,23,42,0.16)] transition hover:-translate-y-0.5 hover:bg-background"
+                    className="rounded-[1.35rem] border border-slate-200 bg-white px-4 py-3 text-left shadow-[0_14px_30px_-24px_rgba(15,23,42,0.12)] transition-all duration-200 hover:scale-[1.01] hover:border-blue-200 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800"
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <p className="min-w-0 flex-1 font-semibold leading-5 text-foreground">
+                      <p className="min-w-0 flex-1 font-semibold leading-5 text-foreground dark:text-white">
                         {notification.title}
                       </p>
                       <Badge variant={typeVariant(notification.type)} className="shrink-0">
                         {notification.type.replaceAll("_", " ")}
                       </Badge>
                     </div>
-                    <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                    <p className="mt-1 text-sm leading-5 text-muted-foreground dark:text-zinc-400">
                       {notification.message}
                     </p>
                     <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">

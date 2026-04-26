@@ -23,27 +23,27 @@ const typeMeta: Record<
   payment: {
     icon: "💰",
     href: "/invoices/history",
-    accent: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    accent: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
   },
   inventory: {
     icon: "📦",
     href: "/inventory",
-    accent: "border-amber-200 bg-amber-50 text-amber-700",
+    accent: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300",
   },
   customer: {
     icon: "👤",
     href: "/customers",
-    accent: "border-sky-200 bg-sky-50 text-sky-700",
+    accent: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300",
   },
   subscription: {
     icon: "💳",
     href: "/pricing",
-    accent: "border-violet-200 bg-violet-50 text-violet-700",
+    accent: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300",
   },
   worker: {
     icon: "👨‍💼",
     href: "/workers",
-    accent: "border-orange-200 bg-orange-50 text-orange-700",
+    accent: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-300",
   },
 };
 
@@ -173,7 +173,7 @@ const NotificationBell = () => {
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[22rem] rounded-3xl p-2">
+      <DropdownMenuContent align="end" className="w-[22rem] rounded-3xl border-slate-200/90 bg-white/98 p-2 dark:border-zinc-800 dark:bg-zinc-950/98">
         <div className="flex items-center justify-between px-3 py-2">
           <div>
             <p className="text-sm font-semibold text-foreground">

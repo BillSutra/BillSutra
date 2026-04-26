@@ -48,64 +48,64 @@ const paletteByTheme: Record<
   }
 > = {
   default: {
-    card: "border-border/80 bg-card/92",
-    label: "text-muted-foreground",
-    value: "text-foreground",
-    description: "text-muted-foreground",
-    iconWrap: "border-border/70 bg-muted/70 text-foreground dark:border-white/6 dark:bg-white/[0.03]",
+    card: "border-border/80 bg-card/92 dark:border-zinc-800 dark:bg-zinc-900",
+    label: "text-muted-foreground dark:text-zinc-400",
+    value: "text-foreground dark:text-white",
+    description: "text-muted-foreground dark:text-zinc-400",
+    iconWrap: "border-border/70 bg-muted/70 text-foreground dark:border-zinc-700 dark:bg-zinc-800 dark:text-white",
     accent: "bg-foreground/75",
-    glow: "bg-sky-500/10 dark:bg-sky-400/8",
-    haze: "bg-primary/8 dark:bg-primary/8",
+    glow: "bg-sky-500/10 dark:bg-sky-400/0",
+    haze: "bg-primary/8 dark:bg-primary/0",
   },
   sales: {
-    card: "border-emerald-200/60 bg-emerald-50/50 dark:border-emerald-400/12 dark:bg-[linear-gradient(180deg,rgba(20,32,28,0.96),rgba(16,26,23,0.92))]",
-    label: "text-emerald-700 dark:text-emerald-200/90",
-    value: "text-foreground",
-    description: "text-muted-foreground",
-    iconWrap: "border-emerald-200/60 bg-emerald-50/80 text-emerald-700 dark:border-emerald-400/12 dark:bg-emerald-400/[0.06] dark:text-emerald-200/90",
+    card: "border-emerald-200/60 bg-emerald-50/50 dark:border-emerald-500/18 dark:bg-zinc-900",
+    label: "text-emerald-700 dark:text-emerald-300",
+    value: "text-foreground dark:text-white",
+    description: "text-muted-foreground dark:text-zinc-400",
+    iconWrap: "border-emerald-200/60 bg-emerald-50/80 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
     accent: "bg-emerald-500 dark:bg-emerald-400/85",
-    glow: "bg-emerald-500/15 dark:bg-emerald-400/10",
-    haze: "bg-emerald-300/15 dark:bg-emerald-300/8",
+    glow: "bg-emerald-500/15 dark:bg-emerald-400/0",
+    haze: "bg-emerald-300/15 dark:bg-emerald-300/0",
   },
   purchases: {
-    card: "border-orange-200/60 bg-orange-50/50 dark:border-amber-400/12 dark:bg-[linear-gradient(180deg,rgba(35,28,22,0.96),rgba(28,22,18,0.92))]",
-    label: "text-orange-700 dark:text-amber-200/90",
-    value: "text-foreground",
-    description: "text-muted-foreground",
-    iconWrap: "border-orange-200/60 bg-orange-50/80 text-orange-700 dark:border-amber-400/12 dark:bg-amber-400/[0.06] dark:text-amber-200/90",
+    card: "border-orange-200/60 bg-orange-50/50 dark:border-amber-500/18 dark:bg-zinc-900",
+    label: "text-orange-700 dark:text-amber-300",
+    value: "text-foreground dark:text-white",
+    description: "text-muted-foreground dark:text-zinc-400",
+    iconWrap: "border-orange-200/60 bg-orange-50/80 text-orange-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300",
     accent: "bg-orange-500 dark:bg-amber-400/85",
-    glow: "bg-orange-500/15 dark:bg-amber-400/10",
-    haze: "bg-orange-300/15 dark:bg-amber-300/8",
+    glow: "bg-orange-500/15 dark:bg-amber-400/0",
+    haze: "bg-orange-300/15 dark:bg-amber-300/0",
   },
   profit: {
-    card: "border-sky-200/60 bg-sky-50/55 dark:border-sky-400/12 dark:bg-[linear-gradient(180deg,rgba(20,27,36,0.96),rgba(17,23,31,0.92))]",
-    label: "text-sky-700 dark:text-sky-200/90",
-    value: "text-foreground",
-    description: "text-muted-foreground",
-    iconWrap: "border-sky-200/60 bg-sky-50/80 text-sky-700 dark:border-sky-400/12 dark:bg-sky-400/[0.06] dark:text-sky-200/90",
+    card: "border-sky-200/60 bg-sky-50/55 dark:border-sky-500/18 dark:bg-zinc-900",
+    label: "text-sky-700 dark:text-sky-300",
+    value: "text-foreground dark:text-white",
+    description: "text-muted-foreground dark:text-zinc-400",
+    iconWrap: "border-sky-200/60 bg-sky-50/80 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300",
     accent: "bg-sky-500 dark:bg-sky-400/85",
-    glow: "bg-sky-500/15 dark:bg-sky-400/10",
-    haze: "bg-sky-300/15 dark:bg-sky-300/8",
+    glow: "bg-sky-500/15 dark:bg-sky-400/0",
+    haze: "bg-sky-300/15 dark:bg-sky-300/0",
   },
   "pending-sales": {
-    card: "border-emerald-200/60 bg-emerald-50/50 dark:border-emerald-400/12 dark:bg-[linear-gradient(180deg,rgba(20,32,28,0.96),rgba(16,26,23,0.92))]",
-    label: "text-emerald-700 dark:text-emerald-200/90",
-    value: "text-foreground",
-    description: "text-muted-foreground",
-    iconWrap: "border-emerald-200/60 bg-emerald-50/80 text-emerald-700 dark:border-emerald-400/12 dark:bg-emerald-400/[0.06] dark:text-emerald-200/90",
+    card: "border-emerald-200/60 bg-emerald-50/50 dark:border-emerald-500/18 dark:bg-zinc-900",
+    label: "text-emerald-700 dark:text-emerald-300",
+    value: "text-foreground dark:text-white",
+    description: "text-muted-foreground dark:text-zinc-400",
+    iconWrap: "border-emerald-200/60 bg-emerald-50/80 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
     accent: "bg-emerald-600 dark:bg-emerald-400/85",
-    glow: "bg-emerald-500/15 dark:bg-emerald-400/10",
-    haze: "bg-emerald-300/15 dark:bg-emerald-300/8",
+    glow: "bg-emerald-500/15 dark:bg-emerald-400/0",
+    haze: "bg-emerald-300/15 dark:bg-emerald-300/0",
   },
   "pending-purchases": {
-    card: "border-orange-200/60 bg-orange-50/50 dark:border-amber-400/12 dark:bg-[linear-gradient(180deg,rgba(35,28,22,0.96),rgba(28,22,18,0.92))]",
-    label: "text-orange-700 dark:text-amber-200/90",
-    value: "text-foreground",
-    description: "text-muted-foreground",
-    iconWrap: "border-orange-200/60 bg-orange-50/80 text-orange-700 dark:border-amber-400/12 dark:bg-amber-400/[0.06] dark:text-amber-200/90",
+    card: "border-orange-200/60 bg-orange-50/50 dark:border-amber-500/18 dark:bg-zinc-900",
+    label: "text-orange-700 dark:text-amber-300",
+    value: "text-foreground dark:text-white",
+    description: "text-muted-foreground dark:text-zinc-400",
+    iconWrap: "border-orange-200/60 bg-orange-50/80 text-orange-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300",
     accent: "bg-orange-500 dark:bg-amber-400/85",
-    glow: "bg-orange-500/15 dark:bg-amber-400/10",
-    haze: "bg-orange-300/15 dark:bg-amber-300/8",
+    glow: "bg-orange-500/15 dark:bg-amber-400/0",
+    haze: "bg-orange-300/15 dark:bg-amber-300/0",
   },
 };
 
@@ -185,28 +185,16 @@ const MetricCard = ({
   return (
     <Card
       className={cn(
-        "relative min-h-[188px] overflow-hidden rounded-[1.6rem] gap-0 py-0 transition duration-300 ease-out hover:-translate-y-1 hover:shadow-[0_28px_58px_-42px_rgba(15,23,42,0.18)]",
+        "relative min-h-[188px] overflow-hidden rounded-[1.6rem] gap-0 py-0 transition-all duration-200 ease-out hover:scale-[1.01] hover:shadow-[0_28px_58px_-42px_rgba(15,23,42,0.18)] dark:hover:shadow-[0_28px_58px_-44px_rgba(0,0,0,0.55)]",
         palette.card,
         isProfitLoss &&
-          "border-rose-200/70 bg-rose-50/70 dark:border-rose-900/40 dark:bg-rose-950/20",
+          "border-rose-200/70 bg-rose-50/70 dark:border-red-500/20 dark:bg-zinc-900",
       )}
     >
       <div
         className={cn(
           "absolute inset-x-0 top-0 h-1",
           isProfitLoss ? "bg-rose-500" : palette.accent,
-        )}
-      />
-      <div
-        className={cn(
-          "absolute -right-10 top-6 h-28 w-28 rounded-full blur-3xl",
-          isProfitLoss ? "bg-rose-500/15" : palette.glow,
-        )}
-      />
-      <div
-        className={cn(
-          "absolute -bottom-8 left-6 h-24 w-24 rounded-full blur-3xl",
-          isProfitLoss ? "bg-rose-300/15" : palette.haze,
         )}
       />
       <CardContent className="relative z-10 flex h-full flex-col gap-2.5 px-5 pb-6 pt-6.5 sm:px-6 sm:pb-6.5 sm:pt-7">
@@ -239,14 +227,14 @@ const MetricCard = ({
               </p>
             ) : null}
             {helperText ? (
-              <p className="mt-2 text-xs text-muted-foreground">{helperText}</p>
+              <p className="mt-2 text-xs text-muted-foreground dark:text-zinc-400">{helperText}</p>
             ) : null}
           </div>
           <div
             className={cn(
-              "ml-3 shrink-0 rounded-2xl border p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)]",
+              "ml-3 shrink-0 rounded-2xl border p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] dark:shadow-none",
               isProfitLoss
-                ? "border-rose-200/60 bg-rose-50/80 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-200"
+                ? "border-rose-200/60 bg-rose-50/80 text-rose-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300"
                 : palette.iconWrap,
             )}
           >
@@ -272,11 +260,11 @@ const MetricCard = ({
                 {changeIcon}
                 {changeCopy}
               </span>
-              <span className="font-medium text-muted-foreground">
+              <span className="font-medium text-muted-foreground dark:text-zinc-400">
                 {trendLabel ?? "vs last period"}
               </span>
             </div>
-            <span className="h-1.5 w-14 shrink-0 rounded-full bg-white/70 shadow-[inset_0_1px_2px_rgba(31,27,22,0.08)] dark:bg-white/[0.08]">
+            <span className="h-1.5 w-14 shrink-0 rounded-full bg-white/70 shadow-[inset_0_1px_2px_rgba(31,27,22,0.08)] dark:bg-zinc-800">
               <span
                 className={cn("block h-1.5 rounded-full", trendBarClass)}
                 style={{ width: `${clamp(Math.abs(change) * 2, 4, 100)}%` }}

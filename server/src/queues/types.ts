@@ -17,6 +17,8 @@ export type SendInvoiceReminderJobData = {
   userId: number;
   invoiceId: number;
   requestedEmail?: string | null;
+  reminderStage?: "upcoming" | "due_today" | "overdue" | "manual";
+  daysUntilDue?: number | null;
 };
 
 export type SendWelcomeEmailJobData = {
@@ -37,11 +39,31 @@ export type SendMonthlySalesReportEmailJobData = {
   monthKey: string;
 };
 
+export type SendPaymentReceivedEmailJobData = {
+  paymentId: number;
+};
+
+export type SendWeeklyReportEmailJobData = {
+  userId: number;
+  weekKey: string;
+};
+
+export type SendLowStockAlertEmailJobData = {
+  userId: number;
+};
+
 export type SendExportEmailJobData = {
   userId: number;
   actorId?: string;
   email: string;
   payload: ExportPayload;
+};
+
+export type SanitizeInventoryJobData = {
+  productId: number;
+  warehouseId?: number | null;
+  triggeredBy: "invoice" | "sale" | "manual";
+  referenceId?: number | string | null;
 };
 
 export type CreateNotificationJobData = {
@@ -60,7 +82,11 @@ export type DefaultQueueJobDataMap = {
   sendEmailVerificationEmail: SendEmailVerificationEmailJobData;
   sendPlanApprovedEmail: SendPlanApprovedEmailJobData;
   sendMonthlySalesReportEmail: SendMonthlySalesReportEmailJobData;
+  sendPaymentReceivedEmail: SendPaymentReceivedEmailJobData;
+  sendWeeklyReportEmail: SendWeeklyReportEmailJobData;
+  sendLowStockAlertEmail: SendLowStockAlertEmailJobData;
   sendExportEmail: SendExportEmailJobData;
+  sanitizeInventory: SanitizeInventoryJobData;
   createNotification: CreateNotificationJobData;
 };
 

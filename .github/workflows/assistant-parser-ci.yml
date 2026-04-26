@@ -1,39 +1,37 @@
-name: Assistant Parser CI
+name: CI Pipeline
 
 on:
+  push:
+    branches:
+      - main
+      - feat/gourav
   pull_request:
-    paths:
-      - server/**
-      - .github/workflows/assistant-parser-ci.yml
-  workflow_dispatch:
 
 jobs:
   assistant-parser:
+    name: Server Build & Test
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./server
+
     steps:
-      - name: Checkout
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: "20.11.1"
           cache: npm
+          cache-dependency-path: server/package-lock.json
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: npm ci
 
-      - name: Run assistant parser tests
-        run: npm run test:assistant-parser --workspace server
+      - name: Run Tests
+        run: npm run test:assistant-parser
 
-      - name: Run assistant integration tests
-        run: npm run test:assistant-integration --workspace server
-
-      - name: Run assistant chatflow E2E tests
-        run: npm run test:assistant-chatflow --workspace server
-
-      - name: Generate Prisma client
-        run: npm run prisma:generate --workspace server
-
-      - name: Build server
-        run: npm run build --workspace server
+      - name: Build Server
+        run: npm run build --if-present

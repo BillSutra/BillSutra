@@ -17,17 +17,19 @@ import {
   buildBusinessAddressLines,
   normalizeBusinessAddressDraft,
 } from "../../lib/indianAddress.js";
+import { getStateFromGstin } from "../../lib/gstin.js";
 import {
   computeInvoicePaymentSnapshotFromPayments,
 } from "../../utils/invoicePaymentSnapshot.js";
 import {
   applyBillingSaleInventoryAdjustments,
   getBillingInventorySchemaSupport,
-  getBillingInventorySettings,
   restoreBillingSaleInventoryAdjustments,
   resolveBillingProducts,
   resolveBillingWarehouse,
 } from "../../services/billingInventorySync.service.js";
+import { enqueueInventorySanitization } from "../../queues/jobs/inventory.jobs.js";
+import { renderInvoicePreviewPdfBuffer } from "./invoicePreviewPdf.service.js";
 
 const INVOICE_STATUS = {
   DRAFT: "DRAFT",
@@ -166,6 +168,15 @@ type CustomerInvoiceProfile = {
   pincode: string | null;
 };
 
+type InvoiceTemplateSnapshot = {
+  templateId?: string | null;
+  templateName?: string | null;
+  enabledSections: string[];
+  sectionOrder?: string[];
+  theme?: Record<string, unknown> | null;
+  designConfig?: Record<string, unknown> | null;
+};
+
 const toNumber = (value: unknown) => Number(value ?? 0);
 
 const roundCurrencyAmount = (value: number) =>
@@ -208,6 +219,62 @@ const toAbsoluteBackendAssetUrl = (value: string | null | undefined) => {
 
   const normalizedPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   return `${baseUrl}${normalizedPath}`;
+};
+
+const formatPreviewDate = (value?: Date | string | null) => {
+  if (!value) return "-";
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return typeof value === "string" ? value : "-";
+  }
+
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(parsed);
+};
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const parseInvoiceTemplateSnapshot = (
+  value: Prisma.JsonValue | null | undefined,
+): InvoiceTemplateSnapshot | null => {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const enabledSections = Array.isArray(value.enabledSections)
+    ? value.enabledSections.filter(
+        (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+      )
+    : [];
+
+  if (enabledSections.length === 0) {
+    return null;
+  }
+
+  const sectionOrder = Array.isArray(value.sectionOrder)
+    ? value.sectionOrder.filter(
+        (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+      )
+    : undefined;
+
+  return {
+    templateId:
+      typeof value.templateId === "string" && value.templateId.trim()
+        ? value.templateId
+        : null,
+    templateName:
+      typeof value.templateName === "string" && value.templateName.trim()
+        ? value.templateName
+        : null,
+    enabledSections,
+    sectionOrder,
+    theme: isRecord(value.theme) ? value.theme : null,
+    designConfig: isRecord(value.designConfig) ? value.designConfig : null,
+  };
 };
 
 type InvoiceGstMetadataRow = {
@@ -726,6 +793,255 @@ const buildCustomerAddressLines = (
     normalizedStructuredAddress,
     customerAddress,
   );
+};
+
+export const buildInvoicePdfPreviewPayload = (params: {
+  invoice: {
+    invoice_number: string;
+    date: Date;
+    due_date: Date | null;
+    status: InvoiceStatus;
+    notes: string | null;
+    subtotal: unknown;
+    total_base?: unknown;
+    tax: unknown;
+    tax_mode: unknown;
+    total_cgst?: unknown;
+    total_sgst?: unknown;
+    total_igst?: unknown;
+    discount: unknown;
+    discount_type: unknown;
+    discount_value: unknown;
+    discount_calculated?: unknown;
+    total: unknown;
+    grand_total?: unknown;
+    template_snapshot?: Prisma.JsonValue | null;
+    payments: Array<{
+      id: number;
+      amount: Prisma.Decimal | number;
+      method: PaymentMethod | null;
+      paid_at: Date;
+    }>;
+    customer: {
+      name: string;
+      email: string | null;
+      phone: string | null;
+      address: string | null;
+    };
+    items: Array<{
+      name: string;
+      quantity: number;
+      price: unknown;
+      tax_rate: unknown;
+      gst_type?: string | null;
+      base_amount?: unknown;
+      gst_amount?: unknown;
+      cgst_amount?: unknown;
+      sgst_amount?: unknown;
+      igst_amount?: unknown;
+      total: unknown;
+    }>;
+  };
+  company: {
+    business_name: string;
+    address: string | null;
+    address_line1: string | null;
+    city: string | null;
+    state: string | null;
+    pincode: string | null;
+    phone: string | null;
+    email: string | null;
+    website?: string | null;
+    logo_url: string | null;
+    tax_id: string | null;
+    currency: string;
+    show_logo_on_invoice?: boolean | null;
+    show_tax_number?: boolean | null;
+    show_payment_qr?: boolean | null;
+  } | null;
+  customerProfile?: CustomerInvoiceProfile | null;
+}) => {
+  const templateSnapshot = parseInvoiceTemplateSnapshot(
+    params.invoice.template_snapshot,
+  );
+  if (!templateSnapshot) {
+    return null;
+  }
+
+  const { invoice, company, customerProfile } = params;
+  const currency = company?.currency ?? "INR";
+  const paidAmount = invoice.payments.reduce(
+    (sum, payment) => sum + toNumber(payment.amount),
+    0,
+  );
+  const totalAmount = toNumber(invoice.total);
+  const remainingAmount = Math.max(totalAmount - paidAmount, 0);
+  const businessState =
+    getStateFromGstin(company?.tax_id) || company?.state || "";
+  const customerState =
+    getStateFromGstin(customerProfile?.gstin) || customerProfile?.state || "";
+  const taxMode =
+    normalizeInvoiceTaxMode(invoice.tax_mode) === "NONE" && toNumber(invoice.tax) > 0
+      ? businessState && customerState && businessState !== customerState
+        ? "IGST"
+        : "CGST_SGST"
+      : normalizeInvoiceTaxMode(invoice.tax_mode);
+  const latestPayment = [...invoice.payments].sort(
+    (left, right) => right.paid_at.getTime() - left.paid_at.getTime(),
+  )[0];
+  const customerType =
+    customerProfile?.customer_type === "business" ? "business" : "individual";
+  const customerBusinessName = customerProfile?.business_name ?? "";
+  const customerDisplayName =
+    customerType === "business" && customerBusinessName
+      ? customerBusinessName
+      : invoice.customer.name;
+  const discountType = normalizeDiscountType(invoice.discount_type);
+  const discountValue = toNumber(invoice.discount_value);
+  const companyAddressLines = buildBusinessAddressLines(
+    {
+      addressLine1: company?.address_line1 ?? undefined,
+      city: company?.city ?? undefined,
+      state: company?.state ?? undefined,
+      pincode: company?.pincode ?? undefined,
+    },
+    company?.address,
+  );
+  const customerAddressLines = buildCustomerAddressLines(
+    invoice.customer.address,
+    customerProfile,
+  );
+
+  return {
+    templateId: templateSnapshot.templateId ?? null,
+    templateName: templateSnapshot.templateName ?? null,
+    enabledSections: templateSnapshot.enabledSections,
+    sectionOrder: templateSnapshot.sectionOrder,
+    theme: templateSnapshot.theme ?? undefined,
+    designConfig: templateSnapshot.designConfig ?? undefined,
+    data: {
+      invoiceTitle: taxMode === "NONE" ? "Bill" : "Tax Invoice",
+      invoiceNumber: invoice.invoice_number,
+      invoiceDate: formatPreviewDate(invoice.date),
+      dueDate: formatPreviewDate(invoice.due_date),
+      placeOfSupply: customerState || businessState || "",
+      taxMode,
+      business: {
+        businessName: company?.business_name ?? "BillSutra",
+        businessAddress: company
+          ? {
+              addressLine1: company.address_line1 ?? "",
+              city: company.city ?? "",
+              state: company.state ?? "",
+              pincode: company.pincode ?? "",
+            }
+          : undefined,
+        address: companyAddressLines.join(", "),
+        phone: company?.phone ?? "",
+        email: company?.email ?? "",
+        website: company?.website ?? "",
+        logoUrl: toAbsoluteBackendAssetUrl(company?.logo_url) ?? "",
+        taxId: company?.tax_id ?? "",
+        currency,
+        showLogoOnInvoice: company?.show_logo_on_invoice ?? false,
+        showTaxNumber: company?.show_tax_number ?? true,
+        showPaymentQr: company?.show_payment_qr ?? false,
+      },
+      client: {
+        name: customerDisplayName,
+        type: customerType,
+        businessName: customerBusinessName,
+        gstin: customerProfile?.gstin ?? "",
+        email: invoice.customer.email ?? "",
+        phone: invoice.customer.phone ?? "",
+        address: customerAddressLines.join(", "),
+      },
+      items: invoice.items.map((item) => ({
+        name: item.name,
+        description:
+          item.gst_type === "IGST"
+            ? `IGST ${toNumber(item.tax_rate)}%`
+            : item.gst_type === "CGST_SGST"
+              ? `CGST ${roundCurrencyAmount(toNumber(item.tax_rate) / 2)}% + SGST ${roundCurrencyAmount(toNumber(item.tax_rate) / 2)}%`
+              : "",
+        quantity: Number(item.quantity ?? 0),
+        unitPrice: toNumber(item.price),
+        taxRate: toNumber(item.tax_rate),
+        gstType:
+          item.gst_type === "IGST" || item.gst_type === "CGST_SGST"
+            ? item.gst_type
+            : undefined,
+        baseAmount: toNumber(item.base_amount) || undefined,
+        gstAmount: toNumber(item.gst_amount) || undefined,
+        cgstAmount: toNumber(item.cgst_amount) || undefined,
+        sgstAmount: toNumber(item.sgst_amount) || undefined,
+        igstAmount: toNumber(item.igst_amount) || undefined,
+        taxableValue: toNumber(item.base_amount) || undefined,
+        amount: toNumber(item.total),
+      })),
+      totals: {
+        subtotal: toNumber(invoice.subtotal),
+        totalBase: toNumber(invoice.total_base ?? invoice.subtotal),
+        tax: toNumber(invoice.tax),
+        discount: toNumber(invoice.discount),
+        total: totalAmount,
+        cgst: toNumber(invoice.total_cgst),
+        sgst: toNumber(invoice.total_sgst),
+        igst: toNumber(invoice.total_igst),
+        grandTotal: toNumber(invoice.grand_total ?? invoice.total),
+        roundOff: 0,
+      },
+      discount: {
+        type: discountType,
+        value: discountValue,
+        calculatedAmount: toNumber(
+          invoice.discount_calculated ?? invoice.discount,
+        ),
+        label: buildDiscountLabel({
+          discountType,
+          discountValue,
+          currency,
+        }),
+      },
+      paymentSummary: {
+        statusLabel: resolveDisplayPaymentStatusLabel({
+          total: totalAmount,
+          paidAmount,
+          dueDate: invoice.due_date,
+        }),
+        statusTone:
+          paidAmount >= totalAmount && totalAmount > 0
+            ? "paid"
+            : paidAmount > 0
+              ? "partial"
+              : "pending",
+        statusNote:
+          paidAmount >= totalAmount && totalAmount > 0
+            ? "Settled in full"
+            : paidAmount > 0
+              ? "Part payment received"
+              : "Awaiting payment",
+        paidAmount,
+        remainingAmount,
+        history: invoice.payments.map((payment) => ({
+          id: payment.id,
+          amount: toNumber(payment.amount),
+          paidAt: formatPreviewDate(payment.paid_at),
+          method: payment.method?.replaceAll("_", " ") ?? null,
+        })),
+      },
+      payment: {
+        mode: latestPayment?.method?.replaceAll("_", " ") ?? "",
+      },
+      notes: invoice.notes ?? "",
+      paymentInfo:
+        company?.email || company?.phone
+          ? [company?.email, company?.phone].filter(Boolean).join(" | ")
+          : "Contact the business for payment instructions.",
+      closingNote: "Thank you for your business.",
+      signatureLabel: "Authorized signatory",
+    },
+  };
 };
 
 const buildInvoicePdfHtml = (
@@ -1313,6 +1629,7 @@ export const createInvoice = async (
     payment_date?: Date | string | null;
     payment_method?: PaymentMethod | null;
     notes?: string | null;
+    template_snapshot?: InvoiceTemplateSnapshot | null;
     sync_sales?: boolean;
     warehouse_id?: number | null;
     items: InvoiceCalcItem[];
@@ -1366,7 +1683,7 @@ export const createInvoice = async (
         ? PAYMENT_STATUS.PARTIALLY_PAID
         : PAYMENT_STATUS.UNPAID;
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const schemaSupport = syncSales
       ? await getBillingInventorySchemaSupport(tx)
       : {
@@ -1374,9 +1691,6 @@ export const createInvoice = async (
           invoiceItemNonInventoryFlag: false,
           saleItemNonInventoryFlag: false,
         };
-    const inventorySettings = syncSales
-      ? await getBillingInventorySettings(tx, userId)
-      : null;
     const warehouse = syncSales
       ? await resolveBillingWarehouse(tx, userId, payload.warehouse_id)
       : null;
@@ -1439,6 +1753,9 @@ export const createInvoice = async (
       discount_calculated: totals.discount,
       total: totals.total,
       notes: payload.notes ?? undefined,
+      template_snapshot: payload.template_snapshot
+        ? (payload.template_snapshot as Prisma.InputJsonValue)
+        : undefined,
       items: { create: itemPayload },
     };
 
@@ -1553,6 +1870,14 @@ export const createInvoice = async (
       });
     }
 
+    let negativeInventoryProducts: Array<{
+      productId: number;
+      warehouseId: number;
+      stockOnHand: number;
+      inventoryQuantity: number | null;
+      issueDetected: boolean;
+    }> = [];
+
     if (syncSales) {
       const saleItems = resolvedItems.map((item, index) => ({
         product_id: item.product_id,
@@ -1619,18 +1944,51 @@ export const createInvoice = async (
         });
       }
 
-      await applyBillingSaleInventoryAdjustments({
+      negativeInventoryProducts = await applyBillingSaleInventoryAdjustments({
         tx,
         warehouseId: warehouse?.id as number,
         items: resolvedItems,
-        allowNegativeStock: inventorySettings?.allowNegativeStock,
+        allowNegativeStock: true,
         referenceId: invoice.id,
         referenceType: "invoice",
       });
     }
 
-    return invoice;
+    return {
+      invoice,
+      negativeInventoryProducts,
+    };
   });
+
+  const uniqueNegativeProducts = Array.from(
+    new Map(
+      result.negativeInventoryProducts
+        .filter((item) => item.issueDetected)
+        .map((item) => [`${item.productId}:${item.warehouseId}`, item]),
+    ).values(),
+  );
+
+  await Promise.all(
+    uniqueNegativeProducts.map(async (item) => {
+      const queueResult = await enqueueInventorySanitization({
+        productId: item.productId,
+        warehouseId: item.warehouseId,
+        triggeredBy: "invoice",
+        referenceId: result.invoice.id,
+      });
+
+      if (!queueResult.queued) {
+        console.warn("[inventory] reconciliation queue unavailable after invoice", {
+          invoiceId: result.invoice.id,
+          productId: item.productId,
+          warehouseId: item.warehouseId,
+          reason: queueResult.reason,
+        });
+      }
+    }),
+  );
+
+  return result.invoice;
 };
 
 export const getInvoice = async (userId: number, id: number) => {
@@ -1865,6 +2223,11 @@ export const duplicateInvoice = async (userId: number, id: number) => {
     });
 
     const invoiceNumber = generateInvoiceNumber(latest?.invoice_number);
+    const sourceTemplateSnapshot = (
+      source as typeof source & {
+        template_snapshot?: Prisma.JsonValue | null;
+      }
+    ).template_snapshot;
 
     const duplicated = await tx.invoice.create({
       data: {
@@ -1883,6 +2246,12 @@ export const duplicateInvoice = async (userId: number, id: number) => {
         discount_calculated: source.discount_calculated,
         total: source.total,
         notes: source.notes,
+        ...(sourceTemplateSnapshot
+          ? {
+              template_snapshot:
+                sourceTemplateSnapshot as Prisma.InputJsonValue,
+            }
+          : {}),
         items: {
           create: source.items.map((item) => ({
             product_id: item.product_id,
@@ -1930,9 +2299,13 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
       pincode: true,
       phone: true,
       email: true,
+      website: true,
       logo_url: true,
       tax_id: true,
       currency: true,
+      show_logo_on_invoice: true,
+      show_tax_number: true,
+      show_payment_qr: true,
     },
   });
 
@@ -1940,6 +2313,21 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
     userId,
     invoice.customer_id,
   );
+
+  const previewPayload = buildInvoicePdfPreviewPayload({
+    invoice,
+    company,
+    customerProfile,
+  });
+
+  if (previewPayload) {
+    const buffer = await renderInvoicePreviewPdfBuffer(previewPayload);
+
+    return {
+      invoiceNumber: invoice.invoice_number,
+      buffer,
+    };
+  }
 
   const html = buildInvoicePdfHtml(invoice, company, customerProfile);
   const buffer = await renderInvoicePdfBuffer(html);

@@ -31,6 +31,8 @@ export const enqueueInvoiceReminderDelivery = async (params: {
   userId: number;
   invoiceId: number;
   requestedEmail?: string | null;
+  reminderStage?: "upcoming" | "due_today" | "overdue" | "manual";
+  daysUntilDue?: number | null;
 }) =>
   enqueueDefaultJob({
     jobName: "sendInvoiceReminderEmail",

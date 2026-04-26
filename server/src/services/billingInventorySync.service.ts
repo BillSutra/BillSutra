@@ -294,13 +294,21 @@ export const applyBillingSaleInventoryAdjustments = async (params: {
     referenceType,
   } = params;
 
+  const affectedProducts: Array<{
+    productId: number;
+    warehouseId: number;
+    stockOnHand: number;
+    inventoryQuantity: number | null;
+    issueDetected: boolean;
+  }> = [];
+
   for (const item of items) {
     if (!item.product_id || item.nonInventoryItem) {
       continue;
     }
 
     try {
-      await applyInventoryDelta({
+      const result = await applyInventoryDelta({
         tx,
         productId: item.product_id,
         warehouseId,
@@ -315,6 +323,17 @@ export const applyBillingSaleInventoryAdjustments = async (params: {
           quantity: item.quantity,
         }),
       });
+
+      affectedProducts.push({
+        productId: item.product_id,
+        warehouseId,
+        stockOnHand: result.stockOnHand,
+        inventoryQuantity: result.inventoryQuantity,
+        issueDetected:
+          result.issueDetected ||
+          (typeof result.inventoryQuantity === "number" &&
+            result.inventoryQuantity < 0),
+      });
     } catch (error) {
       if (
         !allowNegativeStock &&
@@ -327,6 +346,8 @@ export const applyBillingSaleInventoryAdjustments = async (params: {
       throw error;
     }
   }
+
+  return affectedProducts;
 };
 
 export const restoreBillingSaleInventoryAdjustments = async (params: {
