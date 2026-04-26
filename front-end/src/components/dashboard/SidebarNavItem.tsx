@@ -30,29 +30,29 @@ const SidebarNavItem = ({
       aria-current={active ? "page" : undefined}
       title={collapsed ? [label, badge].filter(Boolean).join(" - ") : undefined}
       className={cn(
-        "group relative flex h-10 items-center rounded-xl px-3 py-2 text-sm transition-all duration-200",
+        "group relative flex h-10 items-center rounded-xl border border-transparent px-3 py-2 text-sm transition-all duration-200",
         collapsed ? "justify-center" : "gap-3",
         active
-          ? "border border-border/80 bg-primary/10 text-primary dark:border-white/8 dark:bg-primary/16"
+          ? "border-blue-200 bg-blue-50 text-blue-700 shadow-[0_12px_24px_-20px_rgba(37,99,235,0.28)] ring-1 ring-blue-100 dark:border-blue-500/60 dark:bg-blue-600/20 dark:text-blue-400 dark:shadow-[0_10px_24px_-18px_rgba(37,99,235,0.55)] dark:ring-blue-500/20"
           : highlighted
-            ? "border border-amber-200/80 bg-amber-50/80 text-amber-800 shadow-[0_14px_28px_-24px_rgba(217,119,6,0.65)] hover:bg-amber-100/80 dark:border-amber-400/20 dark:bg-amber-400/[0.08] dark:text-amber-100 dark:hover:bg-amber-400/[0.12]"
-          : "text-muted-foreground hover:bg-card/75 hover:text-foreground dark:hover:bg-white/[0.04]",
+            ? "border border-amber-200 bg-amber-50 text-amber-800 shadow-[0_14px_28px_-24px_rgba(217,119,6,0.18)] hover:bg-amber-100 dark:border-amber-400/20 dark:bg-amber-400/[0.08] dark:text-amber-100 dark:shadow-[0_14px_28px_-24px_rgba(217,119,6,0.4)] dark:hover:bg-amber-400/[0.12]"
+          : "text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-white",
       )}
     >
       <span
         className={cn(
           "absolute inset-y-2 left-0 w-1 rounded-r-full transition-opacity",
-          active ? "bg-primary opacity-100" : "opacity-0",
+          active ? "bg-blue-500 opacity-100" : "opacity-0",
         )}
       />
       <span
         className={cn(
           "flex h-7 w-7 items-center justify-center rounded-lg transition-colors",
           active
-            ? "bg-card/88 text-primary dark:bg-white/[0.06]"
+            ? "bg-blue-100 text-blue-700 dark:bg-blue-500/12 dark:text-blue-400"
             : highlighted
-              ? "bg-white/70 text-amber-700 dark:bg-white/[0.06] dark:text-amber-200"
-            : "bg-transparent text-muted-foreground group-hover:bg-card/88 group-hover:text-foreground dark:group-hover:bg-white/[0.04]",
+              ? "bg-white text-amber-700 dark:bg-white/[0.06] dark:text-amber-200"
+            : "bg-transparent text-slate-400 group-hover:bg-slate-100 group-hover:text-slate-900 dark:text-zinc-500 dark:group-hover:bg-zinc-700/80 dark:group-hover:text-white",
         )}
       >
         <Icon className="h-4 w-4" />

@@ -39,7 +39,7 @@ const BrandLogo = ({
   const icon = (
     <span
       className={cn(
-        "flex shrink-0 items-center justify-center overflow-hidden rounded-[1.35rem] border border-[#d9e6f4] bg-white p-2 shadow-[0_18px_36px_-28px_rgba(17,37,63,0.35)]",
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-[1.1rem] border border-slate-200 bg-white p-2 shadow-[0_14px_28px_-22px_rgba(15,23,42,0.16)] ring-1 ring-black/5 transition-all duration-200 dark:border-zinc-200/90 dark:bg-zinc-100 dark:shadow-[0_14px_28px_-22px_rgba(0,0,0,0.42)] dark:ring-white/10",
         variant === "icon" ? "h-14 w-14" : "h-11 w-11 sm:h-12 sm:w-12",
         iconClassName,
       )}
@@ -68,11 +68,11 @@ const BrandLogo = ({
     <div className={cn("flex min-w-0 items-center gap-3", className)} aria-label={BRAND_NAME}>
       {icon}
       <div className={cn("min-w-0", textClassName)}>
-        <div className="truncate text-base font-semibold tracking-tight text-[#123d65]">
+        <div className="truncate text-base font-semibold tracking-[0.01em] text-slate-900 dark:text-white">
           {BRAND_NAME}
         </div>
         {showTagline ? (
-          <div className="text-[0.64rem] font-semibold uppercase tracking-[0.24em] text-[#7a8ea4]">
+          <div className="text-[0.64rem] font-semibold uppercase tracking-[0.24em] text-slate-400 dark:text-zinc-400">
             Trusted billing operations
           </div>
         ) : null}

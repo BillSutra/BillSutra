@@ -347,28 +347,28 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
       value: invoiceStats?.overdue ?? 0,
       meta: t("dashboard.focus.overdueInvoicesMeta"),
       href: "/invoices/history",
-      tone: "border-rose-200/80 bg-rose-50/80 text-rose-950 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-100",
+      tone: "border-red-200/90 bg-red-50/95 text-red-950 dark:border-red-500/30 dark:bg-red-500/20 dark:text-red-400",
     },
     {
       label: t("dashboard.focus.pendingCollectionsLabel"),
       value: pendingSalesPayments.length,
       meta: currency(metrics?.pendingSalesPayments ?? 0),
       href: "#operations",
-      tone: "border-amber-200/80 bg-amber-50/80 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100",
+      tone: "border-amber-200/90 bg-amber-50/95 text-amber-950 dark:border-yellow-500/30 dark:bg-yellow-500/20 dark:text-yellow-400",
     },
     {
       label: t("dashboard.focus.lowStockAlertsLabel"),
       value: data?.alerts.lowStock.length ?? 0,
       meta: t("dashboard.focus.lowStockAlertsMeta"),
       href: "/inventory",
-      tone: "border-orange-200/80 bg-orange-50/80 text-orange-950 dark:border-orange-900/40 dark:bg-orange-950/20 dark:text-orange-100",
+      tone: "border-orange-200/90 bg-orange-50/95 text-orange-950 dark:border-orange-500/30 dark:bg-orange-500/20 dark:text-orange-400",
     },
     {
       label: t("dashboard.focus.unreadSignalsLabel"),
       value: unreadNotifications,
       meta: t("dashboard.focus.unreadSignalsMeta"),
       href: "#operations",
-      tone: "border-border/80 bg-card/90 text-foreground dark:border-border/70 dark:bg-card/70",
+      tone: "border-slate-200 bg-white text-slate-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-white",
     },
   ];
   const setupProgress = {
@@ -522,7 +522,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         icon: ArrowUpRight,
         label: `+${formatPercent(Math.abs(change))}`,
         className:
-          "border-emerald-200/70 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-200",
+          "border-emerald-200/80 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-300",
       };
     }
 
@@ -531,7 +531,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         icon: ArrowDownRight,
         label: `-${formatPercent(Math.abs(change))}`,
         className:
-          "border-rose-200/70 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/30 dark:text-rose-200",
+          "border-red-200/80 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/20 dark:text-red-300",
       };
     }
 
@@ -539,7 +539,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
       icon: Minus,
       label: formatPercent(0),
       className:
-        "border-border/70 bg-card/80 text-muted-foreground dark:border-border/60 dark:bg-card/70",
+        "border-slate-200 bg-white text-slate-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400",
     };
   };
 
@@ -548,16 +548,16 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
       <header className="dashboard-chart-surface rounded-4xl xl:col-span-8">
         <div className="dashboard-chart-content p-6 sm:p-7">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground">
+            <p className="text-xs uppercase tracking-[0.28em] text-muted-foreground dark:text-zinc-400">
               {t("dashboard.hero.kicker")}
             </p>
             {filterLabel ? (
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.12)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
                 {filterLabel}
               </div>
             ) : null}
             {metricsUpdatedAt ? (
-              <div className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.12)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
                 {t("dashboard.status.lastUpdated", {
                   time: timeLabel(metricsUpdatedAt),
                 })}
@@ -567,10 +567,10 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
 
           <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
             <div className="max-w-3xl">
-              <p className="text-3xl font-semibold tracking-tight text-foreground sm:text-[2.35rem]">
+              <p className="text-3xl font-semibold tracking-tight text-foreground dark:text-white sm:text-[2.35rem]">
                 {t("dashboard.hero.operatingViewTitle")}
               </p>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-[0.98rem]">
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground dark:text-zinc-400 sm:text-[0.98rem]">
                 {t("dashboard.hero.operatingViewDescription")}
               </p>
             </div>
@@ -604,7 +604,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 asChild
                 variant="outline"
                 size="sm"
-                className="rounded-full bg-background/70"
+                className="rounded-full border-slate-200 bg-white text-slate-700 shadow-[0_8px_20px_-18px_rgba(15,23,42,0.12)] transition-all duration-200 hover:scale-[1.01] hover:border-blue-200 hover:text-blue-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800"
               >
                 <Link href={item.href}>{item.label}</Link>
               </Button>
@@ -617,13 +617,13 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                 key={item.label}
                 className="dashboard-chart-metric rounded-[1.45rem] px-5 py-4"
               >
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground dark:text-zinc-400">
                   {item.label}
                 </p>
-                <p className="mt-3 text-xl font-semibold leading-tight text-foreground">
+                <p className="mt-3 text-xl font-bold leading-tight text-foreground dark:text-white">
                   <AnimatedNumber value={item.value} format={currency} />
                 </p>
-                <p className="mt-1.5 text-xs leading-5 text-muted-foreground">
+                <p className="mt-1.5 text-xs leading-5 text-muted-foreground dark:text-zinc-400">
                   {item.helper}
                 </p>
               </div>
@@ -631,7 +631,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           </div>
 
           <div className="mt-6 grid gap-3 lg:grid-cols-2">
-            <div className="rounded-[1.55rem] border border-emerald-200/80 bg-emerald-50/80 px-5 py-5 text-emerald-950 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-100">
+            <div className="rounded-[1.55rem] border border-emerald-200 bg-emerald-50/95 px-5 py-5 text-emerald-950 shadow-[0_14px_28px_-24px_rgba(16,185,129,0.18)] dark:border-emerald-500/20 dark:bg-zinc-900 dark:text-white">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="app-kicker text-[11px]">
@@ -640,19 +640,19 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                   <p className="mt-3 text-xl font-semibold text-current">
                     {currency(metrics?.pendingSalesPayments ?? 0)}
                   </p>
-                  <p className="mt-1.5 text-sm text-current/75">
+                  <p className="mt-1.5 text-sm text-current/75 dark:text-zinc-400">
                     {t("dashboard.hero.collectionsSummary", {
                       count: pendingSalesPayments.length,
                     })}
                   </p>
                 </div>
-                <span className="rounded-full border border-current/10 bg-white/60 px-3 py-1 text-xs font-semibold text-current dark:bg-white/10">
+                <span className="rounded-full border border-current/10 bg-white/60 px-3 py-1 text-xs font-semibold text-current dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
                   {t("dashboard.hero.receivables")}
                 </span>
               </div>
             </div>
 
-            <div className="rounded-[1.55rem] border border-amber-200/80 bg-amber-50/85 px-5 py-5 text-amber-950 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-100">
+            <div className="rounded-[1.55rem] border border-amber-200 bg-amber-50/95 px-5 py-5 text-amber-950 shadow-[0_14px_28px_-24px_rgba(245,158,11,0.16)] dark:border-amber-500/20 dark:bg-zinc-900 dark:text-white">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="app-kicker text-[11px]">
@@ -663,7 +663,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                       count: invoiceStats?.overdue ?? 0,
                     })}
                   </p>
-                  <p className="mt-1.5 text-sm text-current/75">
+                  <p className="mt-1.5 text-sm text-current/75 dark:text-zinc-400">
                     {t("dashboard.hero.paidSummary", {
                       paid: invoiceStats?.paid ?? 0,
                       total: invoiceStats?.total ?? 0,
@@ -680,15 +680,15 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
       <aside className="dashboard-chart-surface rounded-4xl xl:col-span-4">
         <div className="dashboard-chart-content flex h-full flex-col p-6 sm:p-7">
           <div className="flex items-start gap-3">
-            <div className="rounded-2xl border border-border/70 bg-card/80 p-2 text-primary shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white p-2 text-primary shadow-[0_10px_22px_-18px_rgba(37,99,235,0.18)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-blue-400">
               <BellRing size={18} />
             </div>
             <div>
               <p className="app-kicker">{t("dashboard.focus.kicker")}</p>
-              <h2 className="mt-1 text-xl font-semibold text-foreground">
+              <h2 className="mt-1 text-xl font-semibold text-foreground dark:text-white">
                 {t("dashboard.focus.title")}
               </h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              <p className="mt-2 text-sm leading-6 text-muted-foreground dark:text-zinc-400">
                 {t("dashboard.focus.description")}
               </p>
             </div>
@@ -699,7 +699,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
               <Link
                 key={item.label}
                 href={item.href}
-                className={`group rounded-[1.45rem] border px-4 py-4 shadow-[0_16px_34px_-26px_rgba(31,27,22,0.24)] transition hover:-translate-y-0.5 ${item.tone}`}
+                className={`group rounded-[1.45rem] border px-4 py-4 shadow-[0_16px_34px_-26px_rgba(31,27,22,0.24)] transition-all duration-200 hover:scale-[1.01] dark:shadow-[0_18px_34px_-28px_rgba(0,0,0,0.45)] ${item.tone}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -1235,17 +1235,17 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
           <div className="dashboard-chart-surface rounded-[1.85rem]">
             <div className="dashboard-chart-content p-6">
               <div className="flex items-start gap-3">
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-200">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-amber-700 dark:border-amber-500/20 dark:bg-zinc-900 dark:text-amber-300">
                   <ReceiptText size={18} />
                 </div>
                 <div>
                   <p className="app-kicker">{beginnerGuideCopy.focusTitle}</p>
-                  <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
+                  <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground dark:text-white">
                     {t("dashboard.sections.records.title")}
                   </h2>
                 </div>
               </div>
-              <p className="mt-4 text-sm leading-6 text-muted-foreground">
+              <p className="mt-4 text-sm leading-6 text-muted-foreground dark:text-zinc-400">
                 {beginnerGuideCopy.focusDescription}
               </p>
               <div className="mt-5 grid gap-3">
@@ -1253,7 +1253,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                   <Link
                     key={item.label}
                     href={item.href}
-                    className={`group rounded-[1.35rem] border px-4 py-4 transition hover:-translate-y-0.5 ${item.tone}`}
+                    className={`group rounded-[1.35rem] border px-4 py-4 transition-all duration-200 hover:scale-[1.01] dark:shadow-[0_18px_34px_-28px_rgba(0,0,0,0.45)] ${item.tone}`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div>

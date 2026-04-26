@@ -9,10 +9,10 @@ const Cta = () => {
   const { t } = useI18n();
 
   return (
-    <section className="bg-white py-20">
+    <section className="bg-background py-20">
       <div className="mx-auto w-full max-w-7xl px-6">
-        <div className="overflow-hidden rounded-[2rem] border border-[#123d65]/10 bg-[linear-gradient(135deg,#123d65_0%,#204e79_52%,#d2a555_180%)] px-8 py-10 text-white shadow-[0_40px_100px_-56px_rgba(18,61,101,0.58)] sm:px-10 sm:py-12">
-          <div className="flex flex-col items-start gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="overflow-hidden rounded-[2rem] border border-blue-500/10 bg-[radial-gradient(circle_at_top_left,rgba(96,165,250,0.22),transparent_28%),linear-gradient(135deg,#0f172a_0%,#1e3a8a_45%,#2563eb_100%)] px-8 py-10 text-white shadow-[0_40px_100px_-56px_rgba(37,99,235,0.52)] sm:px-10 sm:py-12">
+          <div className="flex flex-col items-start gap-5 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-white/72">
                 {t("landing.cta.kicker")}
@@ -28,18 +28,18 @@ const Cta = () => {
               <Button
                 asChild
                 size="lg"
-                className="h-12 rounded-xl bg-white px-6 text-[#123d65] hover:bg-[#f6fbff]"
+                className="h-12 rounded-xl bg-white px-6 text-blue-700 hover:bg-slate-100"
               >
                 <Link href="/register">
                   {t("landing.cta.primaryCta")}
-                  <ArrowRight className="ml-1 h-4 w-4" />
+                  <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
               <Button
                 asChild
                 size="lg"
                 variant="outline"
-                className="h-12 rounded-xl border-white/50 bg-transparent px-6 text-white hover:bg-white/10"
+                className="h-12 rounded-xl border-white/30 bg-transparent px-6 text-white hover:bg-white/10"
               >
                 <Link href="#product">{t("landing.cta.secondaryCta")}</Link>
               </Button>

@@ -12,24 +12,24 @@ const Navbar = () => {
 
   const navItems = [
     { label: t("landing.nav.features"), href: "#features" },
-    { label: t("landing.nav.pricing"), href: "#pricing" },
-    { label: t("landing.nav.docs"), href: "#docs" },
-    { label: t("landing.nav.login"), href: "/login" },
+    { label: t("landing.nav.preview"), href: "#product" },
+    { label: t("landing.nav.customers"), href: "#testimonials" },
+    { label: t("landing.nav.pricing"), href: "/pricing" },
   ];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-[#dce7f1]/80 bg-white/88 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md transition-all duration-200 dark:shadow-[0_14px_32px_-28px_rgba(0,0,0,0.82)]">
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
         <Link href="/" className="min-w-0">
           <BrandLogo showTagline={false} priority />
         </Link>
 
-        <nav className="hidden items-center gap-7 text-sm text-[#627890] md:flex">
+        <nav className="hidden items-center gap-7 text-sm text-zinc-400 md:flex">
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="transition hover:text-[#123d65]"
+              className="transition-all duration-200 hover:text-white"
             >
               {item.label}
             </Link>
@@ -42,13 +42,13 @@ const Navbar = () => {
           <Button
             asChild
             variant="outline"
-            className="hidden rounded-xl border-[#d7e4f1] bg-white/80 text-[#123d65] hover:bg-[#f6fbff] md:inline-flex"
+            className="hidden rounded-xl border-zinc-700 bg-zinc-900 text-white hover:border-zinc-600 hover:bg-zinc-800 md:inline-flex"
           >
-            <Link href="/register">{t("landing.nav.getStarted")}</Link>
+            <Link href="/login">{t("landing.nav.login")}</Link>
           </Button>
           <Button
             asChild
-            className="rounded-xl bg-[#123d65] text-white hover:bg-[#0f3252]"
+            className="rounded-xl bg-blue-600 text-white hover:bg-blue-500"
           >
             <Link href="/register">{t("landing.nav.getStarted")}</Link>
           </Button>

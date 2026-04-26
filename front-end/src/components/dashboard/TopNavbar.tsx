@@ -101,7 +101,7 @@ const TopNavbar = ({
   };
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border/70 bg-background/78 shadow-[0_1px_0_rgba(17,37,63,0.05)] backdrop-blur-xl dark:bg-background/72 dark:shadow-[0_12px_30px_-26px_rgba(1,4,9,0.9)]">
+    <header className="sticky top-0 z-30 border-b border-slate-200/90 bg-white/88 shadow-[0_10px_28px_-24px_rgba(15,23,42,0.16)] backdrop-blur-sm transition-all duration-200 dark:border-zinc-800 dark:bg-zinc-950/90 dark:shadow-[0_1px_0_rgba(255,255,255,0.02)] dark:backdrop-blur-md">
       <div className="px-4 py-3 sm:px-6 lg:px-8">
         <div className="flex min-h-[3.75rem] items-center gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -120,7 +120,7 @@ const TopNavbar = ({
               <BrandLogo
                 showTagline={false}
                 className="gap-2.5"
-                iconClassName="h-10 w-10 rounded-[1.15rem] p-1.5 sm:h-11 sm:w-11"
+                iconClassName="h-10 w-10 rounded-[1.15rem] p-1.5 shadow-[0_12px_24px_-18px_rgba(15,23,42,0.12)] sm:h-11 sm:w-11"
               />
             </Link>
 
@@ -131,7 +131,7 @@ const TopNavbar = ({
               <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder={t("topNavbar.searchPlaceholder")}
-                className="h-11 rounded-full pl-11 pr-4 placeholder:text-muted-foreground"
+                className="h-11 rounded-full border-slate-200 bg-white pl-11 pr-4 text-slate-900 placeholder:text-slate-400 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.12)] focus-visible:border-blue-500 focus-visible:ring-blue-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:placeholder:text-zinc-500"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
@@ -160,7 +160,7 @@ const TopNavbar = ({
           <Search className="pointer-events-none absolute top-1/2 left-4 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={t("topNavbar.searchPlaceholder")}
-            className="h-11 rounded-full pl-11 pr-4 placeholder:text-muted-foreground"
+            className="h-11 rounded-full border-slate-200 bg-white pl-11 pr-4 text-slate-900 placeholder:text-slate-400 shadow-[0_8px_22px_-18px_rgba(15,23,42,0.12)] focus-visible:border-blue-500 focus-visible:ring-blue-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
           />

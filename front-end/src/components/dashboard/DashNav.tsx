@@ -9,6 +9,7 @@ import ThemeToggle from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/providers/LanguageProvider";
 import { dashboardNavItems } from "./dashboard-nav";
+import BrandLogo from "@/components/branding/BrandLogo";
 
 export default function DashNavbar({
   name,
@@ -40,20 +41,24 @@ export default function DashNavbar({
   );
 
   return (
-    <nav className="border-b border-border/60 bg-background">
+    <nav className="border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md transition-all duration-200">
       <div className="grid grid-cols-1 items-center gap-4 px-6 py-4 lg:grid-cols-[auto_1fr_auto]">
-        <div className="text-center text-xl font-extrabold md:text-2xl lg:text-left">
-          {t("common.appName")}
+        <div className="flex justify-center lg:justify-start">
+          <BrandLogo
+            showTagline={false}
+            className="gap-2.5"
+            iconClassName="h-10 w-10 rounded-[1.15rem] p-1.5 shadow-[0_12px_24px_-18px_rgba(255,255,255,0.1)]"
+          />
         </div>
-        <div className="hidden flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground lg:flex">
+        <div className="hidden flex-wrap items-center justify-center gap-4 text-sm text-zinc-400 lg:flex">
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "transition-colors hover:text-foreground",
+                "transition-colors duration-200 hover:text-white",
                 pathname === item.href || pathname.startsWith(`${item.href}/`)
-                  ? "text-foreground"
+                  ? "text-white"
                   : undefined,
               )}
             >
@@ -66,16 +71,16 @@ export default function DashNavbar({
           <ProfileMenu name={name} image={image} />
         </div>
       </div>
-      <div className="flex flex-wrap justify-center gap-2 px-6 pb-4 text-xs text-muted-foreground lg:hidden">
+      <div className="flex flex-wrap justify-center gap-2 px-6 pb-4 text-xs text-zinc-400 lg:hidden">
         {navItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}
             className={cn(
-              "rounded-full border px-3 py-1 transition-colors",
+              "rounded-full border px-3 py-1 transition-all duration-200",
               pathname === item.href || pathname.startsWith(`${item.href}/`)
-                ? "border-primary text-foreground"
-                : "border-border hover:border-primary",
+                ? "border-blue-500 bg-blue-600/15 text-white"
+                : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white",
             )}
           >
             {item.label}

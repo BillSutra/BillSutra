@@ -1,11 +1,11 @@
 "use client";
 
 import {
+  BarChart3,
   CheckCircle2,
-  CircleDashed,
   CreditCard,
-  PackageOpen,
-  Sparkles,
+  LayoutDashboard,
+  ReceiptText,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useI18n } from "@/providers/LanguageProvider";
@@ -13,130 +13,130 @@ import { useI18n } from "@/providers/LanguageProvider";
 const ProductPreview = () => {
   const { t } = useI18n();
 
+  const previewCards = [
+    {
+      title: t("landing.preview.dashboardTitle"),
+      description: t("landing.preview.dashboardDescription"),
+      icon: LayoutDashboard,
+      tone:
+        "border-blue-200 bg-blue-50/70 text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-300",
+      lines: [
+        t("landing.preview.dashboardPointOne"),
+        t("landing.preview.dashboardPointTwo"),
+      ],
+    },
+    {
+      title: t("landing.preview.billingTitle"),
+      description: t("landing.preview.billingDescription"),
+      icon: ReceiptText,
+      tone:
+        "border-amber-200 bg-amber-50/70 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300",
+      lines: [
+        t("landing.preview.billingPointOne"),
+        t("landing.preview.billingPointTwo"),
+      ],
+    },
+    {
+      title: t("landing.preview.reportsTitle"),
+      description: t("landing.preview.reportsDescription"),
+      icon: BarChart3,
+      tone:
+        "border-emerald-200 bg-emerald-50/70 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
+      lines: [
+        t("landing.preview.reportsPointOne"),
+        t("landing.preview.reportsPointTwo"),
+      ],
+    },
+  ];
+
   return (
     <section
       id="product"
-      className="bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_44%,#f6f0e7_100%)] py-20"
+      className="bg-[linear-gradient(180deg,#ffffff_0%,#f6faff_48%,#f8fbff_100%)] py-20 dark:bg-[linear-gradient(180deg,#09090b_0%,#111113_48%,#18181b_100%)]"
     >
-      <div className="mx-auto grid w-full max-w-7xl items-center gap-12 px-6 lg:grid-cols-[0.92fr_1.08fr]">
-        <div className="space-y-5">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[#d7e4f1] bg-white/90 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-[#73879b]">
-            <Sparkles className="h-3.5 w-3.5 text-[#123d65]" />
+      <div className="mx-auto w-full max-w-7xl px-6">
+        <div className="max-w-3xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-zinc-500">
             {t("landing.preview.kicker")}
-          </div>
-          <h2 className="text-3xl font-semibold tracking-tight text-[#10233f] sm:text-4xl">
+          </p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-4xl">
             {t("landing.preview.title")}
           </h2>
-          <p className="max-w-2xl text-base leading-7 text-[#627890]">
+          <p className="mt-3 text-base leading-7 text-slate-600 dark:text-zinc-400">
             {t("landing.preview.description")}
           </p>
-          <div className="grid gap-3 text-sm text-[#546a80]">
-            {[
-              t("landing.preview.pointOne"),
-              t("landing.preview.pointTwo"),
-              t("landing.preview.pointThree"),
-            ].map((item) => (
-              <div
-                key={item}
-                className="flex items-start gap-3 rounded-2xl border border-white/80 bg-white/78 px-4 py-4 shadow-[0_18px_40px_-34px_rgba(18,61,101,0.28)]"
-              >
-                <CheckCircle2 size={18} className="mt-0.5 text-[#2f8f68]" />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
         </div>
 
-        <Card className="overflow-hidden rounded-[2rem] border border-white/80 bg-white/82 shadow-[0_40px_100px_-54px_rgba(18,61,101,0.42)] backdrop-blur-xl">
+        <Card className="mt-10 overflow-hidden rounded-[2rem] border border-white/80 bg-white/84 shadow-[0_36px_84px_-52px_rgba(15,23,42,0.22)] dark:border-zinc-800 dark:bg-zinc-900/92 dark:shadow-[0_28px_70px_-44px_rgba(0,0,0,0.58)]">
           <CardContent className="p-5 sm:p-6">
-            <div className="rounded-[1.7rem] border border-[#dce7f1] bg-[linear-gradient(180deg,#ffffff_0%,#f6faff_100%)] p-5">
-              <div className="flex items-center justify-between text-xs text-[#73879b]">
-                <span>{t("landing.preview.surfaceLabel")}</span>
-                <span>{t("landing.preview.surfaceStatus")}</span>
+            <div className="rounded-[1.7rem] border border-slate-200 bg-slate-50 p-5 dark:border-zinc-800 dark:bg-zinc-950">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-zinc-500">
+                    {t("landing.preview.surfaceLabel")}
+                  </p>
+                  <p className="mt-1 text-lg font-semibold text-slate-950 dark:text-white">
+                    {t("landing.preview.surfaceTitle")}
+                  </p>
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+                  <CreditCard className="h-3.5 w-3.5 text-blue-500" />
+                  {t("landing.preview.surfaceStatus")}
+                </div>
               </div>
 
-              <div className="mt-5 grid gap-4">
-                <div className="grid gap-4 sm:grid-cols-3">
-                  <div className="rounded-2xl border border-[#dce7f1] bg-white p-4 shadow-sm">
-                    <div className="flex items-center gap-2 text-[#123d65]">
-                      <CreditCard className="h-4 w-4" />
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#73879b]">
-                        {t("landing.preview.metricOneLabel")}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xl font-semibold text-[#10233f]">
-                      {t("landing.preview.metricOneValue")}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-[#eadfcf] bg-[#fffaf2] p-4 shadow-sm">
-                    <div className="flex items-center gap-2 text-[#b67c2e]">
-                      <PackageOpen className="h-4 w-4" />
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8b7558]">
-                        {t("landing.preview.metricTwoLabel")}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xl font-semibold text-[#5d4423]">
-                      {t("landing.preview.metricTwoValue")}
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-[#d8ece4] bg-[#f4fbf8] p-4 shadow-sm">
-                    <div className="flex items-center gap-2 text-[#2f8f68]">
-                      <CircleDashed className="h-4 w-4" />
-                      <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5c7f71]">
-                        {t("landing.preview.metricThreeLabel")}
-                      </span>
-                    </div>
-                    <p className="mt-3 text-xl font-semibold text-[#134b39]">
-                      {t("landing.preview.metricThreeValue")}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-[1.5rem] border border-[#dce7f1] bg-white p-4 shadow-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold text-[#10233f]">
-                      {t("landing.preview.chartTitle")}
-                    </p>
-                    <p className="text-xs text-[#73879b]">
-                      {t("landing.preview.chartRange")}
-                    </p>
-                  </div>
-                  <div className="mt-5 flex h-44 items-end gap-3">
-                    {[38, 52, 64, 58, 84, 72, 94].map((height) => (
-                      <div key={height} className="flex flex-1 flex-col justify-end">
-                        <div
-                          className="w-full rounded-t-2xl bg-[linear-gradient(180deg,#123d65_0%,#5f93c2_100%)]"
-                          style={{ height: `${height}%` }}
-                        />
+              <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                {previewCards.map((card) => (
+                  <div
+                    key={card.title}
+                    className="rounded-[1.55rem] border border-slate-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className={`rounded-2xl border px-3 py-3 ${card.tone}`}>
+                        <card.icon className="h-5 w-5" />
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      <div className="flex gap-1.5">
+                        <span className="h-2.5 w-2.5 rounded-full bg-rose-300" />
+                        <span className="h-2.5 w-2.5 rounded-full bg-amber-300" />
+                        <span className="h-2.5 w-2.5 rounded-full bg-emerald-300" />
+                      </div>
+                    </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-[1.4rem] border border-[#dce7f1] bg-white p-4 shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#73879b]">
-                      {t("landing.preview.cardOneLabel")}
+                    <h3 className="mt-4 text-lg font-semibold text-slate-950 dark:text-white">
+                      {card.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-zinc-400">
+                      {card.description}
                     </p>
-                    <p className="mt-2 text-lg font-semibold text-[#10233f]">
-                      {t("landing.preview.cardOneValue")}
-                    </p>
-                    <p className="mt-2 text-sm text-[#627890]">
-                      {t("landing.preview.cardOneDescription")}
-                    </p>
+
+                    <div className="mt-4 space-y-2.5">
+                      {card.lines.map((line) => (
+                        <div
+                          key={line}
+                          className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300"
+                        >
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                          <span>{line}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="rounded-[1.4rem] border border-[#eadfcf] bg-[#fffaf2] p-4 shadow-sm">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#8b7558]">
-                      {t("landing.preview.cardTwoLabel")}
-                    </p>
-                    <p className="mt-2 text-lg font-semibold text-[#5d4423]">
-                      {t("landing.preview.cardTwoValue")}
-                    </p>
-                    <p className="mt-2 text-sm text-[#80684b]">
-                      {t("landing.preview.cardTwoDescription")}
-                    </p>
+                ))}
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                {[
+                  t("landing.preview.pointOne"),
+                  t("landing.preview.pointTwo"),
+                  t("landing.preview.pointThree"),
+                ].map((item) => (
+                  <div
+                    key={item}
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-sm text-slate-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
+                  >
+                    {item}
                   </div>
-                </div>
+                ))}
               </div>
             </div>
           </CardContent>

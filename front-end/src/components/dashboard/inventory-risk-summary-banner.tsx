@@ -43,19 +43,19 @@ const InventoryRiskSummaryBanner = () => {
   const hasCombinedAlert = forecastTrend > 0 && stockoutsSoonCount > 0;
 
   return (
-    <section className="dashboard-chart-surface rounded-[1.75rem] border border-amber-200/70 bg-[linear-gradient(135deg,rgba(255,251,235,0.96),rgba(255,255,255,0.98))]">
+    <section className="dashboard-chart-surface rounded-[1.75rem] border border-amber-200/80 bg-amber-50/95 shadow-[0_16px_34px_-26px_rgba(245,158,11,0.14)] dark:border-amber-500/20 dark:bg-zinc-900">
       <div className="dashboard-chart-content flex flex-col gap-5 p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-start gap-3">
-            <div className="rounded-2xl border border-amber-200 bg-white/80 p-3 text-amber-600">
+            <div className="rounded-2xl border border-amber-200 bg-white p-3 text-amber-600 shadow-[0_10px_22px_-18px_rgba(245,158,11,0.18)] dark:border-amber-500/20 dark:bg-zinc-800 dark:text-amber-300">
               <PackageSearch size={18} />
             </div>
             <div>
               <p className="app-kicker">Inventory risk summary</p>
-              <h3 className="mt-1 text-lg font-semibold text-foreground">
+              <h3 className="mt-1 text-lg font-semibold text-foreground dark:text-white">
                 Predictive restock signals for the next few days
               </h3>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className="mt-1 text-sm text-muted-foreground dark:text-zinc-400">
                 {hasCombinedAlert
                   ? `Demand is rising ${number(forecastTrend, {
                       maximumFractionDigits: 1,
@@ -75,26 +75,26 @@ const InventoryRiskSummaryBanner = () => {
 
         <div className="grid gap-3 md:grid-cols-3">
           <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground dark:text-zinc-400">
               Critical SKUs
             </p>
-            <p className="mt-2 text-2xl font-semibold text-foreground">
+            <p className="mt-2 text-2xl font-bold text-foreground dark:text-white">
               {number(criticalCount)}
             </p>
           </div>
           <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground dark:text-zinc-400">
               Stockouts &lt; 3 days
             </p>
-            <p className="mt-2 text-2xl font-semibold text-foreground">
+            <p className="mt-2 text-2xl font-bold text-foreground dark:text-white">
               {number(stockoutsSoonCount)}
             </p>
           </div>
           <div className="dashboard-chart-metric rounded-2xl px-4 py-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground dark:text-zinc-400">
               Total reorder value
             </p>
-            <p className="mt-2 text-2xl font-semibold text-foreground">
+            <p className="mt-2 text-2xl font-bold text-foreground dark:text-white">
               {currency(totalReorderValue)}
             </p>
           </div>
