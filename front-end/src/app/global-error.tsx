@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import * as Sentry from "@sentry/nextjs";
 import { Button } from "@/components/ui/button";
+import { captureFrontendSentryException } from "@/lib/observability/sentry";
 import {
   DEFAULT_LANGUAGE,
   isLanguage,
@@ -18,7 +18,7 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
-    Sentry.captureException(error);
+    void captureFrontendSentryException(error);
   }, [error]);
 
   const language = useMemo(() => {

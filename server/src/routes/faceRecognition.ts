@@ -1,6 +1,7 @@
 import { Router } from "express";
 import * as FaceRecognitionController from "../controllers/FaceRecognitionController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
+import { faceAuthRateLimiter } from "../middlewares/rateLimit.middleware.js";
 import multer from "multer";
 import type { NextFunction, Request, Response } from "express";
 
@@ -87,6 +88,7 @@ const uploadImage = (req: Request, res: Response, next: NextFunction) => {
 router.post(
   "/register",
   AuthMiddleware,
+  faceAuthRateLimiter,
   uploadImage,
   wrap(FaceRecognitionController.registerFace),
 );
@@ -94,9 +96,14 @@ router.post(
 /**
  * Face Authentication (Login)
  * POST /api/face/authenticate
- * Body: { email, imageData (base64) }
+ * Body: multipart/form-data with image + email, or legacy JSON { email, imageData (base64) }
  */
-router.post("/authenticate", wrap(FaceRecognitionController.authenticateFace));
+router.post(
+  "/authenticate",
+  faceAuthRateLimiter,
+  uploadImage,
+  wrap(FaceRecognitionController.authenticateFace),
+);
 
 /**
  * Get registered face profile data

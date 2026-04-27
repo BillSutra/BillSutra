@@ -29,13 +29,19 @@ export const faceErrorMessages: Record<string, string> = {
   FACE_NOT_FOUND: "No registered face found.",
   FACE_NOT_DETECTED: "No face detected. Keep your face inside the box.",
   NO_FACE_DETECTED: "No face detected. Keep your face inside the box.",
+  FACE_REENROLL_REQUIRED:
+    "Your saved face data needs to be enrolled again. Please register your face again.",
   MULTIPLE_FACES: "Multiple faces detected. Only one person allowed.",
   MULTIPLE_FACES_DETECTED:
     "Multiple faces detected. Only one person allowed.",
   NO_FACE_REGISTERED: "No registered face found.",
+  LOW_CONFIDENCE:
+    "Face match confidence is too low. Try again with steadier framing and better lighting.",
   LOW_LIGHT: "Lighting is too low. Improve lighting and try again.",
   IMAGE_PROCESSING_ERROR:
     "Lighting is too low. Improve lighting and try again.",
+  USER_NOT_FOUND:
+    "No account was found for that email address, or face login is not enabled yet.",
 };
 
 export const normalizeFaceError = (err: unknown): NormalizedFaceError => {

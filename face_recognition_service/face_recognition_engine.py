@@ -11,8 +11,12 @@ from typing import Tuple, List, Optional, Dict, Any
 import logging
 import traceback
 from config import (
-    FACE_RECOGNITION_DISTANCE_THRESHOLD,
+    FACE_MATCH_THRESHOLD,
+    FACE_DISTANCE_NORMALIZER,
     MIN_CONFIDENCE_LEVEL,
+    MIN_BRIGHTNESS_MEAN,
+    MIN_IMAGE_WIDTH,
+    MIN_IMAGE_HEIGHT,
     MAX_IMAGE_SIZE,
     SUPPORTED_IMAGE_FORMATS,
     ERROR_MESSAGES,
@@ -75,6 +79,24 @@ class FaceRecognitionEngine:
     def __init__(self):
         self.logger = logger
         self.logger.info("Initializing Face Recognition Engine")
+        self._warmed_up = False
+        self._warm_up_models()
+
+    def _warm_up_models(self) -> None:
+        """Warm core detection paths once during startup."""
+        try:
+            warm_image = np.zeros((MIN_IMAGE_HEIGHT, MIN_IMAGE_WIDTH, 3), dtype=np.uint8)
+            face_recognition.face_locations(warm_image, model="hog", number_of_times_to_upsample=0)
+            face_recognition.face_landmarks(warm_image, face_locations=[], model="large")
+            face_recognition.face_distance(
+                [np.zeros(128, dtype=np.float64)],
+                np.zeros(128, dtype=np.float64),
+            )
+            self._warmed_up = True
+            self.logger.info("Face recognition models warmed up successfully")
+        except Exception as error:
+            self.logger.exception("Face recognition warmup failed")
+            raise RuntimeError("Failed to warm up face recognition models") from error
 
     def validate_image_data(self, image_data: bytes) -> bool:
         """Validate image data before processing"""
@@ -145,6 +167,16 @@ class FaceRecognitionEngine:
             elif img.shape[2] == 4:
                 # RGBA to RGB
                 img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB)
+            else:
+                # OpenCV decodes color images as BGR; face_recognition expects RGB.
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+            height, width = img.shape[:2]
+            if width < MIN_IMAGE_WIDTH or height < MIN_IMAGE_HEIGHT:
+                raise ImageProcessingError(
+                    ErrorCode.IMAGE_PROCESSING_ERROR,
+                    f"Image resolution is too low ({width}x{height}). Minimum supported size is {MIN_IMAGE_WIDTH}x{MIN_IMAGE_HEIGHT}.",
+                )
 
             self.logger.debug(f"Image loaded successfully. Shape: {img.shape}")
             return img
@@ -161,6 +193,33 @@ class FaceRecognitionEngine:
                 details=traceback.format_exc()
             )
 
+    def analyze_image_quality(self, image: np.ndarray) -> Dict[str, float]:
+        """Assess image brightness and blur so we can fail fast with clear feedback."""
+        grayscale = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+        brightness_mean = float(np.mean(grayscale))
+        blur_variance = float(cv2.Laplacian(grayscale, cv2.CV_64F).var())
+        return {
+            "brightness_mean": round(brightness_mean, 2),
+            "blur_variance": round(blur_variance, 2),
+        }
+
+    def validate_image_quality(self, image: np.ndarray) -> Dict[str, float]:
+        metrics = self.analyze_image_quality(image)
+        self.logger.debug(
+            "Image quality metrics | brightness_mean=%.2f | blur_variance=%.2f",
+            metrics["brightness_mean"],
+            metrics["blur_variance"],
+        )
+
+        if metrics["brightness_mean"] < MIN_BRIGHTNESS_MEAN:
+            raise ImageProcessingError(
+                ErrorCode.LOW_LIGHT,
+                "The image is too dark. Please move to better lighting and try again.",
+                details=f"brightness_mean={metrics['brightness_mean']}, min_required={MIN_BRIGHTNESS_MEAN}",
+            )
+
+        return metrics
+
     def detect_faces(self, image: np.ndarray, max_faces: int = 1) -> List[Tuple[int, int, int, int]]:
         """Detect faces in image with comprehensive error handling"""
         try:
@@ -174,7 +233,11 @@ class FaceRecognitionEngine:
 
             # Use HOG model for better accuracy, fall back to cnn if available
             try:
-                face_locations = face_recognition.face_locations(image, model="hog", number_of_times_to_upsample=2)
+                face_locations = face_recognition.face_locations(
+                    image,
+                    model="hog",
+                    number_of_times_to_upsample=1,
+                )
             except Exception as hog_error:
                 self.logger.warning(f"HOG detection failed: {hog_error}, trying default model")
                 face_locations = face_recognition.face_locations(image)
@@ -236,7 +299,7 @@ class FaceRecognitionEngine:
             face_encodings = face_recognition.face_encodings(
                 image,
                 [face_location],
-                num_jitters=2
+                num_jitters=1
             )
 
             if not face_encodings:
@@ -340,6 +403,7 @@ class FaceRecognitionEngine:
 
             # Load image
             image = self.load_image_from_bytes(image_data)
+            quality_metrics = self.validate_image_quality(image)
 
             # Detect faces
             max_faces = 1 if require_single_face else 10
@@ -360,7 +424,8 @@ class FaceRecognitionEngine:
                 "faces_detected": len(face_locations),
                 "face_locations": face_locations,
                 "encoding": encoding.tolist(),
-                "processing_time_ms": round(processing_time, 2)
+                "processing_time_ms": round(processing_time, 2),
+                "image_metrics": quality_metrics,
             }
 
         except FaceRecognitionError as e:
@@ -374,7 +439,7 @@ class FaceRecognitionEngine:
                 "processing_time_ms": round(processing_time, 2),
                 "error": e.message,
                 "code": e.error_code,
-                "details": e.details if hasattr(e, 'details') else None
+                "details": e.details if hasattr(e, 'details') else None,
             }
         except Exception as e:
             processing_time = (time.time() - start_time) * 1000
@@ -387,7 +452,7 @@ class FaceRecognitionEngine:
                 "processing_time_ms": round(processing_time, 2),
                 "error": ERROR_MESSAGES.get(ErrorCode.INTERNAL_SERVER_ERROR),
                 "code": ErrorCode.INTERNAL_SERVER_ERROR,
-                "details": traceback.format_exc()
+                "details": traceback.format_exc(),
             }
 
     def register_face(self, image_data: bytes) -> Dict[str, Any]:
@@ -450,34 +515,51 @@ class FaceRecognitionEngine:
                 }
 
             # Calculate face distance
-            encoding_array = np.array(result["encoding"])
-            registered_array = np.array(registered_encoding)
+            encoding_array = np.array(result["encoding"], dtype=np.float64)
+            registered_array = np.array(registered_encoding, dtype=np.float64)
 
             face_distance = face_recognition.face_distance([registered_array], encoding_array)[0]
-            confidence = 1 - (face_distance / 2.0)
-            confidence = float(np.clip(confidence, 0, 1))
+            cosine_denominator = np.linalg.norm(registered_array) * np.linalg.norm(encoding_array)
+            cosine_similarity = 0.0
+            if cosine_denominator > 0:
+                cosine_similarity = float(np.dot(registered_array, encoding_array) / cosine_denominator)
+            score = float(np.clip((cosine_similarity + 1.0) / 2.0, 0.0, 1.0))
+            confidence = float(np.clip(1.0 - (face_distance / FACE_DISTANCE_NORMALIZER), 0.0, 1.0))
 
-            self.logger.debug(f"Face distance: {face_distance:.4f}, Confidence: {confidence:.4f}")
-            self.logger.info(
-                "Face similarity score | distance=%.4f | confidence=%.4f | threshold=%.4f | min_confidence=%.4f",
+            self.logger.debug(
+                "Face distance: %.4f, Confidence: %.4f, Score: %.4f, Cosine similarity: %.4f",
                 face_distance,
                 confidence,
-                FACE_RECOGNITION_DISTANCE_THRESHOLD,
+                score,
+                cosine_similarity,
+            )
+            self.logger.info(
+                "Face similarity score | distance=%.4f | confidence=%.4f | score=%.4f | threshold=%.4f | min_confidence=%.4f",
+                face_distance,
+                confidence,
+                score,
+                FACE_MATCH_THRESHOLD,
                 MIN_CONFIDENCE_LEVEL,
             )
 
-            matched = face_distance < FACE_RECOGNITION_DISTANCE_THRESHOLD
+            matched = face_distance <= FACE_MATCH_THRESHOLD
 
-            if matched and confidence < MIN_CONFIDENCE_LEVEL:
-                self.logger.warning(f"Match found but confidence too low: {confidence:.4f}")
+            if matched and max(confidence, score) < MIN_CONFIDENCE_LEVEL:
+                self.logger.warning(
+                    "Match found but confidence too low: confidence=%.4f score=%.4f",
+                    confidence,
+                    score,
+                )
                 return {
                     "success": True,
                     "matched": False,
                     "confidence": confidence,
+                    "score": score,
                     "distance": float(face_distance),
                     "message": "Match found but confidence too low. Please try again with better lighting.",
-                    "code": "MATCH_LOW_CONFIDENCE",
-                    "processing_time_ms": result["processing_time_ms"]
+                    "code": ErrorCode.LOW_CONFIDENCE,
+                    "reason": ErrorCode.LOW_CONFIDENCE,
+                    "processing_time_ms": result["processing_time_ms"],
                 }
 
             if matched:
@@ -486,10 +568,12 @@ class FaceRecognitionEngine:
                     "success": True,
                     "matched": True,
                     "confidence": confidence,
+                    "score": score,
                     "distance": float(face_distance),
                     "message": "Face authenticated successfully",
                     "code": None,
-                    "processing_time_ms": result["processing_time_ms"]
+                    "reason": "MATCH_SUCCESS",
+                    "processing_time_ms": result["processing_time_ms"],
                 }
             else:
                 self.logger.warning(f"Face does not match. Distance: {face_distance:.4f}")
@@ -497,10 +581,12 @@ class FaceRecognitionEngine:
                     "success": True,
                     "matched": False,
                     "confidence": confidence,
+                    "score": score,
                     "distance": float(face_distance),
-                    "message": ERROR_MESSAGES.get(ErrorCode.FACE_NOT_DETECTED),
+                    "message": "Face did not match the enrolled profile.",
                     "code": "NO_MATCH_FOUND",
-                    "processing_time_ms": result["processing_time_ms"]
+                    "reason": "LOW_CONFIDENCE",
+                    "processing_time_ms": result["processing_time_ms"],
                 }
 
         except ValidationError as e:
@@ -509,10 +595,12 @@ class FaceRecognitionEngine:
                 "success": False,
                 "matched": False,
                 "confidence": 0.0,
+                "score": 0.0,
                 "distance": 2.0,
                 "message": e.message,
                 "code": e.error_code,
-                "details": e.details if hasattr(e, 'details') else None
+                "reason": e.error_code,
+                "details": e.details if hasattr(e, 'details') else None,
             }
         except Exception as e:
             self.logger.error(f"Unexpected error during face authentication: {str(e)}")
@@ -520,10 +608,12 @@ class FaceRecognitionEngine:
                 "success": False,
                 "matched": False,
                 "confidence": 0.0,
+                "score": 0.0,
                 "distance": 2.0,
                 "message": ERROR_MESSAGES.get(ErrorCode.INTERNAL_SERVER_ERROR),
                 "code": ErrorCode.INTERNAL_SERVER_ERROR,
-                "details": traceback.format_exc()
+                "reason": ErrorCode.INTERNAL_SERVER_ERROR,
+                "details": traceback.format_exc(),
             }
 
     def validate_encoding(self, encoding: List[float]) -> bool:

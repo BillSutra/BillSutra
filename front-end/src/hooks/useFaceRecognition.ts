@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type RefObject } from "react";
 import { apiClient } from "@/lib/apiClient";
 import { normalizeFaceError } from "@/utils/faceErrorHandler";
+import {
+  FACE_MIN_HEIGHT,
+  FACE_MIN_WIDTH,
+  buildFaceUploadFormData,
+} from "@/utils/faceCapture";
 
 interface UseWebcamOptions {
   autoStart?: boolean;
@@ -9,7 +14,7 @@ interface UseWebcamOptions {
 
 interface WebcamStream {
   stream: MediaStream | null;
-  videoRef: React.RefObject<HTMLVideoElement | null>;
+  videoRef: RefObject<HTMLVideoElement | null>;
   isActive: boolean;
   startCamera: () => Promise<void>;
   stopCamera: () => void;
@@ -32,41 +37,6 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
     onErrorRef.current = onError;
   }, [onError]);
 
-  const startCamera = useCallback(async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: "user",
-        },
-        audio: false,
-      });
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        videoRef.current.onloadedmetadata = () => {
-          setIsActive(true);
-        };
-      }
-
-      streamRef.current = mediaStream;
-      setStream(mediaStream);
-    } catch (error) {
-      const errorMessage =
-        error instanceof DOMException
-          ? error.name === "NotAllowedError"
-            ? "Camera permission denied. Please allow camera access in your browser settings."
-            : error.name === "NotFoundError"
-              ? "No camera found on this device."
-              : `Camera error: ${error.message}`
-          : "Failed to access camera";
-
-      onErrorRef.current?.(errorMessage);
-      setIsActive(false);
-    }
-  }, []);
-
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => {
@@ -82,6 +52,69 @@ export const useWebcam = (options: UseWebcamOptions = {}): WebcamStream => {
     setStream(null);
     setIsActive(false);
   }, []);
+
+  const startCamera = useCallback(async () => {
+    try {
+      stopCamera();
+
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280, min: FACE_MIN_WIDTH },
+          height: { ideal: 720, min: FACE_MIN_HEIGHT },
+          facingMode: "user",
+        },
+        audio: false,
+      });
+
+      streamRef.current = mediaStream;
+      setStream(mediaStream);
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+        await new Promise<void>((resolve, reject) => {
+          const currentVideo = videoRef.current;
+          if (!currentVideo) {
+            reject(new Error("Camera preview is unavailable."));
+            return;
+          }
+
+          currentVideo.onloadedmetadata = () => {
+            const width = currentVideo.videoWidth || 0;
+            const height = currentVideo.videoHeight || 0;
+
+            if (width < FACE_MIN_WIDTH || height < FACE_MIN_HEIGHT) {
+              reject(
+                new Error(
+                  `Camera resolution is too low. Minimum supported size is ${FACE_MIN_WIDTH}x${FACE_MIN_HEIGHT}.`,
+                ),
+              );
+              return;
+            }
+
+            void currentVideo.play().finally(() => {
+              setIsActive(true);
+              resolve();
+            });
+          };
+        });
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof DOMException
+          ? error.name === "NotAllowedError"
+            ? "Camera permission denied. Please allow camera access in your browser settings."
+            : error.name === "NotFoundError"
+              ? "No camera found on this device."
+              : `Camera error: ${error.message}`
+          : error instanceof Error
+            ? error.message
+            : "Failed to access camera";
+
+      onErrorRef.current?.(errorMessage);
+      stopCamera();
+      setIsActive(false);
+    }
+  }, [stopCamera]);
 
   const captureImage = useCallback(async (): Promise<Blob | null> => {
     if (!videoRef.current || !isActive) {
@@ -153,52 +186,22 @@ interface ErrorInfo {
   details?: unknown;
 }
 
-function toLoggableError(err: unknown) {
-  if (err instanceof Error) {
-    const errorWithCode = err as unknown as { code?: unknown };
-    const errorWithResponse = err as unknown as {
-      response?: { status?: number; data?: unknown };
-    };
-
-    return {
-      name: err.name,
-      message: err.message,
-      stack: err.stack,
-      ...(typeof errorWithCode.code === "string"
-        ? { code: errorWithCode.code }
-        : {}),
-      ...(errorWithResponse.response
-        ? {
-            response: {
-              status: errorWithResponse.response.status,
-              data: errorWithResponse.response.data,
-            },
-          }
-        : {}),
-    };
-  }
-
-  if (typeof err === "object" && err !== null) {
-    return {
-      ...err,
-      keys: Object.keys(err),
-    };
-  }
-
-  return { value: err };
-}
-
 const FRIENDLY_ERROR_BY_CODE: Record<string, string> = {
   FACE_NOT_DETECTED:
     "No face detected. Please keep your face centered and try again.",
   NO_FACE_DETECTED:
     "No face detected. Please keep your face centered and try again.",
+  FACE_REENROLL_REQUIRED:
+    "Your saved face data needs to be enrolled again. Please register your face again.",
   MULTIPLE_FACES_DETECTED:
     "Multiple faces found. Please ensure only your face is visible.",
   NO_FILE_UPLOADED:
     "No image was captured. Please capture your face and retry.",
   FILE_TOO_LARGE: "Captured image is too large. Please try again.",
   DATABASE_ERROR: "Server error, try again.",
+  LOW_CONFIDENCE:
+    "Face match confidence is too low. Please try again with better lighting.",
+  LOW_LIGHT: "The image is too dark. Please move to better lighting and try again.",
   INVALID_RESPONSE:
     "Face recognition service returned an invalid response. Please try again.",
   SERVICE_UNAVAILABLE:
@@ -322,8 +325,7 @@ export const useFaceRegistration = () => {
       let attempt = 0;
 
       try {
-        const formData = new FormData();
-        formData.append("image", imageBlob, "face.jpg");
+        const formData = buildFaceUploadFormData(imageBlob);
 
         while (attempt < maxAttempts) {
           attempt += 1;
@@ -428,6 +430,8 @@ export const useFaceAuthentication = () => {
       token?: string;
       error?: string;
       code?: string;
+      reason?: string;
+      score?: number;
       status?: number;
       details?: unknown;
     }> => {
@@ -435,16 +439,9 @@ export const useFaceAuthentication = () => {
       setError(null);
 
       try {
-        const reader = new FileReader();
-        const imageBase64 = await new Promise<string>((resolve, reject) => {
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(imageBlob);
-        });
-
-        const response = await apiClient.post("/face/authenticate", {
-          email,
-          imageData: imageBase64.split(",")[1],
+        const formData = buildFaceUploadFormData(imageBlob, { email });
+        const response = await apiClient.post("/face/authenticate", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
         });
 
         const data = response.data;
@@ -493,6 +490,10 @@ export const useFaceAuthentication = () => {
           success: true,
           user: payload.user,
           token: payload.token,
+          reason:
+            typeof payload.reason === "string" ? payload.reason : undefined,
+          score:
+            typeof payload.score === "number" ? payload.score : undefined,
         };
       } catch (err: any) {
         const errorInfo = normalizeFaceError(err);
@@ -502,6 +503,14 @@ export const useFaceAuthentication = () => {
           success: false,
           error: errorInfo.message,
           code: errorInfo.code,
+          reason:
+            err?.response?.data?.reason && typeof err.response.data.reason === "string"
+              ? err.response.data.reason
+              : undefined,
+          score:
+            typeof err?.response?.data?.score === "number"
+              ? err.response.data.score
+              : undefined,
           status: errorInfo.status,
         };
       } finally {

@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
-import * as Sentry from "@sentry/node";
 
 type TelemetryValue =
   | string
@@ -11,10 +10,38 @@ type TelemetryValue =
   | TelemetryValue[]
   | { [key: string]: TelemetryValue };
 
+type SeverityLevel = "fatal" | "error" | "warning" | "log" | "info" | "debug";
+
 type CaptureContext = {
-  level?: Sentry.SeverityLevel;
+  level?: SeverityLevel;
   tags?: Record<string, string | number | boolean | null | undefined>;
   extra?: Record<string, unknown>;
+};
+
+type SentryUser = {
+  id?: string;
+  email?: string | null;
+  role?: string | null;
+  businessId?: string | null;
+  accountType?: string | null;
+};
+
+type SentryScope = {
+  setLevel: (level: SeverityLevel) => void;
+  setTag: (key: string, value: string | number) => void;
+  setUser: (user: SentryUser | null) => void;
+  setContext: (name: string, context: Record<string, unknown>) => void;
+};
+
+type SentryModule = {
+  init: (options: Record<string, unknown>) => void;
+  httpIntegration: (options: Record<string, unknown>) => unknown;
+  expressIntegration: () => unknown;
+  withScope: (callback: (scope: SentryScope) => void) => void;
+  captureMessage: (message: string) => void;
+  captureException: (error: unknown) => void;
+  setUser: (user: SentryUser | null) => void;
+  flush: (timeoutMs?: number) => PromiseLike<boolean> | Promise<boolean>;
 };
 
 const SENSITIVE_KEYS = new Set([
@@ -39,6 +66,10 @@ const MAX_DEPTH = 4;
 const DEFAULT_DEV_SAMPLE_RATE = 1;
 const DEFAULT_PROD_SAMPLE_RATE = 0.2;
 const DEFAULT_SLOW_REQUEST_THRESHOLD_MS = 1_200;
+
+let sentryModulePromise: Promise<SentryModule | null> | null = null;
+let sentryMissingLogged = false;
+let sentryInitialized = false;
 
 const parseSampleRate = (value: string | undefined) => {
   const numericValue = Number(value);
@@ -66,6 +97,28 @@ const getSlowRequestThreshold = () => {
   }
 
   return threshold;
+};
+
+const loadSentry = async (): Promise<SentryModule | null> => {
+  if (!shouldInitializeObservability()) {
+    return null;
+  }
+
+  if (!sentryModulePromise) {
+    sentryModulePromise = import("@sentry/node")
+      .then((module) => module as unknown as SentryModule)
+      .catch((error) => {
+        if (!sentryMissingLogged) {
+          sentryMissingLogged = true;
+          console.warn("[observability] Sentry disabled because @sentry/node is not installed.", {
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return null;
+      });
+  }
+
+  return sentryModulePromise;
 };
 
 const sanitizeTelemetryValue = (
@@ -128,8 +181,13 @@ const buildUserPayload = (req: Request) =>
       }
     : null;
 
-export const initServerObservability = () => {
-  if (!shouldInitializeObservability()) {
+export const initServerObservability = async () => {
+  if (!shouldInitializeObservability() || sentryInitialized) {
+    return;
+  }
+
+  const Sentry = await loadSentry();
+  if (!Sentry) {
     return;
   }
 
@@ -144,6 +202,7 @@ export const initServerObservability = () => {
     ],
     sendDefaultPii: false,
   });
+  sentryInitialized = true;
 };
 
 export const requestObservabilityMiddleware = (
@@ -154,6 +213,8 @@ export const requestObservabilityMiddleware = (
   req.requestId = req.headers["x-request-id"]?.toString() || randomUUID();
   req.requestStartedAt = Date.now();
   res.setHeader("x-request-id", req.requestId);
+
+  void initServerObservability();
 
   const startedAt = req.requestStartedAt;
   res.on("finish", () => {
@@ -166,19 +227,25 @@ export const requestObservabilityMiddleware = (
       return;
     }
 
-    Sentry.withScope((scope) => {
-      scope.setLevel("warning");
-      scope.setTag("kind", "slow_request");
-      scope.setTag("request_id", req.requestId ?? "unknown");
-      scope.setTag("method", req.method);
-      scope.setTag("status_code", res.statusCode);
-      scope.setUser(buildUserPayload(req));
-      scope.setContext("request", buildRequestContext(req));
-      scope.setContext("performance", {
-        durationMs,
-        thresholdMs: getSlowRequestThreshold(),
+    void loadSentry().then((Sentry) => {
+      if (!Sentry) {
+        return;
+      }
+
+      Sentry.withScope((scope) => {
+        scope.setLevel("warning");
+        scope.setTag("kind", "slow_request");
+        scope.setTag("request_id", req.requestId ?? "unknown");
+        scope.setTag("method", req.method);
+        scope.setTag("status_code", res.statusCode);
+        scope.setUser(buildUserPayload(req));
+        scope.setContext("request", buildRequestContext(req));
+        scope.setContext("performance", {
+          durationMs,
+          thresholdMs: getSlowRequestThreshold(),
+        });
+        Sentry.captureMessage(`Slow request: ${req.method} ${req.originalUrl}`);
       });
-      Sentry.captureMessage(`Slow request: ${req.method} ${req.originalUrl}`);
     });
   });
 
@@ -190,17 +257,23 @@ export const setObservabilityUser = (authUser: AuthUser | null | undefined) => {
     return;
   }
 
-  if (!authUser) {
-    Sentry.setUser(null);
-    return;
-  }
+  void loadSentry().then((Sentry) => {
+    if (!Sentry) {
+      return;
+    }
 
-  Sentry.setUser({
-    id: String(authUser.id),
-    email: authUser.email,
-    role: authUser.role,
-    businessId: authUser.businessId,
-    accountType: authUser.accountType,
+    if (!authUser) {
+      Sentry.setUser(null);
+      return;
+    }
+
+    Sentry.setUser({
+      id: String(authUser.id),
+      email: authUser.email,
+      role: authUser.role,
+      businessId: authUser.businessId,
+      accountType: authUser.accountType,
+    });
   });
 };
 
@@ -213,37 +286,43 @@ export const captureServerException = (
     return;
   }
 
-  Sentry.withScope((scope) => {
-    scope.setLevel(context?.level ?? "error");
-    scope.setUser(buildUserPayload(req));
-    scope.setTag("environment", getObservabilityEnvironment());
-    scope.setTag("endpoint", req.originalUrl || req.url);
-    scope.setTag("method", req.method);
-    scope.setTag("request_id", req.requestId ?? "unknown");
-
-    Object.entries(context?.tags ?? {}).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
-        scope.setTag(key, String(value));
-      }
-    });
-
-    scope.setContext("request", buildRequestContext(req));
-
-    const headers = sanitizeTelemetryValue({
-      "user-agent": req.headers["user-agent"],
-      referer: req.headers.referer,
-      origin: req.headers.origin,
-    });
-    scope.setContext("headers", headers as Record<string, TelemetryValue>);
-
-    if (context?.extra) {
-      scope.setContext(
-        "extra",
-        sanitizeTelemetryValue(context.extra) as Record<string, TelemetryValue>,
-      );
+  void loadSentry().then((Sentry) => {
+    if (!Sentry) {
+      return;
     }
 
-    Sentry.captureException(error);
+    Sentry.withScope((scope) => {
+      scope.setLevel(context?.level ?? "error");
+      scope.setUser(buildUserPayload(req));
+      scope.setTag("environment", getObservabilityEnvironment());
+      scope.setTag("endpoint", req.originalUrl || req.url);
+      scope.setTag("method", req.method);
+      scope.setTag("request_id", req.requestId ?? "unknown");
+
+      Object.entries(context?.tags ?? {}).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          scope.setTag(key, String(value));
+        }
+      });
+
+      scope.setContext("request", buildRequestContext(req));
+
+      const headers = sanitizeTelemetryValue({
+        "user-agent": req.headers["user-agent"],
+        referer: req.headers.referer,
+        origin: req.headers.origin,
+      });
+      scope.setContext("headers", headers as Record<string, unknown>);
+
+      if (context?.extra) {
+        scope.setContext(
+          "extra",
+          sanitizeTelemetryValue(context.extra) as Record<string, unknown>,
+        );
+      }
+
+      Sentry.captureException(error);
+    });
   });
 };
 
@@ -256,35 +335,46 @@ export const captureServerMessage = (
     return;
   }
 
-  Sentry.withScope((scope) => {
-    scope.setLevel(context?.level ?? "warning");
-    scope.setUser(buildUserPayload(req));
-    scope.setTag("environment", getObservabilityEnvironment());
-    scope.setTag("endpoint", req.originalUrl || req.url);
-    scope.setTag("method", req.method);
-    scope.setTag("request_id", req.requestId ?? "unknown");
-
-    Object.entries(context?.tags ?? {}).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
-        scope.setTag(key, String(value));
-      }
-    });
-
-    scope.setContext("request", buildRequestContext(req));
-
-    if (context?.extra) {
-      scope.setContext(
-        "extra",
-        sanitizeTelemetryValue(context.extra) as Record<string, TelemetryValue>,
-      );
+  void loadSentry().then((Sentry) => {
+    if (!Sentry) {
+      return;
     }
 
-    Sentry.captureMessage(message);
+    Sentry.withScope((scope) => {
+      scope.setLevel(context?.level ?? "warning");
+      scope.setUser(buildUserPayload(req));
+      scope.setTag("environment", getObservabilityEnvironment());
+      scope.setTag("endpoint", req.originalUrl || req.url);
+      scope.setTag("method", req.method);
+      scope.setTag("request_id", req.requestId ?? "unknown");
+
+      Object.entries(context?.tags ?? {}).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          scope.setTag(key, String(value));
+        }
+      });
+
+      scope.setContext("request", buildRequestContext(req));
+
+      if (context?.extra) {
+        scope.setContext(
+          "extra",
+          sanitizeTelemetryValue(context.extra) as Record<string, unknown>,
+        );
+      }
+
+      Sentry.captureMessage(message);
+    });
   });
 };
 
 export const flushObservability = async (timeoutMs = 2_000) => {
   if (!shouldInitializeObservability()) {
+    return;
+  }
+
+  const Sentry = await loadSentry();
+  if (!Sentry) {
     return;
   }
 

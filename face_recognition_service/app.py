@@ -300,6 +300,7 @@ def validate_encoding_payload(encoding: Any) -> List[float]:
 def extract_file_from_request() -> bytes:
     content_type = (request.content_type or "").lower()
     file_data = None
+    mime_type = None
 
     if "multipart/form-data" in content_type:
         file_obj = request.files.get("image")
@@ -322,6 +323,7 @@ def extract_file_from_request() -> bytes:
                 f"Unsupported image type '{extension}'. Allowed: {', '.join(SUPPORTED_IMAGE_FORMATS)}.",
             )
 
+        mime_type = file_obj.mimetype
         file_data = file_obj.read()
 
     elif request.is_json:
@@ -347,9 +349,11 @@ def extract_file_from_request() -> bytes:
                 ErrorCode.INVALID_IMAGE_DATA,
                 "Invalid base64 image data.",
             ) from error
+        mime_type = payload.get("mimeType") if isinstance(payload.get("mimeType"), str) else None
 
     elif "application/octet-stream" in content_type:
         file_data = request.get_data()
+        mime_type = content_type
 
     else:
         raise ValidationError(
@@ -375,6 +379,13 @@ def extract_file_from_request() -> bytes:
             ErrorCode.INVALID_FILE_TYPE,
             "Only JPG, JPEG, and PNG images are supported.",
         )
+
+    log_request(
+        "face_service.image_payload_received",
+        image_bytes=len(file_data),
+        mime_type=mime_type,
+        detected_format=detected_format,
+    )
 
     return file_data
 
@@ -471,11 +482,13 @@ def health_check():
     engine_ok = True
     try:
         _ = engine.logger
+        warmed_up = getattr(engine, "_warmed_up", False)
     except Exception as error:
         engine_ok = False
+        warmed_up = False
         log_error("face_service.health_check_failed", error)
 
-    status = "healthy" if engine_ok else "degraded"
+    status = "healthy" if engine_ok and warmed_up else "degraded"
     return json_success(
         data={
             "status": status,
@@ -484,9 +497,10 @@ def health_check():
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "debug_mode": DEBUG_MODE,
             "request_timeout_seconds": REQUEST_TIMEOUT,
+            "models_warmed_up": warmed_up,
         },
         message="Health check completed.",
-        status_code=200 if engine_ok else 503,
+        status_code=200 if engine_ok and warmed_up else 503,
     )
 
 
@@ -561,12 +575,18 @@ def authenticate_face():
         status_code = 422 if code in (
             ErrorCode.FACE_NOT_DETECTED,
             ErrorCode.MULTIPLE_FACES_DETECTED,
+            ErrorCode.LOW_LIGHT,
         ) else 500
         return json_error(
             message,
             code,
             status_code=status_code,
-            details=result.get("details"),
+            details={
+                "details": result.get("details"),
+                "score": result.get("score"),
+                "distance": result.get("distance"),
+                "reason": result.get("reason"),
+            },
         )
 
     processing_time_ms = result.get("processing_time_ms")
@@ -577,9 +597,11 @@ def authenticate_face():
         data={
             "matched": bool(result.get("matched")),
             "confidence": float(result.get("confidence", 0.0)),
+            "score": float(result.get("score", 0.0)),
             "distance": float(result.get("distance", 2.0)),
             "processing_time_ms": processing_time_ms,
             "code": result.get("code"),
+            "reason": result.get("reason"),
         },
         message=result.get("message", "Authentication completed."),
     )
@@ -618,11 +640,11 @@ def detect_faces():
 @app.route("/api/face/config", methods=["GET"])
 @api_guard
 def get_config():
-    from config import FACE_RECOGNITION_DISTANCE_THRESHOLD, MIN_CONFIDENCE_LEVEL
+    from config import FACE_MATCH_THRESHOLD, MIN_CONFIDENCE_LEVEL
 
     return json_success(
         data={
-            "distance_threshold": FACE_RECOGNITION_DISTANCE_THRESHOLD,
+            "distance_threshold": FACE_MATCH_THRESHOLD,
             "min_confidence": MIN_CONFIDENCE_LEVEL,
             "max_image_size_bytes": MAX_IMAGE_SIZE,
             "max_image_size_mb": MAX_IMAGE_SIZE // (1024 * 1024),

@@ -24,6 +24,7 @@ enum FaceAuthError {
   DATABASE_ERROR = "DATABASE_ERROR",
   FACE_NOT_FOUND = "FACE_NOT_FOUND",
   FACE_NOT_DETECTED = "FACE_NOT_DETECTED",
+  FACE_REENROLL_REQUIRED = "FACE_REENROLL_REQUIRED",
   FILE_TOO_LARGE = "FILE_TOO_LARGE",
   IMAGE_PROCESSING_ERROR = "IMAGE_PROCESSING_ERROR",
   INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR",
@@ -32,6 +33,8 @@ enum FaceAuthError {
   INVALID_IMAGE_DATA = "INVALID_IMAGE_DATA",
   INVALID_REQUEST = "INVALID_REQUEST",
   INVALID_RESPONSE = "INVALID_RESPONSE",
+  LOW_CONFIDENCE = "LOW_CONFIDENCE",
+  LOW_LIGHT = "LOW_LIGHT",
   MISSING_IMAGE_FIELD = "MISSING_IMAGE_FIELD",
   MULTIPLE_FACES_DETECTED = "MULTIPLE_FACES_DETECTED",
   NO_FACE_REGISTERED = "NO_FACE_REGISTERED",
@@ -49,6 +52,7 @@ const ERROR_CODE_ALIASES: Record<string, string> = {
   MISSING_IMAGE: FaceAuthError.MISSING_IMAGE_FIELD,
   NO_IMAGE_DATA: FaceAuthError.NO_FILE_UPLOADED,
   INVALID_ENCODING: FaceAuthError.INVALID_IMAGE_DATA,
+  MATCH_LOW_CONFIDENCE: FaceAuthError.LOW_CONFIDENCE,
 };
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -56,6 +60,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   [FaceAuthError.FACE_NOT_FOUND]: "No registered face found.",
   [FaceAuthError.FACE_NOT_DETECTED]:
     "No face detected. Please keep your face centered and try again.",
+  [FaceAuthError.FACE_REENROLL_REQUIRED]:
+    "Your saved face data needs to be enrolled again. Please register your face again.",
   [FaceAuthError.FILE_TOO_LARGE]: "Captured image is too large. Please try again.",
   [FaceAuthError.IMAGE_PROCESSING_ERROR]:
     "The image could not be processed. Please capture a clearer photo and retry.",
@@ -65,6 +71,10 @@ const ERROR_MESSAGES: Record<string, string> = {
   [FaceAuthError.INVALID_IMAGE_DATA]: "The image data is invalid or corrupted.",
   [FaceAuthError.INVALID_REQUEST]: "Invalid request. Please verify the required fields and try again.",
   [FaceAuthError.INVALID_RESPONSE]: "Face recognition service returned an invalid response.",
+  [FaceAuthError.LOW_CONFIDENCE]:
+    "Face match confidence is too low. Please try again with better lighting and a steady frame.",
+  [FaceAuthError.LOW_LIGHT]:
+    "The image is too dark. Please move to better lighting and try again.",
   [FaceAuthError.MISSING_IMAGE_FIELD]: "Image is required.",
   [FaceAuthError.MULTIPLE_FACES_DETECTED]:
     "Multiple faces detected. Please ensure only your face is visible.",
@@ -118,9 +128,11 @@ type FaceRegisterPayload = {
 type FaceAuthenticatePayload = {
   matched: boolean;
   confidence: number;
+  score?: number;
   distance: number;
   processing_time_ms?: number;
   code?: string | null;
+  reason?: string | null;
 };
 
 type FaceErrorMeta = {
@@ -128,6 +140,14 @@ type FaceErrorMeta = {
   details?: unknown;
   stack?: string;
 };
+
+type FaceErrorExtras = Partial<{
+  reason: string;
+  score: number;
+  distance: number;
+  processing_time_ms: number;
+  requiresReenrollment: boolean;
+}>;
 
 const serviceEndpoint = (path: string) => `${FACE_SERVICE_URL}${path}`;
 
@@ -181,13 +201,25 @@ function normalizeErrorCode(code?: string) {
   return ERROR_CODE_ALIASES[code] || code;
 }
 
-function buildErrorResponse(code: string, fallbackMessage?: string, meta?: FaceErrorMeta) {
+function buildErrorResponse(
+  code: string,
+  fallbackMessage?: string,
+  meta?: FaceErrorMeta,
+  extras?: FaceErrorExtras,
+) {
   const message = getErrorMessage(code, fallbackMessage);
   const body: Record<string, unknown> = {
     success: false,
     error: message,
     message,
     code,
+    ...(extras?.reason ? { reason: extras.reason } : {}),
+    ...(typeof extras?.score === "number" ? { score: extras.score } : {}),
+    ...(typeof extras?.distance === "number" ? { distance: extras.distance } : {}),
+    ...(typeof extras?.processing_time_ms === "number"
+      ? { processing_time_ms: extras.processing_time_ms }
+      : {}),
+    ...(extras?.requiresReenrollment ? { requiresReenrollment: true } : {}),
   };
 
   if (DEBUG_MODE) {
@@ -207,8 +239,9 @@ function sendFaceError(
   code: string,
   fallbackMessage?: string,
   meta?: FaceErrorMeta,
+  extras?: FaceErrorExtras,
 ) {
-  return res.status(status).json(buildErrorResponse(code, fallbackMessage, meta));
+  return res.status(status).json(buildErrorResponse(code, fallbackMessage, meta, extras));
 }
 
 function resolveUserId(req: Request): number | null {
@@ -232,6 +265,34 @@ function resolveUserId(req: Request): number | null {
 function decodeBase64Image(raw: string): Buffer {
   const normalized = raw.includes(",") ? raw.split(",")[1] : raw;
   return Buffer.from(normalized, "base64");
+}
+
+function resolveImageBuffer(req: Request): {
+  buffer: Buffer | null;
+  mimeType: string | null;
+  source: "multipart" | "base64" | null;
+} {
+  if (req.file?.buffer?.length) {
+    return {
+      buffer: req.file.buffer,
+      mimeType: req.file.mimetype || null,
+      source: "multipart",
+    };
+  }
+
+  if (typeof req.body?.imageData === "string" && req.body.imageData.trim()) {
+    return {
+      buffer: decodeBase64Image(req.body.imageData),
+      mimeType: null,
+      source: "base64",
+    };
+  }
+
+  return {
+    buffer: null,
+    mimeType: null,
+    source: null,
+  };
 }
 
 function validateEncoding(encoding: unknown): encoding is number[] {
@@ -288,6 +349,30 @@ function resolveStoredEncodingString(faceData: {
     faceData.is_encrypted === true || looksEncryptedFaceEncoding(rawEncoding);
 
   return shouldDecrypt ? decryptFaceEncoding(rawEncoding) : rawEncoding;
+}
+
+async function disableFaceDataForReenrollment(userId: number, reason: string) {
+  try {
+    await prismaUnsafe.faceData.updateMany({
+      where: { user_id: userId, is_enabled: true },
+      data: {
+        is_enabled: false,
+        updated_at: new Date(),
+      },
+    });
+
+    logFace("warn", "face_data.disabled_for_reenrollment", {
+      userId,
+      reason,
+    });
+  } catch (error) {
+    logFace("error", "face_data.disable_failed", {
+      userId,
+      reason,
+      message: (error as Error)?.message,
+      stack: (error as Error)?.stack,
+    });
+  }
 }
 
 function isStructuredSuccess<T extends object>(payload: unknown): payload is FaceServiceSuccess<T> {
@@ -388,7 +473,9 @@ function extractServiceError(error: unknown): {
     return {
       status:
         normalizedCode === FaceAuthError.FACE_NOT_DETECTED ||
-        normalizedCode === FaceAuthError.MULTIPLE_FACES_DETECTED
+        normalizedCode === FaceAuthError.MULTIPLE_FACES_DETECTED ||
+        normalizedCode === FaceAuthError.LOW_LIGHT ||
+        normalizedCode === FaceAuthError.LOW_CONFIDENCE
           ? 422
           : axiosError.response?.status && axiosError.response.status >= 400
             ? axiosError.response.status
@@ -523,6 +610,8 @@ export const registerFace = async (req: Request, res: Response) => {
     hasFile: Boolean(req.file),
     hasImageData: Boolean(req.body?.imageData),
     contentType: req.headers["content-type"],
+    mimeType: req.file?.mimetype,
+    imageBytes: req.file?.buffer?.length,
     ip: req.ip,
   });
 
@@ -535,13 +624,13 @@ export const registerFace = async (req: Request, res: Response) => {
       return sendFaceError(res, 400, FaceAuthError.INVALID_REQUEST, "userId is required.");
     }
 
-    let imageBuffer: Buffer | null = null;
-
-    if (req.file?.buffer?.length) {
-      imageBuffer = req.file.buffer;
-    } else if (typeof req.body?.imageData === "string" && req.body.imageData.trim()) {
-      imageBuffer = decodeBase64Image(req.body.imageData);
-    }
+    const { buffer: imageBuffer, mimeType, source } = resolveImageBuffer(req);
+    logFace("log", "register.image_buffer_resolved", {
+      userId,
+      source,
+      mimeType,
+      imageBytes: imageBuffer?.length ?? 0,
+    });
 
     if (!imageBuffer?.length) {
       return sendFaceError(res, 400, FaceAuthError.MISSING_IMAGE_FIELD);
@@ -709,11 +798,17 @@ export const registerFace = async (req: Request, res: Response) => {
 
 export const authenticateFace = async (req: Request, res: Response) => {
   const startedAt = Date.now();
-  const { email, imageData } = req.body ?? {};
+  const { email } = req.body ?? {};
+  const { buffer: imageBuffer, mimeType, source } = resolveImageBuffer(req);
 
   logFace("log", "authenticate.request_received", {
     email,
-    hasImageData: Boolean(imageData),
+    hasFile: Boolean(req.file),
+    hasImageData: Boolean(req.body?.imageData),
+    imageBytes: imageBuffer?.length ?? 0,
+    mimeType,
+    source,
+    contentType: req.headers["content-type"],
     ip: req.ip,
   });
 
@@ -722,7 +817,7 @@ export const authenticateFace = async (req: Request, res: Response) => {
       return sendFaceError(res, 400, FaceAuthError.INVALID_REQUEST, "email is required.");
     }
 
-    if (typeof imageData !== "string" || !imageData.trim()) {
+    if (!imageBuffer?.length) {
       return sendFaceError(res, 400, FaceAuthError.MISSING_IMAGE_FIELD);
     }
 
@@ -752,7 +847,14 @@ export const authenticateFace = async (req: Request, res: Response) => {
         actorType: "user",
         metadata: { email, error: "user_not_found" },
       });
-      return sendFaceError(res, 404, FaceAuthError.USER_NOT_FOUND);
+      return sendFaceError(
+        res,
+        404,
+        FaceAuthError.USER_NOT_FOUND,
+        undefined,
+        undefined,
+        { reason: FaceAuthError.USER_NOT_FOUND },
+      );
     }
 
     if (!faceData?.is_enabled) {
@@ -764,30 +866,57 @@ export const authenticateFace = async (req: Request, res: Response) => {
         actorType: "user",
         metadata: { error: "no_face_registered" },
       });
-      return sendFaceError(res, 400, FaceAuthError.NO_FACE_REGISTERED);
-    }
-
-    const imageBuffer = decodeBase64Image(imageData);
-    if (!imageBuffer.length) {
-      return sendFaceError(res, 400, FaceAuthError.NO_FILE_UPLOADED);
+      return sendFaceError(
+        res,
+        400,
+        FaceAuthError.NO_FACE_REGISTERED,
+        undefined,
+        undefined,
+        { reason: "USER_NOT_ENROLLED" },
+      );
     }
 
     let storedEncoding: unknown;
     try {
       storedEncoding = JSON.parse(resolveStoredEncodingString(faceData));
     } catch (error) {
+      await disableFaceDataForReenrollment(
+        user.id,
+        `encoding_parse_failed:${(error as Error).message}`,
+      );
       logFace("error", "authenticate.encoding_parse_failed", {
         userId: user.id,
         message: (error as Error).message,
         stack: (error as Error).stack,
       });
-      return sendFaceError(res, 500, FaceAuthError.DATABASE_ERROR, "Stored face encoding is corrupted.", {
-        stack: (error as Error).stack,
-      });
+      return sendFaceError(
+        res,
+        409,
+        FaceAuthError.FACE_REENROLL_REQUIRED,
+        "Stored face encoding is corrupted. Please register your face again.",
+        {
+          stack: (error as Error).stack,
+        },
+        {
+          reason: FaceAuthError.FACE_REENROLL_REQUIRED,
+          requiresReenrollment: true,
+        },
+      );
     }
 
     if (!validateEncoding(storedEncoding)) {
-      return sendFaceError(res, 500, FaceAuthError.DATABASE_ERROR, "Stored face encoding is invalid.");
+      await disableFaceDataForReenrollment(user.id, "encoding_invalid_dimensions");
+      return sendFaceError(
+        res,
+        409,
+        FaceAuthError.FACE_REENROLL_REQUIRED,
+        "Stored face encoding is invalid. Please register your face again.",
+        undefined,
+        {
+          reason: FaceAuthError.FACE_REENROLL_REQUIRED,
+          requiresReenrollment: true,
+        },
+      );
     }
 
     let faceServiceResponse: FaceServiceSuccess<FaceAuthenticatePayload>;
@@ -797,6 +926,7 @@ export const authenticateFace = async (req: Request, res: Response) => {
         {
           image: imageBuffer.toString("base64"),
           encoding: storedEncoding,
+          mimeType,
         },
         { "Content-Type": "application/json" },
       );
@@ -837,12 +967,15 @@ export const authenticateFace = async (req: Request, res: Response) => {
       userId: user.id,
       matched: payload.matched,
       confidence: payload.confidence,
+      score: payload.score,
       distance: payload.distance,
+      reason: payload.reason,
       processing_time_ms: payload.processing_time_ms,
     });
     console.log("Face similarity score:", {
       userId: user.id,
       confidence: payload.confidence,
+      score: payload.score,
       distance: payload.distance,
       matched: payload.matched,
     });
@@ -858,6 +991,7 @@ export const authenticateFace = async (req: Request, res: Response) => {
           matched: false,
           distance: payload.distance,
           confidence: payload.confidence,
+          score: payload.score,
           code: payload.code || FaceAuthError.NO_MATCH_FOUND,
         },
       });
@@ -871,7 +1005,14 @@ export const authenticateFace = async (req: Request, res: Response) => {
           details: {
             distance: payload.distance,
             confidence: payload.confidence,
+            score: payload.score,
           },
+        },
+        {
+          reason: payload.reason || payload.code || FaceAuthError.NO_MATCH_FOUND,
+          score: payload.score ?? payload.confidence,
+          distance: payload.distance,
+          processing_time_ms: payload.processing_time_ms,
         },
       );
     }
@@ -886,6 +1027,7 @@ export const authenticateFace = async (req: Request, res: Response) => {
         matched: true,
         distance: payload.distance,
         confidence: payload.confidence,
+        score: payload.score,
       },
     });
 
@@ -915,7 +1057,9 @@ export const authenticateFace = async (req: Request, res: Response) => {
         expiresAt: getAccessTokenExpiresAt(),
         matched: true,
         confidence: payload.confidence,
+        score: payload.score ?? payload.confidence,
         distance: payload.distance,
+        reason: payload.reason || "MATCH_SUCCESS",
         processing_time_ms: payload.processing_time_ms ?? Date.now() - startedAt,
       },
     });
@@ -941,22 +1085,42 @@ export const checkFaceRegistration = async (req: Request, res: Response) => {
     const faceData = await prismaUnsafe.faceData.findUnique({
       where: { user_id: userId },
       select: {
+        user_id: true,
         is_enabled: true,
+        face_encoding: true,
+        face_encoding_json: true,
+        is_encrypted: true,
         created_at: true,
         updated_at: true,
       },
     });
 
+    let faceRegistered = Boolean(faceData?.is_enabled);
+    if (faceRegistered && faceData) {
+      try {
+        const parsedEncoding = JSON.parse(resolveStoredEncodingString(faceData));
+        if (!validateEncoding(parsedEncoding)) {
+          throw new Error("encoding_invalid_dimensions");
+        }
+      } catch (error) {
+        await disableFaceDataForReenrollment(
+          faceData.user_id,
+          `status_check_failed:${(error as Error).message}`,
+        );
+        faceRegistered = false;
+      }
+    }
+
     logFace("log", "check.face_registration_result", {
       userId,
-      faceRegistered: Boolean(faceData?.is_enabled),
+      faceRegistered,
     });
 
     return sendResponse(res, 200, {
       success: true,
       message: "Face registration status fetched successfully.",
       data: {
-        faceRegistered: Boolean(faceData?.is_enabled),
+        faceRegistered,
         created_at: faceData?.created_at ?? null,
         updated_at: faceData?.updated_at ?? null,
       },
@@ -988,7 +1152,11 @@ export const getFaceData = async (req: Request, res: Response) => {
     const faceData = await prismaUnsafe.faceData.findUnique({
       where: { user_id: userId },
       select: {
+        user_id: true,
         is_enabled: true,
+        face_encoding: true,
+        face_encoding_json: true,
+        is_encrypted: true,
         created_at: true,
         updated_at: true,
       },
@@ -996,6 +1164,29 @@ export const getFaceData = async (req: Request, res: Response) => {
 
     if (!faceData?.is_enabled) {
       return sendFaceError(res, 404, FaceAuthError.FACE_NOT_FOUND);
+    }
+
+    try {
+      const parsedEncoding = JSON.parse(resolveStoredEncodingString(faceData));
+      if (!validateEncoding(parsedEncoding)) {
+        throw new Error("encoding_invalid_dimensions");
+      }
+    } catch (error) {
+      await disableFaceDataForReenrollment(
+        faceData.user_id,
+        `profile_fetch_failed:${(error as Error).message}`,
+      );
+      return sendFaceError(
+        res,
+        409,
+        FaceAuthError.FACE_REENROLL_REQUIRED,
+        "Your saved face data needs to be enrolled again.",
+        undefined,
+        {
+          reason: FaceAuthError.FACE_REENROLL_REQUIRED,
+          requiresReenrollment: true,
+        },
+      );
     }
 
     const user = await prismaUnsafe.user.findUnique({
