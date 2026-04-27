@@ -1,5 +1,8 @@
 import axios from "axios";
-import * as Sentry from "@sentry/nextjs";
+import {
+  loadFrontendSentry,
+  type SeverityLevel,
+} from "./sentry";
 
 type TelemetryValue =
   | string
@@ -11,7 +14,7 @@ type TelemetryValue =
   | { [key: string]: TelemetryValue };
 
 type CaptureContext = {
-  level?: Sentry.SeverityLevel;
+  level?: SeverityLevel;
   tags?: Record<string, string | number | boolean | null | undefined>;
   extra?: Record<string, unknown>;
 };
@@ -90,17 +93,23 @@ export const setFrontendObservabilityUser = (user?: {
     return;
   }
 
-  if (!user?.id) {
-    Sentry.setUser(null);
-    return;
-  }
+  void loadFrontendSentry().then((Sentry) => {
+    if (!Sentry) {
+      return;
+    }
 
-  Sentry.setUser({
-    id: user.id,
-    email: user.email ?? undefined,
-    role: user.role ?? undefined,
-    businessId: user.businessId ?? undefined,
-    accountType: user.accountType ?? undefined,
+    if (!user?.id) {
+      Sentry.setUser(null);
+      return;
+    }
+
+    Sentry.setUser({
+      id: user.id,
+      email: user.email ?? undefined,
+      role: user.role ?? undefined,
+      businessId: user.businessId ?? undefined,
+      accountType: user.accountType ?? undefined,
+    });
   });
 };
 
@@ -112,23 +121,29 @@ export const captureFrontendException = (
     return;
   }
 
-  Sentry.withScope((scope) => {
-    scope.setLevel(context?.level ?? "error");
-
-    Object.entries(context?.tags ?? {}).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
-        scope.setTag(key, String(value));
-      }
-    });
-
-    if (context?.extra) {
-      scope.setContext(
-        "extra",
-        sanitizeTelemetryValue(context.extra) as Record<string, TelemetryValue>,
-      );
+  void loadFrontendSentry().then((Sentry) => {
+    if (!Sentry) {
+      return;
     }
 
-    Sentry.captureException(error);
+    Sentry.withScope((scope) => {
+      scope.setLevel(context?.level ?? "error");
+
+      Object.entries(context?.tags ?? {}).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          scope.setTag(key, String(value));
+        }
+      });
+
+      if (context?.extra) {
+        scope.setContext(
+          "extra",
+          sanitizeTelemetryValue(context.extra) as Record<string, unknown>,
+        );
+      }
+
+      Sentry.captureException(error);
+    });
   });
 };
 

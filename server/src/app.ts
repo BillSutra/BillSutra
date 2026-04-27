@@ -36,8 +36,8 @@ app.use(
   "/api/payments/access/webhooks/razorpay",
   express.raw({ type: "application/json" }),
 );
-app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
+app.use(express.json({ limit: "6mb" }));
+app.use(express.urlencoded({ extended: false, limit: "6mb" }));
 
 // Phased upload hardening:
 // - new public assets are served only from /uploads/public

@@ -29,3 +29,13 @@ export const adminPaymentRateLimiter = createRedisRateLimiter({
     message: "Too many admin payment actions, please try again shortly.",
   },
 });
+
+export const faceAuthRateLimiter = createRedisRateLimiter({
+  keyPrefix: "face-auth",
+  windowMs: 10 * 60 * 1000,
+  limit: 15,
+  message: {
+    success: false,
+    message: "Too many face verification attempts. Please wait a few minutes and try again.",
+  },
+});

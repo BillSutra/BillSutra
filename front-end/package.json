@@ -5,8 +5,8 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('.next', { recursive: true, force: true })\"",
     "dev": "next dev --webpack",
-    "dev:turbopack": "next dev",
-    "build": "next build",
+    "dev:turbopack": "next dev --turbopack",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "i18n:check": "node scripts/check-i18n-strings.mjs",

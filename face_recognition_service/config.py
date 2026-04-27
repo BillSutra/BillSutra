@@ -45,10 +45,17 @@ FACE_SERVICE_INTERNAL_CLIENT_VALUE = os.getenv(
 ).strip() or "billsutra-backend"
 
 # Face Recognition Parameters
-FACE_RECOGNITION_DISTANCE_THRESHOLD = float(
-    os.getenv("FACE_RECOGNITION_DISTANCE_THRESHOLD", "0.60")
+FACE_MATCH_THRESHOLD = float(
+    os.getenv(
+        "FACE_MATCH_THRESHOLD",
+        os.getenv("FACE_RECOGNITION_DISTANCE_THRESHOLD", "0.60"),
+    )
 )
-MIN_CONFIDENCE_LEVEL = float(os.getenv("MIN_CONFIDENCE_LEVEL", "0.70"))
+MIN_CONFIDENCE_LEVEL = float(os.getenv("MIN_CONFIDENCE_LEVEL", "0.72"))
+FACE_DISTANCE_NORMALIZER = float(os.getenv("FACE_DISTANCE_NORMALIZER", "1.0"))
+MIN_BRIGHTNESS_MEAN = float(os.getenv("FACE_MIN_BRIGHTNESS_MEAN", "55"))
+MIN_IMAGE_WIDTH = int(os.getenv("FACE_MIN_IMAGE_WIDTH", "640"))
+MIN_IMAGE_HEIGHT = int(os.getenv("FACE_MIN_IMAGE_HEIGHT", "480"))
 MAX_FACE_DETECTION_ATTEMPTS = 5
 FACE_DETECTION_TIMEOUT = 30
 
@@ -70,6 +77,8 @@ class ErrorCode:
     IMAGE_PROCESSING_ERROR = "IMAGE_PROCESSING_ERROR"
     FACE_NOT_DETECTED = "FACE_NOT_DETECTED"
     MULTIPLE_FACES_DETECTED = "MULTIPLE_FACES_DETECTED"
+    LOW_LIGHT = "LOW_LIGHT"
+    LOW_CONFIDENCE = "LOW_CONFIDENCE"
     INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR"
     INVALID_CONTENT_TYPE = "INVALID_CONTENT_TYPE"
     MISSING_IMAGE_FIELD = "MISSING_IMAGE_FIELD"
@@ -83,6 +92,8 @@ ERROR_MESSAGES = {
     ErrorCode.IMAGE_PROCESSING_ERROR: "Failed to process the image. The file may be corrupted or invalid.",
     ErrorCode.FACE_NOT_DETECTED: "No face was detected in the image. Please ensure your face is clearly visible.",
     ErrorCode.MULTIPLE_FACES_DETECTED: "Multiple faces detected. Please ensure only one face is in the frame.",
+    ErrorCode.LOW_LIGHT: "The image is too dark. Please move to better lighting and try again.",
+    ErrorCode.LOW_CONFIDENCE: "Face match confidence is too low. Please capture a clearer image and try again.",
     ErrorCode.INTERNAL_SERVER_ERROR: "An internal server error occurred. Please try again later.",
     ErrorCode.INVALID_CONTENT_TYPE: "Invalid content type. Use multipart/form-data or application/json.",
     ErrorCode.MISSING_IMAGE_FIELD: "Missing 'image' field in the request.",

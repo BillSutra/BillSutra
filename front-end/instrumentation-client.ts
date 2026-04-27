@@ -1,4 +1,7 @@
-import * as Sentry from "@sentry/nextjs";
+import {
+  captureFrontendRouterTransitionStart,
+  initFrontendSentry,
+} from "./src/lib/observability/sentry";
 
 const parseSampleRate = (value: string | undefined) => {
   const numericValue = Number(value);
@@ -9,7 +12,7 @@ const parseSampleRate = (value: string | undefined) => {
   return Math.min(1, Math.max(0, numericValue));
 };
 
-Sentry.init({
+void initFrontendSentry({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   environment:
     process.env.NEXT_PUBLIC_SENTRY_ENVIRONMENT ||
@@ -22,4 +25,6 @@ Sentry.init({
   sendDefaultPii: false,
 });
 
-export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
+export const onRouterTransitionStart = (...args: unknown[]) => {
+  void captureFrontendRouterTransitionStart(...args);
+};

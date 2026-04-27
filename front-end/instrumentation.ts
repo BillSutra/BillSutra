@@ -1,6 +1,14 @@
-import * as Sentry from "@sentry/nextjs";
+import {
+  captureFrontendRequestError,
+  loadFrontendSentry,
+} from "./src/lib/observability/sentry";
 
 export async function register() {
+  const Sentry = await loadFrontendSentry();
+  if (!Sentry) {
+    return;
+  }
+
   if (process.env.NEXT_RUNTIME === "nodejs") {
     await import("./sentry.server.config");
   }
@@ -10,4 +18,6 @@ export async function register() {
   }
 }
 
-export const onRequestError = Sentry.captureRequestError;
+export const onRequestError = (...args: unknown[]) => {
+  void captureFrontendRequestError(...args);
+};

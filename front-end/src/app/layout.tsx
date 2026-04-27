@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import {
   Fraunces,
-  Geist,
-  Geist_Mono,
+  Inter,
   Noto_Sans_Devanagari,
+  Roboto_Mono,
   Sora,
 } from "next/font/google";
 import "./globals.css";
@@ -20,12 +20,12 @@ import { LanguageProvider } from "@/providers/LanguageProvider";
 import ObservabilityProvider from "@/providers/ObservabilityProvider";
 import UpgradePromptDialog from "@/components/subscription/UpgradePromptDialog";
 import { DEFAULT_LANGUAGE, isLanguage, LANGUAGE_COOKIE_KEY } from "@/i18n";
-const geistSans = Geist({
+const geistSans = Inter({
   variable: "--font-geist-sans",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
+const geistMono = Roboto_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
