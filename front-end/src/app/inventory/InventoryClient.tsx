@@ -199,11 +199,11 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
   const noCategoryLabel = t("common.noCategory");
 
   useEffect(() => {
-    const timeoutId = window.setTimeout(() => {
+    const timeoutId = globalThis.setTimeout(() => {
       setDebouncedSearch(searchInput.trim().toLowerCase());
     }, 300);
 
-    return () => window.clearTimeout(timeoutId);
+    return () => globalThis.clearTimeout(timeoutId);
   }, [searchInput]);
 
   useEffect(() => {
@@ -219,20 +219,22 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
       return;
     }
 
-    const idleCallback =
-      "requestIdleCallback" in window
-        ? window.requestIdleCallback(() => setAuxiliaryDataEnabled(true), {
-            timeout: 1200,
-          })
-        : window.setTimeout(() => setAuxiliaryDataEnabled(true), 300);
+    const supportsIdleCallback =
+      typeof window.requestIdleCallback === "function" &&
+      typeof window.cancelIdleCallback === "function";
+    const idleCallbackId = supportsIdleCallback
+      ? window.requestIdleCallback(() => setAuxiliaryDataEnabled(true), {
+          timeout: 1200,
+        })
+      : window.setTimeout(() => setAuxiliaryDataEnabled(true), 300);
 
     return () => {
-      if (typeof idleCallback === "number") {
-        window.clearTimeout(idleCallback);
+      if (!supportsIdleCallback) {
+        window.clearTimeout(idleCallbackId);
         return;
       }
 
-      window.cancelIdleCallback(idleCallback);
+      window.cancelIdleCallback(idleCallbackId);
     };
   }, [isError, isLoading]);
 

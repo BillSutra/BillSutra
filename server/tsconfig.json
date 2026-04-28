@@ -1,18 +1,18 @@
 {
   "compilerOptions": {
     "target": "ESNext",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
     "strict": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
     "types": ["node"],
-    "rootDir": "..",
-    "outDir": ".build",
+    "rootDir": "src",
+    "outDir": "dist",
     "jsx": "react-jsx",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true
   },
-  "include": ["src/**/*", "src/custom-types.d.ts", "../shared/**/*.ts"],
-  "exclude": ["node_modules", "dist", ".build"]
+  "include": ["src/**/*", "src/custom-types.d.ts"],
+  "exclude": ["node_modules", "dist", ".build", "src/**/*.test.ts"]
 }

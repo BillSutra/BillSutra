@@ -4,6 +4,7 @@ import jwt from "jsonwebtoken";
 import prisma from "../config/db.config.js";
 import { hashSecretValue } from "./modernAuth.js";
 import { recordAuditLog } from "../services/auditLog.service.js";
+import { createNotification } from "../services/notification.service.js";
 import {
   getAccessTokenExpiresAt,
   getAccessTokenMaxAgeMs,
@@ -460,6 +461,16 @@ export const issueAuthCookies = async (
             previousLastUsedAt: existingDeviceSession.last_used_at,
           },
         });
+
+        if (authUser.businessId) {
+          void createNotification({
+            userId: authUser.ownerUserId,
+            businessId: authUser.businessId,
+            type: "worker",
+            message: `Suspicious sign-in detected from ${deviceName ?? "a new device"}.`,
+            referenceKey: `suspicious-login:${authUser.ownerUserId}:${requestIp ?? "unknown"}:${new Date().toISOString().slice(0, 13)}`,
+          });
+        }
       }
     }
 

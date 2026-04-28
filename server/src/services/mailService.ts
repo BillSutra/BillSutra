@@ -1,6 +1,5 @@
 import nodemailer from "nodemailer";
 import type { SendMailOptions, Transporter } from "nodemailer";
-import type SMTPPool from "nodemailer/lib/smtp-pool";
 import {
   buildInvoiceEmailTemplate,
   buildOtpEmailTemplate,
@@ -62,9 +61,7 @@ const MAIL_LOG_PREFIX = "[mailService]";
 const DEFAULT_SMTP_HOST = "smtp.gmail.com";
 const DEFAULT_SMTP_PORT = 465;
 
-let transporterPromise:
-  | Transporter<SMTPPool.SentMessageInfo, SMTPPool.Options>
-  | null = null;
+let transporterPromise: Transporter | null = null;
 let transporterVerified = false;
 
 const getFromAddress = () => {
@@ -75,10 +72,7 @@ const getFromAddress = () => {
   return fromEmail ? `${fromName} <${fromEmail}>` : undefined;
 };
 
-const getTransporter = (): Transporter<
-  SMTPPool.SentMessageInfo,
-  SMTPPool.Options
-> => {
+const getTransporter = (): Transporter => {
   if (transporterPromise) {
     return transporterPromise;
   }

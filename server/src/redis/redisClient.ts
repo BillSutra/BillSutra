@@ -1,4 +1,4 @@
-import IORedis from "ioredis";
+import Redis from "ioredis";
 
 const REDIS_LOG_PREFIX = "[redis]";
 
@@ -82,7 +82,7 @@ const resolveRedisConnectionOptions = (options?: {
   };
 };
 
-const attachRedisLogging = (client: IORedis, label: string) => {
+const attachRedisLogging = (client: Redis, label: string) => {
   let readyLogged = false;
 
   client.on("ready", () => {
@@ -98,7 +98,7 @@ const attachRedisLogging = (client: IORedis, label: string) => {
     });
   });
 
-  client.on("error", (error) => {
+  client.on("error", (error: Error) => {
     console.warn(`${REDIS_LOG_PREFIX} ${label} error`, {
       message: error.message,
     });
@@ -109,10 +109,10 @@ const attachRedisLogging = (client: IORedis, label: string) => {
   });
 };
 
-let redisClient: IORedis | null = null;
-let bullmqRedisClient: IORedis | null = null;
+let redisClient: Redis | null = null;
+let bullmqRedisClient: Redis | null = null;
 
-const connectClientIfNeeded = async (client: IORedis) => {
+const connectClientIfNeeded = async (client: Redis) => {
   if (client.status === "wait") {
     await client.connect();
   }
@@ -126,7 +126,7 @@ export const getRedisClient = async () => {
   }
 
   if (!redisClient) {
-    redisClient = new IORedis(resolveRedisConnectionOptions());
+    redisClient = new Redis(resolveRedisConnectionOptions());
     attachRedisLogging(redisClient, "cache");
   }
 
@@ -146,7 +146,7 @@ export const getBullmqRedisConnection = async () => {
   }
 
   if (!bullmqRedisClient) {
-    bullmqRedisClient = new IORedis(
+    bullmqRedisClient = new Redis(
       resolveRedisConnectionOptions({ maxRetriesPerRequest: null }),
     );
     attachRedisLogging(bullmqRedisClient, "bullmq");

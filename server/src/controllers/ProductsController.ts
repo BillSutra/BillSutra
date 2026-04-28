@@ -8,6 +8,7 @@ import {
   productCreateSchema,
   productUpdateSchema,
 } from "../validations/apiValidations.js";
+import { dispatchNotification } from "../services/notification.service.js";
 import {
   maintainProductCategoryReferences,
   normalizeProductCategoryRecord,
@@ -198,6 +199,7 @@ class ProductsController {
 
   static async store(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -256,6 +258,16 @@ class ProductsController {
       },
       include: productCategoryInclude,
     });
+
+    if (businessId) {
+      void dispatchNotification({
+        userId,
+        businessId,
+        type: "inventory",
+        message: `New product ${product.name} added.`,
+        referenceKey: `product-created:${product.id}`,
+      });
+    }
 
     return sendResponse(res, 201, {
       message: "Product created",

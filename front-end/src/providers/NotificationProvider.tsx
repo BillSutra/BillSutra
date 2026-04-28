@@ -9,9 +9,10 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import {
+  deleteNotification as deleteNotificationRequest,
   fetchNotifications,
   markAllNotificationsAsRead,
-  markNotificationAsRead,
+  updateNotificationReadState,
   type AppNotification,
 } from "@/lib/apiClient";
 
@@ -22,7 +23,9 @@ type NotificationContextValue = {
   isFetching: boolean;
   refresh: () => Promise<unknown>;
   markRead: (id: string) => Promise<void>;
+  markUnread: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
+  remove: (id: string) => Promise<void>;
 };
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
@@ -35,7 +38,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
   const query = useQuery({
     queryKey: NOTIFICATION_QUERY_KEY,
-    queryFn: () => fetchNotifications(10),
+    queryFn: () => fetchNotifications({ limit: 5 }),
     enabled: status === "authenticated",
     refetchInterval: () =>
       typeof document !== "undefined" && document.hidden ? false : 60_000,
@@ -44,13 +47,24 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const markReadMutation = useMutation({
-    mutationFn: markNotificationAsRead,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: NOTIFICATION_QUERY_KEY }),
+    mutationFn: (id: string) => updateNotificationReadState(id, true),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  const markUnreadMutation = useMutation({
+    mutationFn: (id: string) => updateNotificationReadState(id, false),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
   const markAllReadMutation = useMutation({
     mutationFn: markAllNotificationsAsRead,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: NOTIFICATION_QUERY_KEY }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteNotificationRequest,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
   const value = useMemo<NotificationContextValue>(
@@ -63,11 +77,17 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       markRead: async (id: string) => {
         await markReadMutation.mutateAsync(id);
       },
+      markUnread: async (id: string) => {
+        await markUnreadMutation.mutateAsync(id);
+      },
       markAllRead: async () => {
         await markAllReadMutation.mutateAsync();
       },
+      remove: async (id: string) => {
+        await deleteMutation.mutateAsync(id);
+      },
     }),
-    [markAllReadMutation, markReadMutation, query],
+    [deleteMutation, markAllReadMutation, markReadMutation, markUnreadMutation, query],
   );
 
   return (

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { io, type Socket } from "socket.io-client";
 import { useSession } from "next-auth/react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { BASE_URL } from "@/lib/apiEndPoints";
 import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
 import {
@@ -24,6 +25,17 @@ const normalizeSocketToken = (raw?: string | null) => {
   }
 
   return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+};
+
+type NotificationEventPayload = {
+  notification: {
+    id: string;
+    businessId: string;
+    type: "payment" | "inventory" | "customer" | "subscription" | "worker";
+    message: string;
+    isRead: boolean;
+    createdAt: string;
+  };
 };
 
 const RealtimeInvoiceProvider = () => {
@@ -84,6 +96,9 @@ const RealtimeInvoiceProvider = () => {
       }, 250);
     };
 
+    const invalidateNotifications = () =>
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+
     const prepareSocketAuth = async (forceRefresh = false) => {
       if (!isSecureAuthEnabled()) {
         socket.auth = legacyToken ? { token: legacyToken } : {};
@@ -124,6 +139,19 @@ const RealtimeInvoiceProvider = () => {
     socket.on("payment_added", invalidateInvoiceState);
     socket.on("invoice_paid", invalidateInvoiceState);
     socket.on("dashboard_updated", invalidateDashboardOnly);
+    socket.on("notification_created", (payload: NotificationEventPayload) => {
+      void invalidateNotifications();
+      toast.success(payload.notification.message);
+    });
+    socket.on("notification_updated", () => {
+      void invalidateNotifications();
+    });
+    socket.on("notification_deleted", () => {
+      void invalidateNotifications();
+    });
+    socket.on("notifications_read_all", () => {
+      void invalidateNotifications();
+    });
     socket.on("disconnect", (reason) => {
       console.info("[socket] disconnected", { reason });
     });
@@ -164,6 +192,10 @@ const RealtimeInvoiceProvider = () => {
       socket.off("payment_added", invalidateInvoiceState);
       socket.off("invoice_paid", invalidateInvoiceState);
       socket.off("dashboard_updated", invalidateDashboardOnly);
+      socket.off("notification_created");
+      socket.off("notification_updated");
+      socket.off("notification_deleted");
+      socket.off("notifications_read_all");
       socket.off("disconnect");
       socket.off("connect_error");
       socket.io.off("reconnect_attempt");

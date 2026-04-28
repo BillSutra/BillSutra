@@ -32,6 +32,7 @@ import {
   type BillingAction,
 } from "../lib/workerPermissions.js";
 import { computeInvoiceStatus } from "../utils/invoicePaymentSnapshot.js";
+import { dispatchNotification } from "../services/notification.service.js";
 
 type SaleCreateInput = z.infer<typeof saleCreateSchema>;
 type SaleUpdateInput = z.infer<typeof saleUpdateSchema>;
@@ -284,6 +285,7 @@ class SalesController {
 
   static async store(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -445,6 +447,21 @@ class SalesController {
 
     invalidateInventoryInsightsCacheByUser(userId);
     emitDashboardUpdate({ userId, source: "sale.create" });
+    if (businessId) {
+      const largeSaleThreshold = Number(
+        process.env.NOTIFICATION_LARGE_SALE_THRESHOLD ?? 25000,
+      );
+
+      if (Number.isFinite(largeSaleThreshold) && total >= largeSaleThreshold) {
+        void dispatchNotification({
+          userId,
+          businessId,
+          type: "payment",
+          message: `Large sale completed for Rs ${total.toFixed(2)}.`,
+          referenceKey: `large-sale:${sale.id}`,
+        });
+      }
+    }
     return sendResponse(res, 201, {
       message: "Sale recorded",
       data: decorateSaleFinancials(sale),

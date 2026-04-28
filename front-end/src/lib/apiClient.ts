@@ -1356,9 +1356,20 @@ export type AppNotification = {
   createdAt: string;
 };
 
+export type NotificationListParams = {
+  page?: number;
+  limit?: number;
+  type?: AppNotificationType | null;
+  isRead?: boolean | null;
+  unreadOnly?: boolean;
+};
+
 export type NotificationListResponse = {
   notifications: AppNotification[];
   unreadCount: number;
+  total: number;
+  page: number;
+  limit: number;
 };
 
 export type SecurityActivityEvent = {
@@ -3392,20 +3403,41 @@ export const saveUserSettingsPreferences = async (
 };
 
 export const fetchNotifications = async (
-  limit = 10,
+  params: NotificationListParams | number = 10,
 ): Promise<NotificationListResponse> => {
+  const resolvedParams =
+    typeof params === "number" ? { limit: params } : params;
   const response = await apiClient.get("/notifications", {
-    params: { limit },
+    params: {
+      limit: resolvedParams.limit,
+      page: resolvedParams.page,
+      type: resolvedParams.type ?? undefined,
+      isRead:
+        typeof resolvedParams.isRead === "boolean"
+          ? resolvedParams.isRead
+          : undefined,
+      unreadOnly: resolvedParams.unreadOnly,
+    },
   });
   return response.data.data as NotificationListResponse;
 };
 
-export const markNotificationAsRead = async (id: string): Promise<void> => {
-  await apiClient.post(`/notifications/${id}/read`);
+export const updateNotificationReadState = async (
+  id: string,
+  isRead: boolean,
+): Promise<AppNotification> => {
+  const response = await apiClient.patch(`/notifications/${id}/read`, {
+    isRead,
+  });
+  return response.data.data as AppNotification;
 };
 
 export const markAllNotificationsAsRead = async (): Promise<void> => {
-  await apiClient.post("/notifications/read-all");
+  await apiClient.patch("/notifications/read-all");
+};
+
+export const deleteNotification = async (id: string): Promise<void> => {
+  await apiClient.delete(`/notifications/${id}`);
 };
 
 export const fetchSecurityActivity = async (): Promise<

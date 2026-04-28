@@ -6,6 +6,12 @@ import {
 import prisma from "../config/db.config.js";
 import { getInventoryInsights } from "./inventoryInsights.service.js";
 import { enqueueNotificationCreation } from "../queues/jobs/notification.jobs.js";
+import {
+  emitRealtimeNotificationCreated,
+  emitRealtimeNotificationDeleted,
+  emitRealtimeNotificationsReadAll,
+  emitRealtimeNotificationUpdated,
+} from "./realtimeSocket.service.js";
 
 const PAYMENT_DUE_LOOKAHEAD_DAYS = 2;
 const SUBSCRIPTION_WARNING_DAYS = 5;
@@ -101,6 +107,48 @@ type CreateNotificationInput = {
   referenceKey?: string | null;
 };
 
+type ListNotificationsParams = {
+  userId: number;
+  page?: number;
+  limit?: number;
+  type?: AppNotificationType | null;
+  isRead?: boolean | null;
+};
+
+const serializeAndEmitCreated = (
+  notification: {
+    id: string;
+    business_id: string;
+    type: NotificationType;
+    message: string;
+    is_read: boolean;
+    created_at: Date;
+  },
+  userId: number,
+) => {
+  emitRealtimeNotificationCreated({
+    userId,
+    notification: serializeNotification(notification),
+  });
+};
+
+const serializeAndEmitUpdated = (
+  notification: {
+    id: string;
+    business_id: string;
+    type: NotificationType;
+    message: string;
+    is_read: boolean;
+    created_at: Date;
+  },
+  userId: number,
+) => {
+  emitRealtimeNotificationUpdated({
+    userId,
+    notification: serializeNotification(notification),
+  });
+};
+
 export const createNotification = async ({
   userId,
   businessId,
@@ -122,7 +170,7 @@ export const createNotification = async ({
 
   if (referenceKey) {
     try {
-      return await prisma.notification.upsert({
+      const notification = await prisma.notification.upsert({
         where: {
           business_id_reference_key: {
             business_id: businessId,
@@ -136,6 +184,8 @@ export const createNotification = async ({
         },
         create: data,
       });
+      serializeAndEmitCreated(notification, userId);
+      return notification;
     } catch (error) {
       if (isNotificationTableMissingError(error)) {
         notificationTableAvailability = {
@@ -149,7 +199,9 @@ export const createNotification = async ({
   }
 
   try {
-    return await prisma.notification.create({ data });
+    const notification = await prisma.notification.create({ data });
+    serializeAndEmitCreated(notification, userId);
+    return notification;
   } catch (error) {
     if (isNotificationTableMissingError(error)) {
       notificationTableAvailability = {
@@ -171,25 +223,44 @@ export const dispatchNotification = async (input: CreateNotificationInput) => {
   return createNotification(input);
 };
 
-export const listNotifications = async (userId: number, limit = 10) => {
-  const safeLimit = Math.max(1, Math.min(limit, 50));
+export const listNotifications = async ({
+  userId,
+  page = 1,
+  limit = 10,
+  type = null,
+  isRead = null,
+}: ListNotificationsParams) => {
+  const safePage = Math.max(1, Math.trunc(page));
+  const safeLimit = Math.max(1, Math.min(Math.trunc(limit), 50));
+  const skip = (safePage - 1) * safeLimit;
+  const where: Prisma.NotificationWhereInput = {
+    user_id: userId,
+    ...(type ? { type: notificationTypeMap[type] } : {}),
+    ...(typeof isRead === "boolean" ? { is_read: isRead } : {}),
+  };
   if (!(await hasNotificationTable())) {
-    return [];
+    return { notifications: [], total: 0, page: safePage, limit: safeLimit };
   }
 
   try {
-    return await prisma.notification.findMany({
-      where: { user_id: userId },
-      orderBy: { created_at: "desc" },
-      take: safeLimit,
-    });
+    const [notifications, total] = await prisma.$transaction([
+      prisma.notification.findMany({
+        where,
+        orderBy: { created_at: "desc" },
+        skip,
+        take: safeLimit,
+      }),
+      prisma.notification.count({ where }),
+    ]);
+
+    return { notifications, total, page: safePage, limit: safeLimit };
   } catch (error) {
     if (isNotificationTableMissingError(error)) {
       notificationTableAvailability = {
         exists: false,
         checkedAt: Date.now(),
       };
-      return [];
+      return { notifications: [], total: 0, page: safePage, limit: safeLimit };
     }
     throw error;
   }
@@ -217,24 +288,38 @@ export const countUnreadNotifications = async (userId: number) =>
     }
   };
 
-export const markNotificationAsRead = async (userId: number, id: string) =>
+export const updateNotificationReadState = async (
+  userId: number,
+  id: string,
+  isRead: boolean,
+) =>
   {
     if (!(await hasNotificationTable())) {
-      return { count: 0 };
+      return null;
     }
 
     try {
-      return await prisma.notification.updateMany({
+      const notification = await prisma.notification.findFirst({
         where: { id, user_id: userId },
-        data: { is_read: true },
       });
+
+      if (!notification) {
+        return null;
+      }
+
+      const updated = await prisma.notification.update({
+        where: { id: notification.id },
+        data: { is_read: isRead },
+      });
+      serializeAndEmitUpdated(updated, userId);
+      return updated;
     } catch (error) {
       if (isNotificationTableMissingError(error)) {
         notificationTableAvailability = {
           exists: false,
           checkedAt: Date.now(),
         };
-        return { count: 0 };
+        return null;
       }
       throw error;
     }
@@ -247,10 +332,14 @@ export const markAllNotificationsAsRead = async (userId: number) =>
     }
 
     try {
-      return await prisma.notification.updateMany({
+      const result = await prisma.notification.updateMany({
         where: { user_id: userId, is_read: false },
         data: { is_read: true },
       });
+      if (result.count > 0) {
+        emitRealtimeNotificationsReadAll({ userId });
+      }
+      return result;
     } catch (error) {
       if (isNotificationTableMissingError(error)) {
         notificationTableAvailability = {
@@ -262,6 +351,36 @@ export const markAllNotificationsAsRead = async (userId: number) =>
       throw error;
     }
   };
+
+export const deleteNotification = async (userId: number, id: string) => {
+  if (!(await hasNotificationTable())) {
+    return { count: 0 };
+  }
+
+  try {
+    const deleted = await prisma.notification.deleteMany({
+      where: { id, user_id: userId },
+    });
+
+    if (deleted.count > 0) {
+      emitRealtimeNotificationDeleted({
+        userId,
+        notificationId: id,
+      });
+    }
+
+    return deleted;
+  } catch (error) {
+    if (isNotificationTableMissingError(error)) {
+      notificationTableAvailability = {
+        exists: false,
+        checkedAt: Date.now(),
+      };
+      return { count: 0 };
+    }
+    throw error;
+  }
+};
 
 export const syncNotifications = async (params: {
   userId: number;

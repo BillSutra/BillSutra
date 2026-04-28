@@ -1,9 +1,9 @@
 import Link from "next/link";
 
 type AuthErrorPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     error?: string;
-  };
+  }>;
 };
 
 const ERROR_COPY: Record<string, string> = {
@@ -13,8 +13,11 @@ const ERROR_COPY: Record<string, string> = {
     "This email is already linked to a different sign-in method.",
 };
 
-export default function AuthErrorPage({ searchParams }: AuthErrorPageProps) {
-  const errorCode = searchParams?.error ?? "Unknown";
+export default async function AuthErrorPage({
+  searchParams,
+}: AuthErrorPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const errorCode = resolvedSearchParams?.error ?? "Unknown";
   const message =
     ERROR_COPY[errorCode] ??
     "Authentication failed due to an unexpected error. Please try again.";

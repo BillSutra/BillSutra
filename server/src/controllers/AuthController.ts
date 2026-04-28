@@ -66,6 +66,7 @@ import {
 import { sendEmail } from "../emails/index.js";
 import { buildResetPasswordUrl } from "../lib/appUrls.js";
 import { dispatchWelcomeEmail } from "../services/email.service.js";
+import { dispatchNotification } from "../services/notification.service.js";
 import {
   consumeEmailVerificationToken,
   dispatchFreshVerificationEmail,
@@ -803,6 +804,13 @@ class AuthController {
         success: true,
         actorType: "WORKER",
         metadata: { workerId: worker.id },
+      });
+
+      void dispatchNotification({
+        userId: authUser.ownerUserId,
+        businessId: authUser.businessId,
+        type: "worker",
+        message: `${worker.name} signed in to BillSutra.`,
       });
 
       return sendResponse(res, 200, {

@@ -611,11 +611,18 @@ class PaymentsController {
       if (result.createdNewPayment) {
         if (businessId) {
           try {
+            const computedStatus = computeInvoiceStatus(
+              result.paidAmount,
+              result.totalAmount,
+            );
             await dispatchNotification({
               userId,
               businessId,
               type: "payment",
-              message: `Payment of Rs ${Number(body.amount).toFixed(2)} received for invoice ${result.invoiceNumber}.`,
+              message:
+                computedStatus === "PARTIAL"
+                  ? `Partial payment of Rs ${Number(body.amount).toFixed(2)} received for invoice ${result.invoiceNumber}.`
+                  : `Payment of Rs ${Number(body.amount).toFixed(2)} received for invoice ${result.invoiceNumber}.`,
               referenceKey: `payment-received:${result.payment.id}`,
             });
           } catch (error) {

@@ -159,20 +159,23 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
       return;
     }
 
-    const idleCallback =
-      typeof window !== "undefined" && "requestIdleCallback" in window
-        ? window.requestIdleCallback(() => setNonCriticalReady(true), {
-            timeout: 800,
-          })
-        : window.setTimeout(() => setNonCriticalReady(true), 250);
+    const supportsIdleCallback =
+      typeof window !== "undefined" &&
+      typeof window.requestIdleCallback === "function" &&
+      typeof window.cancelIdleCallback === "function";
+    const idleCallbackId = supportsIdleCallback
+      ? window.requestIdleCallback(() => setNonCriticalReady(true), {
+          timeout: 800,
+        })
+      : window.setTimeout(() => setNonCriticalReady(true), 250);
 
     return () => {
-      if (typeof idleCallback === "number") {
-        window.clearTimeout(idleCallback);
+      if (!supportsIdleCallback) {
+        window.clearTimeout(idleCallbackId);
         return;
       }
 
-      window.cancelIdleCallback(idleCallback);
+      window.cancelIdleCallback(idleCallbackId);
     };
   }, [hydrated]);
 
@@ -1135,7 +1138,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                   >
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-semibold text-foreground">
-                        {invoice.invoice_number}
+                        {invoice.invoiceNumber}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         {invoice.customer?.name ?? t("invoice.fallbackCustomer")}{" "}

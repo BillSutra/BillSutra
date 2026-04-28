@@ -35,6 +35,23 @@ type PaymentAddedPayload = {
   computedStatus?: string;
 };
 
+type NotificationRealtimePayload = {
+  userId: number;
+  notification: {
+    id: string;
+    businessId: string;
+    type: "payment" | "inventory" | "customer" | "subscription" | "worker";
+    message: string;
+    isRead: boolean;
+    createdAt: string;
+  };
+};
+
+type NotificationDeletedPayload = {
+  userId: number;
+  notificationId: string;
+};
+
 type AuthenticatedSocket = Socket & {
   data: {
     authUser?: AuthUser;
@@ -267,4 +284,38 @@ export const emitRealtimePaymentAdded = (payload: PaymentAddedPayload) => {
       at: Date.now(),
     });
   }
+};
+
+export const emitRealtimeNotificationCreated = (
+  payload: NotificationRealtimePayload,
+) => {
+  emitToUserRoom(payload.userId, "notification_created", {
+    ...payload,
+    at: Date.now(),
+  });
+};
+
+export const emitRealtimeNotificationUpdated = (
+  payload: NotificationRealtimePayload,
+) => {
+  emitToUserRoom(payload.userId, "notification_updated", {
+    ...payload,
+    at: Date.now(),
+  });
+};
+
+export const emitRealtimeNotificationDeleted = (
+  payload: NotificationDeletedPayload,
+) => {
+  emitToUserRoom(payload.userId, "notification_deleted", {
+    ...payload,
+    at: Date.now(),
+  });
+};
+
+export const emitRealtimeNotificationsReadAll = (payload: { userId: number }) => {
+  emitToUserRoom(payload.userId, "notifications_read_all", {
+    ...payload,
+    at: Date.now(),
+  });
 };

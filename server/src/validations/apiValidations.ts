@@ -1317,3 +1317,17 @@ export const settingsPreferencesUpsertSchema = z.object({
     })
     .optional(),
 });
+
+export const notificationsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(50).optional(),
+  type: z
+    .enum(["payment", "inventory", "customer", "subscription", "worker"])
+    .optional(),
+  isRead: z.coerce.boolean().optional(),
+  unreadOnly: z.coerce.boolean().optional(),
+});
+
+export const notificationReadStateSchema = z.object({
+  isRead: z.boolean().optional(),
+});

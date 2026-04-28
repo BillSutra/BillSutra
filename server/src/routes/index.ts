@@ -114,6 +114,8 @@ import {
   exportResourceParamSchema,
   sendTestEmailSchema,
   settingsPreferencesUpsertSchema,
+  notificationsQuerySchema,
+  notificationReadStateSchema,
 } from "../validations/apiValidations.js";
 import invoiceRoutes from "../modules/invoice/invoice.routes.js";
 import importRoutes from "../modules/import/import.routes.js";
@@ -924,17 +926,42 @@ router.put(
   validate({ body: settingsPreferencesUpsertSchema }),
   SettingsController.savePreferences,
 );
-router.get("/notifications", AuthMiddleware, NotificationsController.index);
+router.get(
+  "/notifications",
+  AuthMiddleware,
+  validate({ query: notificationsQuerySchema }),
+  NotificationsController.index,
+);
+router.patch(
+  "/notifications/read-all",
+  AuthMiddleware,
+  NotificationsController.markAllRead,
+);
 router.post(
   "/notifications/read-all",
   AuthMiddleware,
   NotificationsController.markAllRead,
+);
+router.patch(
+  "/notifications/:id/read",
+  AuthMiddleware,
+  validate({
+    params: stringIdParamSchema,
+    body: notificationReadStateSchema,
+  }),
+  NotificationsController.markRead,
 );
 router.post(
   "/notifications/:id/read",
   AuthMiddleware,
   validate({ params: stringIdParamSchema }),
   NotificationsController.markRead,
+);
+router.delete(
+  "/notifications/:id",
+  AuthMiddleware,
+  validate({ params: stringIdParamSchema }),
+  NotificationsController.destroy,
 );
 router.get(
   "/security/activity",
