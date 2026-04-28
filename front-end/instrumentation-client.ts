@@ -1,7 +1,7 @@
 import {
   captureFrontendRouterTransitionStart,
-  initFrontendSentry,
-} from "./src/lib/observability/sentry";
+} from "./src/lib/observability/next-sentry";
+import { initFrontendSentry } from "./src/lib/observability/sentry";
 
 const parseSampleRate = (value: string | undefined) => {
   const numericValue = Number(value);
