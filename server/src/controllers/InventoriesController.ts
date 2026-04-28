@@ -10,6 +10,11 @@ import { dispatchNotification } from "../services/notification.service.js";
 import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
 import { applyInventoryDelta } from "../services/inventoryValidation.service.js";
 import { listInventoryIssuesForUser } from "../services/inventoryIssue.service.js";
+import {
+  clearDanglingProductCategoryReferences,
+  normalizeProductCategoryRecord,
+  productCategoryInclude,
+} from "../lib/productCategories.js";
 
 type InventoryAdjustInput = z.infer<typeof inventoryAdjustSchema>;
 type InventoryQueryInput = z.infer<typeof inventoryQuerySchema>;
@@ -64,16 +69,28 @@ class InventoriesController {
         });
       }
 
+      await clearDanglingProductCategoryReferences(userId);
+
       const inventories = await prisma.inventory.findMany({
         where: {
           warehouse: { user_id: userId },
           ...(warehouseId ? { warehouse_id: warehouseId } : {}),
         },
-        include: { warehouse: true, product: true },
+        include: {
+          warehouse: true,
+          product: {
+            include: productCategoryInclude,
+          },
+        },
         orderBy: { id: "desc" },
       });
 
-      return sendResponse(res, 200, { data: inventories });
+      return sendResponse(res, 200, {
+        data: inventories.map((inventory) => ({
+          ...inventory,
+          product: normalizeProductCategoryRecord(inventory.product),
+        })),
+      });
     } catch (error) {
       return sendResponse(res, 500, { message: "Failed to load inventories" });
     }

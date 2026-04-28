@@ -52,7 +52,8 @@
                    "action":  "कार्रवाई",
                    "productName":  "प्रोडक्ट नाम",
                    "sku":  "SKU",
-                   "skuLabel":  "SKU: {value}"
+                   "skuLabel":  "SKU: {value}",
+                   "noCategory":  "कोई कैटेगरी नहीं"
                },
     "productsPage":  {
                          "title":  "प्रोडक्ट्स",
@@ -2080,13 +2081,14 @@
                                         "healthySummary":  "{count} आइटम ठीक हैं",
                                         "allInventoryTitle":  "पूरी इन्वेंटरी",
                                         "allInventoryDescription":  "प्रोडक्ट खोजें, स्टॉक देखें और जल्दी रीस्टॉक करें।",
-                                        "searchPlaceholder":  "प्रोडक्ट या SKU खोजें",
+                                        "searchPlaceholder":  "प्रोडक्ट, SKU या कैटेगरी खोजें",
                                         "allCategories":  "सभी श्रेणियाँ",
                                         "allWarehouses":  "सभी वेयरहाउस",
                                         "allStatus":  "सभी स्थिति",
                                         "sortStockLowHigh":  "स्टॉक: कम से ज़्यादा",
                                         "sortStockHighLow":  "स्टॉक: ज़्यादा से कम",
                                         "sortName":  "नाम: अ से ज्ञ",
+                                        "sortCategory":  "कैटेगरी: अ से ज्ञ",
                                         "selectVisible":  "दिख रहे प्रोडक्ट चुनें",
                                         "selectPage":  "यह पेज चुनें",
                                         "showing":  "{total} में से {from}-{to} दिख रहे हैं",

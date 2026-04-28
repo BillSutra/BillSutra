@@ -28,7 +28,7 @@ type InventoryClientProps = {
 };
 
 type StockStatus = "out" | "low" | "in";
-type SortOption = "stock_asc" | "stock_desc" | "name_asc";
+type SortOption = "stock_asc" | "stock_desc" | "name_asc" | "category_asc";
 type PageSizeOption = 10 | 25 | 50;
 
 type InventoryTableRow = Inventory & {
@@ -65,6 +65,14 @@ const formatNumber = (value: number, locale: string, digits = 0) =>
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   }).format(value);
+
+const getCategoryDisplayName = (
+  category: { id: number; name: string } | null | undefined,
+  fallback: string,
+) => {
+  const name = category?.name?.trim();
+  return name || fallback;
+};
 
 const getPredictionKey = (productId: number, warehouseId?: number | null) =>
   `${productId}:${warehouseId ?? "all"}`;
@@ -182,6 +190,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
     }),
     [t],
   );
+  const noCategoryLabel = t("common.noCategory");
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -226,8 +235,10 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
         null;
       const effectiveStock = prediction?.stock_left ?? item.quantity;
       const stockStatus = getStockStatus(item, prediction);
-      const categoryName =
-        item.product.category?.name ?? t("productsPage.uncategorized");
+      const categoryName = getCategoryDisplayName(
+        item.product.category,
+        noCategoryLabel,
+      );
       const dailySalesText = prediction
         ? formatNumber(prediction.predicted_daily_sales, locale, 1)
         : t("inventory.predictions.notAvailable");
@@ -238,10 +249,20 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
         effectiveStock,
         stockStatus,
         dailySalesText,
+        product: {
+          ...item.product,
+          category:
+            item.product.category?.name?.trim()
+              ? {
+                  ...item.product.category,
+                  name: item.product.category.name.trim(),
+                }
+              : null,
+        },
         searchText: `${item.product.name} ${item.product.sku} ${categoryName} ${item.warehouse.name}`.toLowerCase(),
       };
     });
-  }, [data, locale, predictionByKey, t]);
+  }, [data, locale, noCategoryLabel, predictionByKey, t]);
 
   const summary = useMemo(
     () => ({
@@ -285,9 +306,32 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
         return right.effectiveStock - left.effectiveStock;
       }
 
+      if (sortBy === "category_asc") {
+        const leftCategory = getCategoryDisplayName(
+          left.product.category,
+          noCategoryLabel,
+        );
+        const rightCategory = getCategoryDisplayName(
+          right.product.category,
+          noCategoryLabel,
+        );
+        const categoryComparison = leftCategory.localeCompare(rightCategory);
+        if (categoryComparison !== 0) {
+          return categoryComparison;
+        }
+      }
+
       return left.product.name.localeCompare(right.product.name);
     });
-  }, [allRows, categoryFilter, debouncedSearch, sortBy, stockFilter, warehouseFilter]);
+  }, [
+    allRows,
+    categoryFilter,
+    debouncedSearch,
+    noCategoryLabel,
+    sortBy,
+    stockFilter,
+    warehouseFilter,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
@@ -511,6 +555,7 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                   <option value="stock_asc">{t("inventory.tableView.sortStockLowHigh")}</option>
                   <option value="stock_desc">{t("inventory.tableView.sortStockHighLow")}</option>
                   <option value="name_asc">{t("inventory.tableView.sortName")}</option>
+                  <option value="category_asc">{t("inventory.tableView.sortCategory")}</option>
                 </select>
               </div>
             </div>
@@ -664,7 +709,12 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                             {row.product.sku || t("common.notAssigned")}
                           </td>
                           <td className="px-5 py-4 text-sm text-gray-700">
-                            {row.product.category?.name ?? t("productsPage.uncategorized")}
+                            <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                              {getCategoryDisplayName(
+                                row.product.category,
+                                noCategoryLabel,
+                              )}
+                            </span>
                           </td>
                           <td className="px-5 py-4 text-sm text-gray-700">
                             {row.warehouse.name}
@@ -722,7 +772,11 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
                           })}
                         </p>
                         <p className="mt-1 text-xs text-gray-500">
-                          {row.product.category?.name ?? t("productsPage.uncategorized")} |{" "}
+                          {getCategoryDisplayName(
+                            row.product.category,
+                            noCategoryLabel,
+                          )}{" "}
+                          |{" "}
                           {row.warehouse.name}
                         </p>
 

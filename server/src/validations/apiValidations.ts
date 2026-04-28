@@ -979,7 +979,7 @@ export const productCreateSchema = z.object({
   gst_rate: z.coerce.number().nonnegative().optional(),
   stock_on_hand: z.coerce.number().int().optional(),
   reorder_level: z.coerce.number().int().optional(),
-  category_id: z.coerce.number().int().positive().optional(),
+  category_id: z.coerce.number().int().positive().nullable().optional(),
 });
 
 export const productUpdateSchema = productCreateSchema.partial();

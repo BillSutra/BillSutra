@@ -15,6 +15,7 @@ declare global {
     name: string;
     email: string;
     workerId?: string;
+    rememberMe?: boolean;
   }
 
   interface AdminAuthUser {

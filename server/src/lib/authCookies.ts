@@ -4,8 +4,11 @@ import jwt from "jsonwebtoken";
 import prisma from "../config/db.config.js";
 import { hashSecretValue } from "./modernAuth.js";
 import {
-  getUserSessionVersionIfAvailable,
+  getAccessTokenExpiresAt,
   getAccessTokenMaxAgeMs,
+  getUserSessionVersionIfAvailable,
+  resolveAuthSessionPreferences,
+  resolveRememberMeFromDecoded,
   resolveAuthUserFromDecoded,
   signAuthToken,
 } from "./authSession.js";
@@ -15,7 +18,6 @@ export const REFRESH_TOKEN_COOKIE_NAME = "bill_sutra_refresh_token";
 export const ACCESS_TOKEN_COOKIE_ALIAS = "accessToken";
 export const REFRESH_TOKEN_COOKIE_ALIAS = "refreshToken";
 
-const DEFAULT_REFRESH_TOKEN_TTL = "7d";
 const TABLE_CACHE_TTL_MS = 60_000;
 
 const tableAvailabilityCache = new Map<string, { value: boolean; checkedAt: number }>();
@@ -81,12 +83,6 @@ const logAuth = (
 const isRefreshTokensTableMissingError = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError &&
   error.code === "P2021";
-
-export const getRefreshTokenTtl = () =>
-  process.env.REFRESH_TOKEN_TTL?.trim() || DEFAULT_REFRESH_TOKEN_TTL;
-
-export const getRefreshTokenMaxAgeMs = () =>
-  parseDurationToMs(getRefreshTokenTtl(), 7 * 24 * 60 * 60 * 1000);
 
 const isRefreshTokensTableAvailable = async () => {
   const cached = tableAvailabilityCache.get("refresh_tokens");
@@ -203,28 +199,37 @@ const setRefreshCookie = (res: Response, refreshToken: string) => {
     res,
     [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
     refreshToken,
-    getRefreshTokenMaxAgeMs(),
+    resolveAuthSessionPreferences({ rememberMe: true }).cookieMaxAgeMs,
   );
 };
 
-const signRefreshToken = (authUser: AuthUser) =>
+const signRefreshToken = (
+  authUser: AuthUser,
+  refreshTokenTtl: string,
+  rememberMe: boolean,
+) =>
   jwt.sign(
     {
       ...authUser,
       token_type: "refresh_v1",
+      remember_me: rememberMe,
     },
     process.env.REFRESH_TOKEN_SECRET?.trim() ||
       (process.env.JWT_SECRET as string),
     {
-      expiresIn: getRefreshTokenTtl() as jwt.SignOptions["expiresIn"],
+      expiresIn: refreshTokenTtl as jwt.SignOptions["expiresIn"],
     },
   );
 
 export const issueAuthCookies = async (
   res: Response,
   authUser: AuthUser,
+  preferences?: {
+    rememberMe?: boolean;
+  },
 ) => {
-  const accessToken = signAuthToken(authUser);
+  const sessionPreferences = resolveAuthSessionPreferences(preferences);
+  const accessToken = signAuthToken(authUser, sessionPreferences);
   setAccessCookie(res, accessToken);
 
   // Backward-compatible rollout: if the new refresh token table is not yet
@@ -236,12 +241,19 @@ export const issueAuthCookies = async (
     return {
       accessToken,
       refreshToken: null as string | null,
+      accessTokenExpiresAt: getAccessTokenExpiresAt(),
+      sessionExpiresAt: sessionPreferences.sessionExpiresAt,
+      rememberMe: sessionPreferences.rememberMe,
     };
   }
 
-  const refreshToken = signRefreshToken(authUser);
+  const refreshToken = signRefreshToken(
+    authUser,
+    sessionPreferences.refreshTokenTtl,
+    sessionPreferences.rememberMe,
+  );
   const tokenHash = hashSecretValue(refreshToken);
-  const expiresAt = new Date(Date.now() + getRefreshTokenMaxAgeMs());
+  const expiresAt = new Date(Date.now() + sessionPreferences.refreshTokenMaxAgeMs);
 
   try {
     await prisma.refreshToken.create({
@@ -251,7 +263,12 @@ export const issueAuthCookies = async (
         expires_at: expiresAt,
       },
     });
-    setRefreshCookie(res, refreshToken);
+    setCookieNames(
+      res,
+      [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
+      refreshToken,
+      sessionPreferences.refreshTokenMaxAgeMs,
+    );
   } catch (error) {
     if (isRefreshTokensTableMissingError(error)) {
       setTableAvailability("refresh_tokens", false);
@@ -259,6 +276,9 @@ export const issueAuthCookies = async (
       return {
         accessToken,
         refreshToken: null as string | null,
+        accessTokenExpiresAt: getAccessTokenExpiresAt(),
+        sessionExpiresAt: sessionPreferences.sessionExpiresAt,
+        rememberMe: sessionPreferences.rememberMe,
       };
     }
 
@@ -268,6 +288,9 @@ export const issueAuthCookies = async (
   return {
     accessToken,
     refreshToken,
+    accessTokenExpiresAt: getAccessTokenExpiresAt(),
+    sessionExpiresAt: sessionPreferences.sessionExpiresAt,
+    rememberMe: sessionPreferences.rememberMe,
   };
 };
 
@@ -392,6 +415,8 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
     return null;
   }
 
+  const rememberMe = resolveRememberMeFromDecoded(decoded);
+
   const latestSessionVersion = await getUserSessionVersionIfAvailable(
     authUser.ownerUserId,
   );
@@ -418,16 +443,20 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
     where: { id: storedToken.id },
   });
 
-  const issued = await issueAuthCookies(res, authUser);
+  const issued = await issueAuthCookies(res, authUser, { rememberMe });
   logAuth("refresh_success", {
     ownerUserId: authUser.ownerUserId,
     accountType: authUser.accountType,
     role: authUser.role,
+    rememberMe,
   });
 
   return {
     authUser,
     accessToken: issued.accessToken,
+    accessTokenExpiresAt: issued.accessTokenExpiresAt,
+    sessionExpiresAt: issued.sessionExpiresAt,
+    rememberMe: issued.rememberMe,
   };
 };
 

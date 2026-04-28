@@ -291,6 +291,9 @@ export const buildWorkerAuthUser = async (
 };
 
 const DEFAULT_ACCESS_TOKEN_TTL = "15m";
+const DEFAULT_STANDARD_SESSION_TTL = "1d";
+const DEFAULT_REMEMBER_ME_SESSION_TTL = "7d";
+const DEFAULT_COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 const parseDurationToMs = (value: string, fallbackMs: number) => {
   const normalized = value.trim().toLowerCase();
@@ -327,8 +330,25 @@ const parseDurationToMs = (value: string, fallbackMs: number) => {
   }
 };
 
+export type AuthSessionPreferences = {
+  rememberMe?: boolean;
+};
+
+export type ResolvedAuthSessionPreferences = {
+  rememberMe: boolean;
+  refreshTokenTtl: string;
+  refreshTokenMaxAgeMs: number;
+  sessionExpiresAt: number;
+  cookieMaxAgeMs: number;
+};
+
+export const normalizeRememberMe = (value: unknown) =>
+  value === true || value === "true" || value === 1 || value === "1";
+
 export const getAccessTokenTtl = () =>
-  process.env.ACCESS_TOKEN_TTL?.trim() || DEFAULT_ACCESS_TOKEN_TTL;
+  process.env.ACCESS_TOKEN_EXPIRES?.trim() ||
+  process.env.ACCESS_TOKEN_TTL?.trim() ||
+  DEFAULT_ACCESS_TOKEN_TTL;
 
 export const getAccessTokenMaxAgeMs = () =>
   parseDurationToMs(getAccessTokenTtl(), 15 * 60 * 1000);
@@ -336,11 +356,58 @@ export const getAccessTokenMaxAgeMs = () =>
 export const getAccessTokenExpiresAt = () =>
   Date.now() + getAccessTokenMaxAgeMs();
 
-export const signAuthToken = (authUser: AuthUser) =>
+export const getCookieMaxAgeMs = () =>
+  parseDurationToMs(
+    process.env.COOKIE_MAX_AGE?.trim() || DEFAULT_REMEMBER_ME_SESSION_TTL,
+    DEFAULT_COOKIE_MAX_AGE_MS,
+  );
+
+export const getStandardSessionTtl = () =>
+  process.env.DEFAULT_REFRESH_TOKEN_EXPIRES?.trim() ||
+  process.env.SESSION_TOKEN_EXPIRES?.trim() ||
+  DEFAULT_STANDARD_SESSION_TTL;
+
+export const getRememberMeSessionTtl = () =>
+  process.env.REFRESH_TOKEN_EXPIRES?.trim() ||
+  process.env.REFRESH_TOKEN_TTL?.trim() ||
+  DEFAULT_REMEMBER_ME_SESSION_TTL;
+
+export const resolveAuthSessionPreferences = (
+  preferences?: AuthSessionPreferences,
+): ResolvedAuthSessionPreferences => {
+  const rememberMe = normalizeRememberMe(preferences?.rememberMe);
+  const refreshTokenTtl = rememberMe
+    ? getRememberMeSessionTtl()
+    : getStandardSessionTtl();
+  const fallbackMs = rememberMe
+    ? DEFAULT_COOKIE_MAX_AGE_MS
+    : 24 * 60 * 60 * 1000;
+  const configuredCookieMaxAgeMs = getCookieMaxAgeMs();
+  const refreshTokenMaxAgeMs = Math.min(
+    parseDurationToMs(refreshTokenTtl, fallbackMs),
+    rememberMe
+      ? configuredCookieMaxAgeMs
+      : Math.min(configuredCookieMaxAgeMs, 24 * 60 * 60 * 1000),
+  );
+
+  return {
+    rememberMe,
+    refreshTokenTtl,
+    refreshTokenMaxAgeMs,
+    sessionExpiresAt: Date.now() + refreshTokenMaxAgeMs,
+    cookieMaxAgeMs: configuredCookieMaxAgeMs,
+  };
+};
+
+export const signAuthToken = (
+  authUser: AuthUser,
+  preferences?: AuthSessionPreferences,
+) =>
   jwt.sign(
     {
       ...authUser,
       token_type: "access_v2",
+      remember_me: normalizeRememberMe(preferences?.rememberMe),
     },
     process.env.JWT_SECRET as string,
     {
@@ -350,6 +417,19 @@ export const signAuthToken = (authUser: AuthUser) =>
 
 export const createAuthBearerToken = (authUser: AuthUser) =>
   `Bearer ${signAuthToken(authUser)}`;
+
+export const resolveRememberMeFromDecoded = (
+  decoded: string | jwt.JwtPayload | undefined,
+) => {
+  if (!decoded || typeof decoded === "string") {
+    return false;
+  }
+
+  const decodedRecord = decoded as Record<string, unknown>;
+  return normalizeRememberMe(
+    decodedRecord.rememberMe ?? decodedRecord.remember_me,
+  );
+};
 
 export const resolveAuthUserFromDecoded = async (
   decoded: string | jwt.JwtPayload | undefined,
@@ -436,5 +516,6 @@ export const resolveAuthUserFromDecoded = async (
     name,
     email,
     workerId: workerId ?? undefined,
+    rememberMe: resolveRememberMeFromDecoded(decoded),
   };
 };

@@ -8,6 +8,12 @@ import {
   productCreateSchema,
   productUpdateSchema,
 } from "../validations/apiValidations.js";
+import {
+  clearDanglingProductCategoryReferences,
+  normalizeProductCategoryRecord,
+  normalizeProductCategoryRecords,
+  productCategoryInclude,
+} from "../lib/productCategories.js";
 
 type ProductCreateInput = z.infer<typeof productCreateSchema>;
 type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
@@ -119,12 +125,22 @@ class ProductsController {
             mode: "insensitive",
           },
         },
+        {
+          category: {
+            name: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
       ];
     }
 
+    await clearDanglingProductCategoryReferences(userId);
+
     const dbQuery = {
       where,
-      include: { category: true },
+      include: productCategoryInclude,
       orderBy: { created_at: "desc" as const },
       skip,
       take: limit,
@@ -137,8 +153,8 @@ class ProductsController {
 
     return sendResponse(res, 200, {
       data: {
-        products: items,
-        items,
+        products: normalizeProductCategoryRecords(items),
+        items: normalizeProductCategoryRecords(items),
         total,
         page,
         limit,
@@ -205,11 +221,12 @@ class ProductsController {
         stock_on_hand: stock_on_hand ?? 0,
         reorder_level: reorder_level ?? 0,
       },
+      include: productCategoryInclude,
     });
 
     return sendResponse(res, 201, {
       message: "Product created",
-      data: product,
+      data: normalizeProductCategoryRecord(product),
     });
   }
 
@@ -220,16 +237,19 @@ class ProductsController {
     }
 
     const id = Number(req.params.id);
+    await clearDanglingProductCategoryReferences(userId);
     const product = await prisma.product.findFirst({
       where: { id, user_id: userId },
-      include: { category: true },
+      include: productCategoryInclude,
     });
 
     if (!product) {
       return sendResponse(res, 404, { message: "Product not found" });
     }
 
-    return sendResponse(res, 200, { data: product });
+    return sendResponse(res, 200, {
+      data: normalizeProductCategoryRecord(product),
+    });
   }
 
   static async update(req: Request, res: Response) {
@@ -272,8 +292,17 @@ class ProductsController {
       }
     }
 
-    const updated = await prisma.product.updateMany({
+    const existingProduct = await prisma.product.findFirst({
       where: { id, user_id: userId },
+      select: { id: true },
+    });
+
+    if (!existingProduct) {
+      return sendResponse(res, 404, { message: "Product not found" });
+    }
+
+    const updated = await prisma.product.update({
+      where: { id: existingProduct.id },
       data: {
         name,
         sku,
@@ -285,13 +314,13 @@ class ProductsController {
         reorder_level,
         category_id,
       },
+      include: productCategoryInclude,
     });
 
-    if (!updated.count) {
-      return sendResponse(res, 404, { message: "Product not found" });
-    }
-
-    return sendResponse(res, 200, { message: "Product updated" });
+    return sendResponse(res, 200, {
+      message: "Product updated",
+      data: normalizeProductCategoryRecord(updated),
+    });
   }
 
   static async destroy(req: Request, res: Response) {
