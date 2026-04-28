@@ -431,6 +431,26 @@ export const resolveRememberMeFromDecoded = (
   );
 };
 
+export const hasSupportedAccessTokenType = (
+  decoded: string | jwt.JwtPayload | undefined,
+) => {
+  if (!decoded || typeof decoded === "string") {
+    return false;
+  }
+
+  const decodedRecord = decoded as Record<string, unknown>;
+  const tokenType =
+    typeof decodedRecord.token_type === "string"
+      ? decodedRecord.token_type.trim()
+      : "";
+
+  if (!tokenType) {
+    return true;
+  }
+
+  return tokenType === "access_v2";
+};
+
 export const resolveAuthUserFromDecoded = async (
   decoded: string | jwt.JwtPayload | undefined,
 ): Promise<AuthUser | null> => {

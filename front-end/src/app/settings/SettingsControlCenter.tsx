@@ -32,6 +32,7 @@ import {
   deleteWorker,
   fetchBusinessProfile,
   fetchLogoUrl,
+  fetchSecuritySessions,
   fetchSecurityActivity,
   fetchUserPermissions,
   fetchUserSettingsPreferences,
@@ -40,7 +41,10 @@ import {
   fetchUserProfile,
   fetchWorkers,
   logoutAllDevices,
+  logoutCurrentSession,
+  logoutOtherDevices,
   removeLogo,
+  revokeSecuritySession,
   replaceLogo,
   runDataExport,
   saveBusinessProfile,
@@ -357,6 +361,19 @@ const formatDate = (value: string | null | undefined) => {
   });
 };
 
+const formatDateTime = (value: string | null | undefined) => {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return parsed.toLocaleString("en-IN", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
   const queryClient = useQueryClient();
   const { language, setLanguage } = useI18n();
@@ -441,6 +458,11 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
   const { data: securityActivity = [] } = useQuery({
     queryKey: ["settings", "security-activity"],
     queryFn: fetchSecurityActivity,
+  });
+
+  const { data: securitySessions = [] } = useQuery({
+    queryKey: ["settings", "security-sessions"],
+    queryFn: fetchSecuritySessions,
   });
 
   useEffect(() => {
@@ -691,11 +713,14 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
         password: newPassword,
         confirm_password: confirmPassword,
       }),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success("Password updated.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
+      clearLegacyStoredToken();
+      clearSecureAuthBootstrapped();
+      await signOut({ callbackUrl: "/login" });
     },
     onError: (error) => {
       toast.error(
@@ -748,6 +773,55 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     onError: (error) => {
       toast.error(
         error instanceof Error ? error.message : "Unable to revoke sessions.",
+      );
+    },
+  });
+
+  const logoutCurrentSessionMutation = useMutation({
+    mutationFn: logoutCurrentSession,
+    onSuccess: async () => {
+      toast.success("Current session logged out.");
+      clearLegacyStoredToken();
+      clearSecureAuthBootstrapped();
+      await signOut({ callbackUrl: "/login" });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to logout current session.",
+      );
+    },
+  });
+
+  const logoutOtherDevicesMutation = useMutation({
+    mutationFn: logoutOtherDevices,
+    onSuccess: ({ revokedCount }) => {
+      toast.success(
+        revokedCount
+          ? `${revokedCount} other session(s) logged out.`
+          : "No other active sessions found.",
+      );
+      void queryClient.invalidateQueries({
+        queryKey: ["settings", "security-sessions"],
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to logout other devices.",
+      );
+    },
+  });
+
+  const revokeSessionMutation = useMutation({
+    mutationFn: revokeSecuritySession,
+    onSuccess: () => {
+      toast.success("Session revoked.");
+      void queryClient.invalidateQueries({
+        queryKey: ["settings", "security-sessions"],
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : "Unable to revoke session.",
       );
     },
   });
@@ -1203,11 +1277,69 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
                 </Button>
                 <Button
                   variant="outline"
+                  onClick={() => logoutCurrentSessionMutation.mutate()}
+                  disabled={logoutCurrentSessionMutation.isPending}
+                >
+                  Logout current device
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => logoutOtherDevicesMutation.mutate()}
+                  disabled={logoutOtherDevicesMutation.isPending}
+                >
+                  Logout other devices
+                </Button>
+                <Button
+                  variant="outline"
                   onClick={() => logoutAllDevicesMutation.mutate()}
                   disabled={logoutAllDevicesMutation.isPending}
                 >
                   Logout from all devices
                 </Button>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 p-3">
+              <p className="text-sm font-semibold">Active sessions</p>
+              <div className="mt-2 space-y-2">
+                {securitySessions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No active sessions found.
+                  </p>
+                ) : (
+                  securitySessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="flex flex-wrap items-start justify-between gap-3 rounded-lg border border-border/60 bg-muted/20 p-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {session.deviceName}
+                          {session.isCurrent ? " • Current device" : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {session.ipAddress || "IP unavailable"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Last active: {formatDateTime(session.lastUsedAt)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Session created: {formatDateTime(session.createdAt)}
+                        </p>
+                      </div>
+                      {!session.isCurrent ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => revokeSessionMutation.mutate(session.id)}
+                          disabled={revokeSessionMutation.isPending}
+                        >
+                          Revoke
+                        </Button>
+                      ) : null}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 

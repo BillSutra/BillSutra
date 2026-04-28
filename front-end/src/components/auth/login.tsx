@@ -32,6 +32,7 @@ import {
 import {
   bootstrapSecureAuthSession,
   isSecureAuthEnabled,
+  setPendingRememberMePreference,
 } from "@/lib/secureAuth";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
 import { captureFrontendException } from "@/lib/observability/shared";
@@ -114,6 +115,7 @@ export default function Login({
   );
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{
     identifier?: string;
@@ -147,6 +149,15 @@ export default function Login({
   );
 
   const callbackUrl = isWorkerMode ? "/sales" : "/dashboard";
+  const verificationRedirectData =
+    state.data && typeof state.data === "object" && "code" in state.data
+      ? (state.data as {
+          code?: string | null;
+          email?: string | null;
+          retryAfter?: number | null;
+          expiresIn?: number | null;
+        })
+      : null;
 
   const completeTokenLogin = useCallback(
     async (
@@ -163,6 +174,13 @@ export default function Login({
 
       setIsSigningIn(true);
       try {
+        if (isSecureAuthEnabled()) {
+          const bootstrapped = await bootstrapSecureAuthSession(token);
+          if (!bootstrapped) {
+            throw new Error("Unable to establish your secure session.");
+          }
+        }
+
         const result = await signIn("auth-token", {
           token,
           redirect: false,
@@ -170,10 +188,6 @@ export default function Login({
 
         if (result?.error) {
           throw new Error("Unable to create your session.");
-        }
-
-        if (isSecureAuthEnabled()) {
-          await bootstrapSecureAuthSession(token);
         }
 
         const destination =
@@ -270,7 +284,38 @@ export default function Login({
   };
 
   useEffect(() => {
-    if (state.status >= 400) {
+    if (
+      state.status === 403 &&
+      verificationRedirectData?.code === "EMAIL_VERIFICATION_REQUIRED"
+    ) {
+      setPendingRememberMePreference(rememberMe);
+      captureAnalyticsEvent("auth_login_verification_required", {
+        method: "password",
+        mode,
+      });
+      toast.error(state.message || "Please verify your email first");
+      const verificationEmail =
+        typeof verificationRedirectData?.email === "string" &&
+        verificationRedirectData.email.trim()
+          ? verificationRedirectData.email.trim()
+          : identifier.trim();
+      const nextSearchParams = new URLSearchParams({
+        email: verificationEmail,
+      });
+      if (typeof verificationRedirectData?.retryAfter === "number") {
+        nextSearchParams.set(
+          "retryAfter",
+          String(verificationRedirectData.retryAfter),
+        );
+      }
+      if (typeof verificationRedirectData?.expiresIn === "number") {
+        nextSearchParams.set(
+          "expiresIn",
+          String(verificationRedirectData.expiresIn),
+        );
+      }
+      router.push(`/verify-email?${nextSearchParams.toString()}`);
+    } else if (state.status >= 400) {
       captureAnalyticsEvent("auth_login_failed", {
         method: "password",
         mode,
@@ -290,7 +335,15 @@ export default function Login({
             : null,
       });
     }
-  }, [completeTokenLogin, mode, state]);
+  }, [
+    completeTokenLogin,
+    identifier,
+    mode,
+    rememberMe,
+    router,
+    state,
+    verificationRedirectData,
+  ]);
 
   useEffect(() => {
     if (otpCooldown <= 0) return;
@@ -313,6 +366,7 @@ export default function Login({
   }, [otpExpiresIn]);
 
   const handleGoogleLogin = () => {
+    setPendingRememberMePreference(rememberMe);
     captureAnalyticsEvent("auth_login_started", {
       method: "google",
       mode,
@@ -352,6 +406,7 @@ export default function Login({
         normalizeEmail(normalizedIdentifier),
         optionsResponse.challenge_id,
         browserResponse,
+        rememberMe,
       );
 
       toast.success("Passkey verified.");
@@ -476,7 +531,11 @@ export default function Login({
       lastSubmittedOtpRef.current = code;
       setIsOtpVerifying(true);
       try {
-        const authPayload = await verifyOtpLoginCode(normalizedEmail, code);
+        const authPayload = await verifyOtpLoginCode(
+          normalizedEmail,
+          code,
+          rememberMe,
+        );
         toast.success("OTP verified.");
         captureAnalyticsEvent("auth_login_succeeded", {
           method: "otp",
@@ -511,7 +570,7 @@ export default function Login({
         setIsOtpVerifying(false);
       }
     },
-    [completeTokenLogin, identifier, isOtpVerifying, mode, otpDigits],
+    [completeTokenLogin, identifier, isOtpVerifying, mode, otpDigits, rememberMe],
   );
 
   useEffect(() => {
@@ -568,6 +627,11 @@ export default function Login({
         noValidate
         onSubmit={handlePasswordSubmit}
       >
+        <input
+          type="hidden"
+          name="rememberMe"
+          value={rememberMe ? "true" : "false"}
+        />
         <AuthFormField
           id="identifier"
           name="identifier"
@@ -591,6 +655,15 @@ export default function Login({
             </Link>
           ) : null}
         </div>
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(event) => setRememberMe(event.target.checked)}
+            className="h-4 w-4 rounded border-border"
+          />
+          <span>{rememberMe ? "Keep me logged in for 7 days" : "Keep me logged in for 1 day"}</span>
+        </label>
         <AuthFormField
           id="password"
           name="password"
@@ -659,6 +732,7 @@ export default function Login({
         <FaceLoginModal
           isOpen={isFaceLoginOpen}
           onClose={() => setIsFaceLoginOpen(false)}
+          rememberMe={rememberMe}
           onSuccess={async (auth) => {
             const completed = await completeTokenLogin(auth.token, {
               isEmailVerified:

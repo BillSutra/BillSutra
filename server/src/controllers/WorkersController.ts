@@ -9,6 +9,7 @@ import {
   isWorkersTableAvailable,
 } from "../lib/authSession.js";
 import { dispatchNotification } from "../services/notification.service.js";
+import { recordAuditLog } from "../services/auditLog.service.js";
 
 const WORKER_MIGRATION_MESSAGE =
   "Worker management requires the latest database migration. Run Prisma migrations and restart the server.";
@@ -682,6 +683,20 @@ class WorkersController {
         referenceKey: `worker-created:${worker.id}`,
       });
     }
+    await recordAuditLog({
+      req,
+      userId: req.user?.ownerUserId ?? req.user?.id ?? null,
+      actorId: req.user?.actorId ?? businessId,
+      actorType: req.user?.accountType ?? "OWNER",
+      action: "worker.create",
+      resourceType: "worker",
+      resourceId: worker.id,
+      status: "success",
+      metadata: {
+        accessRole: accessRole ?? "STAFF",
+        status: status ?? "ACTIVE",
+      },
+    });
 
     return sendResponse(res, 201, {
       message: "Worker created successfully",
@@ -824,6 +839,20 @@ class WorkersController {
         message: `Worker ${updatedWorker.name}'s profile was updated.`,
       });
     }
+    await recordAuditLog({
+      req,
+      userId: req.user?.ownerUserId ?? req.user?.id ?? null,
+      actorId: req.user?.actorId ?? businessId,
+      actorType: req.user?.accountType ?? "OWNER",
+      action: "worker.update",
+      resourceType: "worker",
+      resourceId: updatedWorker.id,
+      status: "success",
+      metadata: {
+        accessRole: accessRole ?? null,
+        status: status ?? null,
+      },
+    });
 
     return sendResponse(res, 200, {
       message: "Worker updated successfully",
@@ -878,6 +907,16 @@ class WorkersController {
         message: `Worker ${worker.name} was removed from your team.`,
       });
     }
+    await recordAuditLog({
+      req,
+      userId: req.user?.ownerUserId ?? req.user?.id ?? null,
+      actorId: req.user?.actorId ?? businessId,
+      actorType: req.user?.accountType ?? "OWNER",
+      action: "worker.delete",
+      resourceType: "worker",
+      resourceId: worker.id,
+      status: "success",
+    });
 
     return sendResponse(res, 200, { message: "Worker deleted successfully" });
   }

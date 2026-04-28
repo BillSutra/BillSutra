@@ -3,45 +3,34 @@
 import { useEffect, useEffectEvent, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { API_URL } from "@/lib/apiEndPoints";
 import {
   AUTH_LOGOUT_EVENT,
   clearClientAuthState,
+  ensureFreshSecureAuthSessionDetailed,
   getSecureAuthExpiresAt,
   hasSecureAuthBootstrap,
-  isAuthTokenExpired,
   isSecureAuthEnabled,
-  isCookieOnlyAuthEnabled,
-  normalizeAuthToken,
-  refreshSecureAuthSessionDetailed,
+  logClientAuthEvent,
 } from "@/lib/secureAuth";
 
-type SessionUserWithToken = {
-  token?: string | null;
+type LogoutEventDetail = {
+  reason?: string;
 };
 
 const AuthSessionGuard = () => {
-  const { data, status } = useSession();
+  const { status } = useSession();
   const router = useRouter();
   const logoutInFlightRef = useRef<Promise<void> | null>(null);
 
-  const performLogout = useEffectEvent(async () => {
+  const performLogout = useEffectEvent(async (reason = "session_expired") => {
     if (logoutInFlightRef.current) {
       return logoutInFlightRef.current;
     }
 
     clearClientAuthState();
+    logClientAuthEvent(`logout_reason=${reason}`);
 
     logoutInFlightRef.current = (async () => {
-      try {
-        await fetch(`${API_URL}/auth/logout`, {
-          method: "POST",
-          credentials: "include",
-        });
-      } catch {
-        // Clearing local state and NextAuth session is more important here.
-      }
-
       try {
         await signOut({
           callbackUrl: "/login",
@@ -62,8 +51,12 @@ const AuthSessionGuard = () => {
       return undefined;
     }
 
-    const handleLogoutEvent = () => {
-      void performLogout();
+    const handleLogoutEvent = (event: Event) => {
+      const detail =
+        event instanceof CustomEvent
+          ? (event.detail as LogoutEventDetail | undefined)
+          : undefined;
+      void performLogout(detail?.reason ?? "session_expired");
     };
 
     window.addEventListener(
@@ -89,55 +82,33 @@ const AuthSessionGuard = () => {
       return undefined;
     }
 
-    if (isSecureAuthEnabled() && hasSecureAuthBootstrap()) {
-      const secureExpiresAt = getSecureAuthExpiresAt();
-
-      if (!secureExpiresAt) {
-        return undefined;
-      }
-
-      const refreshLeadMs = 60 * 1000;
-      const delayMs = Math.max(0, secureExpiresAt - Date.now() - refreshLeadMs);
-      const timeoutId = window.setTimeout(() => {
-        void refreshSecureAuthSessionDetailed().then((result) => {
-          if (!result.ok && result.reason === "auth_invalid") {
-            void performLogout();
-          }
-        });
-      }, delayMs);
-
-      return () => window.clearTimeout(timeoutId);
-    }
-
-    if (isCookieOnlyAuthEnabled()) {
+    if (!isSecureAuthEnabled()) {
       return undefined;
     }
 
-    const token = normalizeAuthToken(
-      (data?.user as SessionUserWithToken | undefined)?.token ?? null,
-    );
+    let cancelled = false;
+    const secureExpiresAt = getSecureAuthExpiresAt();
+    const delayMs =
+      hasSecureAuthBootstrap() && secureExpiresAt
+        ? Math.max(0, secureExpiresAt - Date.now() - 60_000)
+        : 0;
 
-    if (!token) {
-      return undefined;
-    }
+    const timeoutId = window.setTimeout(() => {
+      void ensureFreshSecureAuthSessionDetailed({
+        force: true,
+        minValidityMs: 0,
+      }).then((result) => {
+        if (!cancelled && !result.ok && result.reason === "auth_invalid") {
+          void performLogout("401_refresh_failed");
+        }
+      });
+    }, delayMs);
 
-    if (!isAuthTokenExpired(token)) {
-      return undefined;
-    }
-
-    if (!isSecureAuthEnabled() || isCookieOnlyAuthEnabled()) {
-      void performLogout();
-      return undefined;
-    }
-
-    void refreshSecureAuthSessionDetailed().then((result) => {
-      if (!result.ok && result.reason === "auth_invalid") {
-        void performLogout();
-      }
-    });
-
-    return undefined;
-  }, [data?.user, performLogout, status]);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [performLogout, status]);
 
   return null;
 };

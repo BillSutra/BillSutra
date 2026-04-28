@@ -11,7 +11,7 @@ import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryIns
 import { applyInventoryDelta } from "../services/inventoryValidation.service.js";
 import { listInventoryIssuesForUser } from "../services/inventoryIssue.service.js";
 import {
-  clearDanglingProductCategoryReferences,
+  maintainProductCategoryReferences,
   normalizeProductCategoryRecord,
   productCategoryInclude,
 } from "../lib/productCategories.js";
@@ -69,7 +69,7 @@ class InventoriesController {
         });
       }
 
-      await clearDanglingProductCategoryReferences(userId);
+      void maintainProductCategoryReferences(userId);
 
       const inventories = await prisma.inventory.findMany({
         where: {

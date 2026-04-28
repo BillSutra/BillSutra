@@ -222,6 +222,14 @@ const getStoredWarehousePreference = () => {
   );
 };
 
+const clearStoredWarehousePreference = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(LAST_WAREHOUSE_STORAGE_KEY);
+};
+
 const getPreferredWarehouseFromSettings = (
   preferences: unknown,
 ): string | null => {
@@ -611,6 +619,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         )
       ) {
         return current;
+      }
+
+      if (current.warehouse_id) {
+        clearStoredWarehousePreference();
       }
 
       return {
@@ -1626,6 +1638,15 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           : (form.payment_date ||
             form.date ||
             new Date().toISOString().slice(0, 10));
+      const selectedWarehouseId = form.warehouse_id
+        ? warehouses.some(
+            (warehouse) => String(warehouse.id) === form.warehouse_id,
+          )
+          ? Number(form.warehouse_id)
+          : resolvedDefaultWarehouseId
+            ? Number(resolvedDefaultWarehouseId)
+            : undefined
+        : undefined;
 
       const checkoutResult = await runInvoiceCheckoutPipeline({
         createInvoice: createInvoice.mutateAsync,
@@ -1662,9 +1683,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             designConfig: activeDesignConfig,
           },
           sync_sales: true,
-          warehouse_id: form.warehouse_id
-            ? Number(form.warehouse_id)
-            : undefined,
+          warehouse_id: selectedWarehouseId,
           items: items.map((item) => ({
             product_id: item.product_id ? Number(item.product_id) : undefined,
             name: item.name.trim(),

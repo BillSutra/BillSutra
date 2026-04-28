@@ -10,6 +10,9 @@ import { enqueueNotificationCreation } from "../queues/jobs/notification.jobs.js
 const PAYMENT_DUE_LOOKAHEAD_DAYS = 2;
 const SUBSCRIPTION_WARNING_DAYS = 5;
 const NOTIFICATION_TABLE_CHECK_TTL_MS = 60_000;
+const NOTIFICATION_SYNC_TTL_MS = Number(
+  process.env.NOTIFICATION_SYNC_TTL_MS ?? 45_000,
+);
 
 const notificationTypeMap = {
   payment: NotificationType.PAYMENT,
@@ -34,6 +37,10 @@ const toIsoDateKey = (value: Date) => value.toISOString().slice(0, 10);
 let notificationTableAvailability:
   | { exists: boolean; checkedAt: number }
   | null = null;
+const notificationSyncState = new Map<
+  number,
+  { syncedAt: number; inFlight: Promise<void> | null }
+>();
 
 const isNotificationTableMissingError = (error: unknown) => {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -366,4 +373,41 @@ export const syncNotifications = async (params: {
       referenceKey: `subscription-warning:${toIsoDateKey(subscriptionEnd)}`,
     });
   }
+};
+
+export const syncNotificationsIfStale = async (params: {
+  userId: number;
+  businessId: string;
+}) => {
+  const current = notificationSyncState.get(params.userId);
+  const now = Date.now();
+
+  if (current?.inFlight) {
+    return current.inFlight;
+  }
+
+  if (current && now - current.syncedAt < NOTIFICATION_SYNC_TTL_MS) {
+    return Promise.resolve();
+  }
+
+  const inFlight = syncNotifications(params)
+    .catch((error) => {
+      console.error(
+        "[Notifications] Sync failed, serving cached notifications",
+        error,
+      );
+    })
+    .finally(() => {
+      notificationSyncState.set(params.userId, {
+        syncedAt: Date.now(),
+        inFlight: null,
+      });
+    });
+
+  notificationSyncState.set(params.userId, {
+    syncedAt: current?.syncedAt ?? 0,
+    inFlight,
+  });
+
+  return inFlight;
 };

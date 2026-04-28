@@ -4,7 +4,9 @@ import { deleteCacheByPrefix } from "../redis/cache.js";
 type MetricsCacheEntry = { expiresAt: number; payload: unknown };
 
 const metricsCache = new Map<string, MetricsCacheEntry>();
-const METRICS_CACHE_MS = Number(process.env.DASHBOARD_METRICS_CACHE_MS ?? 0);
+const METRICS_CACHE_MS = Number(
+  process.env.DASHBOARD_METRICS_CACHE_MS ?? 30_000,
+);
 
 const isMetricsCacheEnabled = () =>
   Number.isFinite(METRICS_CACHE_MS) && METRICS_CACHE_MS > 0;

@@ -9,6 +9,7 @@ import { analyzeFaceBlob, validateFaceBlob } from "@/utils/faceCapture";
 interface FaceLoginModalProps {
   isOpen: boolean;
   onClose: () => void;
+  rememberMe?: boolean;
   onSuccess?: (auth: {
     user: any;
     token: string;
@@ -142,6 +143,7 @@ const getStatusCopy = (faceFeedback: FaceFeedbackState) => {
 export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
   isOpen,
   onClose,
+  rememberMe = false,
   onSuccess,
   onError: _onError,
   email: initialEmail,
@@ -308,7 +310,11 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
       setFaceFeedback("detecting");
       setStep("processing");
 
-      const result = await authenticateFace(email.trim(), preview.blob);
+      const result = await authenticateFace(
+        email.trim(),
+        preview.blob,
+        rememberMe,
+      );
 
       if (result.success && result.user && result.token) {
         setFaceFeedback(null);
@@ -383,6 +389,7 @@ export const FaceLoginModal: React.FC<FaceLoginModalProps> = ({
     loading,
     onSuccess,
     preview,
+    rememberMe,
     startCamera,
   ]);
 

@@ -89,6 +89,7 @@ export type FeatureAccessResult = {
 };
 
 const snapshotCache = new Map<number, CacheEntry<SubscriptionSnapshot>>();
+const snapshotInFlightLoads = new Map<number, Promise<SubscriptionSnapshot>>();
 const businessOwnerCache = new Map<string, CacheEntry<number | null>>();
 const userSubscriptionCache = new Map<
   string,
@@ -457,9 +458,22 @@ const loadSnapshotForUser = async (userId: number) => {
     return cached;
   }
 
-  const { snapshot } = await toSnapshot(userId);
-  setCached(snapshotCache, userId, snapshot);
-  return snapshot;
+  const inFlight = snapshotInFlightLoads.get(userId);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const loadPromise = toSnapshot(userId)
+    .then(({ snapshot }) => {
+      setCached(snapshotCache, userId, snapshot);
+      return snapshot;
+    })
+    .finally(() => {
+      snapshotInFlightLoads.delete(userId);
+    });
+
+  snapshotInFlightLoads.set(userId, loadPromise);
+  return loadPromise;
 };
 
 const buildUserSubscriptionRecord = (

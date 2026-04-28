@@ -8,6 +8,13 @@ import {
   clearAuthCookies,
   revokeAllRefreshTokensForUser,
 } from "../lib/authCookies.js";
+import {
+  getCurrentRefreshSessionId,
+  listActiveDeviceSessions,
+  revokeOtherRefreshSessions,
+  revokeRefreshSessionById,
+} from "../services/deviceSessions.service.js";
+import { recordAuditLog } from "../services/auditLog.service.js";
 
 type SettingsPayload = {
   appPreferences?: {
@@ -94,6 +101,22 @@ const getOrCreatePreference = async (userId: number) =>
   );
 
 class SettingsController {
+  private static ensureOwnerSecurityAccess(req: Request, res: Response) {
+    if (!req.user?.ownerUserId) {
+      sendResponse(res, 401, { message: "Unauthorized" });
+      return null;
+    }
+
+    if (req.user.accountType !== "OWNER") {
+      sendResponse(res, 403, {
+        message: "Security session controls are available only for owner accounts.",
+      });
+      return null;
+    }
+
+    return req.user.ownerUserId;
+  }
+
   static async preferences(req: Request, res: Response) {
     const userId = req.user?.id;
     if (!userId) {
@@ -159,10 +182,8 @@ class SettingsController {
   }
 
   static async securityActivity(req: Request, res: Response) {
-    const userId = req.user?.ownerUserId;
-    if (!userId) {
-      return sendResponse(res, 401, { message: "Unauthorized" });
-    }
+    const userId = SettingsController.ensureOwnerSecurityAccess(req, res);
+    if (!userId) return;
 
     const events = await prisma.authEvent.findMany({
       where: { user_id: userId },
@@ -190,11 +211,116 @@ class SettingsController {
     });
   }
 
-  static async logoutAll(req: Request, res: Response) {
-    const userId = req.user?.ownerUserId;
-    if (!userId) {
-      return sendResponse(res, 401, { message: "Unauthorized" });
+  static async securitySessions(req: Request, res: Response) {
+    const userId = SettingsController.ensureOwnerSecurityAccess(req, res);
+    if (!userId) return;
+
+    const sessions = await listActiveDeviceSessions(userId, req);
+
+    return sendResponse(res, 200, {
+      data: sessions,
+    });
+  }
+
+  static async logoutOthers(req: Request, res: Response) {
+    const userId = SettingsController.ensureOwnerSecurityAccess(req, res);
+    if (!userId) return;
+
+    const currentSessionId = await getCurrentRefreshSessionId(req, userId);
+    const revokedCount = await revokeOtherRefreshSessions(
+      userId,
+      currentSessionId,
+      "logout_other_devices",
+    );
+
+    await recordAuthEvent({
+      req,
+      userId,
+      method: AuthMethod.PASSWORD,
+      success: true,
+      actorType: req.user?.accountType ?? "OWNER",
+      metadata: {
+        action: "LOGOUT_OTHER_DEVICES",
+        revokedCount,
+      },
+    });
+    await recordAuditLog({
+      req,
+      userId,
+      actorId: req.user?.actorId ?? String(userId),
+      actorType: req.user?.accountType ?? "OWNER",
+      action: "security.logout_other_devices",
+      resourceType: "session",
+      status: "success",
+      metadata: {
+        revokedCount,
+        currentSessionId,
+      },
+    });
+
+    return sendResponse(res, 200, {
+      message: revokedCount
+        ? "Other device sessions have been revoked."
+        : "No other active device sessions were found.",
+      data: {
+        revokedCount,
+      },
+    });
+  }
+
+  static async revokeSession(req: Request, res: Response) {
+    const userId = SettingsController.ensureOwnerSecurityAccess(req, res);
+    if (!userId) return;
+
+    const sessionId = req.params.id?.trim();
+    if (!sessionId) {
+      return sendResponse(res, 422, { message: "Session id is required" });
     }
+
+    const currentSessionId = await getCurrentRefreshSessionId(req, userId);
+    const revoked = await revokeRefreshSessionById(
+      userId,
+      sessionId,
+      sessionId === currentSessionId
+        ? "manual_logout_current_session"
+        : "manual_logout_other_session",
+    );
+
+    if (!revoked) {
+      return sendResponse(res, 404, {
+        message: "Session not found",
+      });
+    }
+
+    if (sessionId === currentSessionId) {
+      clearAuthCookies(res);
+    }
+
+    await recordAuditLog({
+      req,
+      userId,
+      actorId: req.user?.actorId ?? String(userId),
+      actorType: req.user?.accountType ?? "OWNER",
+      action:
+        sessionId === currentSessionId
+          ? "security.logout_current_session"
+          : "security.logout_session",
+      resourceType: "session",
+      resourceId: sessionId,
+      status: "success",
+    });
+
+    return sendResponse(res, 200, {
+      message:
+        sessionId === currentSessionId
+          ? "Current session logged out."
+          : "Device session revoked.",
+    });
+  }
+
+  static async logoutAll(req: Request, res: Response) {
+    const userId = SettingsController.ensureOwnerSecurityAccess(req, res);
+    if (!userId) return;
 
     try {
       await prisma.user.update({
@@ -215,7 +341,7 @@ class SettingsController {
       }
     }
 
-    await revokeAllRefreshTokensForUser(userId);
+    await revokeAllRefreshTokensForUser(userId, "logout_all_devices");
     clearAuthCookies(res);
 
     await recordAuthEvent({
@@ -227,6 +353,15 @@ class SettingsController {
       metadata: {
         action: "LOGOUT_ALL_DEVICES",
       },
+    });
+    await recordAuditLog({
+      req,
+      userId,
+      actorId: req.user?.actorId ?? String(userId),
+      actorType: req.user?.accountType ?? "OWNER",
+      action: "security.logout_all_devices",
+      resourceType: "session",
+      status: "success",
     });
 
     return sendResponse(res, 200, {

@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { sendResponse } from "../../utils/sendResponse.js";
 import { executeExport, previewExport } from "./export.service.js";
+import { recordAuditLog } from "../../services/auditLog.service.js";
 
 class ExportController {
   static async preview(req: Request, res: Response) {
@@ -55,6 +56,24 @@ class ExportController {
           filters: req.body.filters,
         },
       );
+      await recordAuditLog({
+        req,
+        userId: authUser.ownerUserId,
+        actorId: authUser.actorId,
+        actorType: authUser.accountType,
+        action: "export.run",
+        resourceType: "export",
+        resourceId: req.params.resource,
+        status: "success",
+        metadata: {
+          format: req.body.format,
+          scope: req.body.scope,
+          delivery: req.body.delivery,
+          selectedCount: Array.isArray(req.body.selected_ids)
+            ? req.body.selected_ids.length
+            : 0,
+        },
+      });
 
       if (result.delivery === "email") {
         return sendResponse(res, 200, {

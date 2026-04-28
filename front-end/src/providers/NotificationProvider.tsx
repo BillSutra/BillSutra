@@ -37,8 +37,10 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
     queryKey: NOTIFICATION_QUERY_KEY,
     queryFn: () => fetchNotifications(10),
     enabled: status === "authenticated",
-    refetchInterval: 30000,
-    staleTime: 15000,
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.hidden ? false : 60_000,
+    refetchIntervalInBackground: false,
+    staleTime: 45_000,
   });
 
   const markReadMutation = useMutation({

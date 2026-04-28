@@ -1,9 +1,6 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../config/db.config.js";
 import { getExtraEntryStats } from "./extraEntry.service.js";
-import {
-  computeInvoicePaymentSnapshotFromPayments,
-} from "../utils/invoicePaymentSnapshot.js";
 
 type RevenuePoint = { date: Date; total: Prisma.Decimal | number };
 type CostPoint = { date: Date; total: Prisma.Decimal | number };
@@ -445,7 +442,11 @@ type CashInflowSnapshot = {
   };
 };
 
-const SYNCED_INVOICE_NOTE_PATTERN = /Synced from invoice\s+/i;
+const SYNCED_INVOICE_NOTE_REGEX_SOURCE = "Synced from invoice\\s+";
+const SYNCED_INVOICE_NOTE_PATTERN = new RegExp(
+  SYNCED_INVOICE_NOTE_REGEX_SOURCE,
+  "i",
+);
 const DASHBOARD_SALES_DEBUG = process.env.DASHBOARD_DEBUG_SALES === "true";
 
 const isSyncedInvoiceSale = (notes: string | null | undefined) =>
@@ -496,22 +497,6 @@ const logCashInflowSnapshot = (
       },
     }),
   );
-};
-
-const resolveInvoicePaidAmount = (invoice: {
-  total: unknown;
-  status: string;
-  payments: Array<{ amount: unknown }>;
-}) => {
-  return computeInvoicePaymentSnapshotFromPayments(invoice).paidAmount;
-};
-
-const resolveInvoicePendingAmount = (invoice: {
-  total: unknown;
-  status: string;
-  payments: Array<{ amount: unknown }>;
-}) => {
-  return computeInvoicePaymentSnapshotFromPayments(invoice).pendingAmount;
 };
 
 export const fetchCashInflowSnapshot = async (params: {
@@ -615,58 +600,89 @@ const fetchSalesMetricSnapshot = async (params: {
 }) => {
   const { userId, start, endExclusive } = params;
 
-  const [cashInflowSnapshot, sales, invoices] = await Promise.all([
-    fetchCashInflowSnapshot({
-      userId,
-      start,
-      endExclusive,
-      debugLabel: "dashboard sales metrics",
-    }),
-    prisma.sale.findMany({
-      where: {
-        user_id: userId,
-        status: SALE_STATUS.COMPLETED,
-        sale_date: { gte: start, lt: endExclusive },
-      },
-      select: {
-        pendingAmount: true,
-        notes: true,
-      },
-    }),
-    prisma.invoice.findMany({
-      where: {
-        user_id: userId,
-        date: { gte: start, lt: endExclusive },
-      },
-      select: {
-        total: true,
-        status: true,
-        payments: {
-          select: {
-            amount: true,
-          },
-        },
-      },
-    }),
+  const [
+    directSalesReceiptRows,
+    invoicePaymentRows,
+    directSalesPendingRows,
+    invoicePendingRows,
+  ] = await Promise.all([
+    prisma.$queryRaw<Array<{ total: Prisma.Decimal | number | null }>>(Prisma.sql`
+      SELECT COALESCE(SUM("paid_amount"), 0) AS total
+      FROM "sales"
+      WHERE "user_id" = ${userId}
+        AND "status" = ${SALE_STATUS.COMPLETED}::"SaleStatus"
+        AND "paid_amount" > 0
+        AND (
+          ("payment_date" >= ${start} AND "payment_date" < ${endExclusive})
+          OR (
+            "payment_date" IS NULL
+            AND "sale_date" >= ${start}
+            AND "sale_date" < ${endExclusive}
+          )
+        )
+        AND ("notes" IS NULL OR "notes" !~* ${SYNCED_INVOICE_NOTE_REGEX_SOURCE})
+    `),
+    prisma.$queryRaw<Array<{ total: Prisma.Decimal | number | null }>>(Prisma.sql`
+      SELECT COALESCE(SUM("amount"), 0) AS total
+      FROM "payments"
+      WHERE "user_id" = ${userId}
+        AND "paid_at" >= ${start}
+        AND "paid_at" < ${endExclusive}
+    `),
+    prisma.$queryRaw<Array<{ total: Prisma.Decimal | number | null }>>(Prisma.sql`
+      SELECT COALESCE(SUM("pending_amount"), 0) AS total
+      FROM "sales"
+      WHERE "user_id" = ${userId}
+        AND "status" = ${SALE_STATUS.COMPLETED}::"SaleStatus"
+        AND "sale_date" >= ${start}
+        AND "sale_date" < ${endExclusive}
+        AND ("notes" IS NULL OR "notes" !~* ${SYNCED_INVOICE_NOTE_REGEX_SOURCE})
+    `),
+    prisma.$queryRaw<Array<{ total: Prisma.Decimal | number | null }>>(Prisma.sql`
+      WITH invoice_scope AS (
+        SELECT "id", "total", "status"
+        FROM "invoices"
+        WHERE "user_id" = ${userId}
+          AND "issue_date" >= ${start}
+          AND "issue_date" < ${endExclusive}
+      ),
+      payment_totals AS (
+        SELECT
+          "invoice_id",
+          COALESCE(SUM("amount"), 0) AS paid_total
+        FROM "payments"
+        WHERE "invoice_id" IN (SELECT "id" FROM invoice_scope)
+        GROUP BY "invoice_id"
+      )
+      SELECT COALESCE(
+        SUM(
+          CASE
+            WHEN i."status" IN (${INVOICE_STATUS.DRAFT}::"InvoiceStatus", ${INVOICE_STATUS.VOID}::"InvoiceStatus")
+              THEN 0
+            ELSE GREATEST(
+              COALESCE(i."total", 0) - LEAST(COALESCE(pt.paid_total, 0), COALESCE(i."total", 0)),
+              0
+            )
+          END
+        ),
+        0
+      ) AS total
+      FROM invoice_scope AS i
+      LEFT JOIN payment_totals AS pt
+        ON pt."invoice_id" = i."id"
+    `),
   ]);
 
-  const directSales = sales.filter((sale) => !isSyncedInvoiceSale(sale.notes));
-
-  const directSalesPending = directSales.reduce(
-    (sum, sale) =>
-      sum +
-      Math.max(0, toNumber(sale.pendingAmount)),
-    0,
-  );
-
-  const invoicePending = invoices.reduce(
-    (sum, invoice) => sum + resolveInvoicePendingAmount(invoice),
-    0,
-  );
+  const totalSales =
+    toNumber(directSalesReceiptRows[0]?.total ?? 0) +
+    toNumber(invoicePaymentRows[0]?.total ?? 0);
+  const pendingSales =
+    toNumber(directSalesPendingRows[0]?.total ?? 0) +
+    toNumber(invoicePendingRows[0]?.total ?? 0);
 
   return {
-    totalSales: cashInflowSnapshot.total,
-    pendingSales: roundMetric(directSalesPending + invoicePending),
+    totalSales: roundMetric(totalSales),
+    pendingSales: roundMetric(pendingSales),
   } satisfies SalesMetricSnapshot;
 };
 
@@ -714,14 +730,16 @@ const fetchTotalsSnapshot = async (params: {
   endExclusive: Date;
 }) => {
   const { userId, start, endExclusive } = params;
-  const totals = await sumSalesPurchases({ userId, start, endExclusive });
-  const salesMetrics = await fetchSalesMetricSnapshot({
-    userId,
-    start,
-    endExclusive,
-  });
-  const expenses = await getExpenseTotals({ userId, from: start, to: endExclusive });
-  const extraEntryStats = await getExtraEntryStats({ userId, from: start, to: endExclusive });
+  const [totals, salesMetrics, expenses, extraEntryStats] = await Promise.all([
+    sumSalesPurchases({ userId, start, endExclusive }),
+    fetchSalesMetricSnapshot({
+      userId,
+      start,
+      endExclusive,
+    }),
+    getExpenseTotals({ userId, from: start, to: endExclusive }),
+    getExtraEntryStats({ userId, from: start, to: endExclusive }),
+  ]);
 
   return {
     bookedSales: roundMetric(totals.salesBooked),
@@ -1162,6 +1180,7 @@ export const buildDashboardOverview = async (params: {
     previousExtraEntryStats,
     currentSalesMetrics,
     previousSalesMetrics,
+    recentInvoices,
   ] = await Promise.all([
     prisma.sale.findMany({
       where: {
@@ -1282,6 +1301,23 @@ export const buildDashboardOverview = async (params: {
       userId,
       start: resolved.previousStart,
       endExclusive: resolved.previousEndExclusive,
+    }),
+    prisma.invoice.findMany({
+      where: { user_id: userId },
+      select: {
+        id: true,
+        invoice_number: true,
+        status: true,
+        total: true,
+        date: true,
+        customer: {
+          select: {
+            name: true,
+          },
+        },
+      },
+      orderBy: { date: "desc" },
+      take: 5,
     }),
   ]);
 
@@ -1714,6 +1750,16 @@ export const buildDashboardOverview = async (params: {
         paymentStatus: item.paymentStatus,
         date: item.date,
       })),
+    recentInvoices: recentInvoices.map((invoice) => ({
+      id: invoice.id,
+      invoiceNumber: invoice.invoice_number,
+      customer: invoice.customer
+        ? { name: invoice.customer.name ?? "Walk-in" }
+        : null,
+      total: roundMetric(toNumber(invoice.total)),
+      status: invoice.status,
+      date: invoice.date.toISOString(),
+    })),
     invoiceStats: {
       total: currentSales.length,
       paid: currentSales.filter((sale) => sale.paymentStatus === "PAID").length,
@@ -1787,17 +1833,6 @@ export const buildDashboardCardMetrics = async (params: {
   const { userId, filters } = params;
   const resolved = resolveDashboardFilters(filters);
 
-  const currentTotals = await fetchTotalsSnapshot({
-    userId,
-    start: resolved.start,
-    endExclusive: resolved.endExclusive,
-  });
-  const previousTotals = await fetchTotalsSnapshot({
-    userId,
-    start: resolved.previousStart,
-    endExclusive: resolved.previousEndExclusive,
-  });
-
   const now = new Date();
   const todayStart = startOfDayUtc(now);
   const todayEnd = addDaysUtc(todayStart, 1);
@@ -1827,46 +1862,69 @@ export const buildDashboardCardMetrics = async (params: {
   const prevYearStart = new Date(Date.UTC(now.getUTCFullYear() - 1, 0, 1));
   const prevYearEnd = addDaysUtc(prevYearStart, yearSpanDays);
 
-  const todaySnapshot = await fetchTotalsSnapshot({
-    userId,
-    start: todayStart,
-    endExclusive: todayEnd,
-  });
-  const yesterdaySnapshot = await fetchTotalsSnapshot({
-    userId,
-    start: addDaysUtc(todayStart, -1),
-    endExclusive: todayStart,
-  });
-  const weekSnapshot = await fetchTotalsSnapshot({
-    userId,
-    start: weekStart,
-    endExclusive: todayEnd,
-  });
-  const prevWeekSnapshot = await fetchTotalsSnapshot({
-    userId,
-    start: addDaysUtc(weekStart, -7),
-    endExclusive: weekStart,
-  });
-  const monthSnapshot = await fetchTotalsSnapshot({
-    userId,
-    start: monthStart,
-    endExclusive: todayEnd,
-  });
-  const prevMonthSnapshot = await fetchTotalsSnapshot({
-    userId,
-    start: prevMonthStart,
-    endExclusive: prevMonthEnd,
-  });
-  const yearSnapshot = await fetchTotalsSnapshot({
-    userId,
-    start: yearStart,
-    endExclusive: todayEnd,
-  });
-  const prevYearSnapshot = await fetchTotalsSnapshot({
-    userId,
-    start: prevYearStart,
-    endExclusive: prevYearEnd,
-  });
+  const [
+    currentTotals,
+    previousTotals,
+    todaySnapshot,
+    yesterdaySnapshot,
+    weekSnapshot,
+    prevWeekSnapshot,
+    monthSnapshot,
+    prevMonthSnapshot,
+    yearSnapshot,
+    prevYearSnapshot,
+  ] = await Promise.all([
+    fetchTotalsSnapshot({
+      userId,
+      start: resolved.start,
+      endExclusive: resolved.endExclusive,
+    }),
+    fetchTotalsSnapshot({
+      userId,
+      start: resolved.previousStart,
+      endExclusive: resolved.previousEndExclusive,
+    }),
+    fetchTotalsSnapshot({
+      userId,
+      start: todayStart,
+      endExclusive: todayEnd,
+    }),
+    fetchTotalsSnapshot({
+      userId,
+      start: addDaysUtc(todayStart, -1),
+      endExclusive: todayStart,
+    }),
+    fetchTotalsSnapshot({
+      userId,
+      start: weekStart,
+      endExclusive: todayEnd,
+    }),
+    fetchTotalsSnapshot({
+      userId,
+      start: addDaysUtc(weekStart, -7),
+      endExclusive: weekStart,
+    }),
+    fetchTotalsSnapshot({
+      userId,
+      start: monthStart,
+      endExclusive: todayEnd,
+    }),
+    fetchTotalsSnapshot({
+      userId,
+      start: prevMonthStart,
+      endExclusive: prevMonthEnd,
+    }),
+    fetchTotalsSnapshot({
+      userId,
+      start: yearStart,
+      endExclusive: todayEnd,
+    }),
+    fetchTotalsSnapshot({
+      userId,
+      start: prevYearStart,
+      endExclusive: prevYearEnd,
+    }),
+  ]);
 
   const calcProfit = (snapshot: TotalsSnapshot) =>
     roundMetric(snapshot.totalSales - snapshot.bookedPurchases - snapshot.expenses + snapshot.extraIncome - snapshot.extraExpense - snapshot.extraLoss - snapshot.extraInvestment);

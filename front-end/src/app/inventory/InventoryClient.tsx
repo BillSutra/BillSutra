@@ -163,13 +163,19 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedRowIds, setSelectedRowIds] = useState<number[]>([]);
+  const [auxiliaryDataEnabled, setAuxiliaryDataEnabled] = useState(false);
   const scopedWarehouseId = warehouseFilter ? Number(warehouseFilter) : undefined;
   const { data, isLoading, isError } = useInventoriesQuery();
-  const { data: products } = useProductsQuery();
+  const { data: products } = useProductsQuery(undefined, {
+    enabled: auxiliaryDataEnabled,
+  });
   const { data: categories } = useCategoriesQuery();
   const { data: warehouses } = useWarehousesQuery();
   const predictionsQuery = useInventoryDemandPredictions(
     scopedWarehouseId ? { warehouseId: scopedWarehouseId } : undefined,
+    {
+      enabled: auxiliaryDataEnabled && !isLoading && !isError,
+    },
   );
   const adjustInventory = useAdjustInventoryMutation();
   const [form, setForm] = useState({
@@ -207,6 +213,28 @@ const InventoryClient = ({ name, image }: InventoryClientProps) => {
   useEffect(() => {
     setCurrentPage(1);
   }, [categoryFilter, debouncedSearch, pageSize, sortBy, stockFilter, warehouseFilter]);
+
+  useEffect(() => {
+    if (isLoading || isError) {
+      return;
+    }
+
+    const idleCallback =
+      "requestIdleCallback" in window
+        ? window.requestIdleCallback(() => setAuxiliaryDataEnabled(true), {
+            timeout: 1200,
+          })
+        : window.setTimeout(() => setAuxiliaryDataEnabled(true), 300);
+
+    return () => {
+      if (typeof idleCallback === "number") {
+        window.clearTimeout(idleCallback);
+        return;
+      }
+
+      window.cancelIdleCallback(idleCallback);
+    };
+  }, [isError, isLoading]);
 
   const predictionByKey = useMemo(() => {
     const map = new Map<string, InventoryDemandPrediction>();

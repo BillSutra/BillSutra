@@ -42,12 +42,14 @@ export async function registerAction(prevState: unknown, formdata: FormData) {
       confirm_password: formdata.get("confirm_password"),
     });
     return {
-      status: 200,
-      message: response.data?.message ?? "Registration successful.",
+      status: response.status,
+      message:
+        response.data?.message ?? "Account created. Verify your email to continue.",
       errors: {},
       data: {
-        token: response.data?.data?.token ?? response.data?.token ?? null,
         user: response.data?.data?.user ?? response.data?.user ?? null,
+        verification:
+          response.data?.data?.verification ?? response.data?.verification ?? null,
       },
     };
   } catch (error) {
@@ -58,6 +60,21 @@ export async function registerAction(prevState: unknown, formdata: FormData) {
           message: extractAxiosMessage(error, "Please check the form details."),
           errors: error.response.data.errors,
           data: {},
+        };
+      }
+
+      if (error.response?.status === 503) {
+        return {
+          status: 503,
+          message: extractAxiosMessage(
+            error,
+            "Account created, but verification email could not be sent.",
+          ),
+          errors: {},
+          data: {
+            user: error.response.data?.data?.user ?? null,
+            verification: error.response.data?.data?.verification ?? null,
+          },
         };
       }
 
@@ -121,11 +138,14 @@ export async function loginAction(prevState: unknown, formData: FormData) {
     const normalizedPhone = rawIdentifier.replace(/[^\d+]/g, "");
     const isEmailIdentifier = EMAIL_REGEX.test(rawIdentifier.toLowerCase());
 
+    const rememberMe = formData.get("rememberMe") === "true";
+
     const response = await axios.post(check_credential, {
       identifier: rawIdentifier,
       email: isEmailIdentifier ? rawIdentifier.toLowerCase() : undefined,
       phone: !isEmailIdentifier ? normalizedPhone || undefined : undefined,
       password: formData.get("password"),
+      rememberMe,
     });
     const authPayload = response.data?.data ?? response.data;
     return {
@@ -135,6 +155,7 @@ export async function loginAction(prevState: unknown, formData: FormData) {
       data: {
         identifier: rawIdentifier,
         password: formData.get("password"),
+        rememberMe,
         token: authPayload?.token ?? null,
         user: authPayload?.user ?? null,
       },
@@ -158,6 +179,25 @@ export async function loginAction(prevState: unknown, formData: FormData) {
           data: {},
         };
       }
+
+      if (error.response?.status === 403) {
+        return {
+          status: 403,
+          message: extractAxiosMessage(error, "Please verify your email first"),
+          errors: {},
+          data: {
+            code:
+              typeof error.response.data?.code === "string"
+                ? error.response.data.code
+                : null,
+            email:
+              error.response.data?.data?.email ??
+              normalizeIdentifier(formData.get("identifier") ?? formData.get("email")),
+            retryAfter: error.response.data?.data?.retryAfter ?? null,
+            expiresIn: error.response.data?.data?.expiresIn ?? null,
+          },
+        };
+      }
     }
 
     return {
@@ -177,11 +217,14 @@ export async function workerLoginAction(prevState: unknown, formData: FormData) 
     const normalizedPhone = rawIdentifier.replace(/[^\d+]/g, "");
     const isEmailIdentifier = EMAIL_REGEX.test(rawIdentifier.toLowerCase());
 
+    const rememberMe = formData.get("rememberMe") === "true";
+
     const response = await axios.post(WORKER_LOGIN_URL, {
       identifier: rawIdentifier,
       email: isEmailIdentifier ? rawIdentifier.toLowerCase() : undefined,
       phone: !isEmailIdentifier ? normalizedPhone || undefined : undefined,
       password: formData.get("password"),
+      rememberMe,
     });
     const authPayload = response.data?.data ?? response.data;
     return {
@@ -191,6 +234,7 @@ export async function workerLoginAction(prevState: unknown, formData: FormData) 
       data: {
         identifier: rawIdentifier,
         password: formData.get("password"),
+        rememberMe,
         token: authPayload?.token ?? null,
         user: authPayload?.user ?? null,
       },

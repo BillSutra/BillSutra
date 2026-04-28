@@ -1,9 +1,13 @@
 import { Router } from "express";
 import * as FaceRecognitionController from "../controllers/FaceRecognitionController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
-import { faceAuthRateLimiter } from "../middlewares/rateLimit.middleware.js";
+import {
+  faceAuthRateLimiter,
+  uploadRateLimiter,
+} from "../middlewares/rateLimit.middleware.js";
 import multer from "multer";
 import type { NextFunction, Request, Response } from "express";
+import { matchesAllowedUploadKinds } from "../lib/fileUploadSecurity.js";
 
 const router = Router();
 const upload = multer({
@@ -39,6 +43,18 @@ const wrap =
 const uploadImage = (req: Request, res: Response, next: NextFunction) => {
   upload.single("image")(req, res, (err: unknown) => {
     if (!err) {
+      if (
+        req.file &&
+        !matchesAllowedUploadKinds(req.file.buffer, ["png", "jpeg"])
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "The uploaded face image content does not match a supported format.",
+          error: "The uploaded face image content does not match a supported format.",
+          code: "INVALID_FILE_TYPE",
+        });
+      }
+
       return next();
     }
 
@@ -89,6 +105,7 @@ router.post(
   "/register",
   AuthMiddleware,
   faceAuthRateLimiter,
+  uploadRateLimiter,
   uploadImage,
   wrap(FaceRecognitionController.registerFace),
 );
@@ -101,6 +118,7 @@ router.post(
 router.post(
   "/authenticate",
   faceAuthRateLimiter,
+  uploadRateLimiter,
   uploadImage,
   wrap(FaceRecognitionController.authenticateFace),
 );

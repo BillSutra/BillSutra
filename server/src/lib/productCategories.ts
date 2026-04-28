@@ -1,6 +1,14 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../config/db.config.js";
 
+const CATEGORY_REFERENCE_HEALTH_TTL_MS = Number(
+  process.env.CATEGORY_REFERENCE_HEALTH_TTL_MS ?? 10 * 60 * 1000,
+);
+const categoryReferenceHealthByUser = new Map<
+  number,
+  { checkedAt: number; inFlight: Promise<number> | null }
+>();
+
 export const productCategoryInclude = {
   category: {
     select: {
@@ -65,4 +73,35 @@ export const clearDanglingProductCategoryReferences = async (userId: number) => 
     });
     return 0;
   }
+};
+
+export const maintainProductCategoryReferences = async (userId: number) => {
+  const cached = categoryReferenceHealthByUser.get(userId);
+  const now = Date.now();
+
+  if (
+    cached &&
+    now - cached.checkedAt < CATEGORY_REFERENCE_HEALTH_TTL_MS &&
+    !cached.inFlight
+  ) {
+    return 0;
+  }
+
+  if (cached?.inFlight) {
+    return cached.inFlight;
+  }
+
+  const inFlight = clearDanglingProductCategoryReferences(userId).finally(() => {
+    categoryReferenceHealthByUser.set(userId, {
+      checkedAt: Date.now(),
+      inFlight: null,
+    });
+  });
+
+  categoryReferenceHealthByUser.set(userId, {
+    checkedAt: cached?.checkedAt ?? 0,
+    inFlight,
+  });
+
+  return inFlight;
 };

@@ -139,11 +139,14 @@ export const resolveBillingWarehouse = async (
       where: { id: preferredWarehouseId, user_id: userId },
     });
 
-    if (!warehouse) {
-      throw createAppError("Warehouse not found.", 404);
+    if (warehouse) {
+      return warehouse;
     }
 
-    return warehouse;
+    console.warn("[BillingInventorySync] Falling back from stale warehouse", {
+      userId,
+      preferredWarehouseId,
+    });
   }
 
   const existingWarehouse = await tx.warehouse.findFirst({

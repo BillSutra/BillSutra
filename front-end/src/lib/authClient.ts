@@ -23,6 +23,10 @@ export type EmailVerificationResult = AuthSuccessPayload & {
   expiresAt?: number;
 };
 
+export type EmailVerificationOtpResponse = AuthSuccessPayload & {
+  expiresAt?: number;
+};
+
 export type PasskeyCredentialRecord = {
   id: number;
   label: string;
@@ -84,11 +88,16 @@ export const requestOtpLoginCode = async (email: string) => {
   }
 };
 
-export const verifyOtpLoginCode = async (email: string, code: string) => {
+export const verifyOtpLoginCode = async (
+  email: string,
+  code: string,
+  rememberMe = false,
+) => {
   try {
     const response = await axios.post(`${API_URL}/auth/otp/verify`, {
       email,
       code,
+      rememberMe,
     }, {
       withCredentials: true,
     });
@@ -119,6 +128,7 @@ export const verifyPasskeyAuthentication = async (
   email: string,
   challengeId: number,
   responsePayload: unknown,
+  rememberMe = false,
 ) => {
   try {
     const response = await axios.post(
@@ -126,6 +136,7 @@ export const verifyPasskeyAuthentication = async (
       {
         email,
         challenge_id: challengeId,
+        rememberMe,
         response: responsePayload,
       },
       { withCredentials: true },
@@ -194,6 +205,55 @@ export const verifyEmailAddress = async (token: string) => {
     return (response.data.data ?? response.data) as EmailVerificationResult;
   } catch (error) {
     throw new Error(extractMessage(error, "Unable to verify email."));
+  }
+};
+
+export const verifyEmailVerificationOtp = async (
+  email: string,
+  otp: string,
+  rememberMe?: boolean | null,
+) => {
+  try {
+    const response = await axios.post(
+      `${API_URL}/auth/verify-email`,
+      {
+        email,
+        otp,
+        rememberMe:
+          typeof rememberMe === "boolean" ? rememberMe : undefined,
+      },
+      { withCredentials: true },
+    );
+    return (response.data.data ?? response.data) as EmailVerificationOtpResponse;
+  } catch (error) {
+    throw new Error(extractMessage(error, "Unable to verify email."));
+  }
+};
+
+export const resendEmailVerificationOtp = async (email: string) => {
+  try {
+    const response = await axios.post(
+      `${API_URL}/auth/resend-otp`,
+      { email },
+      { withCredentials: true },
+    );
+    return response.data.data as
+      | { email?: string; retryAfter?: number; expiresIn?: number }
+      | undefined;
+  } catch (error) {
+    const nextError = new Error(
+      extractMessage(error, "Unable to resend verification code."),
+    ) as RetryableError;
+
+    if (axios.isAxiosError(error)) {
+      const data = error.response?.data as
+        | { data?: { retryAfter?: number; expiresIn?: number } }
+        | undefined;
+      nextError.retryAfter = data?.data?.retryAfter;
+      nextError.expiresIn = data?.data?.expiresIn;
+    }
+
+    throw nextError;
   }
 };
 

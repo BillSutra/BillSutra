@@ -10,6 +10,7 @@ import { buildPasswordResetEmail } from "./templates/password-reset.js";
 import { buildPaymentAccessApprovedEmail } from "./templates/payment-access-approved.js";
 import { buildPaymentReceivedEmail } from "./templates/payment-received.js";
 import { buildVerifyEmailEmail } from "./templates/verify-email.js";
+import { buildVerifyEmailOtpEmail } from "./templates/verify-email-otp.js";
 import { buildWeeklyReportEmail } from "./templates/weekly-report.js";
 import { buildWelcomeEmail } from "./templates/welcome.js";
 import type {
@@ -31,6 +32,7 @@ const DEFAULT_FROM_EMAIL = "BillSutra <no-reply@billsutra.com>";
 const templateBuilders = {
   welcome: buildWelcomeEmail,
   verify_email: buildVerifyEmailEmail,
+  verify_email_otp: buildVerifyEmailOtpEmail,
   password_reset: buildPasswordResetEmail,
   otp_login: buildOtpLoginEmail,
   invoice_sent: buildInvoiceSentEmail,

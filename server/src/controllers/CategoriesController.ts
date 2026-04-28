@@ -10,6 +10,24 @@ import {
 type CategoryCreateInput = z.infer<typeof categoryCreateSchema>;
 type CategoryUpdateInput = z.infer<typeof categoryUpdateSchema>;
 
+const CATEGORY_CACHE_MS = Number(process.env.CATEGORY_CACHE_MS ?? 30_000);
+const categoryListCache = new Map<
+  number,
+  {
+    expiresAt: number;
+    data: Array<{
+      id: number;
+      name: string;
+      created_at: Date;
+      updated_at: Date;
+    }>;
+  }
+>();
+
+const invalidateCategoryCache = (userId: number) => {
+  categoryListCache.delete(userId);
+};
+
 class CategoriesController {
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
@@ -17,10 +35,28 @@ class CategoriesController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    const cached = categoryListCache.get(userId);
+    if (cached && cached.expiresAt > Date.now()) {
+      return sendResponse(res, 200, { data: cached.data });
+    }
+
     const categories = await prisma.category.findMany({
       where: { user_id: userId },
       orderBy: { created_at: "desc" },
+      select: {
+        id: true,
+        name: true,
+        created_at: true,
+        updated_at: true,
+      },
     });
+
+    if (CATEGORY_CACHE_MS > 0) {
+      categoryListCache.set(userId, {
+        expiresAt: Date.now() + CATEGORY_CACHE_MS,
+        data: categories,
+      });
+    }
 
     return sendResponse(res, 200, { data: categories });
   }
@@ -37,6 +73,8 @@ class CategoriesController {
     const category = await prisma.category.create({
       data: { user_id: userId, name },
     });
+
+    invalidateCategoryCache(userId);
 
     return sendResponse(res, 201, {
       message: "Category created",
@@ -81,6 +119,8 @@ class CategoriesController {
       return sendResponse(res, 404, { message: "Category not found" });
     }
 
+    invalidateCategoryCache(userId);
+
     return sendResponse(res, 200, { message: "Category updated" });
   }
 
@@ -98,6 +138,8 @@ class CategoriesController {
     if (!deleted.count) {
       return sendResponse(res, 404, { message: "Category not found" });
     }
+
+    invalidateCategoryCache(userId);
 
     return sendResponse(res, 200, { message: "Category removed" });
   }

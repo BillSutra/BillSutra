@@ -16,6 +16,10 @@ import {
 import { normalizeGstin } from "../lib/gstin.js";
 import { launchPuppeteerBrowser } from "../lib/launchPuppeteerBrowser.js";
 import { dispatchNotification } from "../services/notification.service.js";
+import {
+  encryptSensitiveValue,
+  maybeDecryptSensitiveValue,
+} from "../lib/fieldEncryption.js";
 
 type CustomerCreateInput = z.infer<typeof customerCreateSchema>;
 type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
@@ -63,6 +67,15 @@ type CustomerInvoiceRecord = {
     reference?: string | null;
     paid_at: Date;
   }>;
+};
+
+type CustomerListSummaryRow = {
+  customer_id: number;
+  invoiced_total: unknown;
+  total_paid: unknown;
+  open_invoice_count: bigint | number | null;
+  last_invoice_date: Date | null;
+  last_payment_date: Date | null;
 };
 
 const customerBaseSelect = {
@@ -191,6 +204,64 @@ const loadExtendedCustomerFields = async (
   }
 };
 
+const normalizeCustomerGstinValue = (value: unknown) => {
+  const decrypted = maybeDecryptSensitiveValue(toNullableString(value));
+  return decrypted ? normalizeGstin(decrypted) : null;
+};
+
+const loadCustomerListSummaries = async (
+  userId: number,
+  customerIds: number[],
+) => {
+  if (!customerIds.length) {
+    return new Map<number, CustomerListSummaryRow>();
+  }
+
+  const rows = await prisma.$queryRaw<CustomerListSummaryRow[]>(Prisma.sql`
+    WITH payment_totals AS (
+      SELECT
+        p."invoice_id",
+        COALESCE(SUM(p."amount"), 0) AS total_paid,
+        MAX(p."paid_at") AS last_payment_date
+      FROM "payments" AS p
+      GROUP BY p."invoice_id"
+    )
+    SELECT
+      i."customer_id",
+      COALESCE(SUM(COALESCE(i."total", 0)), 0) AS invoiced_total,
+      COALESCE(
+        SUM(
+          LEAST(COALESCE(pt.total_paid, 0), COALESCE(i."total", 0))
+        ),
+        0
+      ) AS total_paid,
+      COALESCE(
+        SUM(
+          CASE
+            WHEN i."status" IN ('DRAFT', 'VOID') THEN 0
+            WHEN GREATEST(
+              COALESCE(i."total", 0) - LEAST(COALESCE(pt.total_paid, 0), COALESCE(i."total", 0)),
+              0
+            ) > 0 THEN 1
+            ELSE 0
+          END
+        ),
+        0
+      ) AS open_invoice_count,
+      MAX(i."issue_date") AS last_invoice_date,
+      MAX(pt.last_payment_date) AS last_payment_date
+    FROM "invoices" AS i
+    LEFT JOIN payment_totals AS pt
+      ON pt."invoice_id" = i."id"
+    WHERE i."user_id" = ${userId}
+      AND i."customer_id" IN (${Prisma.join(customerIds)})
+      AND i."status" IN ('SENT', 'PARTIALLY_PAID', 'PAID', 'OVERDUE')
+    GROUP BY i."customer_id"
+  `);
+
+  return new Map(rows.map((row) => [row.customer_id, row]));
+};
+
 const persistExtendedCustomerFields = async (
   userId: number,
   customerId: number,
@@ -303,7 +374,7 @@ const serializeCustomer = (
 
   const customerType = normalizeCustomerType(extended?.customer_type);
   const businessName = toNullableString(extended?.business_name);
-  const gstin = toNullableString(extended?.gstin);
+  const gstin = normalizeCustomerGstinValue(extended?.gstin);
   const openingBalance = roundAmount(
     Math.max(toNumber(extended?.opening_balance ?? 0), 0),
   );
@@ -428,6 +499,37 @@ const buildCustomerSummary = (
     lastPaymentDate,
     lastActivityDate,
     openInvoices,
+  };
+};
+
+const buildCustomerListSummary = (
+  customer: CustomerBaseRecord,
+  extended: CustomerExtendedFields | undefined,
+  summaryRow?: CustomerListSummaryRow,
+) => {
+  const openingBalance = roundAmount(
+    Math.max(toNumber(extended?.opening_balance ?? 0), 0),
+  );
+  const invoicedTotal = roundAmount(toNumber(summaryRow?.invoiced_total ?? 0));
+  const totalBilled = roundAmount(openingBalance + invoicedTotal);
+  const totalPaid = roundAmount(toNumber(summaryRow?.total_paid ?? 0));
+  const outstandingBalance = roundAmount(Math.max(totalBilled - totalPaid, 0));
+  const lastPaymentDate = summaryRow?.last_payment_date ?? null;
+  const lastInvoiceDate = summaryRow?.last_invoice_date ?? null;
+  const lastActivityDate = [customer.created_at, lastInvoiceDate, lastPaymentDate]
+    .filter((value): value is Date => value instanceof Date)
+    .sort((left, right) => right.getTime() - left.getTime())[0] ?? customer.created_at;
+
+  return {
+    openingBalance,
+    totalBilled,
+    totalPaid,
+    outstandingBalance,
+    openInvoiceCount: Number(summaryRow?.open_invoice_count ?? 0),
+    settled: outstandingBalance <= 0,
+    lastPaymentDate,
+    lastActivityDate,
+    openInvoices: [],
   };
 };
 
@@ -919,38 +1021,24 @@ class CustomersController {
         orderBy: { created_at: "desc" },
         skip,
         take: limit,
-        select: {
-          ...customerBaseSelect,
-          invoices: {
-            select: {
-              id: true,
-              invoice_number: true,
-              date: true,
-              due_date: true,
-              status: true,
-              total: true,
-              payments: {
-                select: {
-                  id: true,
-                  amount: true,
-                  paid_at: true,
-                },
-              },
-            },
-          },
-        },
+        select: customerBaseSelect,
       }),
       prisma.customer.count({ where }),
     ]);
 
-    const extendedMap = await loadExtendedCustomerFields(
-      userId,
-      items.map((item) => item.id),
-    );
+    const customerIds = items.map((item) => item.id);
+    const [extendedMap, summaryMap] = await Promise.all([
+      loadExtendedCustomerFields(userId, customerIds),
+      loadCustomerListSummaries(userId, customerIds),
+    ]);
 
     const enrichedCustomers = items.map((customer) => ({
       ...serializeCustomer(customer, extendedMap.get(customer.id)),
-      ...buildCustomerSummary(customer, extendedMap.get(customer.id)),
+      ...buildCustomerListSummary(
+        customer,
+        extendedMap.get(customer.id),
+        summaryMap.get(customer.id),
+      ),
     }));
 
     return sendResponse(res, 200, {
@@ -997,9 +1085,9 @@ class CustomersController {
     await persistExtendedCustomerFields(userId, customer.id, {
       customer_type: customerType,
       business_name: businessName,
-      gstin: toNullableString(body.gstin)
-        ? normalizeGstin(body.gstin ?? undefined)
-        : null,
+      gstin: encryptSensitiveValue(
+        normalizeCustomerGstinValue(body.gstin),
+      ),
       address_line1: structuredAddress.addressLine1 ?? null,
       city: structuredAddress.city ?? null,
       state: structuredAddress.state ?? null,
@@ -1306,9 +1394,9 @@ class CustomersController {
     await persistExtendedCustomerFields(userId, id, {
       customer_type: nextType,
       business_name: nextBusinessName,
-      gstin: toNullableString(body.gstin ?? existingExtended?.gstin)
-        ? normalizeGstin(body.gstin ?? existingExtended?.gstin)
-        : null,
+      gstin: encryptSensitiveValue(
+        normalizeCustomerGstinValue(body.gstin ?? existingExtended?.gstin),
+      ),
       address_line1: structuredAddress.addressLine1 ?? null,
       city: structuredAddress.city ?? null,
       state: structuredAddress.state ?? null,

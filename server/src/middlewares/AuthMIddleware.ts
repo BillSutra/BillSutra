@@ -5,6 +5,7 @@ import {
   resolveAccessTokenFromRequest,
 } from "../lib/authCookies.js";
 import {
+  hasSupportedAccessTokenType,
   getUserSessionVersionIfAvailable,
   resolveAuthUserFromDecoded,
 } from "../lib/authSession.js";
@@ -53,6 +54,14 @@ const unauthorized = (res: Response) => {
   res.status(401).json({ status: 401, message: "Unauthorized" });
 };
 
+const authServiceUnavailable = (res: Response) => {
+  res.status(503).json({
+    status: 503,
+    message: "Authentication service temporarily unavailable",
+    code: "AUTH_SERVICE_UNAVAILABLE",
+  });
+};
+
 const verifyResolvedToken = async (
   token: string,
   source: "header" | "cookie",
@@ -73,6 +82,10 @@ const verifyResolvedToken = async (
       return true;
     }
 
+    return false;
+  }
+
+  if (!hasSupportedAccessTokenType(decoded)) {
     return false;
   }
 
@@ -133,8 +146,14 @@ const verifyResolvedToken = async (
 
     next();
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    console.warn("[auth] request_verification_failed", {
+      path: req.path,
+      source,
+      message: error instanceof Error ? error.message : String(error),
+    });
+    authServiceUnavailable(res);
+    return true;
   }
 };
 

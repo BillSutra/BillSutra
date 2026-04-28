@@ -62,10 +62,14 @@ const defaultListQueryOptions = {
   retry: 1,
 } as const;
 
-export const useProductsQuery = (params?: ProductListParams) =>
+export const useProductsQuery = (
+  params?: ProductListParams,
+  options?: { enabled?: boolean },
+) =>
   useQuery({
     queryKey: ["products", "options", params],
     queryFn: () => fetchProductOptions(params),
+    enabled: options?.enabled ?? true,
     ...defaultListQueryOptions,
   });
 

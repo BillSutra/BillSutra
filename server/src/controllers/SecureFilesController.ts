@@ -2,7 +2,10 @@ import fs from "fs";
 import jwt from "jsonwebtoken";
 import path from "path";
 import type { Request, Response } from "express";
-import { findUploadedFileById } from "../services/uploadedFiles.service.js";
+import {
+  findUploadedFileById,
+  verifySignedSecureFileRequest,
+} from "../services/uploadedFiles.service.js";
 import {
   LEGACY_PAYMENT_PROOFS_ROOT,
   PRIVATE_EXPORTS_ROOT,
@@ -15,6 +18,7 @@ import {
   resolveAccessTokenFromRequest,
 } from "../lib/authCookies.js";
 import {
+  hasSupportedAccessTokenType,
   getUserSessionVersionIfAvailable,
   resolveAuthUserFromDecoded,
 } from "../lib/authSession.js";
@@ -40,6 +44,10 @@ const verifyOwnerToken = async (token: string) => {
   try {
     decoded = jwt.verify(token, process.env.JWT_SECRET as string);
   } catch {
+    return null;
+  }
+
+  if (!hasSupportedAccessTokenType(decoded)) {
     return null;
   }
 
@@ -168,14 +176,19 @@ const resolveSecureFileActor = async (
 
 class SecureFilesController {
   static async show(req: Request, res: Response) {
-    const actor = await resolveSecureFileActor(req);
-    if (!actor) {
-      return res.status(401).json({ status: 401, message: "Unauthorized" });
-    }
-
     const fileId = req.params.id?.trim();
     if (!fileId) {
       return res.status(400).json({ status: 400, message: "File id is required" });
+    }
+
+    const signedAccessAllowed = verifySignedSecureFileRequest(
+      fileId,
+      typeof req.query.expires === "string" ? req.query.expires : null,
+      typeof req.query.signature === "string" ? req.query.signature : null,
+    );
+    const actor = signedAccessAllowed ? null : await resolveSecureFileActor(req);
+    if (!actor && !signedAccessAllowed) {
+      return res.status(401).json({ status: 401, message: "Unauthorized" });
     }
 
     const fileRecord = await findUploadedFileById(fileId);
@@ -183,7 +196,7 @@ class SecureFilesController {
       return res.status(404).json({ status: 404, message: "File not found" });
     }
 
-    if (actor.kind === "owner" && fileRecord.user_id !== actor.ownerUserId) {
+    if (actor?.kind === "owner" && fileRecord.user_id !== actor.ownerUserId) {
       return res.status(403).json({ status: 403, message: "Forbidden" });
     }
 

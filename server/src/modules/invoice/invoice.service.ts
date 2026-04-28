@@ -50,11 +50,18 @@ const SALE_STATUS = {
   COMPLETED: "COMPLETED",
 } as const satisfies Record<string, SaleStatus>;
 
+const OVERDUE_SYNC_INTERVAL_MS = Number(
+  process.env.INVOICE_OVERDUE_SYNC_INTERVAL_MS ?? 60_000,
+);
+const overdueSyncByUser = new Map<number, number>();
+
 type ListInvoiceFilters = {
   status?: InvoiceStatus;
   clientId?: number;
   from?: Date;
   to?: Date;
+  page?: number;
+  limit?: number;
 };
 
 type InvoicePaymentStatusInput = "UNPAID" | "PARTIALLY_PAID" | "PAID";
@@ -696,6 +703,96 @@ const attachInvoiceGstMetadata = async <
       };
     }),
   } as T;
+};
+
+const attachInvoiceGstMetadataBatch = async <
+  T extends Array<
+    Prisma.InvoiceGetPayload<{ include: typeof invoiceInclude }> & {
+      [key: string]: unknown;
+    }
+  >,
+>(
+  invoices: T,
+) => {
+  if (invoices.length === 0) {
+    return invoices;
+  }
+
+  const invoiceIds = invoices.map((invoice) => invoice.id);
+  const [invoiceRows, itemRows] = await Promise.all([
+    prisma.$queryRaw<InvoiceGstMetadataRow[]>(Prisma.sql`
+      SELECT id, total_base, total_cgst, total_sgst, total_igst, grand_total
+      FROM "invoices"
+      WHERE id IN (${Prisma.join(invoiceIds)})
+    `),
+    prisma.$queryRaw<
+      Array<
+        InvoiceItemGstMetadataRow & {
+          invoice_id: number;
+        }
+      >
+    >(Prisma.sql`
+      SELECT
+        id,
+        invoice_id,
+        gst_type,
+        base_amount,
+        gst_amount,
+        cgst_amount,
+        sgst_amount,
+        igst_amount
+      FROM "invoice_items"
+      WHERE invoice_id IN (${Prisma.join(invoiceIds)})
+    `),
+  ]);
+
+  const invoiceMetaById = new Map(invoiceRows.map((row) => [row.id, row]));
+  const itemMetaByInvoiceId = new Map<
+    number,
+    Map<number, InvoiceItemGstMetadataRow>
+  >();
+
+  itemRows.forEach((row) => {
+    const perInvoice =
+      itemMetaByInvoiceId.get(row.invoice_id) ??
+      new Map<number, InvoiceItemGstMetadataRow>();
+    perInvoice.set(row.id, row);
+    itemMetaByInvoiceId.set(row.invoice_id, perInvoice);
+  });
+
+  return invoices.map((invoice) => {
+    const paymentSnapshot = computeInvoicePaymentSnapshotFromPayments({
+      total: invoice.total,
+      status: invoice.status,
+      dueDate: "due_date" in invoice ? invoice.due_date : null,
+      payments: invoice.payments,
+    });
+    const invoiceMeta = invoiceMetaById.get(invoice.id);
+    const itemMetaById = itemMetaByInvoiceId.get(invoice.id) ?? new Map();
+
+    return {
+      ...invoice,
+      total_base: invoiceMeta?.total_base ?? null,
+      total_cgst: invoiceMeta?.total_cgst ?? null,
+      total_sgst: invoiceMeta?.total_sgst ?? null,
+      total_igst: invoiceMeta?.total_igst ?? null,
+      grand_total: invoiceMeta?.grand_total ?? null,
+      totalPaid: paymentSnapshot.paidAmount,
+      computedStatus: paymentSnapshot.dynamicPaymentStatus,
+      items: invoice.items.map((item) => {
+        const meta = itemMetaById.get(item.id);
+        return {
+          ...item,
+          gst_type: meta?.gst_type ?? null,
+          base_amount: meta?.base_amount ?? null,
+          gst_amount: meta?.gst_amount ?? null,
+          cgst_amount: meta?.cgst_amount ?? null,
+          sgst_amount: meta?.sgst_amount ?? null,
+          igst_amount: meta?.igst_amount ?? null,
+        };
+      }),
+    };
+  }) as unknown as T;
 };
 
 const escapeHtml = (text: unknown) =>
@@ -1373,6 +1470,15 @@ const buildInvoicePdfHtml = (
 };
 
 const syncOverdueInvoices = async (userId: number) => {
+  const lastSyncedAt = overdueSyncByUser.get(userId) ?? 0;
+  if (
+    OVERDUE_SYNC_INTERVAL_MS > 0 &&
+    Date.now() - lastSyncedAt < OVERDUE_SYNC_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  overdueSyncByUser.set(userId, Date.now());
   const now = new Date();
 
   await prisma.invoice.updateMany({
@@ -1564,13 +1670,39 @@ export const listInvoices = async (
     };
   }
 
+  const orderBy = { createdAt: "desc" } as const;
+
+  if (filters.page || filters.limit) {
+    const page = Math.max(1, Math.trunc(filters.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Math.trunc(filters.limit ?? 20)));
+    const skip = (page - 1) * limit;
+    const [items, total] = await prisma.$transaction([
+      prisma.invoice.findMany({
+        where,
+        include: invoiceInclude,
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      prisma.invoice.count({ where }),
+    ]);
+
+    return {
+      items: await attachInvoiceGstMetadataBatch(items),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
   const invoices = await prisma.invoice.findMany({
     where,
     include: invoiceInclude,
-    orderBy: { createdAt: "desc" },
+    orderBy,
   });
 
-  return Promise.all(invoices.map((invoice) => attachInvoiceGstMetadata(invoice)));
+  return attachInvoiceGstMetadataBatch(invoices);
 };
 
 export const getInvoiceBootstrap = async (userId: number) => {

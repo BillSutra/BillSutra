@@ -4,7 +4,11 @@ import { Prisma, AuthMethod } from "@prisma/client";
 
 import prisma from "../config/db.config.js";
 import AppError from "../utils/AppError.js";
-import { buildOwnerAuthUser, getAccessTokenExpiresAt } from "../lib/authSession.js";
+import {
+  buildOwnerAuthUser,
+  getAccessTokenExpiresAt,
+  normalizeRememberMe,
+} from "../lib/authSession.js";
 import { issueAuthCookies } from "../lib/authCookies.js";
 import { recordAuthEvent } from "../lib/modernAuth.js";
 import { sendResponse } from "../utils/sendResponse.js";
@@ -1037,7 +1041,9 @@ export const authenticateFace = async (req: Request, res: Response) => {
       name: user.name,
       is_email_verified: user.is_email_verified,
     });
-    const { accessToken } = await issueAuthCookies(res, authUser);
+    const { accessToken } = await issueAuthCookies(req, res, authUser, {
+      rememberMe: normalizeRememberMe(req.body?.rememberMe),
+    });
     const token = `Bearer ${accessToken}`;
 
     return sendResponse(res, 200, {

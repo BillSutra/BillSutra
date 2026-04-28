@@ -4,7 +4,11 @@ import {
   getCookieValue,
   ACCESS_TOKEN_COOKIE_NAME,
 } from "../lib/authCookies.js";
-import { resolveAuthUserFromDecoded } from "../lib/authSession.js";
+import {
+  hasSupportedAccessTokenType,
+  getUserSessionVersionIfAvailable,
+  resolveAuthUserFromDecoded,
+} from "../lib/authSession.js";
 
 const normalizeToken = (raw?: unknown) => {
   if (!raw) return null;
@@ -39,6 +43,11 @@ const AuthSseMiddleware = (
       return;
     }
 
+    if (!hasSupportedAccessTokenType(decoded)) {
+      res.status(401).json({ status: 401, message: "Unauthorized" });
+      return;
+    }
+
     try {
       const authUser = await resolveAuthUserFromDecoded(decoded);
 
@@ -48,6 +57,20 @@ const AuthSseMiddleware = (
       }
 
       req.user = authUser;
+
+      const latestSessionVersion = await getUserSessionVersionIfAvailable(
+        authUser.ownerUserId,
+      );
+      if (
+        latestSessionVersion !== null &&
+        latestSessionVersion !== authUser.sessionVersion
+      ) {
+        res.status(401).json({
+          status: 401,
+          message: "Session expired. Please login again.",
+        });
+        return;
+      }
 
       if (authUser.accountType === "OWNER" && !authUser.isEmailVerified) {
         res.status(403).json({
@@ -67,8 +90,16 @@ const AuthSseMiddleware = (
       }
 
       next();
-    } catch {
-      res.status(401).json({ status: 401, message: "Unauthorized" });
+    } catch (error) {
+      console.warn("[auth] sse_verification_failed", {
+        path: req.path,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      res.status(503).json({
+        status: 503,
+        message: "Authentication service temporarily unavailable",
+        code: "AUTH_SERVICE_UNAVAILABLE",
+      });
     }
   });
 };

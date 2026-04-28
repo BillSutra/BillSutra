@@ -13,6 +13,10 @@ import {
   parseLegacyBusinessAddress,
 } from "../lib/indianAddress.js";
 import { normalizeGstin } from "../lib/gstin.js";
+import {
+  encryptSensitiveValue,
+  maybeDecryptSensitiveValue,
+} from "../lib/fieldEncryption.js";
 
 type SupplierCreateInput = z.infer<typeof supplierCreateSchema>;
 type SupplierUpdateInput = z.infer<typeof supplierUpdateSchema>;
@@ -69,6 +73,14 @@ const toNullableString = (value: unknown) => {
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
 };
+
+const normalizeSupplierGstinValue = (value: unknown) => {
+  const decrypted = maybeDecryptSensitiveValue(toNullableString(value));
+  return decrypted ? normalizeGstin(decrypted) : null;
+};
+
+const normalizeSupplierPanValue = (value: unknown) =>
+  maybeDecryptSensitiveValue(toNullableString(value))?.toUpperCase() ?? null;
 
 const normalizePaymentTerms = (value: unknown): SupplierPaymentTerms | null => {
   if (value === "NET_7" || value === "NET_15" || value === "NET_30") {
@@ -373,8 +385,8 @@ const serializeSupplier = (
 
   const businessName = toNullableString(extended?.business_name);
   const categories = normalizeSupplierCategories(extended?.categories);
-  const gstin = toNullableString(extended?.gstin);
-  const pan = toNullableString(extended?.pan);
+  const gstin = normalizeSupplierGstinValue(extended?.gstin);
+  const pan = normalizeSupplierPanValue(extended?.pan);
   const paymentTerms = normalizePaymentTerms(extended?.payment_terms);
   const openingBalance = roundAmount(
     Math.max(toNumber(extended?.opening_balance ?? 0), 0),
@@ -473,10 +485,8 @@ class SuppliersController {
     await persistExtendedSupplierFields(userId, supplier.id, {
       categories: normalizeSupplierCategories(body.categories),
       business_name: toNullableString(body.businessName ?? body.business_name),
-      gstin: toNullableString(body.gstin)
-        ? normalizeGstin(body.gstin ?? undefined)
-        : null,
-      pan: toNullableString(body.pan),
+      gstin: encryptSensitiveValue(normalizeSupplierGstinValue(body.gstin)),
+      pan: encryptSensitiveValue(normalizeSupplierPanValue(body.pan)),
       address_line1: structuredAddress.addressLine1 ?? null,
       city: structuredAddress.city ?? null,
       state: structuredAddress.state ?? null,
@@ -600,10 +610,12 @@ class SuppliersController {
           body.business_name ??
           existingExtended?.business_name,
       ),
-      gstin: toNullableString(body.gstin ?? existingExtended?.gstin)
-        ? normalizeGstin(body.gstin ?? existingExtended?.gstin)
-        : null,
-      pan: toNullableString(body.pan ?? existingExtended?.pan),
+      gstin: encryptSensitiveValue(
+        normalizeSupplierGstinValue(body.gstin ?? existingExtended?.gstin),
+      ),
+      pan: encryptSensitiveValue(
+        normalizeSupplierPanValue(body.pan ?? existingExtended?.pan),
+      ),
       address_line1: structuredAddress.addressLine1 ?? null,
       city: structuredAddress.city ?? null,
       state: structuredAddress.state ?? null,

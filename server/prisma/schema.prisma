@@ -16,6 +16,7 @@ model User {
   oauth_id          String?
   image             String?
   is_email_verified Boolean @default(false)
+  email_verified_at DateTime?
 
   created_at DateTime  @default(now())
   updated_at DateTime  @updatedAt
@@ -46,6 +47,7 @@ model User {
   auth_challenges             AuthChallenge[]
   otp_codes                   OtpCode[]
   auth_events                 AuthEvent[]
+  audit_logs                  AuditLog[]
   face_data                   FaceData?
   preferences                 UserPreference?
   notifications               Notification[]
@@ -105,6 +107,7 @@ model Notification {
   updated_at  DateTime @updatedAt
 
   @@index([user_id, created_at])
+  @@index([user_id, is_read, created_at])
   @@index([business_id, created_at])
   @@unique([business_id, reference_key])
   @@map("notifications")
@@ -304,6 +307,7 @@ model Customer {
   email_logs                  EmailLog[]
 
   @@index([user_id])
+  @@index([user_id, created_at])
   @@map("customers")
 }
 
@@ -335,6 +339,7 @@ model Supplier {
   purchases Purchase[]
 
   @@index([user_id])
+  @@index([user_id, created_at])
   @@map("suppliers")
 }
 
@@ -353,6 +358,7 @@ model Category {
 
   @@unique([user_id, name])
   @@index([user_id])
+  @@index([user_id, created_at])
   @@map("categories")
 }
 
@@ -482,6 +488,8 @@ model Purchase {
   items PurchaseItem[]
 
   @@index([user_id])
+  @@index([user_id, purchase_date])
+  @@index([user_id, purchase_date, supplier_id])
   @@index([supplier_id])
   @@index([warehouse_id])
   @@map("purchases")
@@ -539,6 +547,8 @@ model Sale {
   @@index([user_id])
   @@index([customer_id])
   @@index([user_id, sale_date])
+  @@index([user_id, sale_date, customer_id])
+  @@index([user_id, paymentDate])
   @@map("sales")
 }
 
@@ -612,6 +622,9 @@ model Invoice {
   @@index([warehouse_id])
   @@index([status])
   @@index([due_date])
+  @@index([user_id, createdAt])
+  @@index([user_id, date])
+  @@index([user_id, status, createdAt])
   @@map("invoices")
 }
 
@@ -697,6 +710,7 @@ model Payment {
 
   @@index([invoice_id])
   @@index([user_id])
+  @@index([user_id, paid_at])
   @@unique([user_id, payment_idempotency_key])
   @@map("payments")
 }
@@ -830,11 +844,41 @@ model RefreshToken {
   user_id Int
 
   token_hash String   @unique @db.VarChar(191)
+  ip_address String?  @db.VarChar(64)
+  user_agent String?  @db.VarChar(512)
+  device_name String? @db.VarChar(191)
   expires_at DateTime
+  last_used_at DateTime @default(now())
+  revoked_at DateTime?
+  revoked_reason String? @db.VarChar(64)
   created_at DateTime @default(now())
 
   @@index([user_id, expires_at])
+  @@index([user_id, revoked_at, expires_at])
   @@map("refresh_tokens")
+}
+
+model AuditLog {
+  id String @id @default(cuid()) @db.VarChar(191)
+
+  user    User? @relation(fields: [user_id], references: [id], onDelete: SetNull)
+  user_id Int?
+
+  actor_id      String  @db.VarChar(191)
+  actor_type    String  @db.VarChar(32)
+  action        String  @db.VarChar(64)
+  resource_type String  @db.VarChar(64)
+  resource_id   String? @db.VarChar(191)
+  status        String  @default("SUCCESS") @db.VarChar(16)
+  ip_address    String? @db.VarChar(64)
+  user_agent    String? @db.VarChar(512)
+  metadata      Json?
+  created_at    DateTime @default(now())
+
+  @@index([user_id, created_at])
+  @@index([resource_type, resource_id, created_at])
+  @@index([action, created_at])
+  @@map("audit_logs")
 }
 
 model EmailVerificationToken {
@@ -1077,6 +1121,7 @@ enum AuthChallengeFlow {
 
 enum OtpPurpose {
   LOGIN
+  EMAIL_VERIFICATION
 }
 
 enum OtpChannel {

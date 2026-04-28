@@ -14,8 +14,6 @@ import {
   fetchDashboardCardMetrics,
   fetchBusinessProfile,
   fetchDashboardOverview,
-  fetchInvoices,
-  fetchProducts,
   fetchSubscriptionStatus,
 } from "@/lib/apiClient";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
@@ -27,7 +25,6 @@ import {
   dashboardSectionFallback,
 } from "@/components/dashboard/dashboard-section-shared";
 import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
-import { useCustomersQuery } from "@/hooks/useInventoryQueries";
 import DashboardFilters, {
   type DashboardFilters as DashboardFilterState,
 } from "@/components/dashboard/dashboard-filters";
@@ -57,7 +54,6 @@ import { useHydrated } from "@/hooks/useHydrated";
 import { useI18n } from "@/providers/LanguageProvider";
 import { useDashboardFormatters } from "@/components/dashboard/use-dashboard-formatters";
 import DashboardPlanCard from "@/components/dashboard/dashboard-plan-card";
-import InventoryRiskSummaryBanner from "@/components/dashboard/inventory-risk-summary-banner";
 import SetupProgressCard from "@/components/dashboard/SetupProgressCard";
 import BeginnerGuideCard from "@/components/beginner/BeginnerGuideCard";
 import { cn } from "@/lib/utils";
@@ -90,6 +86,10 @@ const DashboardSalesAnalyticsPanel = dynamic(
   () => import("@/components/dashboard/dashboard-sales-analytics-panel"),
   { loading: () => dashboardSectionFallback("h-[520px]") },
 );
+const InventoryRiskSummaryBanner = dynamic(
+  () => import("@/components/dashboard/inventory-risk-summary-banner"),
+  { loading: () => dashboardSectionFallback("h-[172px]") },
+);
 
 type DashboardClientProps = {
   name: string;
@@ -108,24 +108,19 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     range: "30d",
     granularity: "day",
   });
+  const [nonCriticalReady, setNonCriticalReady] = useState(false);
   const deferredFilters = useDeferredValue(filters);
   const displayName = name.trim() || t("common.guest");
 
-  const hasValidSessionToken =
-    typeof token === "string" &&
-    token.trim().length > 0 &&
-    token !== "undefined" &&
-    token !== "null";
-
   useDashboardRealtime({
-    enabled: hydrated && hasValidSessionToken && DASHBOARD_REALTIME_ENABLED,
+    enabled: hydrated && DASHBOARD_REALTIME_ENABLED,
     token,
   });
 
   const metricsQuery = useQuery({
     queryKey: ["dashboard", "metrics", deferredFilters],
     queryFn: () => fetchDashboardCardMetrics(deferredFilters),
-    enabled: hydrated && hasValidSessionToken,
+    enabled: hydrated,
     placeholderData: keepPreviousData,
     ...dashboardQueryDefaults,
   });
@@ -133,7 +128,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   const { data, isError, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["dashboard", "overview", deferredFilters],
     queryFn: () => fetchDashboardOverview(deferredFilters),
-    enabled: hydrated && hasValidSessionToken,
+    enabled: hydrated,
     ...dashboardQueryDefaults,
     refetchInterval: DASHBOARD_REALTIME_ENABLED
       ? false
@@ -141,30 +136,15 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     placeholderData: keepPreviousData,
   });
 
-  const { data: allInvoices = [] } = useQuery({
-    queryKey: ["dashboard", "allInvoices"],
-    queryFn: fetchInvoices,
-    enabled: hydrated && hasValidSessionToken,
-    placeholderData: keepPreviousData,
-    ...dashboardQueryDefaults,
-  });
-  const { data: productsPage } = useQuery({
-    queryKey: ["dashboard", "productCount"],
-    queryFn: () => fetchProducts({ page: 1, limit: 1 }),
-    enabled: hydrated && hasValidSessionToken,
-    placeholderData: keepPreviousData,
-    ...dashboardQueryDefaults,
-  });
-  const { data: customers = [] } = useCustomersQuery();
   const { data: businessProfile } = useQuery({
     queryKey: ["business-profile"],
     queryFn: fetchBusinessProfile,
-    enabled: hydrated && hasValidSessionToken,
+    enabled: hydrated,
   });
   const { data: subscription } = useQuery({
     queryKey: ["subscription-status"],
     queryFn: fetchSubscriptionStatus,
-    enabled: hydrated && hasValidSessionToken,
+    enabled: hydrated && nonCriticalReady,
   });
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
   const [demoSeeded, setDemoSeeded] = useState(false);
@@ -174,6 +154,28 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     setDemoSeeded(getBeginnerState().demoSeeded);
   }, [hydrated]);
 
+  useEffect(() => {
+    if (!hydrated) {
+      return;
+    }
+
+    const idleCallback =
+      typeof window !== "undefined" && "requestIdleCallback" in window
+        ? window.requestIdleCallback(() => setNonCriticalReady(true), {
+            timeout: 800,
+          })
+        : window.setTimeout(() => setNonCriticalReady(true), 250);
+
+    return () => {
+      if (typeof idleCallback === "number") {
+        window.clearTimeout(idleCallback);
+        return;
+      }
+
+      window.cancelIdleCallback(idleCallback);
+    };
+  }, [hydrated]);
+
   const metrics = metricsQuery.data?.metrics;
   const metricsUpdatedAt = metricsQuery.dataUpdatedAt;
   const metricsLoading = metricsQuery.isLoading;
@@ -181,22 +183,10 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
   const metricsError = metricsQuery.isError;
   const invoiceStats = data?.invoiceStats;
   const pendingSalesPayments = data?.pendingPayments ?? [];
-  const recentInvoices = [...allInvoices]
-    .sort(
-      (left, right) =>
-        new Date(right.date).getTime() - new Date(left.date).getTime(),
-    )
-    .slice(0, 5);
-  const currentDate = new Date();
-  const monthlyInvoiceCount = allInvoices.filter((invoice) => {
-    const invoiceDate = new Date(invoice.date);
-    return (
-      invoiceDate.getFullYear() === currentDate.getFullYear() &&
-      invoiceDate.getMonth() === currentDate.getMonth()
-    );
-  }).length;
-  const productCount = productsPage?.total ?? 0;
-  const customerCount = customers.length;
+  const recentInvoices = data?.recentInvoices ?? [];
+  const monthlyInvoiceCount = subscription?.usage.invoicesCreated ?? 0;
+  const productCount = data?.inventory?.totalProducts ?? 0;
+  const customerCount = data?.customerHighlights?.totalCustomers ?? 0;
   const prioritizedPendingSalesPayments = [...pendingSalesPayments]
     .sort((left, right) => right.pendingAmount - left.pendingAmount)
     .slice(0, 4);
@@ -207,8 +197,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     return "bg-rose-100 text-rose-700";
   };
 
-  const showLoadingState =
-    !hydrated || (hasValidSessionToken && metricsLoading);
+  const showLoadingState = !hydrated || metricsLoading;
   const unreadNotifications =
     data?.notifications.filter((notification) => !notification.read).length ??
     data?.notifications.length ??
@@ -375,18 +364,18 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     businessReady: Boolean(businessProfile?.business_name?.trim()),
     productsReady: productCount > 0,
     customersReady: customerCount > 0,
-    billsReady: allInvoices.length > 0,
+    billsReady: recentInvoices.length > 0,
   };
   const shouldShowSetupProgress = Object.values(setupProgress).some(
     (done) => !done,
   );
   const isBeginnerWorkspace =
-    shouldShowSetupProgress && allInvoices.length === 0;
+    shouldShowSetupProgress && recentInvoices.length === 0;
   const createBillCtaLabel =
     language === "hi" ? "नया बिल बनाएं" : "Create New Bill";
 
   useEffect(() => {
-    if (!hydrated || !hasValidSessionToken || !isBeginnerWorkspace) {
+    if (!hydrated || !isBeginnerWorkspace) {
       return;
     }
 
@@ -398,7 +387,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
 
     window.localStorage.setItem(FIRST_BILL_REDIRECT_KEY, "1");
     router.replace("/simple-bill?firstVisit=1");
-  }, [hydrated, hasValidSessionToken, isBeginnerWorkspace, router]);
+  }, [hydrated, isBeginnerWorkspace, router]);
 
   const beginnerGuideCopy =
     language === "hi"
@@ -1149,8 +1138,7 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
                         {invoice.invoice_number}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {invoice.customer?.name ??
-                          t("invoice.fallbackCustomer")}{" "}
+                        {invoice.customer?.name ?? t("invoice.fallbackCustomer")}{" "}
                         - {dateWithYear(invoice.date)}
                       </p>
                     </div>
@@ -1334,9 +1322,9 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
         ) : (
           <>
             {heroSection}
-            <InventoryRiskSummaryBanner />
+            {nonCriticalReady ? <InventoryRiskSummaryBanner /> : null}
             {performanceSection}
-            {analyticsSection}
+            {nonCriticalReady ? analyticsSection : null}
             {operationsSection}
             {recordsSection}
           </>

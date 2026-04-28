@@ -7,7 +7,7 @@ import {
   warehouseUpdateSchema,
 } from "../validations/apiValidations.js";
 import {
-  clearDanglingProductCategoryReferences,
+  maintainProductCategoryReferences,
   normalizeProductCategoryRecord,
   productCategoryInclude,
 } from "../lib/productCategories.js";
@@ -56,7 +56,7 @@ class WarehousesController {
     }
 
     const id = Number(req.params.id);
-    await clearDanglingProductCategoryReferences(userId);
+    void maintainProductCategoryReferences(userId);
     const warehouse = await prisma.warehouse.findFirst({
       where: { id, user_id: userId },
       include: {

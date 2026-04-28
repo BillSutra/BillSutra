@@ -21,7 +21,9 @@ import {
   authOtpSendSchema,
   authOtpVerifySchema,
   authRegisterSchema,
+  authResendVerificationOtpSchema,
   authResetSchema,
+  authVerifyEmailOtpSchema,
   passkeyAuthenticateOptionsSchema,
   passkeyAuthenticateVerifySchema,
   passkeyRegisterOptionsSchema,
@@ -30,6 +32,7 @@ import {
 } from "../validations/apiValidations.js";
 import {
   buildOwnerAuthUser,
+  hasSupportedAccessTokenType,
   buildWorkerAuthUser,
   ensureBusinessForUser,
   getAccessTokenExpiresAt,
@@ -42,6 +45,7 @@ import {
   logResolvedTokenSource,
   refreshAuthCookies,
   resolveAccessTokenFromRequest,
+  revokeAllRefreshTokensForUser,
   revokeRefreshTokenFromRequest,
 } from "../lib/authCookies.js";
 import {
@@ -66,7 +70,12 @@ import {
   consumeEmailVerificationToken,
   dispatchFreshVerificationEmail,
   getEmailVerificationResendState,
+  issueEmailVerificationOtp,
+  resendEmailVerificationOtpForEmail,
+  verifyEmailVerificationOtp,
 } from "../services/emailVerification.service.js";
+import { recordAuditLog } from "../services/auditLog.service.js";
+import { maybeHandleSuspiciousLogin } from "../services/authSecurity.service.js";
 
 type SerializableOwnerUser = Pick<
   User,
@@ -76,6 +85,8 @@ type SerializableOwnerUser = Pick<
 type OAuthLoginPayload = z.infer<typeof authOauthSchema>;
 type CredentialsLoginPayload = z.infer<typeof authLoginSchema>;
 type CredentialsRegisterPayload = z.infer<typeof authRegisterSchema>;
+type VerifyEmailOtpPayload = z.infer<typeof authVerifyEmailOtpSchema>;
+type ResendVerificationOtpPayload = z.infer<typeof authResendVerificationOtpSchema>;
 type ForgotPasswordPayload = z.infer<typeof authForgotSchema>;
 type ResetPasswordPayload = z.infer<typeof authResetSchema>;
 type WorkerLoginPayload = z.infer<typeof workerLoginSchema>;
@@ -111,12 +122,24 @@ const serializeOwnerUser = (
 });
 
 const buildOwnerAuthResponse = async (
+  req: Request,
   res: Response,
   user: SerializableOwnerUser,
   message: string,
+  preferences?: {
+    rememberMe?: boolean;
+    reason?: string;
+  },
 ) => {
   const authUser = await buildOwnerAuthUser(user);
-  const { accessToken } = await issueAuthCookies(res, authUser);
+  await maybeHandleSuspiciousLogin({
+    req,
+    userId: user.id,
+    email: user.email,
+    actorId: authUser.actorId,
+    actorType: authUser.accountType,
+  });
+  const { accessToken } = await issueAuthCookies(req, res, authUser, preferences);
   const expiresAt = getAccessTokenExpiresAt();
 
   return {
@@ -134,6 +157,9 @@ const resolveAuthUserFromAccessToken = async (token: string | null) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    if (!hasSupportedAccessTokenType(decoded)) {
+      return null;
+    }
     const authUser = await resolveAuthUserFromDecoded(decoded);
 
     if (!authUser) {
@@ -152,8 +178,16 @@ const resolveAuthUserFromAccessToken = async (token: string | null) => {
     }
 
     return authUser;
-  } catch {
-    return null;
+  } catch (error) {
+    if (
+      error instanceof jwt.TokenExpiredError ||
+      error instanceof jwt.JsonWebTokenError ||
+      error instanceof jwt.NotBeforeError
+    ) {
+      return null;
+    }
+
+    throw error;
   }
 };
 
@@ -197,6 +231,7 @@ class AuthController {
               oauth_id: body.oauth_id,
               image: body.image,
               is_email_verified: true,
+              email_verified_at: new Date(),
             },
             select: authUserSelect,
           })
@@ -208,6 +243,7 @@ class AuthController {
               oauth_id: body.oauth_id,
               image: body.image,
               is_email_verified: true,
+              email_verified_at: new Date(),
             },
             select: authUserSelect,
           });
@@ -223,7 +259,9 @@ class AuthController {
       return sendResponse(
         res,
         200,
-        await buildOwnerAuthResponse(res, findUser, "Login successful"),
+        await buildOwnerAuthResponse(req, res, findUser, "Login successful", {
+          rememberMe: body.rememberMe,
+        }),
       );
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -252,31 +290,55 @@ class AuthController {
           email: body.email,
           password_hash,
           provider: "credentials",
+          is_email_verified: false,
+          email_verified_at: null,
         },
         select: authUserSelect,
-        });
+      });
 
       await ensureBusinessForUser(user.id, body.name);
-      void dispatchWelcomeEmail(user.id);
-      void dispatchFreshVerificationEmail(user.id).catch((error) => {
-        console.warn("[auth] verification email dispatch failed", {
+      let otpDeliveryFailed = false;
+      try {
+        await issueEmailVerificationOtp(user.id, { force: true });
+      } catch (error) {
+        otpDeliveryFailed = true;
+        console.warn("[auth] verification_otp_send_failed", {
           userId: user.id,
           message: error instanceof Error ? error.message : String(error),
         });
-      });
+      }
 
       return sendResponse(
         res,
-        200,
-        await buildOwnerAuthResponse(
-          res,
-          user,
-          "Registration successful",
-        ),
+        201,
+        {
+          message: otpDeliveryFailed
+            ? "Account created. Request a verification code to continue."
+            : "Account created. Verify your email to continue.",
+          data: {
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              is_email_verified: false,
+            },
+            verification: {
+              required: true,
+              email: user.email,
+              retryAfter: Math.ceil(OTP_RESEND_COOLDOWN_MS / 1000),
+              expiresIn: 10 * 60,
+              otpDeliveryFailed,
+            },
+          },
+        },
       );
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
     }
+  }
+
+  static async signup(req: Request, res: Response) {
+    return AuthController.register(req, res);
   }
 
   static async verifyEmail(req: Request, res: Response) {
@@ -306,10 +368,13 @@ class AuthController {
         });
       }
 
+      void dispatchWelcomeEmail(result.user.id);
+
       return sendResponse(
         res,
         200,
         await buildOwnerAuthResponse(
+          req,
           res,
           result.user,
           "Email verified successfully",
@@ -373,6 +438,100 @@ class AuthController {
     }
   }
 
+  static async resendVerificationOtp(req: Request, res: Response) {
+    try {
+      const body: ResendVerificationOtpPayload = req.body;
+      const result = await resendEmailVerificationOtpForEmail(body.email);
+
+      return sendResponse(res, 200, {
+        message: result.message,
+        data: {
+          email: normalizeEmailAddress(body.email),
+          retryAfter: result.retryAfter,
+          expiresIn: result.expiresIn,
+        },
+      });
+    } catch {
+      return sendResponse(res, 500, {
+        message: "Unable to resend verification code right now.",
+      });
+    }
+  }
+
+  static async verifyEmailOtp(req: Request, res: Response) {
+    try {
+      const body: VerifyEmailOtpPayload = req.body;
+      const result = await verifyEmailVerificationOtp({
+        email: body.email,
+        otp: body.otp,
+      });
+
+      if (result.status === "invalid") {
+        return sendResponse(res, 422, {
+          message: "Invalid OTP",
+          errors: { otp: "Invalid OTP" },
+        });
+      }
+
+      if (result.status === "expired") {
+        return sendResponse(res, 410, {
+          message: "OTP expired. Please request a new one.",
+          errors: { otp: "OTP expired" },
+        });
+      }
+
+      if (result.status === "locked") {
+        return sendResponse(res, 429, {
+          message: "Too many incorrect attempts. Please request a new OTP.",
+          errors: { otp: "Too many incorrect attempts" },
+        });
+      }
+
+      if (result.status !== "verified" && result.status !== "already_verified") {
+        return sendResponse(res, 422, {
+          message: "Invalid OTP",
+          errors: { otp: "Invalid OTP" },
+        });
+      }
+
+      const verifiedUser = result.user;
+
+      if (result.status === "verified") {
+        void dispatchWelcomeEmail(verifiedUser.id);
+      }
+
+      await recordAuthEvent({
+        req,
+        userId: verifiedUser.id,
+        method: AuthMethod.OTP,
+        success: true,
+        actorType: "OWNER",
+        metadata: {
+          action: "email_verification_otp",
+        },
+      });
+
+      return sendResponse(
+        res,
+        200,
+        await buildOwnerAuthResponse(
+          req,
+          res,
+          { ...verifiedUser, is_email_verified: true },
+          "Email verified successfully",
+          {
+            rememberMe: body.rememberMe,
+            reason: "otp",
+          },
+        ),
+      );
+    } catch {
+      return sendResponse(res, 500, {
+        message: "Unable to verify email right now.",
+      });
+    }
+  }
+
   static async refresh(req: Request, res: Response) {
     try {
       const refreshed = await refreshAuthCookies(req, res);
@@ -391,10 +550,14 @@ class AuthController {
           expiresAt: getAccessTokenExpiresAt(),
         },
       });
-    } catch {
-      clearAuthCookies(res);
-      return sendResponse(res, 500, {
-        message: "Unable to refresh session",
+    } catch (error) {
+      console.warn("[auth] refresh_failed", {
+        reason: "service_unavailable",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return sendResponse(res, 503, {
+        message: "Authentication service temporarily unavailable",
+        code: "AUTH_SERVICE_UNAVAILABLE",
       });
     }
   }
@@ -418,7 +581,13 @@ class AuthController {
         });
       }
 
-      const issued = await issueAuthCookies(res, authUser);
+      const issued = await issueAuthCookies(req, res, authUser, {
+        rememberMe:
+          typeof req.body?.rememberMe === "boolean"
+            ? req.body.rememberMe
+            : authUser.rememberMe,
+        reason: "bootstrap",
+      });
 
       return sendResponse(res, 200, {
         message:
@@ -426,25 +595,52 @@ class AuthController {
         data: {
           token: `Bearer ${issued.accessToken}`,
           expiresAt: getAccessTokenExpiresAt(),
+          rememberMe: issued.rememberMe,
         },
       });
-    } catch {
-      clearAuthCookies(res);
-      return sendResponse(res, 500, {
-        message: "Unable to bootstrap secure session",
+    } catch (error) {
+      console.warn("[auth] bootstrap_failed", {
+        reason: "service_unavailable",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return sendResponse(res, 503, {
+        message: "Authentication service temporarily unavailable",
+        code: "AUTH_SERVICE_UNAVAILABLE",
       });
     }
   }
 
   static async logout(req: Request, res: Response) {
     try {
+      console.info("[auth] logout_reason=manual", {
+        ownerUserId: req.user?.ownerUserId ?? null,
+        accountType: req.user?.accountType ?? null,
+      });
       await revokeRefreshTokenFromRequest(req);
       clearAuthCookies(res);
+      if (req.user?.ownerUserId) {
+        await recordAuthEvent({
+          req,
+          userId: req.user.ownerUserId,
+          method: AuthMethod.PASSWORD,
+          success: true,
+          actorType: req.user.accountType,
+          metadata: {
+            action: "manual_logout",
+            workerId: req.user.workerId ?? null,
+          },
+        });
+      }
 
       return sendResponse(res, 200, {
         message: "Logged out successfully",
       });
-    } catch {
+    } catch (error) {
+      console.warn("[auth] logout_reason=manual", {
+        ownerUserId: req.user?.ownerUserId ?? null,
+        accountType: req.user?.accountType ?? null,
+        message: error instanceof Error ? error.message : String(error),
+      });
       clearAuthCookies(res);
       return sendResponse(res, 200, {
         message: "Logged out successfully",
@@ -500,10 +696,26 @@ class AuthController {
         actorType: "OWNER",
       });
 
+      if (!user.is_email_verified) {
+        const otpResendState = await issueEmailVerificationOtp(user.id);
+
+        return sendResponse(res, 403, {
+          message: "Please verify your email first",
+          code: "EMAIL_VERIFICATION_REQUIRED",
+          data: {
+            email: user.email,
+            retryAfter: otpResendState.retryAfter,
+            expiresIn: otpResendState.expiresIn,
+          },
+        });
+      }
+
       return sendResponse(
         res,
         200,
-        await buildOwnerAuthResponse(res, user, "Login successful"),
+        await buildOwnerAuthResponse(req, res, user, "Login successful", {
+          rememberMe: body.rememberMe,
+        }),
       );
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -569,7 +781,9 @@ class AuthController {
       }
 
       const authUser = await buildWorkerAuthUser(worker);
-      const { accessToken } = await issueAuthCookies(res, authUser);
+      const { accessToken } = await issueAuthCookies(req, res, authUser, {
+        rememberMe: body.rememberMe,
+      });
 
       try {
         await prisma.$executeRaw`
@@ -613,7 +827,7 @@ class AuthController {
   static async forgotPassword(req: Request, res: Response) {
     try {
       const body: ForgotPasswordPayload = req.body;
-      const { email } = body;
+      const email = normalizeEmailAddress(body.email);
 
       const user = await prisma.user.findUnique({
         where: { email },
@@ -624,22 +838,30 @@ class AuthController {
         },
       });
       if (!user) {
-        return sendResponse(res, 422, {
-          message: "No account found for this email",
-          errors: { email: "No account found" },
+        return sendResponse(res, 200, {
+          message: "If an account exists for this email, a password reset link has been sent.",
         });
       }
 
       const token = crypto.randomBytes(24).toString("hex");
+      const tokenHash = hashSecretValue(token);
       const expires = new Date(Date.now() + 1000 * 60 * 30);
 
-      await prisma.passwordResetToken.create({
-        data: {
-          user_id: user.id,
-          token,
-          expires_at: expires,
-        },
-      });
+      await prisma.$transaction([
+        prisma.passwordResetToken.deleteMany({
+          where: {
+            user_id: user.id,
+            used_at: null,
+          },
+        }),
+        prisma.passwordResetToken.create({
+          data: {
+            user_id: user.id,
+            token: tokenHash,
+            expires_at: expires,
+          },
+        }),
+      ]);
 
       try {
         await sendEmail("password_reset", {
@@ -658,7 +880,7 @@ class AuthController {
         await prisma.passwordResetToken.deleteMany({
           where: {
             user_id: user.id,
-            token,
+            token: tokenHash,
             used_at: null,
           },
         });
@@ -668,8 +890,21 @@ class AuthController {
         });
       }
 
+      await recordAuditLog({
+        req,
+        userId: user.id,
+        actorId: String(user.id),
+        actorType: "OWNER",
+        action: "auth.password_reset.requested",
+        resourceType: "user",
+        resourceId: String(user.id),
+        metadata: {
+          email,
+        },
+      });
+
       return sendResponse(res, 200, {
-        message: "Password reset email sent",
+        message: "If an account exists for this email, a password reset link has been sent.",
       });
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -678,7 +913,8 @@ class AuthController {
 
   static async resetPassword(req: Request, res: Response) {
     try {
-      const { email, password, token } = req.body as ResetPasswordPayload;
+      const email = normalizeEmailAddress(req.body.email);
+      const { password, token } = req.body as ResetPasswordPayload;
 
       const user = await prisma.user.findUnique({
         where: { email },
@@ -696,7 +932,7 @@ class AuthController {
       const reset = await prisma.passwordResetToken.findFirst({
         where: {
           user_id: user.id,
-          token,
+          token: hashSecretValue(token),
           used_at: null,
           expires_at: { gt: new Date() },
         },
@@ -710,14 +946,52 @@ class AuthController {
       }
 
       const password_hash = await bcrypt.hash(password, 12);
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { password_hash },
-        select: { id: true },
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: user.id },
+          data: {
+            password_hash,
+            session_version: {
+              increment: 1,
+            },
+          },
+          select: { id: true },
+        }),
+        prisma.passwordResetToken.update({
+          where: { id: reset.id },
+          data: { used_at: new Date() },
+        }),
+        prisma.passwordResetToken.deleteMany({
+          where: {
+            user_id: user.id,
+            used_at: null,
+            NOT: { id: reset.id },
+          },
+        }),
+      ]);
+      await revokeAllRefreshTokensForUser(user.id, "password_reset");
+
+      await recordAuthEvent({
+        req,
+        userId: user.id,
+        method: AuthMethod.PASSWORD,
+        success: true,
+        actorType: "OWNER",
+        metadata: {
+          action: "password_reset_completed",
+        },
       });
-      await prisma.passwordResetToken.update({
-        where: { id: reset.id },
-        data: { used_at: new Date() },
+      await recordAuditLog({
+        req,
+        userId: user.id,
+        actorId: String(user.id),
+        actorType: "OWNER",
+        action: "auth.password_reset.completed",
+        resourceType: "user",
+        resourceId: String(user.id),
+        metadata: {
+          email,
+        },
       });
 
       return sendResponse(res, 200, { message: "Password reset successful" });
@@ -928,10 +1202,17 @@ class AuthController {
         }),
         prisma.user.update({
           where: { id: user.id },
-          data: { is_email_verified: true },
+          data: {
+            is_email_verified: true,
+            email_verified_at: user.is_email_verified ? undefined : new Date(),
+          },
           select: { id: true },
         }),
       ]);
+
+      if (!user.is_email_verified) {
+        void dispatchWelcomeEmail(user.id);
+      }
 
       await recordAuthEvent({
         req,
@@ -945,9 +1226,14 @@ class AuthController {
         res,
         200,
         await buildOwnerAuthResponse(
+          req,
           res,
           { ...user, is_email_verified: true },
           "OTP verified. Login successful",
+          {
+            rememberMe: body.rememberMe,
+            reason: "otp",
+          },
         ),
       );
     } catch {
@@ -1154,7 +1440,9 @@ class AuthController {
       return sendResponse(
         res,
         200,
-        await buildOwnerAuthResponse(res, user, "Passkey login successful"),
+        await buildOwnerAuthResponse(req, res, user, "Passkey login successful", {
+          rememberMe: body.rememberMe,
+        }),
       );
     } catch {
       return sendResponse(res, 422, {
@@ -1393,6 +1681,18 @@ class AuthController {
         return credential;
       });
 
+      await recordAuthEvent({
+        req,
+        userId: user.id,
+        method: AuthMethod.PASSWORD,
+        success: true,
+        actorType: "OWNER",
+        metadata: {
+          action: "passkey_registered",
+          credentialId: created.id,
+        },
+      });
+
       return sendResponse(res, 200, {
         message: "Passkey added successfully.",
         data: created,
@@ -1435,6 +1735,18 @@ class AuthController {
 
       await prisma.passkeyCredential.delete({
         where: { id: credential.id },
+      });
+
+      await recordAuthEvent({
+        req,
+        userId: req.user.id,
+        method: AuthMethod.PASSWORD,
+        success: true,
+        actorType: "OWNER",
+        metadata: {
+          action: "passkey_removed",
+          credentialId: credential.id,
+        },
       });
 
       return sendResponse(res, 200, { message: "Passkey removed" });

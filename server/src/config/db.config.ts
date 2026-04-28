@@ -154,8 +154,23 @@ const globalForPrisma = globalThis as typeof globalThis & {
   prisma?: PrismaClient;
 };
 
+const fullQueryLoggingEnabled = process.env.PRISMA_LOG_QUERIES === "true";
+const slowQueryThresholdMs = resolvePositiveNumber(
+  process.env.PRISMA_SLOW_QUERY_MS,
+) ?? 250;
+const shouldAttachQueryLogging =
+  fullQueryLoggingEnabled || slowQueryThresholdMs > 0;
+
 const prismaClientOptions: PrismaClientRuntimeOverrideOptions = {
-  log: ["error"],
+  log: shouldAttachQueryLogging
+    ? [
+        "error",
+        {
+          emit: "event",
+          level: "query",
+        },
+      ]
+    : ["error"],
   transactionOptions: {
     maxWait: 30000,
     timeout: 30000,
@@ -234,6 +249,39 @@ const prisma =
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
+}
+
+if (!isTestRun && prisma instanceof PrismaClient && shouldAttachQueryLogging) {
+  (
+    prisma as PrismaClient & {
+      $on: (
+        eventType: "query",
+        callback: (event: {
+          duration: number;
+          target: string;
+          query: string;
+          params: string;
+        }) => void,
+      ) => void;
+    }
+  ).$on("query", (event) => {
+    if (!fullQueryLoggingEnabled && event.duration < slowQueryThresholdMs) {
+      return;
+    }
+
+    const normalizedQuery = event.query.replace(/\s+/g, " ").trim();
+    const trimmedQuery =
+      normalizedQuery.length > 600
+        ? `${normalizedQuery.slice(0, 597)}...`
+        : normalizedQuery;
+
+    console.info("[db.query]", {
+      durationMs: event.duration,
+      target: event.target,
+      query: trimmedQuery,
+      params: fullQueryLoggingEnabled ? event.params : undefined,
+    });
+  });
 }
 
 export default prisma;

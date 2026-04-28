@@ -13,6 +13,7 @@ import {
   initServerObservability,
 } from "./lib/observability.js";
 import { initRealtimeSocketServer } from "./services/realtimeSocket.service.js";
+import { validateSecurityEnv } from "./lib/securityEnv.js";
 
 const requiredEnv = ["JWT_SECRET"] as const;
 
@@ -26,6 +27,8 @@ if (missingEnv.length > 0) {
     `Missing required environment variable(s): ${missingEnv.join(", ")}`,
   );
 }
+
+validateSecurityEnv();
 
 const PORT = process.env.PORT || 7000;
 

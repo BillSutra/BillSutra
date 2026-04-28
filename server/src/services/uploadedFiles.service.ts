@@ -5,6 +5,7 @@ import { getBackendAppUrl } from "../lib/appUrls.js";
 
 const TABLE_CACHE_TTL_MS = 60_000;
 const tableAvailabilityCache = new Map<string, { value: boolean; checkedAt: number }>();
+const DEFAULT_SIGNED_FILE_TTL_MS = 15 * 60 * 1000;
 
 type RegisterUploadedFileInput = {
   ownerUserId: number;
@@ -33,6 +34,28 @@ const setTableAvailability = (tableName: string, value: boolean) => {
     value,
     checkedAt: Date.now(),
   });
+};
+
+const getSecureFileSigningSecret = () =>
+  process.env.SECURE_FILE_SIGNING_SECRET?.trim() ||
+  process.env.JWT_SECRET?.trim() ||
+  "";
+
+const buildSecureFileSignature = (fileId: string, expiresAt: number) =>
+  crypto
+    .createHmac("sha256", getSecureFileSigningSecret())
+    .update(`${fileId}:${expiresAt}`)
+    .digest("hex");
+
+const safeCompare = (left: string, right: string) => {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
 };
 
 const isUploadedFilesTableMissingError = (error: unknown) =>
@@ -64,8 +87,40 @@ export const isUploadedFilesTableAvailable = async () => {
   }
 };
 
-export const buildSecureFileUrl = (fileId: string) =>
-  `${getBackendAppUrl()}/api/secure-files/${encodeURIComponent(fileId)}`;
+export const buildSecureFileUrl = (
+  fileId: string,
+  options?: {
+    expiresInMs?: number;
+  },
+) => {
+  const expiresAt = Date.now() + (options?.expiresInMs ?? DEFAULT_SIGNED_FILE_TTL_MS);
+  const signature = buildSecureFileSignature(fileId, expiresAt);
+  const url = new URL(
+    `/api/secure-files/${encodeURIComponent(fileId)}`,
+    getBackendAppUrl(),
+  );
+  url.searchParams.set("expires", String(expiresAt));
+  url.searchParams.set("signature", signature);
+  return url.toString();
+};
+
+export const verifySignedSecureFileRequest = (
+  fileId: string,
+  expires: string | null | undefined,
+  signature: string | null | undefined,
+) => {
+  const secret = getSecureFileSigningSecret();
+  if (!secret || !expires || !signature) {
+    return false;
+  }
+
+  const expiresAt = Number(expires);
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    return false;
+  }
+
+  return safeCompare(buildSecureFileSignature(fileId, expiresAt), signature);
+};
 
 export const registerUploadedFile = async (
   input: RegisterUploadedFileInput,

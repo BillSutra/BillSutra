@@ -6,7 +6,7 @@ import {
   markAllNotificationsAsRead,
   markNotificationAsRead,
   serializeNotification,
-  syncNotifications,
+  syncNotificationsIfStale,
 } from "../services/notification.service.js";
 
 class NotificationsController {
@@ -22,11 +22,7 @@ class NotificationsController {
       typeof req.query.limit === "string" ? Number(req.query.limit) : 10;
     const limit = Number.isFinite(limitRaw) ? limitRaw : 10;
 
-    try {
-      await syncNotifications({ userId, businessId });
-    } catch (error) {
-      console.error("[Notifications] Sync failed, serving cached notifications", error);
-    }
+    void syncNotificationsIfStale({ userId, businessId });
 
     const [notifications, unreadCount] = await Promise.all([
       listNotifications(userId, limit),

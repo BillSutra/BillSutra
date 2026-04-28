@@ -1,5 +1,4 @@
 import axios from "axios";
-import { getSession } from "next-auth/react";
 import type {
   AssistantHistoryMessage as SharedAssistantHistoryMessage,
   AssistantReply as SharedAssistantReply,
@@ -27,19 +26,11 @@ import { normalizeListResponse } from "./normalizeListResponse";
 import { captureApiFailure } from "./observability/shared";
 import { normalizeGstin } from "./gstin";
 import {
-  bootstrapSecureAuthSession,
-  clearLegacyStoredToken,
-  clearSecureAuthBootstrapped,
+  ensureFreshSecureAuthSessionDetailed,
   getLegacyStoredToken,
-  hasSecureAuthBootstrap,
   isAuthTokenExpired,
-  isSecureAuthSessionExpired,
-  isCookieOnlyAuthEnabled,
   isSecureAuthEnabled,
-  normalizeAuthToken,
-  refreshSecureAuthSessionDetailed,
   requestClientLogout,
-  setLegacyStoredToken,
 } from "./secureAuth";
 
 export const apiClient = axios.create({
@@ -47,63 +38,76 @@ export const apiClient = axios.create({
   withCredentials: true,
 });
 
+const CSRF_COOKIE_NAME = "bill_sutra_csrf_token";
+
+const getCookieValue = (cookieName: string) => {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const encodedName = `${cookieName}=`;
+  const matchedCookie = document.cookie
+    .split(";")
+    .map((entry) => entry.trim())
+    .find((entry) => entry.startsWith(encodedName));
+
+  if (!matchedCookie) {
+    return null;
+  }
+
+  return decodeURIComponent(matchedCookie.slice(encodedName.length));
+};
+
 const isFaceAuthenticationRequest = (requestUrl: string) =>
   requestUrl.includes("/face/authenticate");
 
 apiClient.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
     config.withCredentials = true;
-    const secureAuthEnabled = isSecureAuthEnabled();
-    const secureCookieReady = secureAuthEnabled && hasSecureAuthBootstrap();
-    const secureCookieExpired =
-      secureCookieReady && isSecureAuthSessionExpired();
-    const session = !isCookieOnlyAuthEnabled() ? await getSession() : null;
-    const sessionToken = normalizeAuthToken(
-      (session?.user as { token?: string } | undefined)?.token ?? null,
-    );
-
-    let token =
-      !secureCookieReady || !secureAuthEnabled
-        ? sessionToken ?? getLegacyStoredToken()
-        : null;
-
-    if (sessionToken) {
-      setLegacyStoredToken(sessionToken);
-    } else if (!token) {
-      clearLegacyStoredToken();
+    const csrfToken = getCookieValue(CSRF_COOKIE_NAME);
+    if (csrfToken) {
+      config.headers = config.headers ?? {};
+      config.headers["X-CSRF-Token"] = csrfToken;
     }
 
-    if (secureCookieExpired) {
-      const refreshResult = await refreshSecureAuthSessionDetailed();
+    const requestUrl = typeof config.url === "string" ? config.url : "";
+    const isAuthLifecycleRequest =
+      requestUrl.includes("/auth/refresh") ||
+      requestUrl.includes("/auth/logout") ||
+      requestUrl.includes("/auth/session/bootstrap");
+
+    if (isSecureAuthEnabled() && !isAuthLifecycleRequest) {
+      const refreshResult = await ensureFreshSecureAuthSessionDetailed();
       if (!refreshResult.ok) {
         if (refreshResult.reason === "auth_invalid") {
-          requestClientLogout("refresh_expired");
-        }
-        return Promise.reject(new axios.CanceledError("Session expired"));
-      }
-    } else if (!secureCookieReady && token && isAuthTokenExpired(token)) {
-      if (secureAuthEnabled) {
-        const refreshResult = await refreshSecureAuthSessionDetailed();
-        if (refreshResult.ok) {
-          if (config.headers?.Authorization) {
-            delete config.headers.Authorization;
-          }
-          return config;
+          requestClientLogout("401_refresh_failed");
         }
 
-        if (refreshResult.reason === "auth_invalid") {
-          requestClientLogout("refresh_expired");
-        }
-        return Promise.reject(new axios.CanceledError("Session expired"));
-      } else {
-        requestClientLogout("token_expired");
-        return Promise.reject(new axios.CanceledError("Session expired"));
+        return Promise.reject(
+          new axios.CanceledError(
+            refreshResult.reason === "auth_invalid"
+              ? "Session expired"
+              : "Authentication temporarily unavailable",
+          ),
+        );
       }
+
+      if (config.headers?.Authorization) {
+        delete config.headers.Authorization;
+      }
+      return config;
     }
 
-    if (!secureCookieReady && token && !isAuthTokenExpired(token)) {
-      const header = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
-      config.headers.Authorization = header;
+    const token = getLegacyStoredToken();
+    if (token && isAuthTokenExpired(token)) {
+      requestClientLogout("token_expired");
+      return Promise.reject(new axios.CanceledError("Session expired"));
+    }
+
+    if (token) {
+      config.headers.Authorization = token.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
     } else if (config.headers?.Authorization) {
       delete config.headers.Authorization;
     }
@@ -173,7 +177,10 @@ apiClient.interceptors.response.use(
         originalRequest._retry = true;
 
         try {
-          const refreshResult = await refreshSecureAuthSessionDetailed();
+          const refreshResult = await ensureFreshSecureAuthSessionDetailed({
+            force: true,
+            minValidityMs: 0,
+          });
           if (!refreshResult.ok) {
             if (refreshResult.reason !== "auth_invalid") {
               originalRequest._authRefreshTransientFailure = true;
@@ -193,58 +200,8 @@ apiClient.interceptors.response.use(
         } catch (refreshError) {
           captureApiFailure(refreshError);
 
-          clearSecureAuthBootstrapped();
-          const session = await getSession();
-          const sessionToken = normalizeAuthToken(
-            (session?.user as { token?: string } | undefined)?.token ?? null,
-          );
-
-          if (
-            originalRequest._authRefreshInvalid &&
-            sessionToken &&
-            !isAuthTokenExpired(sessionToken)
-          ) {
-            setLegacyStoredToken(sessionToken);
-
-            const bootstrapped = await bootstrapSecureAuthSession(sessionToken);
-            if (bootstrapped) {
-              if (originalRequest.headers?.Authorization) {
-                delete originalRequest.headers.Authorization;
-              }
-
-              originalRequest.withCredentials = true;
-              return apiClient(originalRequest);
-            }
-
-            originalRequest.headers = originalRequest.headers ?? {};
-            originalRequest.headers.Authorization = sessionToken.startsWith(
-              "Bearer ",
-            )
-              ? sessionToken
-              : `Bearer ${sessionToken}`;
-            originalRequest.withCredentials = true;
-            return apiClient(originalRequest);
-          }
-
-          const legacyToken = getLegacyStoredToken();
-          if (
-            originalRequest._authRefreshInvalid &&
-            legacyToken &&
-            !isAuthTokenExpired(legacyToken)
-          ) {
-            originalRequest.headers = originalRequest.headers ?? {};
-            originalRequest.headers.Authorization = legacyToken.startsWith(
-              "Bearer ",
-            )
-              ? legacyToken
-              : `Bearer ${legacyToken}`;
-            originalRequest.withCredentials = true;
-            return apiClient(originalRequest);
-          }
-
           if (originalRequest._authRefreshInvalid) {
-            clearLegacyStoredToken();
-            requestClientLogout("refresh_expired");
+            requestClientLogout("401_refresh_failed");
           }
         }
       }
@@ -369,6 +326,7 @@ export type ProductListParams = {
   limit?: number;
   category?: string | null;
   search?: string | null;
+  mode?: "options" | "full";
 };
 
 export type ProductListResponse = {
@@ -1194,6 +1152,20 @@ export type DashboardOverview = {
     paymentStatus: "PAID" | "PARTIAL" | "PENDING";
     date: string;
   }>;
+  recentInvoices?: Array<{
+    id: number;
+    invoiceNumber: string;
+    customer: { name: string } | null;
+    total: number;
+    status: string;
+    date: string;
+  }>;
+  customerHighlights?: {
+    totalCustomers: number;
+  };
+  inventory?: {
+    totalProducts: number;
+  };
   activity: Array<{ time: string; label: string }>;
 };
 
@@ -1396,6 +1368,17 @@ export type SecurityActivityEvent = {
   ipAddress: string | null;
   userAgent: string | null;
   createdAt: string;
+};
+
+export type DeviceSessionRecord = {
+  id: string;
+  deviceName: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string;
+  isCurrent: boolean;
 };
 
 export type AccessPaymentStatusResponse = {
@@ -1962,6 +1945,9 @@ export const fetchProducts = async (
   if (params?.search) {
     searchParams.set("search", params.search);
   }
+  if (params?.mode && params.mode !== "full") {
+    searchParams.set("mode", params.mode);
+  }
 
   const query = searchParams.toString();
   const response = await apiClient.get(
@@ -1989,11 +1975,16 @@ export const fetchProducts = async (
 export const fetchProductOptions = async (
   params?: ProductListParams,
 ): Promise<Product[]> => {
+  const requestedLimit =
+    typeof params?.limit === "number" && Number.isFinite(params.limit)
+      ? params.limit
+      : 200;
   const response = await fetchProducts({
     page: params?.page ?? 1,
-    limit: params?.limit ?? 1000,
+    limit: Math.min(Math.max(1, requestedLimit), 200),
     category: params?.category ?? null,
     search: params?.search ?? null,
+    mode: "options",
   });
 
   return response.products;
@@ -3374,8 +3365,9 @@ export const updateUserProfile = async (
 
 export const updateUserPassword = async (
   payload: UpdatePasswordPayload,
-): Promise<void> => {
-  await apiClient.put("/users/password", payload);
+): Promise<{ reauthRequired?: boolean }> => {
+  const response = await apiClient.put("/users/password", payload);
+  return (response.data?.data as { reauthRequired?: boolean } | undefined) ?? {};
 };
 
 export const deleteUserData = async (): Promise<void> => {
@@ -3421,6 +3413,22 @@ export const fetchSecurityActivity = async (): Promise<
 > => {
   const response = await apiClient.get("/security/activity");
   return response.data.data as SecurityActivityEvent[];
+};
+
+export const fetchSecuritySessions = async (): Promise<DeviceSessionRecord[]> => {
+  const response = await apiClient.get("/security/sessions");
+  return response.data.data as DeviceSessionRecord[];
+};
+
+export const logoutOtherDevices = async (): Promise<{ revokedCount: number }> => {
+  const response = await apiClient.post("/security/logout-others");
+  return (
+    response.data?.data as { revokedCount: number } | undefined
+  ) ?? { revokedCount: 0 };
+};
+
+export const revokeSecuritySession = async (sessionId: string): Promise<void> => {
+  await apiClient.delete(`/security/sessions/${encodeURIComponent(sessionId)}`);
 };
 
 export const logoutAllDevices = async (): Promise<void> => {

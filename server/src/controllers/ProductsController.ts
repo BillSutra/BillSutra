@@ -9,7 +9,7 @@ import {
   productUpdateSchema,
 } from "../validations/apiValidations.js";
 import {
-  clearDanglingProductCategoryReferences,
+  maintainProductCategoryReferences,
   normalizeProductCategoryRecord,
   normalizeProductCategoryRecords,
   productCategoryInclude,
@@ -86,6 +86,9 @@ class ProductsController {
       typeof req.query.search === "string" ? req.query.search.trim() : "";
     const category =
       typeof req.query.category === "string" ? req.query.category.trim() : "";
+    const mode =
+      typeof req.query.mode === "string" ? req.query.mode.trim().toLowerCase() : "";
+    const isOptionsMode = mode === "options";
 
     const where: Prisma.ProductWhereInput = {
       user_id: userId,
@@ -136,25 +139,55 @@ class ProductsController {
       ];
     }
 
-    await clearDanglingProductCategoryReferences(userId);
+    void maintainProductCategoryReferences(userId);
 
-    const dbQuery = {
+    if (isOptionsMode) {
+      const items = await prisma.product.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          barcode: true,
+          price: true,
+          cost: true,
+          gst_rate: true,
+          stock_on_hand: true,
+          reorder_level: true,
+          category: productCategoryInclude.category,
+        },
+        orderBy: { name: "asc" },
+        skip,
+        take: limit,
+      });
+      const normalizedItems = normalizeProductCategoryRecords(items);
+
+      return sendResponse(res, 200, {
+        data: {
+          products: normalizedItems,
+          items: normalizedItems,
+          page,
+          limit,
+          total: normalizedItems.length,
+          totalPages: 1,
+        },
+      });
+    }
+
+    const items = await prisma.product.findMany({
       where,
       include: productCategoryInclude,
-      orderBy: { created_at: "desc" as const },
+      orderBy: { created_at: "desc" },
       skip,
       take: limit,
-    };
-
-    const [items, total] = await prisma.$transaction([
-      prisma.product.findMany(dbQuery),
-      prisma.product.count({ where }),
-    ]);
+    });
+    const normalizedItems = normalizeProductCategoryRecords(items);
+    const total = await prisma.product.count({ where });
 
     return sendResponse(res, 200, {
       data: {
-        products: normalizeProductCategoryRecords(items),
-        items: normalizeProductCategoryRecords(items),
+        products: normalizedItems,
+        items: normalizedItems,
         total,
         page,
         limit,
@@ -237,7 +270,7 @@ class ProductsController {
     }
 
     const id = Number(req.params.id);
-    await clearDanglingProductCategoryReferences(userId);
+    void maintainProductCategoryReferences(userId);
     const product = await prisma.product.findFirst({
       where: { id, user_id: userId },
       include: productCategoryInclude,

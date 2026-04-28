@@ -2,7 +2,6 @@
 import React, {
   FormEvent,
   useActionState,
-  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -16,11 +15,6 @@ import { signIn } from "next-auth/react";
 import Image from "next/image";
 import { useI18n } from "@/providers/LanguageProvider";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
-import {
-  bootstrapSecureAuthSession,
-  isSecureAuthEnabled,
-} from "@/lib/secureAuth";
-import { captureFrontendException } from "@/lib/observability/shared";
 import { useRouter } from "next/navigation";
 import { Check, Eye, EyeOff, LoaderCircle, X } from "lucide-react";
 
@@ -250,81 +244,75 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
     confirm_password: asErrorText(state.errors?.confirm_password),
   };
 
-  const completeTokenSignup = useCallback(
-    async (
-      rawToken: unknown,
-      options?: {
-        isEmailVerified?: boolean | null;
-      },
-    ) => {
-      if (typeof rawToken !== "string" || !rawToken.trim()) {
-        toast.error("A valid login token was not returned.");
-        return false;
+  useEffect(() => {
+    if (state.status === 503 && state.data?.verification) {
+      toast.error(
+        state.message ||
+          "Account created, but we could not send the verification code yet.",
+      );
+      const verificationEmail =
+        typeof state.data?.verification?.email === "string" &&
+        state.data.verification.email.trim()
+          ? state.data.verification.email.trim()
+          : email.trim();
+      const nextSearchParams = new URLSearchParams({
+        email: verificationEmail,
+        delivery: "failed",
+      });
+      if (typeof state.data?.verification?.retryAfter === "number") {
+        nextSearchParams.set(
+          "retryAfter",
+          String(state.data.verification.retryAfter),
+        );
       }
-
-      const token = rawToken.trim().startsWith("Bearer ")
-        ? rawToken.trim()
-        : `Bearer ${rawToken.trim()}`;
+      if (typeof state.data?.verification?.expiresIn === "number") {
+        nextSearchParams.set(
+          "expiresIn",
+          String(state.data.verification.expiresIn),
+        );
+      }
 
       setIsCompletingSignup(true);
-      try {
-        const result = await signIn("auth-token", {
-          token,
-          redirect: false,
-        });
-
-        if (result?.error) {
-          throw new Error("Unable to create your session.");
-        }
-
-        if (isSecureAuthEnabled()) {
-          await bootstrapSecureAuthSession(token);
-        }
-
-        router.push(
-          options?.isEmailVerified === false ? "/verify-email" : "/dashboard",
-        );
-        router.refresh();
-        return true;
-      } catch (error) {
-        captureFrontendException(error, {
-          tags: {
-            flow: "auth.complete_signup_login",
-          },
-        });
-        const message =
-          error instanceof Error && error.message.trim()
-            ? error.message
-            : "Unable to complete sign in.";
-        toast.error(message);
-        return false;
-      } finally {
-        setIsCompletingSignup(false);
-      }
-    },
-    [router],
-  );
-
-  useEffect(() => {
-    if (state.status >= 400) {
+      router.push(`/verify-email?${nextSearchParams.toString()}`);
+    } else if (state.status >= 400) {
       captureAnalyticsEvent("auth_signup_failed", {
         method: "password",
         status: state.status,
       });
       toast.error(state.message);
-    } else if (state.status === 200) {
+    } else if (state.status === 201) {
       captureAnalyticsEvent("auth_signup_succeeded", {
         method: "password",
       });
-      toast.success(state.message || "Registration successful.");
-      void completeTokenSignup(state.data?.token, {
-        isEmailVerified:
-          typeof state.data?.user?.is_email_verified === "boolean"
-            ? state.data.user.is_email_verified
-            : null,
+      toast.success(state.message || "Account created. Verify your email to continue.");
+      const verificationEmail =
+        typeof state.data?.verification?.email === "string" &&
+        state.data.verification.email.trim()
+          ? state.data.verification.email.trim()
+          : email.trim();
+      const nextSearchParams = new URLSearchParams({
+        email: verificationEmail,
       });
+      if (typeof state.data?.verification?.retryAfter === "number") {
+        nextSearchParams.set(
+          "retryAfter",
+          String(state.data.verification.retryAfter),
+        );
+      }
+      if (typeof state.data?.verification?.expiresIn === "number") {
+        nextSearchParams.set(
+          "expiresIn",
+          String(state.data.verification.expiresIn),
+        );
+      }
+      if (state.data?.verification?.otpDeliveryFailed === true) {
+        nextSearchParams.set("delivery", "failed");
+      }
+
+      setIsCompletingSignup(true);
+      router.push(`/verify-email?${nextSearchParams.toString()}`);
     }
-  }, [completeTokenSignup, state, t]);
+  }, [email, router, state, t]);
 
   const handleGoogleSignup = () => {
     captureAnalyticsEvent("auth_signup_started", {
@@ -528,7 +516,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
             <>
               <LoaderCircle className="h-4 w-4 animate-spin" />
               {isCompletingSignup
-                ? "Signing you in..."
+                ? "Preparing verification..."
                 : t("auth.shared.creatingAccount")}
             </>
           ) : (

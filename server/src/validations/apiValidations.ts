@@ -86,6 +86,7 @@ export const categoryUpdateSchema = categoryCreateSchema.partial();
 export const authLoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
+  rememberMe: z.boolean().optional(),
 });
 
 export const authOauthSchema = z.object({
@@ -94,6 +95,7 @@ export const authOauthSchema = z.object({
   provider: z.string().min(2).optional(),
   oauth_id: z.string().min(1).optional(),
   image: z.string().url().optional(),
+  rememberMe: z.boolean().optional(),
 });
 
 export const authRegisterSchema = z
@@ -114,6 +116,16 @@ export const authForgotSchema = z.object({
 
 export const authVerifyEmailQuerySchema = z.object({
   token: z.string().trim().min(32).max(191),
+});
+
+export const authVerifyEmailOtpSchema = z.object({
+  email: z.string().email(),
+  otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+  rememberMe: z.boolean().optional(),
+});
+
+export const authResendVerificationOtpSchema = z.object({
+  email: z.string().email(),
 });
 
 const webAuthnRegistrationResponseSchema = z.object({
@@ -150,6 +162,10 @@ export const authTokenSchema = z.object({
   token: z.string().min(10),
 });
 
+export const authSessionBootstrapSchema = z.object({
+  rememberMe: z.boolean().optional(),
+});
+
 export const authOtpSendSchema = z.object({
   email: z.string().email(),
 });
@@ -157,6 +173,7 @@ export const authOtpSendSchema = z.object({
 export const authOtpVerifySchema = z.object({
   email: z.string().email(),
   code: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+  rememberMe: z.boolean().optional(),
 });
 
 export const passkeyAuthenticateOptionsSchema = z.object({
@@ -166,6 +183,7 @@ export const passkeyAuthenticateOptionsSchema = z.object({
 export const passkeyAuthenticateVerifySchema = z.object({
   email: z.string().email(),
   challenge_id: z.coerce.number().int().positive(),
+  rememberMe: z.boolean().optional(),
   response: webAuthnAuthenticationResponseSchema,
 });
 

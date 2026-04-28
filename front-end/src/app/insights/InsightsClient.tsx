@@ -120,14 +120,9 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
   const deferredFilters = useDeferredValue(filters);
 
   const displayName = name.trim() || t("common.guest");
-  const hasValidSessionToken =
-    typeof token === "string" &&
-    token.trim().length > 0 &&
-    token !== "undefined" &&
-    token !== "null";
 
   useDashboardRealtime({
-    enabled: hydrated && hasValidSessionToken && DASHBOARD_REALTIME_ENABLED,
+    enabled: hydrated && DASHBOARD_REALTIME_ENABLED,
     token,
   });
 
@@ -140,7 +135,7 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
     staleTime: 30_000,
   });
 
-  const showLoadingState = !hydrated || (hasValidSessionToken && isLoading);
+  const showLoadingState = !hydrated || isLoading;
 
   const sectionLinks = [
     { label: t("dashboard.sectionLinks.overview"), href: "#summary" },

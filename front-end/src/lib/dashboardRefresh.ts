@@ -40,9 +40,9 @@ export const dashboardQueryDefaults = {
     ? false
     : DASHBOARD_REFRESH_INTERVAL_MS) as false | number,
   refetchIntervalInBackground: true,
-  staleTime: 0,
-  refetchOnMount: true,
-  refetchOnWindowFocus: true,
+  staleTime: 30_000,
+  refetchOnMount: false,
+  refetchOnWindowFocus: false,
   retry: 3,
   retryDelay: dashboardRetryDelay,
 };

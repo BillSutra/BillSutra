@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import type { Request, Response } from "express";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
@@ -16,6 +17,10 @@ import {
   getCachedMetrics,
   setCachedMetrics,
 } from "../services/dashboardMetricsCache.js";
+import {
+  getCachedDashboardOverview,
+  setCachedDashboardOverview,
+} from "../services/dashboardOverviewCache.js";
 import {
   buildDashboardMetricsRedisKey,
   buildDashboardOverviewRedisKey,
@@ -191,6 +196,127 @@ const buildMetricsCacheKey = (userId: number, query: Request["query"]) => {
   return parts.join("|");
 };
 
+const DASHBOARD_METRICS_CACHE_TTL_SECONDS = Number(
+  process.env.DASHBOARD_METRICS_CACHE_TTL_SECONDS ?? 30,
+);
+const DASHBOARD_ENDPOINT_CACHE_TTL_SECONDS = Number(
+  process.env.DASHBOARD_ENDPOINT_CACHE_TTL_SECONDS ?? 30,
+);
+
+const dashboardEndpointCache = new Map<
+  string,
+  { expiresAt: number; data: unknown }
+>();
+
+const serializeCacheQueryValue = (value: unknown) => {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.join(",");
+  }
+
+  return "";
+};
+
+const buildDashboardEndpointCacheKey = (
+  endpoint: string,
+  userId: number,
+  query: Request["query"] = {},
+) =>
+  `dashboard:${userId}:${endpoint}:${[
+    serializeCacheQueryValue(query.range),
+    serializeCacheQueryValue(query.startDate),
+    serializeCacheQueryValue(query.endDate),
+    serializeCacheQueryValue(query.granularity),
+  ].join("|")}`;
+
+const getDashboardEndpointCache = async <T>(cacheKey: string) => {
+  const cached = dashboardEndpointCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.data as T;
+  }
+
+  if (cached) {
+    dashboardEndpointCache.delete(cacheKey);
+  }
+
+  const redisCached = await getCache<T>(cacheKey);
+  if (redisCached) {
+    dashboardEndpointCache.set(cacheKey, {
+      expiresAt: Date.now() + DASHBOARD_ENDPOINT_CACHE_TTL_SECONDS * 1000,
+      data: redisCached,
+    });
+    return redisCached;
+  }
+
+  return null;
+};
+
+const setDashboardEndpointCache = async (cacheKey: string, data: unknown) => {
+  dashboardEndpointCache.set(cacheKey, {
+    expiresAt: Date.now() + DASHBOARD_ENDPOINT_CACHE_TTL_SECONDS * 1000,
+    data,
+  });
+  await setCache(cacheKey, data, DASHBOARD_ENDPOINT_CACHE_TTL_SECONDS);
+};
+
+type DashboardSalesDailyRow = {
+  day: Date;
+  total: Prisma.Decimal | number | null;
+};
+
+type DashboardSalesMonthlyRow = {
+  month: Date;
+  total: Prisma.Decimal | number | null;
+};
+
+type DashboardCategoryRow = {
+  name: string | null;
+  value: Prisma.Decimal | number | null;
+};
+
+type DashboardCustomerSummaryRow = {
+  pendingPayments: Prisma.Decimal | number | null;
+  dailyRegisteredCustomers: bigint | number | null;
+  dailyWalkInCustomers: bigint | number | null;
+  weeklyRegisteredCustomers: bigint | number | null;
+  weeklyWalkInCustomers: bigint | number | null;
+  monthlyRegisteredCustomers: bigint | number | null;
+  monthlyWalkInCustomers: bigint | number | null;
+};
+
+type DashboardCustomerMetricRow = {
+  customerId: number | null;
+  customerName: string | null;
+  bookedTotal: Prisma.Decimal | number | null;
+  bookedOrders: bigint | number | null;
+  paidRevenueTotal: Prisma.Decimal | number | null;
+  paidOrderCount: bigint | number | null;
+  firstPaidSaleDate: Date | null;
+  lastPaidSaleDate: Date | null;
+  paidOrdersLast30: bigint | number | null;
+  paidOrdersPrev30: bigint | number | null;
+};
+
+type DashboardSupplierSummaryRow = {
+  recentPurchases: bigint | number | null;
+  outstandingPayables: Prisma.Decimal | number | null;
+};
+
+type DashboardSupplierMetricRow = {
+  supplierId: number | null;
+  supplierName: string | null;
+  totalPurchaseAmount: Prisma.Decimal | number | null;
+  totalOrders: bigint | number | null;
+  firstPurchaseDate: Date | null;
+  lastPurchaseDate: Date | null;
+};
+
+const toCount = (value: bigint | number | null | undefined) =>
+  Number(value ?? 0);
+
 class DashboardController {
   static async stream(req: Request, res: Response) {
     const userId = req.user?.id;
@@ -232,9 +358,15 @@ class DashboardController {
       if (!userId) {
         return sendResponse(res, 401, { message: "Unauthorized" });
       }
+      const cacheKey = `${userId}|${JSON.stringify(req.query ?? {})}`;
       const redisCacheKey = buildDashboardOverviewRedisKey(userId, req.query);
+      const cached = getCachedDashboardOverview(cacheKey);
+      if (cached) {
+        return sendResponse(res, 200, { data: cached });
+      }
       const redisCached = await getCache(redisCacheKey);
       if (redisCached) {
+        setCachedDashboardOverview(cacheKey, redisCached);
         return sendResponse(res, 200, { data: redisCached });
       }
       const data = await buildDashboardOverview({
@@ -247,6 +379,7 @@ class DashboardController {
         },
       });
 
+      setCachedDashboardOverview(cacheKey, data);
       void setCache(redisCacheKey, data, 60);
 
       return sendResponse(res, 200, { data });
@@ -268,15 +401,15 @@ class DashboardController {
 
       const cacheKey = buildMetricsCacheKey(userId, req.query);
       const redisCacheKey = buildDashboardMetricsRedisKey(userId, req.query);
+      const cached = getCachedMetrics(cacheKey);
+      if (cached) {
+        return sendResponse(res, 200, { data: cached });
+      }
+
       const redisCached = await getCache(redisCacheKey);
       if (redisCached) {
         setCachedMetrics(cacheKey, redisCached);
         return sendResponse(res, 200, { data: redisCached });
-      }
-
-      const cached = getCachedMetrics(cacheKey);
-      if (cached) {
-        return sendResponse(res, 200, { data: cached });
       }
 
       const data = await buildDashboardCardMetrics({
@@ -290,7 +423,7 @@ class DashboardController {
       });
 
       setCachedMetrics(cacheKey, data);
-      void setCache(redisCacheKey, data, 60);
+      void setCache(redisCacheKey, data, DASHBOARD_METRICS_CACHE_TTL_SECONDS);
 
       return sendResponse(res, 200, { data });
     } catch (error) {
@@ -308,6 +441,17 @@ class DashboardController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    const cacheKey = buildDashboardEndpointCacheKey("sales", userId, req.query);
+    const cached = await getDashboardEndpointCache<{
+      last7Days: Array<{ date: string; sales: number; purchases: number }>;
+      last30Days: Array<{ date: string; sales: number; purchases: number }>;
+      monthly: Array<{ month: string; sales: number; purchases: number }>;
+      categories: Array<{ name: string; value: number }>;
+    }>(cacheKey);
+    if (cached) {
+      return sendResponse(res, 200, { data: cached });
+    }
+
     const resolved = resolveDashboardFilters({
       range: req.query.range,
       startDate: req.query.startDate,
@@ -323,51 +467,86 @@ class DashboardController {
     );
     const endDate = resolved.endExclusive;
 
-    const { sales, purchases, saleItems } = await resolveSequentially({
-      sales: () =>
-        prisma.sale.findMany({
-          where: { user_id: userId, sale_date: { gte: start30, lt: endDate } },
-          select: { sale_date: true, total: true, totalAmount: true },
-        }),
-      purchases: () =>
-        prisma.purchase.findMany({
-          where: {
-            user_id: userId,
-            purchase_date: { gte: start6Months, lt: endDate },
-          },
-          select: { purchase_date: true, total: true, totalAmount: true },
-        }),
-      saleItems: () =>
-        prisma.saleItem.findMany({
-          where: {
-            sale: { user_id: userId, sale_date: { gte: start30, lt: endDate } },
-          },
-          select: {
-            line_total: true,
-            product: { select: { category: { select: { name: true } } } },
-          },
-        }),
-    });
+    const [
+      dailySalesRows,
+      dailyPurchaseRows,
+      monthlySalesRows,
+      monthlyPurchaseRows,
+      categoryRows,
+    ] = await Promise.all([
+      prisma.$queryRaw<DashboardSalesDailyRow[]>(Prisma.sql`
+        SELECT
+          date_trunc('day', "sale_date")::date AS day,
+          COALESCE(SUM(COALESCE("total_amount", "total")), 0) AS total
+        FROM "sales"
+        WHERE "user_id" = ${userId}
+          AND "sale_date" >= ${start30}
+          AND "sale_date" < ${endDate}
+        GROUP BY date_trunc('day', "sale_date")
+        ORDER BY day ASC
+      `),
+      prisma.$queryRaw<DashboardSalesDailyRow[]>(Prisma.sql`
+        SELECT
+          date_trunc('day', "purchase_date")::date AS day,
+          COALESCE(SUM(COALESCE("total_amount", "total")), 0) AS total
+        FROM "purchases"
+        WHERE "user_id" = ${userId}
+          AND "purchase_date" >= ${start30}
+          AND "purchase_date" < ${endDate}
+        GROUP BY date_trunc('day', "purchase_date")
+        ORDER BY day ASC
+      `),
+      prisma.$queryRaw<DashboardSalesMonthlyRow[]>(Prisma.sql`
+        SELECT
+          date_trunc('month', "sale_date")::date AS month,
+          COALESCE(SUM(COALESCE("total_amount", "total")), 0) AS total
+        FROM "sales"
+        WHERE "user_id" = ${userId}
+          AND "sale_date" >= ${start6Months}
+          AND "sale_date" < ${endDate}
+        GROUP BY date_trunc('month', "sale_date")
+        ORDER BY month ASC
+      `),
+      prisma.$queryRaw<DashboardSalesMonthlyRow[]>(Prisma.sql`
+        SELECT
+          date_trunc('month', "purchase_date")::date AS month,
+          COALESCE(SUM(COALESCE("total_amount", "total")), 0) AS total
+        FROM "purchases"
+        WHERE "user_id" = ${userId}
+          AND "purchase_date" >= ${start6Months}
+          AND "purchase_date" < ${endDate}
+        GROUP BY date_trunc('month', "purchase_date")
+        ORDER BY month ASC
+      `),
+      prisma.$queryRaw<DashboardCategoryRow[]>(Prisma.sql`
+        SELECT
+          COALESCE(cat."name", 'Uncategorized') AS name,
+          COALESCE(SUM(si."line_total"), 0) AS value
+        FROM "sale_items" AS si
+        INNER JOIN "sales" AS s
+          ON s."id" = si."sale_id"
+        LEFT JOIN "products" AS p
+          ON p."id" = si."product_id"
+        LEFT JOIN "categories" AS cat
+          ON cat."id" = p."category_id"
+        WHERE s."user_id" = ${userId}
+          AND s."sale_date" >= ${start30}
+          AND s."sale_date" < ${endDate}
+        GROUP BY COALESCE(cat."name", 'Uncategorized')
+        ORDER BY value DESC
+        LIMIT 7
+      `),
+    ]);
 
-    const dailySalesTotals = new Map<string, number>();
-    sales.forEach((sale) => {
-      const key = toDateKey(sale.sale_date);
-      dailySalesTotals.set(
-        key,
-        (dailySalesTotals.get(key) ?? 0) +
-          resolveRecordedTotal(sale.totalAmount, sale.total),
-      );
-    });
-
-    const dailyPurchaseTotals = new Map<string, number>();
-    purchases.forEach((purchase) => {
-      const key = toDateKey(purchase.purchase_date);
-      dailyPurchaseTotals.set(
-        key,
-        (dailyPurchaseTotals.get(key) ?? 0) +
-          resolveRecordedTotal(purchase.totalAmount, purchase.total),
-      );
-    });
+    const dailySalesTotals = new Map(
+      dailySalesRows.map((row) => [toDateKey(new Date(row.day)), toNumber(row.total)]),
+    );
+    const dailyPurchaseTotals = new Map(
+      dailyPurchaseRows.map((row) => [
+        toDateKey(new Date(row.day)),
+        toNumber(row.total),
+      ]),
+    );
 
     const last30Days = buildDateSeries(start30, 30).map((key) => ({
       date: key,
@@ -396,19 +575,19 @@ class DashboardController {
       });
     }
 
-    sales.forEach((sale) => {
-      const key = toMonthKey(sale.sale_date);
+    monthlySalesRows.forEach((sale) => {
+      const key = toMonthKey(new Date(sale.month));
       const entry = monthlyMap.get(key);
       if (entry) {
-        entry.sales += resolveRecordedTotal(sale.totalAmount, sale.total);
+        entry.sales += toNumber(sale.total);
       }
     });
 
-    purchases.forEach((purchase) => {
-      const key = toMonthKey(purchase.purchase_date);
+    monthlyPurchaseRows.forEach((purchase) => {
+      const key = toMonthKey(new Date(purchase.month));
       const entry = monthlyMap.get(key);
       if (entry) {
-        entry.purchases += resolveRecordedTotal(purchase.totalAmount, purchase.total);
+        entry.purchases += toNumber(purchase.total);
       }
     });
 
@@ -418,28 +597,21 @@ class DashboardController {
       purchases: entry.purchases,
     }));
 
-    const categoryMap = new Map<string, number>();
-    saleItems.forEach((item) => {
-      const name = item.product?.category?.name ?? "Uncategorized";
-      categoryMap.set(
-        name,
-        (categoryMap.get(name) ?? 0) + toNumber(item.line_total),
-      );
-    });
+    const categories = categoryRows.map((row) => ({
+      name: row.name?.trim() || "Uncategorized",
+      value: toNumber(row.value),
+    }));
 
-    const categories = Array.from(categoryMap.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 7);
+    const data = {
+      last7Days,
+      last30Days,
+      monthly,
+      categories,
+    };
 
-    return sendResponse(res, 200, {
-      data: {
-        last7Days,
-        last30Days,
-        monthly,
-        categories,
-      },
-    });
+    await setDashboardEndpointCache(cacheKey, data);
+
+    return sendResponse(res, 200, { data });
   }
 
   static async paymentMethods(req: Request, res: Response) {
@@ -548,6 +720,24 @@ class DashboardController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    const cacheKey = buildDashboardEndpointCacheKey(
+      "transactions",
+      userId,
+      req.query,
+    );
+    const cached = await getDashboardEndpointCache<{
+      transactions: Array<{
+        date: string;
+        invoiceNumber: string;
+        customer: string;
+        amount: number;
+        paymentStatus: "PAID" | "PARTIAL" | "PENDING";
+      }>;
+    }>(cacheKey);
+    if (cached) {
+      return sendResponse(res, 200, { data: cached });
+    }
+
     const resolved = resolveDashboardFilters({
       range: req.query.range,
       startDate: req.query.startDate,
@@ -560,7 +750,18 @@ class DashboardController {
         user_id: userId,
         sale_date: { gte: resolved.start, lt: resolved.endExclusive },
       },
-      include: { customer: true },
+      select: {
+        id: true,
+        sale_date: true,
+        total: true,
+        totalAmount: true,
+        paymentStatus: true,
+        customer: {
+          select: {
+            name: true,
+          },
+        },
+      },
       orderBy: { sale_date: "desc" },
       take: 10,
     });
@@ -581,13 +782,92 @@ class DashboardController {
             : "PENDING",
     }));
 
-    return sendResponse(res, 200, { data: { transactions } });
+    const data = { transactions };
+    await setDashboardEndpointCache(cacheKey, data);
+
+    return sendResponse(res, 200, { data });
   }
 
-  static async customers(req: Request, res: Response) {
+  static async customersOptimized(req: Request, res: Response) {
     const userId = req.user?.id;
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    const cacheKey = buildDashboardEndpointCacheKey("customers", userId);
+    const cached = await getDashboardEndpointCache<{
+      totalRegisteredCustomers: number;
+      pendingPayments: number;
+      customerVisits: {
+        daily: {
+          registeredCustomers: number;
+          walkInCustomers: number;
+          totalCustomers: number;
+        };
+        weekly: {
+          registeredCustomers: number;
+          walkInCustomers: number;
+          totalCustomers: number;
+        };
+        monthly: {
+          registeredCustomers: number;
+          walkInCustomers: number;
+          totalCustomers: number;
+        };
+      };
+      topCustomers: Array<{
+        name: string;
+        totalPurchaseAmount: number;
+        numberOfOrders: number;
+      }>;
+      clvAnalytics: {
+        premiumCustomers: Array<{
+          customerId: number | null;
+          customerName: string;
+          lifetimeValue: number;
+          predicatedFutureValue: number;
+          totalOrders: number;
+          compositeScore: number;
+          segment: "PREMIUM" | "REGULAR" | "NEW_LOW";
+        }>;
+        regularCustomers: Array<{
+          customerId: number | null;
+          customerName: string;
+          lifetimeValue: number;
+          predicatedFutureValue: number;
+          totalOrders: number;
+          compositeScore: number;
+          segment: "PREMIUM" | "REGULAR" | "NEW_LOW";
+        }>;
+        newLowCustomers: Array<{
+          customerId: number | null;
+          customerName: string;
+          lifetimeValue: number;
+          predicatedFutureValue: number;
+          totalOrders: number;
+          compositeScore: number;
+          segment: "PREMIUM" | "REGULAR" | "NEW_LOW";
+        }>;
+        premiumCount: number;
+        regularCount: number;
+        newLowCount: number;
+      };
+      churnAnalytics: {
+        highRiskCount: number;
+        mediumRiskCount: number;
+        lowRiskCount: number;
+        topAtRiskCustomers: Array<{
+          customerId: number;
+          customerName: string;
+          lastPurchaseDate: string;
+          daysSinceLastPurchase: number;
+          churnProbability: number;
+          riskLevel: "HIGH_RISK" | "MEDIUM_RISK" | "LOW_RISK";
+        }>;
+      };
+    }>(cacheKey);
+    if (cached) {
+      return sendResponse(res, 200, { data: cached });
     }
 
     const now = new Date();
@@ -599,146 +879,88 @@ class DashboardController {
     const start30DaysAgo = startOfDayUtc(addDays(now, -30));
     const start60DaysAgo = startOfDayUtc(addDays(now, -60));
 
-    const {
-      totalRegisteredCustomers,
-      pendingPaymentAgg,
-      topCustomerSales,
-      dailyRegisteredGroups,
-      dailyWalkIns,
-      weeklyRegisteredGroups,
-      weeklyWalkIns,
-      monthlyRegisteredGroups,
-      monthlyWalkIns,
-      allCustomersData,
-      last30DaysSales,
-      prev30DaysSales,
-    } = await resolveSequentially({
-      totalRegisteredCustomers: () =>
+    const [totalRegisteredCustomers, summaryRows, customerMetricRows] =
+      await Promise.all([
         prisma.customer.count({
           where: { user_id: userId },
         }),
-      pendingPaymentAgg: () =>
-        prisma.sale.aggregate({
-          where: {
-            user_id: userId,
-            paymentStatus: { in: ["PARTIALLY_PAID", "UNPAID"] },
-          },
-          _sum: { pendingAmount: true },
-        }),
-      topCustomerSales: () =>
-        prisma.sale.groupBy({
-          by: ["customer_id"],
-          where: { user_id: userId, customer_id: { not: null } },
-          _sum: { total: true },
-          _count: { _all: true },
-          orderBy: { _sum: { total: "desc" } },
-          take: 5,
-        }),
-      dailyRegisteredGroups: () =>
-        prisma.sale.groupBy({
-          by: ["customer_id"],
-          where: {
-            user_id: userId,
-            customer_id: { not: null },
-            sale_date: { gte: dayStart },
-          },
-          _count: { _all: true },
-        }),
-      dailyWalkIns: () =>
-        prisma.sale.count({
-          where: {
-            user_id: userId,
-            customer_id: null,
-            sale_date: { gte: dayStart },
-          },
-        }),
-      weeklyRegisteredGroups: () =>
-        prisma.sale.groupBy({
-          by: ["customer_id"],
-          where: {
-            user_id: userId,
-            customer_id: { not: null },
-            sale_date: { gte: weekStart },
-          },
-          _count: { _all: true },
-        }),
-      weeklyWalkIns: () =>
-        prisma.sale.count({
-          where: {
-            user_id: userId,
-            customer_id: null,
-            sale_date: { gte: weekStart },
-          },
-        }),
-      monthlyRegisteredGroups: () =>
-        prisma.sale.groupBy({
-          by: ["customer_id"],
-          where: {
-            user_id: userId,
-            customer_id: { not: null },
-            sale_date: { gte: monthStart },
-          },
-          _count: { _all: true },
-        }),
-      monthlyWalkIns: () =>
-        prisma.sale.count({
-          where: {
-            user_id: userId,
-            customer_id: null,
-            sale_date: { gte: monthStart },
-          },
-        }),
-      allCustomersData: () =>
-        prisma.sale.groupBy({
-          by: ["customer_id"],
-          where: {
-            user_id: userId,
-            customer_id: { not: null },
-            paymentStatus: { in: ["PAID", "PARTIALLY_PAID"] },
-          },
-          _sum: { total: true },
-          _count: { _all: true },
-          _min: { sale_date: true },
-          _max: { sale_date: true },
-        }),
-      last30DaysSales: () =>
-        prisma.sale.groupBy({
-          by: ["customer_id"],
-          where: {
-            user_id: userId,
-            customer_id: { not: null },
-            paymentStatus: { in: ["PAID", "PARTIALLY_PAID"] },
-            sale_date: { gte: start30DaysAgo },
-          },
-          _count: { _all: true },
-        }),
-      prev30DaysSales: () =>
-        prisma.sale.groupBy({
-          by: ["customer_id"],
-          where: {
-            user_id: userId,
-            customer_id: { not: null },
-            paymentStatus: { in: ["PAID", "PARTIALLY_PAID"] },
-            sale_date: { gte: start60DaysAgo, lt: start30DaysAgo },
-          },
-          _count: { _all: true },
-        }),
-    });
+        prisma.$queryRaw<DashboardCustomerSummaryRow[]>(Prisma.sql`
+          SELECT
+            COALESCE(SUM(
+              CASE
+                WHEN "payment_status" IN ('PARTIALLY_PAID'::"PaymentStatus", 'UNPAID'::"PaymentStatus")
+                  THEN "pending_amount"
+                ELSE 0
+              END
+            ), 0) AS "pendingPayments",
+            COUNT(DISTINCT CASE WHEN "customer_id" IS NOT NULL AND "sale_date" >= ${dayStart} THEN "customer_id" END) AS "dailyRegisteredCustomers",
+            COUNT(*) FILTER (WHERE "customer_id" IS NULL AND "sale_date" >= ${dayStart}) AS "dailyWalkInCustomers",
+            COUNT(DISTINCT CASE WHEN "customer_id" IS NOT NULL AND "sale_date" >= ${weekStart} THEN "customer_id" END) AS "weeklyRegisteredCustomers",
+            COUNT(*) FILTER (WHERE "customer_id" IS NULL AND "sale_date" >= ${weekStart}) AS "weeklyWalkInCustomers",
+            COUNT(DISTINCT CASE WHEN "customer_id" IS NOT NULL AND "sale_date" >= ${monthStart} THEN "customer_id" END) AS "monthlyRegisteredCustomers",
+            COUNT(*) FILTER (WHERE "customer_id" IS NULL AND "sale_date" >= ${monthStart}) AS "monthlyWalkInCustomers"
+          FROM "sales"
+          WHERE "user_id" = ${userId}
+        `),
+        prisma.$queryRaw<DashboardCustomerMetricRow[]>(Prisma.sql`
+          SELECT
+            s."customer_id" AS "customerId",
+            c."name" AS "customerName",
+            COALESCE(SUM(COALESCE(s."total_amount", s."total")), 0) AS "bookedTotal",
+            COUNT(*) AS "bookedOrders",
+            COALESCE(SUM(
+              CASE
+                WHEN s."payment_status" IN ('PAID'::"PaymentStatus", 'PARTIALLY_PAID'::"PaymentStatus")
+                  THEN COALESCE(s."total_amount", s."total")
+                ELSE 0
+              END
+            ), 0) AS "paidRevenueTotal",
+            COUNT(*) FILTER (
+              WHERE s."payment_status" IN ('PAID'::"PaymentStatus", 'PARTIALLY_PAID'::"PaymentStatus")
+            ) AS "paidOrderCount",
+            MIN(s."sale_date") FILTER (
+              WHERE s."payment_status" IN ('PAID'::"PaymentStatus", 'PARTIALLY_PAID'::"PaymentStatus")
+            ) AS "firstPaidSaleDate",
+            MAX(s."sale_date") FILTER (
+              WHERE s."payment_status" IN ('PAID'::"PaymentStatus", 'PARTIALLY_PAID'::"PaymentStatus")
+            ) AS "lastPaidSaleDate",
+            COUNT(*) FILTER (
+              WHERE s."payment_status" IN ('PAID'::"PaymentStatus", 'PARTIALLY_PAID'::"PaymentStatus")
+                AND s."sale_date" >= ${start30DaysAgo}
+            ) AS "paidOrdersLast30",
+            COUNT(*) FILTER (
+              WHERE s."payment_status" IN ('PAID'::"PaymentStatus", 'PARTIALLY_PAID'::"PaymentStatus")
+                AND s."sale_date" >= ${start60DaysAgo}
+                AND s."sale_date" < ${start30DaysAgo}
+            ) AS "paidOrdersPrev30"
+          FROM "sales" AS s
+          LEFT JOIN "customers" AS c
+            ON c."id" = s."customer_id"
+          WHERE s."user_id" = ${userId}
+            AND s."customer_id" IS NOT NULL
+          GROUP BY s."customer_id", c."name"
+        `),
+      ]);
 
-    // Calculate CLV metrics for each customer
-    const clvMetrics = allCustomersData
+    const summary = summaryRows[0];
+    const customerMetrics = customerMetricRows.map((row) => ({
+      customerId: row.customerId,
+      customerName: row.customerName?.trim() || "Customer",
+      bookedTotal: toNumber(row.bookedTotal),
+      bookedOrders: toCount(row.bookedOrders),
+      paidRevenueTotal: toNumber(row.paidRevenueTotal),
+      paidOrderCount: toCount(row.paidOrderCount),
+      firstPaidSaleDate: row.firstPaidSaleDate,
+      lastPaidSaleDate: row.lastPaidSaleDate,
+      paidOrdersLast30: toCount(row.paidOrdersLast30),
+      paidOrdersPrev30: toCount(row.paidOrdersPrev30),
+    }));
+
+    const clvMetrics = customerMetrics
+      .filter((record) => record.paidOrderCount > 0 && record.lastPaidSaleDate)
       .map((record) => {
-        const customerId = record.customer_id;
-        const totalOrders = record._count._all;
-        const totalRevenue = toNumber(record._sum.total);
-        const firstPurchase = record._min.sale_date
-          ? new Date(record._min.sale_date)
-          : new Date();
-        const lastPurchase = record._max.sale_date
-          ? new Date(record._max.sale_date)
-          : new Date();
-
-        // Calculate customer lifetime days
+        const firstPurchase = record.firstPaidSaleDate ?? new Date();
+        const lastPurchase = record.lastPaidSaleDate ?? new Date();
         const lifetimeDays = Math.max(
           1,
           Math.floor(
@@ -746,65 +968,60 @@ class DashboardController {
               (1000 * 60 * 60 * 24),
           ),
         );
-
-        // Calculate metrics
-        const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-        const purchaseFrequency = totalOrders / Math.max(1, lifetimeDays);
+        const avgOrderValue =
+          record.paidOrderCount > 0
+            ? record.paidRevenueTotal / record.paidOrderCount
+            : 0;
+        const purchaseFrequency =
+          record.paidOrderCount / Math.max(1, lifetimeDays);
         const predicatedFutureValue = Math.round(
           avgOrderValue * purchaseFrequency * 180,
         );
 
         return {
-          customerId,
-          totalOrders,
-          totalRevenue,
+          customerId: record.customerId,
+          totalOrders: record.paidOrderCount,
+          totalRevenue: record.paidRevenueTotal,
           avgOrderValue: Math.round(avgOrderValue),
           purchaseFrequency: Math.round(purchaseFrequency * 1000) / 1000,
           lastPurchaseDate: toDateKey(lastPurchase),
           lifetimeDays,
-          lifeTimeValue: totalRevenue,
+          lifeTimeValue: record.paidRevenueTotal,
           predicatedFutureValue,
         };
       })
       .sort((a, b) => b.lifeTimeValue - a.lifeTimeValue);
 
-    // Calculate composite scores and segments for CLV
-    // 1. Find max values to safely normalize
-    const maxLtv = Math.max(1, ...clvMetrics.map((m) => m.lifeTimeValue));
+    const maxLtv = Math.max(1, ...clvMetrics.map((m) => m.lifeTimeValue), 1);
     const maxFreq = Math.max(
       0.001,
       ...clvMetrics.map((m) => m.purchaseFrequency),
+      0.001,
     );
-    const maxAov = Math.max(1, ...clvMetrics.map((m) => m.avgOrderValue));
+    const maxAov = Math.max(1, ...clvMetrics.map((m) => m.avgOrderValue), 1);
 
-    const clvWithScores = clvMetrics.map((m) => {
+    const clvWithScores = clvMetrics.map((metric) => {
       const daysSinceLastPurchase = Math.max(
         1,
-        (now.getTime() - new Date(m.lastPurchaseDate).getTime()) /
+        (now.getTime() - new Date(metric.lastPurchaseDate).getTime()) /
           (1000 * 60 * 60 * 24),
       );
 
-      // Normalize metrics 0-1
-      const normLtv = m.lifeTimeValue / maxLtv;
-      const normFreq = m.purchaseFrequency / maxFreq;
-      const normAov = m.avgOrderValue / maxAov;
-      const normRecency = Math.max(0, 1 - daysSinceLastPurchase / 365); // simple inverted recency up to 1 year
-
-      // Weights: LTV (40%), Frequency (25%), AOV (20%), Recency (15%)
+      const normLtv = metric.lifeTimeValue / maxLtv;
+      const normFreq = metric.purchaseFrequency / maxFreq;
+      const normAov = metric.avgOrderValue / maxAov;
+      const normRecency = Math.max(0, 1 - daysSinceLastPurchase / 365);
       const compositeScore =
         normLtv * 0.4 + normFreq * 0.25 + normAov * 0.2 + normRecency * 0.15;
 
-      return { ...m, compositeScore };
+      return { ...metric, compositeScore };
     });
 
-    // Determine segments based on percentiles to ensure identical scores get same segment
-    // Sort descending by compositeScore
     const sortedScores = [...clvWithScores].sort(
       (a, b) => b.compositeScore - a.compositeScore,
     );
     const premiumThresholdIndex = Math.floor(sortedScores.length * 0.3);
     const regularThresholdIndex = Math.floor(sortedScores.length * 0.7);
-
     const premiumScoreThreshold =
       sortedScores[Math.max(0, premiumThresholdIndex - 1)]?.compositeScore ?? 0;
     const regularScoreThreshold =
@@ -828,113 +1045,87 @@ class DashboardController {
       return { ...metric, segment };
     });
 
-    const topCustomerIds = topCustomerSales
-      .map((item) => item.customer_id)
-      .filter((id): id is number => id !== null);
-    const clvCustomerIds = clvWithSegments
-      .map((m) => m.customerId)
-      .filter((id): id is number => id !== null);
-    const customerIds = Array.from(
-      new Set([...topCustomerIds, ...clvCustomerIds]),
-    );
-    const customers = customerIds.length
-      ? await prisma.customer.findMany({
-          where: { id: { in: customerIds } },
-          select: { id: true, name: true },
-        })
-      : [];
-    const customerMap = new Map(
-      customers.map((customer) => [customer.id, customer.name]),
+    const customerNameMap = new Map(
+      customerMetrics
+        .filter((item) => item.customerId !== null)
+        .map((item) => [item.customerId as number, item.customerName]),
     );
 
-    const topCustomers = topCustomerSales
-      .filter(
-        (item): item is typeof item & { customer_id: number } =>
-          item.customer_id !== null,
-      )
+    const topCustomers = [...customerMetrics]
+      .sort((left, right) => right.bookedTotal - left.bookedTotal)
+      .slice(0, 5)
       .map((item) => ({
-        name: customerMap.get(item.customer_id) ?? "Customer",
-        totalPurchaseAmount: toNumber(item._sum.total),
-        numberOfOrders: item._count._all,
+        name: item.customerName,
+        totalPurchaseAmount: item.bookedTotal,
+        numberOfOrders: item.bookedOrders,
       }));
-
-    const clvCustomerMap = customerMap;
 
     const premiumCustomers = clvWithSegments
       .filter(
-        (m): m is typeof m & { customerId: number } => m.customerId !== null,
+        (metric): metric is typeof metric & { customerId: number } =>
+          metric.customerId !== null,
       )
-      .filter((m) => m.segment === "PREMIUM")
+      .filter((metric) => metric.segment === "PREMIUM")
       .slice(0, 5)
-      .map((m) => ({
-        customerId: m.customerId,
-        customerName: clvCustomerMap.get(m.customerId) ?? "Customer",
-        lifetimeValue: m.lifeTimeValue,
-        predicatedFutureValue: m.predicatedFutureValue,
-        totalOrders: m.totalOrders,
-        compositeScore: m.compositeScore,
-        segment: m.segment,
+      .map((metric) => ({
+        customerId: metric.customerId,
+        customerName: customerNameMap.get(metric.customerId) ?? "Customer",
+        lifetimeValue: metric.lifeTimeValue,
+        predicatedFutureValue: metric.predicatedFutureValue,
+        totalOrders: metric.totalOrders,
+        compositeScore: metric.compositeScore,
+        segment: metric.segment,
       }));
 
     const regularCustomers = clvWithSegments
       .filter(
-        (m): m is typeof m & { customerId: number } => m.customerId !== null,
+        (metric): metric is typeof metric & { customerId: number } =>
+          metric.customerId !== null,
       )
-      .filter((m) => m.segment === "REGULAR")
+      .filter((metric) => metric.segment === "REGULAR")
       .slice(0, 5)
-      .map((m) => ({
-        customerId: m.customerId,
-        customerName: clvCustomerMap.get(m.customerId) ?? "Customer",
-        lifetimeValue: m.lifeTimeValue,
-        predicatedFutureValue: m.predicatedFutureValue,
-        totalOrders: m.totalOrders,
-        compositeScore: m.compositeScore,
-        segment: m.segment,
+      .map((metric) => ({
+        customerId: metric.customerId,
+        customerName: customerNameMap.get(metric.customerId) ?? "Customer",
+        lifetimeValue: metric.lifeTimeValue,
+        predicatedFutureValue: metric.predicatedFutureValue,
+        totalOrders: metric.totalOrders,
+        compositeScore: metric.compositeScore,
+        segment: metric.segment,
       }));
 
     const newLowCustomers = clvWithSegments
       .filter(
-        (m): m is typeof m & { customerId: number } => m.customerId !== null,
+        (metric): metric is typeof metric & { customerId: number } =>
+          metric.customerId !== null,
       )
-      .filter((m) => m.segment === "NEW_LOW")
+      .filter((metric) => metric.segment === "NEW_LOW")
       .slice(0, 5)
-      .map((m) => ({
-        customerId: m.customerId,
-        customerName: clvCustomerMap.get(m.customerId) ?? "Customer",
-        lifetimeValue: m.lifeTimeValue,
-        predicatedFutureValue: m.predicatedFutureValue,
-        totalOrders: m.totalOrders,
-        compositeScore: m.compositeScore,
-        segment: m.segment,
+      .map((metric) => ({
+        customerId: metric.customerId,
+        customerName: customerNameMap.get(metric.customerId) ?? "Customer",
+        lifetimeValue: metric.lifeTimeValue,
+        predicatedFutureValue: metric.predicatedFutureValue,
+        totalOrders: metric.totalOrders,
+        compositeScore: metric.compositeScore,
+        segment: metric.segment,
       }));
 
-    const toVisitBreakdown = (
-      registeredCustomers: number,
-      walkInCustomers: number,
-    ) => ({
-      registeredCustomers,
-      walkInCustomers,
-      totalCustomers: registeredCustomers + walkInCustomers,
-    });
-
-    // Churn prediction calculation
     const churnAnalyticsValues = clvWithSegments
       .filter(
-        (m): m is typeof m & { customerId: number } => m.customerId !== null,
+        (metric): metric is typeof metric & { customerId: number } =>
+          metric.customerId !== null,
       )
-      .map((m) => {
-        // Find last 30 and prev 30 purchases
-        const last30 =
-          last30DaysSales.find((s) => s.customer_id === m.customerId)?._count
-            ._all || 0;
-        const prev30 =
-          prev30DaysSales.find((s) => s.customer_id === m.customerId)?._count
-            ._all || 0;
-
+      .map((metric) => {
+        const source = customerMetrics.find(
+          (item) => item.customerId === metric.customerId,
+        );
+        const last30 = source?.paidOrdersLast30 ?? 0;
+        const prev30 = source?.paidOrdersPrev30 ?? 0;
         const daysSinceLastPurchase = Math.max(
           1,
           Math.floor(
-            (now.getTime() - new Date(m.lastPurchaseDate).getTime()) /
+            (now.getTime() - new Date(metric.lastPurchaseDate).getTime()) /
               (1000 * 60 * 60 * 24),
           ),
         );
@@ -944,7 +1135,7 @@ class DashboardController {
           orderTrendDrop = Math.max(0, (prev30 - last30) / prev30);
         } else if (
           last30 === 0 &&
-          m.totalOrders > 0 &&
+          metric.totalOrders > 0 &&
           daysSinceLastPurchase > 30
         ) {
           orderTrendDrop = 1;
@@ -954,7 +1145,7 @@ class DashboardController {
           1,
           daysSinceLastPurchase / 365,
         );
-        const normPurchaseFreq = Math.min(1, m.purchaseFrequency);
+        const normPurchaseFreq = Math.min(1, metric.purchaseFrequency);
 
         let churnProbability =
           normDaysSinceLastPurchase * 0.4 +
@@ -970,252 +1161,278 @@ class DashboardController {
         }
 
         return {
-          customerId: m.customerId,
-          customerName: clvCustomerMap.get(m.customerId) ?? "Customer",
-          lastPurchaseDate: m.lastPurchaseDate,
+          customerId: metric.customerId,
+          customerName: customerNameMap.get(metric.customerId) ?? "Customer",
+          lastPurchaseDate: metric.lastPurchaseDate,
           daysSinceLastPurchase,
           churnProbability,
           riskLevel,
         };
       });
 
-    const highRiskCount = churnAnalyticsValues.filter(
-      (c) => c.riskLevel === "HIGH_RISK",
-    ).length;
-    const mediumRiskCount = churnAnalyticsValues.filter(
-      (c) => c.riskLevel === "MEDIUM_RISK",
-    ).length;
-    const lowRiskCount = churnAnalyticsValues.filter(
-      (c) => c.riskLevel === "LOW_RISK",
-    ).length;
-    const topAtRiskCustomers = [...churnAnalyticsValues]
-      .sort((a, b) => b.churnProbability - a.churnProbability)
-      .slice(0, 5);
-
-    return sendResponse(res, 200, {
-      data: {
-        totalRegisteredCustomers,
-        pendingPayments: toNumber(pendingPaymentAgg._sum.pendingAmount),
-        customerVisits: {
-          daily: toVisitBreakdown(dailyRegisteredGroups.length, dailyWalkIns),
-          weekly: toVisitBreakdown(
-            weeklyRegisteredGroups.length,
-            weeklyWalkIns,
-          ),
-          monthly: toVisitBreakdown(
-            monthlyRegisteredGroups.length,
-            monthlyWalkIns,
-          ),
-        },
-        topCustomers,
-        clvAnalytics: {
-          premiumCustomers,
-          regularCustomers,
-          newLowCustomers,
-          premiumCount: clvWithSegments.filter((m) => m.segment === "PREMIUM")
-            .length,
-          regularCount: clvWithSegments.filter((m) => m.segment === "REGULAR")
-            .length,
-          newLowCount: clvWithSegments.filter((m) => m.segment === "NEW_LOW")
-            .length,
-        },
-        churnAnalytics: {
-          highRiskCount,
-          mediumRiskCount,
-          lowRiskCount,
-          topAtRiskCustomers,
-        },
-      },
+    const toVisitBreakdown = (
+      registeredCustomers: number,
+      walkInCustomers: number,
+    ) => ({
+      registeredCustomers,
+      walkInCustomers,
+      totalCustomers: registeredCustomers + walkInCustomers,
     });
+
+    const data = {
+      totalRegisteredCustomers,
+      pendingPayments: toNumber(summary?.pendingPayments),
+      customerVisits: {
+        daily: toVisitBreakdown(
+          toCount(summary?.dailyRegisteredCustomers),
+          toCount(summary?.dailyWalkInCustomers),
+        ),
+        weekly: toVisitBreakdown(
+          toCount(summary?.weeklyRegisteredCustomers),
+          toCount(summary?.weeklyWalkInCustomers),
+        ),
+        monthly: toVisitBreakdown(
+          toCount(summary?.monthlyRegisteredCustomers),
+          toCount(summary?.monthlyWalkInCustomers),
+        ),
+      },
+      topCustomers,
+      clvAnalytics: {
+        premiumCustomers,
+        regularCustomers,
+        newLowCustomers,
+        premiumCount: clvWithSegments.filter((metric) => metric.segment === "PREMIUM")
+          .length,
+        regularCount: clvWithSegments.filter((metric) => metric.segment === "REGULAR")
+          .length,
+        newLowCount: clvWithSegments.filter((metric) => metric.segment === "NEW_LOW")
+          .length,
+      },
+      churnAnalytics: {
+        highRiskCount: churnAnalyticsValues.filter(
+          (metric) => metric.riskLevel === "HIGH_RISK",
+        ).length,
+        mediumRiskCount: churnAnalyticsValues.filter(
+          (metric) => metric.riskLevel === "MEDIUM_RISK",
+        ).length,
+        lowRiskCount: churnAnalyticsValues.filter(
+          (metric) => metric.riskLevel === "LOW_RISK",
+        ).length,
+        topAtRiskCustomers: [...churnAnalyticsValues]
+          .sort((left, right) => right.churnProbability - left.churnProbability)
+          .slice(0, 5),
+      },
+    };
+
+    await setDashboardEndpointCache(cacheKey, data);
+
+    return sendResponse(res, 200, { data });
   }
 
-  static async suppliers(req: Request, res: Response) {
+  static async suppliersOptimized(req: Request, res: Response) {
     const userId = req.user?.id;
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    const cacheKey = buildDashboardEndpointCacheKey("suppliers", userId);
+    const cached = await getDashboardEndpointCache<{
+      total: number;
+      recentPurchases: number;
+      outstandingPayables: number;
+      topSuppliers: Array<{
+        name: string;
+        totalPurchaseAmount: number;
+        numberOfOrders: number;
+      }>;
+      supplierAnalytics: {
+        highValueCount: number;
+        lowValueCount: number;
+        highValueSuppliers: Array<{
+          supplierId: number | null;
+          supplierName: string;
+          lifetimeValue: number;
+          predictedFutureValue: number;
+          totalOrders: number;
+          segment: "HIGH_VALUE" | "LOW_VALUE";
+        }>;
+        lowValueSuppliers: Array<{
+          supplierId: number | null;
+          supplierName: string;
+          lifetimeValue: number;
+          predictedFutureValue: number;
+          totalOrders: number;
+          segment: "HIGH_VALUE" | "LOW_VALUE";
+        }>;
+      };
+    }>(cacheKey);
+    if (cached) {
+      return sendResponse(res, 200, { data: cached });
+    }
+
     const now = new Date();
     const start30 = startOfDayUtc(addDays(now, -29));
 
-    const {
-      total,
-      recentPurchases,
-      purchaseTotals,
-      topSupplierPurchases,
-      allSuppliersData,
-    } = await resolveSequentially({
-      total: () => prisma.supplier.count({ where: { user_id: userId } }),
-      recentPurchases: () =>
-        prisma.purchase.count({
-          where: { user_id: userId, purchase_date: { gte: start30 } },
-        }),
-      purchaseTotals: () =>
-        prisma.purchase.aggregate({
-          where: { user_id: userId, purchase_date: { gte: start30 } },
-          _sum: { pendingAmount: true },
-        }),
-      topSupplierPurchases: () =>
-        prisma.purchase.groupBy({
-          by: ["supplier_id"],
-          where: { user_id: userId, supplier_id: { not: null } },
-          _sum: { total: true },
-          _count: { _all: true },
-          orderBy: { _sum: { total: "desc" } },
-          take: 5,
-        }),
-      allSuppliersData: () =>
-        prisma.purchase.groupBy({
-          by: ["supplier_id"],
-          where: {
-            user_id: userId,
-            supplier_id: { not: null },
-          },
-          _sum: { total: true },
-          _count: { _all: true },
-          _min: { purchase_date: true },
-          _max: { purchase_date: true },
-        }),
-    });
+    const [total, summaryRows, supplierMetricRows] = await Promise.all([
+      prisma.supplier.count({ where: { user_id: userId } }),
+      prisma.$queryRaw<DashboardSupplierSummaryRow[]>(Prisma.sql`
+        SELECT
+          COUNT(*) FILTER (WHERE "purchase_date" >= ${start30}) AS "recentPurchases",
+          COALESCE(SUM(
+            CASE
+              WHEN "purchase_date" >= ${start30}
+                THEN "pending_amount"
+              ELSE 0
+            END
+          ), 0) AS "outstandingPayables"
+        FROM "purchases"
+        WHERE "user_id" = ${userId}
+      `),
+      prisma.$queryRaw<DashboardSupplierMetricRow[]>(Prisma.sql`
+        SELECT
+          p."supplier_id" AS "supplierId",
+          s."name" AS "supplierName",
+          COALESCE(SUM(COALESCE(p."total_amount", p."total")), 0) AS "totalPurchaseAmount",
+          COUNT(*) AS "totalOrders",
+          MIN(p."purchase_date") AS "firstPurchaseDate",
+          MAX(p."purchase_date") AS "lastPurchaseDate"
+        FROM "purchases" AS p
+        LEFT JOIN "suppliers" AS s
+          ON s."id" = p."supplier_id"
+        WHERE p."user_id" = ${userId}
+          AND p."supplier_id" IS NOT NULL
+        GROUP BY p."supplier_id", s."name"
+      `),
+    ]);
 
-    // Get supplier names for top suppliers
-    const topSupplierIds = topSupplierPurchases
-      .map((item) => item.supplier_id)
-      .filter((id): id is number => id !== null);
+    const summary = summaryRows[0];
+    const supplierMetrics = supplierMetricRows.map((row) => ({
+      supplierId: row.supplierId,
+      supplierName: row.supplierName?.trim() || "Supplier",
+      totalPurchaseAmount: toNumber(row.totalPurchaseAmount),
+      totalOrders: toCount(row.totalOrders),
+      firstPurchaseDate: row.firstPurchaseDate ?? new Date(),
+      lastPurchaseDate: row.lastPurchaseDate ?? new Date(),
+    }));
 
-    // Calculate Supplier Lifetime Value (LTV) metrics for each supplier
-    const supplierLtvMetrics = allSuppliersData
+    const supplierLtvMetrics = supplierMetrics
       .map((record) => {
-        const supplierId = record.supplier_id;
-        const totalOrders = record._count._all;
-        const totalPurchaseValue = toNumber(record._sum.total);
-        const firstPurchase = record._min.purchase_date
-          ? new Date(record._min.purchase_date)
-          : new Date();
-        const lastPurchase = record._max.purchase_date
-          ? new Date(record._max.purchase_date)
-          : new Date();
-
-        // Calculate supplier lifetime days
         const lifetimeDays = Math.max(
           1,
           Math.floor(
-            (lastPurchase.getTime() - firstPurchase.getTime()) /
+            (record.lastPurchaseDate.getTime() -
+              record.firstPurchaseDate.getTime()) /
               (1000 * 60 * 60 * 24),
           ),
         );
-
-        // Calculate metrics
         const avgOrderValue =
-          totalOrders > 0 ? totalPurchaseValue / totalOrders : 0;
-        const purchaseFrequency = totalOrders / Math.max(1, lifetimeDays);
-        const predictedFutureValue = Math.round(
-          avgOrderValue * purchaseFrequency * 180,
-        );
+          record.totalOrders > 0
+            ? record.totalPurchaseAmount / record.totalOrders
+            : 0;
+        const purchaseFrequency =
+          record.totalOrders / Math.max(1, lifetimeDays);
 
         return {
-          supplierId,
-          totalOrders,
-          totalPurchaseValue,
+          supplierId: record.supplierId,
+          totalOrders: record.totalOrders,
+          supplierLifetimeValue: record.totalPurchaseAmount,
           avgOrderValue: Math.round(avgOrderValue),
           purchaseFrequency: Math.round(purchaseFrequency * 1000) / 1000,
-          lastPurchaseDate: toDateKey(lastPurchase),
+          lastPurchaseDate: toDateKey(record.lastPurchaseDate),
           lifetimeDays,
-          supplierLifetimeValue: totalPurchaseValue,
-          predictedFutureValue,
+          predictedFutureValue: Math.round(
+            avgOrderValue * purchaseFrequency * 180,
+          ),
         };
       })
-      .sort((a, b) => b.supplierLifetimeValue - a.supplierLifetimeValue);
+      .sort((left, right) => right.supplierLifetimeValue - left.supplierLifetimeValue);
 
-    // Determine supplier segments
-    // HIGH_VALUE: top 35% by supplier lifetime value to capture similar-value suppliers
-    const supplierWithSegments = supplierLtvMetrics.map((metric, index) => {
-      let segment: "HIGH_VALUE" | "LOW_VALUE" = "LOW_VALUE";
-
-      const highValueCount = Math.max(
-        1,
-        Math.ceil(supplierLtvMetrics.length * 0.35),
-      );
-      if (index < highValueCount) {
-        segment = "HIGH_VALUE";
-      }
-
-      return { ...metric, segment };
-    });
-
-    // Get supplier names once for both top-supplier and LTV sections.
-    const supplierLtvIds = supplierWithSegments
-      .map((m) => m.supplierId)
-      .filter((id): id is number => id !== null);
-    const supplierIds = Array.from(
-      new Set([...topSupplierIds, ...supplierLtvIds]),
+    const highValueCount = Math.max(
+      1,
+      Math.ceil(supplierLtvMetrics.length * 0.35),
     );
-    const supplierNames = supplierIds.length
-      ? await prisma.supplier.findMany({
-          where: { id: { in: supplierIds } },
-          select: { id: true, name: true },
-        })
-      : [];
-    const supplierLtvMap = new Map(
-      supplierNames.map((supplier) => [supplier.id, supplier.name]),
-    );
-    const supplierMap = supplierLtvMap;
 
-    const topSuppliersList = topSupplierPurchases
-      .filter(
-        (item): item is typeof item & { supplier_id: number } =>
-          item.supplier_id !== null,
-      )
-      .map((item) => ({
-        name: supplierMap.get(item.supplier_id) ?? "Supplier",
-        totalPurchaseAmount: toNumber(item._sum.total),
-        numberOfOrders: item._count._all,
-      }));
+    const supplierWithSegments = supplierLtvMetrics.map((metric, index) => ({
+      ...metric,
+      segment:
+        index < highValueCount
+          ? ("HIGH_VALUE" as const)
+          : ("LOW_VALUE" as const),
+    }));
+
+    const supplierNameMap = new Map(
+      supplierMetrics
+        .filter((item) => item.supplierId !== null)
+        .map((item) => [item.supplierId as number, item.supplierName]),
+    );
 
     const highValueSuppliers = supplierWithSegments
       .filter(
-        (m): m is typeof m & { supplierId: number } => m.supplierId !== null,
+        (metric): metric is typeof metric & { supplierId: number } =>
+          metric.supplierId !== null,
       )
-      .filter((m) => m.segment === "HIGH_VALUE")
+      .filter((metric) => metric.segment === "HIGH_VALUE")
       .slice(0, 5)
-      .map((m) => ({
-        supplierId: m.supplierId,
-        supplierName: supplierLtvMap.get(m.supplierId) ?? "Supplier",
-        lifetimeValue: m.supplierLifetimeValue,
-        predictedFutureValue: m.predictedFutureValue,
-        totalOrders: m.totalOrders,
-        segment: m.segment,
+      .map((metric) => ({
+        supplierId: metric.supplierId,
+        supplierName: supplierNameMap.get(metric.supplierId) ?? "Supplier",
+        lifetimeValue: metric.supplierLifetimeValue,
+        predictedFutureValue: metric.predictedFutureValue,
+        totalOrders: metric.totalOrders,
+        segment: metric.segment,
       }));
 
     const lowValueSuppliers = supplierWithSegments
       .filter(
-        (m): m is typeof m & { supplierId: number } => m.supplierId !== null,
+        (metric): metric is typeof metric & { supplierId: number } =>
+          metric.supplierId !== null,
       )
-      .filter((m) => m.segment === "LOW_VALUE")
+      .filter((metric) => metric.segment === "LOW_VALUE")
       .slice(0, 5)
-      .map((m) => ({
-        supplierId: m.supplierId,
-        supplierName: supplierLtvMap.get(m.supplierId) ?? "Supplier",
-        lifetimeValue: m.supplierLifetimeValue,
-        predictedFutureValue: m.predictedFutureValue,
-        totalOrders: m.totalOrders,
-        segment: m.segment,
+      .map((metric) => ({
+        supplierId: metric.supplierId,
+        supplierName: supplierNameMap.get(metric.supplierId) ?? "Supplier",
+        lifetimeValue: metric.supplierLifetimeValue,
+        predictedFutureValue: metric.predictedFutureValue,
+        totalOrders: metric.totalOrders,
+        segment: metric.segment,
       }));
 
-    return sendResponse(res, 200, {
-      data: {
-        total,
-        recentPurchases,
-        outstandingPayables: toNumber(purchaseTotals._sum.pendingAmount),
-        topSuppliers: topSuppliersList,
-        supplierAnalytics: {
-          highValueCount: highValueSuppliers.length,
-          lowValueCount: lowValueSuppliers.length,
-          highValueSuppliers,
-          lowValueSuppliers,
-        },
+    const data = {
+      total,
+      recentPurchases: toCount(summary?.recentPurchases),
+      outstandingPayables: toNumber(summary?.outstandingPayables),
+      topSuppliers: [...supplierMetrics]
+        .sort((left, right) => right.totalPurchaseAmount - left.totalPurchaseAmount)
+        .slice(0, 5)
+        .map((metric) => ({
+          name: metric.supplierName,
+          totalPurchaseAmount: metric.totalPurchaseAmount,
+          numberOfOrders: metric.totalOrders,
+        })),
+      supplierAnalytics: {
+        highValueCount: supplierWithSegments.filter(
+          (metric) => metric.segment === "HIGH_VALUE",
+        ).length,
+        lowValueCount: supplierWithSegments.filter(
+          (metric) => metric.segment === "LOW_VALUE",
+        ).length,
+        highValueSuppliers,
+        lowValueSuppliers,
       },
-    });
+    };
+
+    await setDashboardEndpointCache(cacheKey, data);
+
+    return sendResponse(res, 200, { data });
+  }
+
+  static async customers(req: Request, res: Response) {
+    return DashboardController.customersOptimized(req, res);
+  }
+
+  static async suppliers(req: Request, res: Response) {
+    return DashboardController.suppliersOptimized(req, res);
   }
 
   static async cashflow(req: Request, res: Response) {

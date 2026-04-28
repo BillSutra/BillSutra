@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import prisma from "../config/db.config.js";
 import { hashSecretValue } from "./modernAuth.js";
+import { recordAuditLog } from "../services/auditLog.service.js";
 import {
   getAccessTokenExpiresAt,
   getAccessTokenMaxAgeMs,
@@ -21,6 +22,8 @@ export const REFRESH_TOKEN_COOKIE_ALIAS = "refreshToken";
 const TABLE_CACHE_TTL_MS = 60_000;
 
 const tableAvailabilityCache = new Map<string, { value: boolean; checkedAt: number }>();
+const prismaUnsafe = prisma as any;
+let hasLoggedStatelessRefreshFallback = false;
 
 const setTableAvailability = (tableName: string, value: boolean) => {
   tableAvailabilityCache.set(tableName, {
@@ -66,6 +69,88 @@ const parseDurationToMs = (value: string, fallbackMs: number) => {
 
 const isProd = process.env.NODE_ENV === "production";
 const authLogEnabled = process.env.AUTH_LOGGING_ENABLED !== "false";
+const AUTH_COOKIE_ROOT_PATH = "/";
+const REFRESH_COOKIE_PATH = "/api/auth";
+
+const trimForStorage = (value: string | null | undefined, maxLength: number) => {
+  if (!value) {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, maxLength) : null;
+};
+
+const resolveRequestIp = (req?: Request) => {
+  if (!req) {
+    return null;
+  }
+
+  const forwardedFor = req.headers["x-forwarded-for"];
+  if (typeof forwardedFor === "string" && forwardedFor.trim()) {
+    return trimForStorage(forwardedFor.split(",")[0] ?? null, 64);
+  }
+
+  if (Array.isArray(forwardedFor) && forwardedFor[0]) {
+    return trimForStorage(forwardedFor[0], 64);
+  }
+
+  return trimForStorage(req.ip || req.socket.remoteAddress || null, 64);
+};
+
+const resolveRequestUserAgent = (req?: Request) => {
+  if (!req) {
+    return null;
+  }
+
+  return typeof req.headers["user-agent"] === "string"
+    ? trimForStorage(req.headers["user-agent"], 512)
+    : null;
+};
+
+const resolveDeviceName = (req?: Request) => {
+  const userAgent = resolveRequestUserAgent(req)?.toLowerCase() ?? "";
+  if (!userAgent) {
+    return "Unknown device";
+  }
+
+  const browser = userAgent.includes("edg/")
+    ? "Edge"
+    : userAgent.includes("chrome/")
+      ? "Chrome"
+      : userAgent.includes("safari/") && !userAgent.includes("chrome/")
+        ? "Safari"
+        : userAgent.includes("firefox/")
+          ? "Firefox"
+          : userAgent.includes("opr/")
+            ? "Opera"
+            : "Browser";
+
+  const platform = userAgent.includes("android")
+    ? "Android"
+    : userAgent.includes("iphone") || userAgent.includes("ipad")
+      ? "iPhone"
+      : userAgent.includes("windows")
+        ? "Windows"
+        : userAgent.includes("mac os")
+          ? "Mac"
+          : userAgent.includes("linux")
+            ? "Linux"
+            : "Device";
+
+  return trimForStorage(`${browser} on ${platform}`, 191) ?? "Unknown device";
+};
+
+const resolveSameSite = () => {
+  const configuredValue = process.env.AUTH_COOKIE_SAMESITE?.trim().toLowerCase();
+  if (configuredValue === "lax") {
+    return "lax" as const;
+  }
+
+  return "strict" as const;
+};
+
+const COOKIE_SAMESITE = resolveSameSite();
 
 const logAuth = (
   event: string,
@@ -78,6 +163,19 @@ const logAuth = (
 
   const logger = level === "warn" ? console.warn : console.info;
   logger(`[auth] ${event}`, detail ?? {});
+};
+
+const logRefreshTableFallback = (detail?: Record<string, unknown>) => {
+  if (hasLoggedStatelessRefreshFallback) {
+    return;
+  }
+
+  hasLoggedStatelessRefreshFallback = true;
+  logAuth(
+    "refresh_cookie_using_stateless_fallback_missing_table",
+    detail,
+    "warn",
+  );
 };
 
 const isRefreshTokensTableMissingError = (error: unknown) =>
@@ -150,12 +248,16 @@ const getCookieValueFromNames = (req: Request, cookieNames: string[]) => {
   return null;
 };
 
-const clearCookieNames = (res: Response, cookieNames: string[]) => {
+const clearCookieNames = (
+  res: Response,
+  cookieNames: string[],
+  path = AUTH_COOKIE_ROOT_PATH,
+) => {
   const cookieOptions = {
     httpOnly: true,
     secure: isProd,
-    sameSite: "strict" as const,
-    path: "/",
+    sameSite: COOKIE_SAMESITE,
+    path,
   };
 
   cookieNames.forEach((cookieName) => {
@@ -168,21 +270,35 @@ const setCookieNames = (
   cookieNames: string[],
   value: string,
   maxAge: number,
+  path = AUTH_COOKIE_ROOT_PATH,
 ) => {
   cookieNames.forEach((cookieName) => {
     res.cookie(cookieName, value, {
       httpOnly: true,
       secure: isProd,
-      sameSite: "strict",
-      path: "/",
+      sameSite: COOKIE_SAMESITE,
+      path,
       maxAge,
     });
   });
 };
 
 export const clearAuthCookies = (res: Response) => {
-  clearCookieNames(res, [ACCESS_TOKEN_COOKIE_NAME, ACCESS_TOKEN_COOKIE_ALIAS]);
-  clearCookieNames(res, [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS]);
+  clearCookieNames(
+    res,
+    [ACCESS_TOKEN_COOKIE_NAME, ACCESS_TOKEN_COOKIE_ALIAS],
+    AUTH_COOKIE_ROOT_PATH,
+  );
+  clearCookieNames(
+    res,
+    [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
+    REFRESH_COOKIE_PATH,
+  );
+  clearCookieNames(
+    res,
+    [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
+    AUTH_COOKIE_ROOT_PATH,
+  );
 };
 
 const setAccessCookie = (res: Response, accessToken: string) => {
@@ -191,6 +307,7 @@ const setAccessCookie = (res: Response, accessToken: string) => {
     [ACCESS_TOKEN_COOKIE_NAME, ACCESS_TOKEN_COOKIE_ALIAS],
     accessToken,
     getAccessTokenMaxAgeMs(),
+    AUTH_COOKIE_ROOT_PATH,
   );
 };
 
@@ -200,6 +317,7 @@ const setRefreshCookie = (res: Response, refreshToken: string) => {
     [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
     refreshToken,
     resolveAuthSessionPreferences({ rememberMe: true }).cookieMaxAgeMs,
+    REFRESH_COOKIE_PATH,
   );
 };
 
@@ -221,26 +339,51 @@ const signRefreshToken = (
     },
   );
 
+type IssuedAuthCookies = {
+  accessToken: string;
+  refreshToken: string | null;
+  accessTokenExpiresAt: number;
+  sessionExpiresAt: number;
+  rememberMe: boolean;
+};
+
 export const issueAuthCookies = async (
+  req: Request | undefined,
   res: Response,
   authUser: AuthUser,
   preferences?: {
     rememberMe?: boolean;
+    reason?: string;
   },
-) => {
+): Promise<IssuedAuthCookies> => {
   const sessionPreferences = resolveAuthSessionPreferences(preferences);
   const accessToken = signAuthToken(authUser, sessionPreferences);
   setAccessCookie(res, accessToken);
 
   // Backward-compatible rollout: if the new refresh token table is not yet
-  // available in an environment, we still issue the short-lived access cookie
-  // and preserve legacy bearer-token flows instead of breaking login.
+  // available in an environment, keep refresh-cookie persistence alive using
+  // signed JWT refresh cookies until migrations are applied.
   const refreshTableAvailable = await isRefreshTokensTableAvailable();
   if (!refreshTableAvailable) {
-    logAuth("refresh_cookie_skipped_missing_table");
+    const refreshToken = signRefreshToken(
+      authUser,
+      sessionPreferences.refreshTokenTtl,
+      sessionPreferences.rememberMe,
+    );
+    setCookieNames(
+      res,
+      [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
+      refreshToken,
+      sessionPreferences.refreshTokenMaxAgeMs,
+      REFRESH_COOKIE_PATH,
+    );
+    logRefreshTableFallback({
+      ownerUserId: authUser.ownerUserId,
+      reason: preferences?.reason ?? "login",
+    });
     return {
       accessToken,
-      refreshToken: null as string | null,
+      refreshToken,
       accessTokenExpiresAt: getAccessTokenExpiresAt(),
       sessionExpiresAt: sessionPreferences.sessionExpiresAt,
       rememberMe: sessionPreferences.rememberMe,
@@ -254,13 +397,81 @@ export const issueAuthCookies = async (
   );
   const tokenHash = hashSecretValue(refreshToken);
   const expiresAt = new Date(Date.now() + sessionPreferences.refreshTokenMaxAgeMs);
+  const requestIp = resolveRequestIp(req);
+  const requestUserAgent = resolveRequestUserAgent(req);
+  const deviceName = resolveDeviceName(req);
+  const issueReason = preferences?.reason ?? "login";
 
   try {
-    await prisma.refreshToken.create({
+    if (req && issueReason !== "refresh" && (requestIp || requestUserAgent)) {
+      const existingDeviceSession = await prismaUnsafe.refreshToken.findFirst({
+        where: {
+          user_id: authUser.ownerUserId,
+          revoked_at: null,
+          expires_at: {
+            gt: new Date(),
+          },
+          OR: [
+            ...(requestIp ? [{ ip_address: { not: requestIp } }] : []),
+            ...(requestUserAgent
+              ? [{ user_agent: { not: requestUserAgent } }]
+              : []),
+          ],
+        },
+        select: {
+          id: true,
+          ip_address: true,
+          user_agent: true,
+          device_name: true,
+          created_at: true,
+          last_used_at: true,
+        },
+      });
+
+      if (existingDeviceSession) {
+        logAuth(
+          "suspicious_login_detected",
+          {
+            ownerUserId: authUser.ownerUserId,
+            currentIp: requestIp,
+            currentDevice: deviceName,
+            previousIp: existingDeviceSession.ip_address,
+            previousDevice: existingDeviceSession.device_name,
+            reason: issueReason,
+          },
+          "warn",
+        );
+
+        await recordAuditLog({
+          req,
+          userId: authUser.ownerUserId,
+          actorId: authUser.actorId,
+          actorType: authUser.accountType,
+          action: "auth.suspicious_login_detected",
+          resourceType: "session",
+          resourceId: existingDeviceSession.id,
+          status: "warning",
+          metadata: {
+            reason: issueReason,
+            currentIp: requestIp,
+            currentDevice: deviceName,
+            previousIp: existingDeviceSession.ip_address,
+            previousDevice: existingDeviceSession.device_name,
+            previousLastUsedAt: existingDeviceSession.last_used_at,
+          },
+        });
+      }
+    }
+
+    await prismaUnsafe.refreshToken.create({
       data: {
         user_id: authUser.ownerUserId,
         token_hash: tokenHash,
+        ip_address: requestIp ?? undefined,
+        user_agent: requestUserAgent ?? undefined,
+        device_name: deviceName ?? undefined,
         expires_at: expiresAt,
+        last_used_at: new Date(),
       },
     });
     setCookieNames(
@@ -268,18 +479,13 @@ export const issueAuthCookies = async (
       [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
       refreshToken,
       sessionPreferences.refreshTokenMaxAgeMs,
+      REFRESH_COOKIE_PATH,
     );
   } catch (error) {
     if (isRefreshTokensTableMissingError(error)) {
       setTableAvailability("refresh_tokens", false);
-      logAuth("refresh_cookie_skipped_table_missing_runtime", undefined, "warn");
-      return {
-        accessToken,
-        refreshToken: null as string | null,
-        accessTokenExpiresAt: getAccessTokenExpiresAt(),
-        sessionExpiresAt: sessionPreferences.sessionExpiresAt,
-        rememberMe: sessionPreferences.rememberMe,
-      };
+      hasLoggedStatelessRefreshFallback = false;
+      return issueAuthCookies(req, res, authUser, preferences);
     }
 
     throw error;
@@ -300,7 +506,7 @@ const findStoredRefreshToken = async (refreshToken: string, ownerUserId: number)
   }
 
   try {
-    return await prisma.refreshToken.findFirst({
+    return await prismaUnsafe.refreshToken.findFirst({
       where: {
         user_id: ownerUserId,
         token_hash: hashSecretValue(refreshToken),
@@ -316,14 +522,24 @@ const findStoredRefreshToken = async (refreshToken: string, ownerUserId: number)
   }
 };
 
-const deleteRefreshTokenByHash = async (refreshToken: string) => {
+const revokeRefreshTokenByHash = async (
+  refreshToken: string,
+  reason = "manual_logout",
+) => {
   if (!(await isRefreshTokensTableAvailable())) {
     return;
   }
 
   try {
-    await prisma.refreshToken.deleteMany({
-      where: { token_hash: hashSecretValue(refreshToken) },
+    await prismaUnsafe.refreshToken.updateMany({
+      where: {
+        token_hash: hashSecretValue(refreshToken),
+        revoked_at: null,
+      },
+      data: {
+        revoked_at: new Date(),
+        revoked_reason: reason,
+      },
     });
   } catch (error) {
     if (isRefreshTokensTableMissingError(error)) {
@@ -335,14 +551,24 @@ const deleteRefreshTokenByHash = async (refreshToken: string) => {
   }
 };
 
-export const revokeAllRefreshTokensForUser = async (userId: number) => {
+export const revokeAllRefreshTokensForUser = async (
+  userId: number,
+  reason = "logout_all_devices",
+) => {
   if (!(await isRefreshTokensTableAvailable())) {
     return;
   }
 
   try {
-    await prisma.refreshToken.deleteMany({
-      where: { user_id: userId },
+    await prismaUnsafe.refreshToken.updateMany({
+      where: {
+        user_id: userId,
+        revoked_at: null,
+      },
+      data: {
+        revoked_at: new Date(),
+        revoked_reason: reason,
+      },
     });
   } catch (error) {
     if (isRefreshTokensTableMissingError(error)) {
@@ -363,7 +589,7 @@ export const revokeRefreshTokenFromRequest = async (req: Request) => {
     return false;
   }
 
-  await deleteRefreshTokenByHash(refreshToken);
+  await revokeRefreshTokenByHash(refreshToken, "manual_logout");
   return true;
 };
 
@@ -385,14 +611,14 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
         (process.env.JWT_SECRET as string),
     );
   } catch (error) {
-    await deleteRefreshTokenByHash(refreshToken);
+    await revokeRefreshTokenByHash(refreshToken, "jwt_verify_failed");
     clearAuthCookies(res);
     logAuth("refresh_failed", { reason: "jwt_verify_failed", message: (error as Error).message }, "warn");
     return null;
   }
 
   if (!decoded || typeof decoded === "string") {
-    await deleteRefreshTokenByHash(refreshToken);
+    await revokeRefreshTokenByHash(refreshToken, "invalid_payload");
     clearAuthCookies(res);
     logAuth("refresh_failed", { reason: "invalid_payload" }, "warn");
     return null;
@@ -401,7 +627,7 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
   const tokenType =
     typeof decoded.token_type === "string" ? decoded.token_type : null;
   if (tokenType !== "refresh_v1") {
-    await deleteRefreshTokenByHash(refreshToken);
+    await revokeRefreshTokenByHash(refreshToken, "unexpected_token_type");
     clearAuthCookies(res);
     logAuth("refresh_failed", { reason: "unexpected_token_type", tokenType }, "warn");
     return null;
@@ -409,7 +635,7 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
 
   const authUser = await resolveAuthUserFromDecoded(decoded);
   if (!authUser) {
-    await deleteRefreshTokenByHash(refreshToken);
+    await revokeRefreshTokenByHash(refreshToken, "auth_user_resolution_failed");
     clearAuthCookies(res);
     logAuth("refresh_failed", { reason: "auth_user_resolution_failed" }, "warn");
     return null;
@@ -425,25 +651,108 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
     latestSessionVersion !== null &&
     latestSessionVersion !== authUser.sessionVersion
   ) {
-    await revokeAllRefreshTokensForUser(authUser.ownerUserId);
+    await revokeAllRefreshTokensForUser(
+      authUser.ownerUserId,
+      "session_version_mismatch",
+    );
+    await recordAuditLog({
+      req,
+      userId: authUser.ownerUserId,
+      actorId: authUser.actorId,
+      actorType: authUser.accountType,
+      action: "auth.refresh.session_version_mismatch",
+      resourceType: "session",
+      status: "warning",
+      metadata: {
+        latestSessionVersion,
+        tokenSessionVersion: authUser.sessionVersion,
+      },
+    });
     clearAuthCookies(res);
     logAuth("refresh_failed", { reason: "session_version_mismatch", ownerUserId: authUser.ownerUserId }, "warn");
     return null;
   }
 
+  const refreshTableAvailable = await isRefreshTokensTableAvailable();
+  if (!refreshTableAvailable) {
+    const issued = await issueAuthCookies(req, res, authUser, {
+      rememberMe,
+      reason: "refresh",
+    });
+    logRefreshTableFallback({
+      ownerUserId: authUser.ownerUserId,
+      reason: "refresh",
+    });
+    logAuth("refresh_success", {
+      ownerUserId: authUser.ownerUserId,
+      accountType: authUser.accountType,
+      role: authUser.role,
+      rememberMe,
+      storage: "stateless_fallback",
+    });
+
+    return {
+      authUser,
+      accessToken: issued.accessToken,
+      accessTokenExpiresAt: issued.accessTokenExpiresAt,
+      sessionExpiresAt: issued.sessionExpiresAt,
+      rememberMe: issued.rememberMe,
+    };
+  }
+
   const storedToken = await findStoredRefreshToken(refreshToken, authUser.ownerUserId);
-  if (!storedToken || storedToken.expires_at.getTime() <= Date.now()) {
-    await deleteRefreshTokenByHash(refreshToken);
+  if (
+    !storedToken ||
+    storedToken.revoked_at ||
+    storedToken.expires_at.getTime() <= Date.now()
+  ) {
+    const failureReason = storedToken?.revoked_at
+      ? "refresh_token_reuse_detected"
+      : "stored_token_missing_or_expired";
+    await revokeAllRefreshTokensForUser(authUser.ownerUserId, failureReason);
+    await recordAuditLog({
+      req,
+      userId: authUser.ownerUserId,
+      actorId: authUser.actorId,
+      actorType: authUser.accountType,
+      action: "auth.refresh.failed",
+      resourceType: "session",
+      status: storedToken?.revoked_at ? "warning" : "failure",
+      metadata: {
+        reason: failureReason,
+        hadStoredToken: Boolean(storedToken),
+        tokenId: storedToken?.id ?? null,
+        deviceName: storedToken?.device_name ?? null,
+      },
+    });
     clearAuthCookies(res);
-    logAuth("refresh_failed", { reason: "stored_token_missing_or_expired", ownerUserId: authUser.ownerUserId }, "warn");
+    logAuth(
+      "refresh_failed",
+      {
+        reason: failureReason,
+        ownerUserId: authUser.ownerUserId,
+      },
+      "warn",
+    );
     return null;
   }
 
-  await prisma.refreshToken.delete({
+  await prismaUnsafe.refreshToken.update({
     where: { id: storedToken.id },
+    data: {
+      revoked_at: new Date(),
+      revoked_reason: "rotated",
+      last_used_at: new Date(),
+      ip_address: resolveRequestIp(req) ?? storedToken.ip_address,
+      user_agent: resolveRequestUserAgent(req) ?? storedToken.user_agent,
+      device_name: resolveDeviceName(req) ?? storedToken.device_name,
+    },
   });
 
-  const issued = await issueAuthCookies(res, authUser, { rememberMe });
+  const issued = await issueAuthCookies(req, res, authUser, {
+    rememberMe,
+    reason: "refresh",
+  });
   logAuth("refresh_success", {
     ownerUserId: authUser.ownerUserId,
     accountType: authUser.accountType,

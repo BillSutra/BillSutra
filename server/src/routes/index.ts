@@ -42,7 +42,11 @@ import { paymentProofUploadMiddleware } from "../middlewares/paymentProof.upload
 import {
   adminPaymentRateLimiter,
   authRateLimiter,
+  exportRateLimiter,
+  loginRateLimiter,
+  otpResendRateLimiter,
   paymentRateLimiter,
+  uploadRateLimiter,
 } from "../middlewares/rateLimit.middleware.js";
 import validate from "../middlewares/validate.js";
 import {
@@ -64,10 +68,13 @@ import {
   authLoginSchema,
   authOtpSendSchema,
   authOtpVerifySchema,
+  authResendVerificationOtpSchema,
   authRegisterSchema,
   authForgotSchema,
   authResetSchema,
+  authVerifyEmailOtpSchema,
   authVerifyEmailQuerySchema,
+  authSessionBootstrapSchema,
   passkeyAuthenticateOptionsSchema,
   passkeyAuthenticateVerifySchema,
   passkeyRegisterOptionsSchema,
@@ -219,6 +226,12 @@ router.patch(
 
 // Auth routes
 router.post(
+  "/auth/signup",
+  authRateLimiter,
+  validate({ body: authRegisterSchema }),
+  AuthController.signup,
+);
+router.post(
   "/auth/login",
   authRateLimiter,
   validate({ body: authOauthSchema }),
@@ -226,7 +239,7 @@ router.post(
 );
 router.post(
   "/auth/logincheck",
-  authRateLimiter,
+  loginRateLimiter,
   validate({ body: authLoginSchema }),
   AuthController.loginCheck,
 );
@@ -243,18 +256,31 @@ router.get(
   AuthController.verifyEmail,
 );
 router.post(
+  "/auth/verify-email",
+  authRateLimiter,
+  validate({ body: authVerifyEmailOtpSchema }),
+  AuthController.verifyEmailOtp,
+);
+router.post(
   "/auth/resend-verification",
   authRateLimiter,
   AuthMiddleware,
   AuthController.resendVerification,
 );
+router.post(
+  "/auth/resend-otp",
+  otpResendRateLimiter,
+  validate({ body: authResendVerificationOtpSchema }),
+  AuthController.resendVerificationOtp,
+);
 router.post("/auth/refresh", authRateLimiter, AuthController.refresh);
 router.post(
   "/auth/session/bootstrap",
   authRateLimiter,
+  validate({ body: authSessionBootstrapSchema }),
   AuthController.bootstrapSecureSession,
 );
-router.post("/auth/logout", AuthController.logout);
+router.post("/auth/logout", authRateLimiter, AuthController.logout);
 router.post(
   "/auth/forgot-password",
   validate({ body: authForgotSchema }),
@@ -262,7 +288,7 @@ router.post(
 );
 router.post(
   "/auth/worker/login",
-  authRateLimiter,
+  loginRateLimiter,
   validate({ body: workerLoginSchema }),
   AuthController.workerLogin,
 );
@@ -524,12 +550,14 @@ router.get("/logo", AuthMiddleware, LogoController.get);
 router.post(
   "/logo",
   AuthMiddleware,
+  uploadRateLimiter,
   logoUploadMiddleware,
   LogoController.upload,
 );
 router.put(
   "/logo",
   AuthMiddleware,
+  uploadRateLimiter,
   logoUploadMiddleware,
   LogoController.update,
 );
@@ -538,6 +566,7 @@ router.delete("/logo", AuthMiddleware, LogoController.remove);
 router.post(
   "/exports/:resource/preview",
   AuthMiddleware,
+  exportRateLimiter,
   RequireFeatureAccessMiddleware("DATA_EXPORT"),
   validate({
     params: exportResourceParamSchema,
@@ -549,6 +578,7 @@ router.post(
 router.post(
   "/exports/:resource",
   AuthMiddleware,
+  exportRateLimiter,
   RequireFeatureAccessMiddleware("DATA_EXPORT"),
   validate({ params: exportResourceParamSchema, body: exportRequestSchema }),
   ExportController.run,
@@ -845,6 +875,7 @@ router.post(
   "/payments/upload-proof",
   AuthMiddleware,
   paymentRateLimiter,
+  uploadRateLimiter,
   paymentProofUploadMiddleware,
   validate({ body: accessPaymentProofUploadSchema }),
   AccessPaymentsController.uploadProof,
@@ -853,6 +884,7 @@ router.post(
   "/submit-upi",
   AuthMiddleware,
   paymentRateLimiter,
+  uploadRateLimiter,
   paymentProofUploadMiddleware,
   validate({ body: accessUpiSubmitSchema }),
   AccessPaymentsController.submitUpi,
@@ -908,6 +940,22 @@ router.get(
   "/security/activity",
   AuthMiddleware,
   SettingsController.securityActivity,
+);
+router.get(
+  "/security/sessions",
+  AuthMiddleware,
+  SettingsController.securitySessions,
+);
+router.post(
+  "/security/logout-others",
+  AuthMiddleware,
+  SettingsController.logoutOthers,
+);
+router.delete(
+  "/security/sessions/:id",
+  AuthMiddleware,
+  validate({ params: stringIdParamSchema }),
+  SettingsController.revokeSession,
 );
 router.post(
   "/security/logout-all",

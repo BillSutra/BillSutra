@@ -26,6 +26,11 @@ import {
 } from "../lib/observability.js";
 import { dispatchPaymentReceivedEmail } from "../services/notificationEmail.service.js";
 import { computeInvoiceStatus } from "../utils/invoicePaymentSnapshot.js";
+import {
+  encryptSensitiveValue,
+  maybeDecryptSensitiveValue,
+} from "../lib/fieldEncryption.js";
+import { recordAuditLog } from "../services/auditLog.service.js";
 
 type PaymentCreateInput = z.infer<typeof paymentCreateSchema>;
 type PaymentUpdateInput = z.infer<typeof paymentUpdateSchema>;
@@ -154,8 +159,8 @@ const serializePayment = (payment: Payment) => ({
   amount: payment.amount,
   method: payment.method,
   provider: payment.provider,
-  transaction_id: payment.transaction_id,
-  reference: payment.reference,
+  transaction_id: maybeDecryptSensitiveValue(payment.transaction_id),
+  reference: maybeDecryptSensitiveValue(payment.reference),
   paid_at: payment.paid_at,
   created_at: payment.created_at,
 });
@@ -332,8 +337,12 @@ const runPaymentTransaction = async (params: {
                 amount: body.amount,
                 method: body.method ?? PaymentMethod.CASH,
                 provider: body.provider,
-                transaction_id: body.transaction_id,
-                reference: body.reference,
+                transaction_id: encryptSensitiveValue(
+                  body.transaction_id?.trim() || null,
+                ),
+                reference: encryptSensitiveValue(
+                  body.reference?.trim() || null,
+                ),
                 paid_at: body.paid_at ?? undefined,
                 ...(idempotencyEnabled && paymentIdempotencyKey
                   ? { payment_idempotency_key: paymentIdempotencyKey }
@@ -501,9 +510,19 @@ const runPaymentUpdateTransaction = async (params: {
           ...(body.method !== undefined ? { method: body.method } : {}),
           ...(body.provider !== undefined ? { provider: body.provider } : {}),
           ...(body.transaction_id !== undefined
-            ? { transaction_id: body.transaction_id }
+            ? {
+                transaction_id: encryptSensitiveValue(
+                  body.transaction_id?.trim() || null,
+                ),
+              }
             : {}),
-          ...(body.reference !== undefined ? { reference: body.reference } : {}),
+          ...(body.reference !== undefined
+            ? {
+                reference: encryptSensitiveValue(
+                  body.reference?.trim() || null,
+                ),
+              }
+            : {}),
           ...(body.paid_at !== undefined ? { paid_at: body.paid_at } : {}),
         },
       });
@@ -672,6 +691,22 @@ class PaymentsController {
         idempotencyEnabled,
         idempotencySource: idempotencyEnabled ? resolvedIdempotency.source : "disabled",
       });
+      await recordAuditLog({
+        req,
+        userId,
+        actorId: req.user?.actorId ?? String(userId),
+        actorType: req.user?.accountType ?? "OWNER",
+        action: "payment.create",
+        resourceType: "payment",
+        resourceId: String(result.payment.id),
+        status: "success",
+        metadata: {
+          invoiceId: result.invoiceId,
+          amount: Number(result.payment.amount),
+          method: result.payment.method,
+          createdNewPayment: result.createdNewPayment,
+        },
+      });
 
       return sendResponse(res, 201, {
         message: "Payment recorded",
@@ -832,6 +867,23 @@ class PaymentsController {
         nextAmount: Number(result.payment.amount),
         previousMethod: result.previousPayment.method,
         nextMethod: result.payment.method,
+      });
+      await recordAuditLog({
+        req,
+        userId,
+        actorId: req.user?.actorId ?? String(userId),
+        actorType: req.user?.accountType ?? "OWNER",
+        action: "payment.update",
+        resourceType: "payment",
+        resourceId: String(result.payment.id),
+        status: "success",
+        metadata: {
+          invoiceId: result.invoiceId,
+          previousAmount: Number(result.previousPayment.amount),
+          nextAmount: Number(result.payment.amount),
+          previousMethod: result.previousPayment.method,
+          nextMethod: result.payment.method,
+        },
       });
 
       return sendResponse(res, 200, {

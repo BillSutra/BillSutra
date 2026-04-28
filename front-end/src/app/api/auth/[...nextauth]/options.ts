@@ -10,11 +10,6 @@ import {
   check_credential,
 } from "@/lib/apiEndPoints";
 
-const exposeAccessTokenToClient =
-  (process.env.NEXT_PUBLIC_USE_COOKIE_AUTH ??
-    process.env.USE_COOKIE_AUTH ??
-    "false") !== "true";
-
 /* ================= TYPES ================= */
 
 export type CustomSession = {
@@ -59,6 +54,9 @@ type AuthPayload = {
 const mapAuthPayloadToUser = (
   authPayload: AuthPayload | undefined,
   fallbackProvider: string,
+  options?: {
+    includeBootstrapToken?: boolean;
+  },
 ): CustomUser | null => {
   const user = authPayload?.user;
   if (!user) return null;
@@ -75,7 +73,7 @@ const mapAuthPayloadToUser = (
     email: user.email ?? null,
     image: user.image ?? null,
     provider: user.provider ?? fallbackProvider,
-    token: exposeAccessTokenToClient ? authPayload?.token ?? null : null,
+    token: options?.includeBootstrapToken ? authPayload?.token ?? null : null,
     is_email_verified: user.is_email_verified ?? null,
     role: user.role ?? null,
     businessId: user.businessId ?? null,
@@ -193,6 +191,9 @@ export const authOptions: AuthOptions = {
               token: bearerToken,
             },
             "token",
+            {
+              includeBootstrapToken: false,
+            },
           );
         } catch (error) {
           console.error("Token login error:", error);
@@ -228,6 +229,9 @@ export const authOptions: AuthOptions = {
           const mappedUser = mapAuthPayloadToUser(
             authPayload,
             account?.provider ?? "google",
+            {
+              includeBootstrapToken: true,
+            },
           );
 
           if (!mappedUser) {
