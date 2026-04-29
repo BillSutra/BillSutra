@@ -190,3 +190,5 @@ export const calculateInvoiceTotals = ({
     items: computedItems,
   };
 };
+
+export default calculateInvoiceTotals;
