@@ -193,6 +193,7 @@ router.post(
   validate({ body: adminLoginSchema }),
   AdminController.login,
 );
+router.get("/admin/session", AdminAuthMiddleware, AdminController.session);
 router.post("/admin/logout", AdminAuthMiddleware, AdminController.logout);
 router.get("/admin/summary", AdminAuthMiddleware, AdminController.summary);
 router.get(

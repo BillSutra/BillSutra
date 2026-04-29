@@ -26,8 +26,10 @@ import { normalizeListResponse } from "./normalizeListResponse";
 import { captureApiFailure } from "./observability/shared";
 import { normalizeGstin } from "./gstin";
 import {
+  bootstrapSecureAuthSession,
   ensureFreshSecureAuthSessionDetailed,
   getLegacyStoredToken,
+  hasSecureAuthBootstrap,
   isAuthTokenExpired,
   isSecureAuthEnabled,
   logClientAuthEvent,
@@ -63,6 +65,17 @@ apiClient.interceptors.request.use(async (config) => {
       requestUrl.includes("/auth/session/bootstrap");
 
     if (isSecureAuthEnabled() && !isAuthLifecycleRequest) {
+      if (!hasSecureAuthBootstrap()) {
+        const bootstrapToken = getLegacyStoredToken();
+        if (bootstrapToken) {
+          const bootstrapped = await bootstrapSecureAuthSession(bootstrapToken);
+          logClientAuthEvent("request_bootstrap_attempt", {
+            requestUrl,
+            bootstrapped,
+          });
+        }
+      }
+
       const refreshResult = await ensureFreshSecureAuthSessionDetailed();
       if (!refreshResult.ok) {
         if (refreshResult.reason === "auth_invalid") {

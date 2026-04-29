@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { isAxiosError } from "axios";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ValidationField } from "@/components/ui/ValidationField";
-import { loginSuperAdmin } from "@/lib/adminApiClient";
+import { fetchAdminSession, loginSuperAdmin } from "@/lib/adminApiClient";
 import { validateEmail } from "@/lib/validation";
 
 const AdminLoginClient = () => {
@@ -14,6 +14,27 @@ const AdminLoginClient = () => {
   const [password, setPassword] = useState("qwerty123");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const restoreAdminSession = async () => {
+      try {
+        await fetchAdminSession();
+        if (!cancelled) {
+          router.replace("/admin/dashboard");
+        }
+      } catch {
+        // Stay on the login page when no active admin session exists.
+      }
+    };
+
+    void restoreAdminSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

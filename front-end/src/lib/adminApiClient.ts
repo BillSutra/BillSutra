@@ -134,14 +134,20 @@ const adminApiClient = axios.create({
   withCredentials: true,
 });
 
+let adminRedirectPending = false;
+
+const resetAdminRedirectState = () => {
+  adminRedirectPending = false;
+};
+
 adminApiClient.interceptors.request.use((config) => {
   config.withCredentials = true;
 
-  if (typeof window !== "undefined") {
-    const token = getStoredAdminToken();
-    if (token) {
-      config.headers.Authorization = token.startsWith("Bearer ")
-        ? token
+    if (typeof window !== "undefined") {
+      const token = getStoredAdminToken();
+      if (token) {
+        config.headers.Authorization = token.startsWith("Bearer ")
+          ? token
         : `Bearer ${token}`;
     }
   }
@@ -156,7 +162,11 @@ adminApiClient.interceptors.response.use(
       const status = Number(error?.response?.status ?? 0);
       if (status === 401 || status === 403) {
         clearAdminToken();
-        if (!window.location.pathname.startsWith("/admin/login")) {
+        if (
+          !adminRedirectPending &&
+          !window.location.pathname.startsWith("/admin/login")
+        ) {
+          adminRedirectPending = true;
           window.location.assign("/admin/login");
         }
       }
@@ -173,7 +183,14 @@ export const loginSuperAdmin = async (payload: {
   const response = await axios.post(ADMIN_LOGIN_URL, payload, {
     withCredentials: true,
   });
+  resetAdminRedirectState();
   return response.data.data as AdminLoginResponse;
+};
+
+export const fetchAdminSession = async () => {
+  const response = await adminApiClient.get("/admin/session");
+  resetAdminRedirectState();
+  return response.data.data as AdminLoginResponse["user"];
 };
 
 export const logoutSuperAdmin = async () => {

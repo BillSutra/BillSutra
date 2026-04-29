@@ -28,6 +28,7 @@ import { clearAdminToken } from "@/lib/adminAuth";
 import {
   approveAdminPayment,
   fetchAdminPayments,
+  fetchAdminSession,
   rejectAdminPayment,
   type AdminAccessPaymentRecord,
 } from "@/lib/adminApiClient";
@@ -119,8 +120,26 @@ export default function AdminPaymentsClient() {
   useEffect(() => {
     const run = async () => {
       setIsLoading(true);
-      await loadPayments();
-      setIsLoading(false);
+      try {
+        await fetchAdminSession();
+        await loadPayments();
+      } catch (sessionError) {
+        if (
+          isAxiosError(sessionError) &&
+          [401, 403].includes(sessionError.response?.status ?? 0)
+        ) {
+          handleUnauthorized();
+          return;
+        }
+
+        setError(
+          sessionError instanceof Error
+            ? sessionError.message
+            : "Unable to restore admin session.",
+        );
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     void run();

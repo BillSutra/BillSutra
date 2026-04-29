@@ -87,26 +87,45 @@ const AuthSessionGuard = () => {
     }
 
     let cancelled = false;
-    const secureExpiresAt = getSecureAuthExpiresAt();
-    const delayMs =
-      hasSecureAuthBootstrap() && secureExpiresAt
-        ? Math.max(0, secureExpiresAt - Date.now() - 60_000)
-        : 0;
+    let timeoutId: number | null = null;
 
-    const timeoutId = window.setTimeout(() => {
-      void ensureFreshSecureAuthSessionDetailed({
-        force: true,
-        minValidityMs: 0,
-      }).then((result) => {
-        if (!cancelled && !result.ok && result.reason === "auth_invalid") {
-          void performLogout("401_refresh_failed");
-        }
-      });
-    }, delayMs);
+    const scheduleNextRefresh = (fallbackDelayMs = 60_000) => {
+      if (cancelled) {
+        return;
+      }
+
+      const secureExpiresAt = getSecureAuthExpiresAt();
+      const delayMs =
+        hasSecureAuthBootstrap() && secureExpiresAt
+          ? Math.max(0, secureExpiresAt - Date.now() - 60_000)
+          : fallbackDelayMs;
+
+      timeoutId = window.setTimeout(() => {
+        void ensureFreshSecureAuthSessionDetailed({
+          force: true,
+          minValidityMs: 0,
+        }).then((result) => {
+          if (cancelled) {
+            return;
+          }
+
+          if (!result.ok && result.reason === "auth_invalid") {
+            void performLogout("401_refresh_failed");
+            return;
+          }
+
+          scheduleNextRefresh();
+        });
+      }, delayMs);
+    };
+
+    scheduleNextRefresh();
 
     return () => {
       cancelled = true;
-      window.clearTimeout(timeoutId);
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
     };
   }, [performLogout, status]);
 

@@ -47,6 +47,7 @@ import {
   deleteAdminBusiness,
   fetchAdminBusinessDetail,
   fetchAdminBusinesses,
+  fetchAdminSession,
   fetchAdminSummary,
   fetchAdminWorkers,
   logoutSuperAdmin,
@@ -232,8 +233,21 @@ export default function AdminDashboardClient() {
   useEffect(() => {
     const run = async () => {
       setIsLoading(true);
-      await loadPanel();
-      setIsLoading(false);
+      try {
+        await fetchAdminSession();
+        await loadPanel();
+      } catch (sessionError) {
+        if (isUnauthorizedError(sessionError)) {
+          handleUnauthorized();
+          return;
+        }
+
+        setError(
+          getErrorMessage(sessionError, "Unable to restore admin session."),
+        );
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     void run();

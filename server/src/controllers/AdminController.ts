@@ -3,10 +3,10 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../config/db.config.js";
 import { getAccessTokenSecret } from "../lib/authSecrets.js";
+import { buildHttpOnlyCookieOptions } from "../lib/cookieSecurity.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
 const ADMIN_AUTH_COOKIE_NAME = "bill_sutra_admin_session";
-const isProd = process.env.NODE_ENV === "production";
 const ADMIN_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
 
 const parseOwnerUserId = (ownerId: string) => {
@@ -22,27 +22,28 @@ const createAdminToken = (payload: AdminAuthUser) =>
     expiresIn: "1d",
   })}`;
 
-const setAdminAuthCookie = (res: Response, token: string) => {
+const setAdminAuthCookie = (req: Request, res: Response, token: string) => {
   const normalizedToken = token.startsWith("Bearer ")
     ? token.slice("Bearer ".length)
     : token;
 
-  res.cookie(ADMIN_AUTH_COOKIE_NAME, normalizedToken, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "strict",
-    path: "/",
-    maxAge: ADMIN_TOKEN_TTL_MS,
-  });
+  res.cookie(
+    ADMIN_AUTH_COOKIE_NAME,
+    normalizedToken,
+    buildHttpOnlyCookieOptions(req, {
+      path: "/",
+      maxAge: ADMIN_TOKEN_TTL_MS,
+    }),
+  );
 };
 
-const clearAdminAuthCookie = (res: Response) => {
-  res.clearCookie(ADMIN_AUTH_COOKIE_NAME, {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: "strict",
-    path: "/",
-  });
+const clearAdminAuthCookie = (req: Request | undefined, res: Response) => {
+  res.clearCookie(
+    ADMIN_AUTH_COOKIE_NAME,
+    buildHttpOnlyCookieOptions(req, {
+      path: "/",
+    }),
+  );
 };
 
 class AdminController {
@@ -78,7 +79,7 @@ class AdminController {
       role: "SUPER_ADMIN",
     };
     const token = createAdminToken(authUser);
-    setAdminAuthCookie(res, token);
+    setAdminAuthCookie(req, res, token);
 
     return sendResponse(res, 200, {
       message: "Admin login successful",
@@ -90,8 +91,16 @@ class AdminController {
     });
   }
 
-  static async logout(_req: Request, res: Response) {
-    clearAdminAuthCookie(res);
+  static session(req: Request, res: Response) {
+    return sendResponse(res, 200, {
+      data: {
+        user: req.admin ?? null,
+      },
+    });
+  }
+
+  static async logout(req: Request, res: Response) {
+    clearAdminAuthCookie(req, res);
     return sendResponse(res, 200, {
       message: "Admin logged out successfully",
     });

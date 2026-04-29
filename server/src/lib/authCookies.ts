@@ -6,6 +6,7 @@ import { getRefreshTokenSecret } from "./authSecrets.js";
 import { hashSecretValue } from "./modernAuth.js";
 import { recordAuditLog } from "../services/auditLog.service.js";
 import { createNotification } from "../services/notification.service.js";
+import { buildHttpOnlyCookieOptions } from "./cookieSecurity.js";
 import {
   getAccessTokenExpiresAt,
   getAccessTokenMaxAgeMs,
@@ -69,7 +70,6 @@ const parseDurationToMs = (value: string, fallbackMs: number) => {
   }
 };
 
-const isProd = process.env.NODE_ENV === "production";
 const authLogEnabled = process.env.AUTH_LOGGING_ENABLED !== "false";
 const AUTH_COOKIE_ROOT_PATH = "/";
 const REFRESH_COOKIE_PATH = "/api/auth";
@@ -142,17 +142,6 @@ const resolveDeviceName = (req?: Request) => {
 
   return trimForStorage(`${browser} on ${platform}`, 191) ?? "Unknown device";
 };
-
-const resolveSameSite = () => {
-  const configuredValue = process.env.AUTH_COOKIE_SAMESITE?.trim().toLowerCase();
-  if (configuredValue === "lax") {
-    return "lax" as const;
-  }
-
-  return "strict" as const;
-};
-
-const COOKIE_SAMESITE = resolveSameSite();
 
 const logAuth = (
   event: string,
@@ -259,16 +248,12 @@ const getCookieValueFromNames = (req: Request, cookieNames: string[]) => {
 };
 
 const clearCookieNames = (
+  req: Request | undefined,
   res: Response,
   cookieNames: string[],
   path = AUTH_COOKIE_ROOT_PATH,
 ) => {
-  const cookieOptions = {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: COOKIE_SAMESITE,
-    path,
-  };
+  const cookieOptions = buildHttpOnlyCookieOptions(req, { path });
 
   cookieNames.forEach((cookieName) => {
     res.clearCookie(cookieName, cookieOptions);
@@ -276,6 +261,7 @@ const clearCookieNames = (
 };
 
 const setCookieNames = (
+  req: Request | undefined,
   res: Response,
   cookieNames: string[],
   value: string,
@@ -283,36 +269,42 @@ const setCookieNames = (
   path = AUTH_COOKIE_ROOT_PATH,
 ) => {
   cookieNames.forEach((cookieName) => {
-    res.cookie(cookieName, value, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: COOKIE_SAMESITE,
-      path,
-      maxAge,
-    });
+    res.cookie(
+      cookieName,
+      value,
+      buildHttpOnlyCookieOptions(req, { path, maxAge }),
+    );
   });
 };
 
-export const clearAuthCookies = (res: Response) => {
+export const clearAuthCookies = (res: Response, req?: Request) => {
   clearCookieNames(
+    req,
     res,
     [ACCESS_TOKEN_COOKIE_NAME, ACCESS_TOKEN_COOKIE_ALIAS],
     AUTH_COOKIE_ROOT_PATH,
   );
   clearCookieNames(
+    req,
     res,
     [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
     REFRESH_COOKIE_PATH,
   );
   clearCookieNames(
+    req,
     res,
     [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
     AUTH_COOKIE_ROOT_PATH,
   );
 };
 
-const setAccessCookie = (res: Response, accessToken: string) => {
+const setAccessCookie = (
+  req: Request | undefined,
+  res: Response,
+  accessToken: string,
+) => {
   setCookieNames(
+    req,
     res,
     [ACCESS_TOKEN_COOKIE_NAME, ACCESS_TOKEN_COOKIE_ALIAS],
     accessToken,
@@ -321,8 +313,13 @@ const setAccessCookie = (res: Response, accessToken: string) => {
   );
 };
 
-const setRefreshCookie = (res: Response, refreshToken: string) => {
+const setRefreshCookie = (
+  req: Request | undefined,
+  res: Response,
+  refreshToken: string,
+) => {
   setCookieNames(
+    req,
     res,
     [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
     refreshToken,
@@ -367,7 +364,7 @@ export const issueAuthCookies = async (
 ): Promise<IssuedAuthCookies> => {
   const sessionPreferences = resolveAuthSessionPreferences(preferences);
   const accessToken = signAuthToken(authUser, sessionPreferences);
-  setAccessCookie(res, accessToken);
+  setAccessCookie(req, res, accessToken);
 
   // Backward-compatible rollout: if the new refresh token table is not yet
   // available in an environment, keep refresh-cookie persistence alive using
@@ -380,6 +377,7 @@ export const issueAuthCookies = async (
       sessionPreferences.rememberMe,
     );
     setCookieNames(
+      req,
       res,
       [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
       refreshToken,
@@ -502,6 +500,7 @@ export const issueAuthCookies = async (
       },
     });
     setCookieNames(
+      req,
       res,
       [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
       refreshToken,
@@ -646,14 +645,14 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
     );
   } catch (error) {
     await revokeRefreshTokenByHash(refreshToken, "jwt_verify_failed");
-    clearAuthCookies(res);
+    clearAuthCookies(res, req);
     logAuth("refresh_failed", { reason: "jwt_verify_failed", message: (error as Error).message }, "warn");
     return null;
   }
 
   if (!decoded || typeof decoded === "string") {
     await revokeRefreshTokenByHash(refreshToken, "invalid_payload");
-    clearAuthCookies(res);
+    clearAuthCookies(res, req);
     logAuth("refresh_failed", { reason: "invalid_payload" }, "warn");
     return null;
   }
@@ -662,7 +661,7 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
     typeof decoded.token_type === "string" ? decoded.token_type : null;
   if (tokenType !== "refresh_v1") {
     await revokeRefreshTokenByHash(refreshToken, "unexpected_token_type");
-    clearAuthCookies(res);
+    clearAuthCookies(res, req);
     logAuth("refresh_failed", { reason: "unexpected_token_type", tokenType }, "warn");
     return null;
   }
@@ -670,7 +669,7 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
   const authUser = await resolveAuthUserFromDecoded(decoded);
   if (!authUser) {
     await revokeRefreshTokenByHash(refreshToken, "auth_user_resolution_failed");
-    clearAuthCookies(res);
+    clearAuthCookies(res, req);
     logAuth("refresh_failed", { reason: "auth_user_resolution_failed" }, "warn");
     return null;
   }
@@ -702,7 +701,7 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
         tokenSessionVersion: authUser.sessionVersion,
       },
     });
-    clearAuthCookies(res);
+    clearAuthCookies(res, req);
     logAuth("refresh_failed", { reason: "session_version_mismatch", ownerUserId: authUser.ownerUserId }, "warn");
     return null;
   }

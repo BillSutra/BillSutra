@@ -159,8 +159,12 @@ const buildOwnerAuthResponse = async (
     actorId: authUser.actorId,
     actorType: authUser.accountType,
   });
-  const { accessToken } = await issueAuthCookies(req, res, authUser, preferences);
-  const expiresAt = getAccessTokenExpiresAt();
+  const { accessToken, accessTokenExpiresAt } = await issueAuthCookies(
+    req,
+    res,
+    authUser,
+    preferences,
+  );
 
   void dispatchNotification({
     userId: user.id,
@@ -176,7 +180,7 @@ const buildOwnerAuthResponse = async (
     message,
     user: serializeOwnerUser(user, authUser),
     token: `Bearer ${accessToken}`,
-    expiresAt,
+    expiresAt: accessTokenExpiresAt,
   };
 };
 
@@ -593,7 +597,7 @@ class AuthController {
         data: {
           token: `Bearer ${refreshed.accessToken}`,
           source: "cookie",
-          expiresAt: getAccessTokenExpiresAt(),
+          expiresAt: refreshed.accessTokenExpiresAt,
         },
       });
     } catch (error) {
@@ -621,7 +625,7 @@ class AuthController {
       );
 
       if (!authUser) {
-        clearAuthCookies(res);
+        clearAuthCookies(res, req);
         return sendResponse(res, 401, {
           message: "Unauthorized",
         });
@@ -640,7 +644,7 @@ class AuthController {
           "Secure cookie session bootstrapped. Legacy bearer tokens remain supported during the transition.",
         data: {
           token: `Bearer ${issued.accessToken}`,
-          expiresAt: getAccessTokenExpiresAt(),
+          expiresAt: issued.accessTokenExpiresAt,
           rememberMe: issued.rememberMe,
         },
       });
@@ -663,7 +667,7 @@ class AuthController {
         accountType: req.user?.accountType ?? null,
       });
       await revokeRefreshTokenFromRequest(req);
-      clearAuthCookies(res);
+      clearAuthCookies(res, req);
       if (req.user?.ownerUserId) {
         await recordAuthEvent({
           req,
@@ -687,7 +691,7 @@ class AuthController {
         accountType: req.user?.accountType ?? null,
         message: error instanceof Error ? error.message : String(error),
       });
-      clearAuthCookies(res);
+      clearAuthCookies(res, req);
       return sendResponse(res, 200, {
         message: "Logged out successfully",
       });
@@ -827,9 +831,14 @@ class AuthController {
       }
 
       const authUser = await buildWorkerAuthUser(worker);
-      const { accessToken } = await issueAuthCookies(req, res, authUser, {
-        rememberMe: body.rememberMe,
-      });
+      const { accessToken, accessTokenExpiresAt } = await issueAuthCookies(
+        req,
+        res,
+        authUser,
+        {
+          rememberMe: body.rememberMe,
+        },
+      );
 
       try {
         await prisma.$executeRaw`
@@ -873,7 +882,7 @@ class AuthController {
           workerId: worker.id,
         },
         token: `Bearer ${accessToken}`,
-        expiresAt: getAccessTokenExpiresAt(),
+        expiresAt: accessTokenExpiresAt,
       });
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
