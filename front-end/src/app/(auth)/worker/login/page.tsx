@@ -6,6 +6,10 @@ import WorkerLoginPageContent from "@/components/auth/WorkerLoginPageContent";
 
 const Page = async () => {
   const session = await getServerSession(authOptions);
+  if (session?.user?.accountType === "WORKER") {
+    redirect("/worker-panel");
+  }
+
   if (session) {
     redirect("/dashboard");
   }

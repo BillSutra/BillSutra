@@ -8,6 +8,28 @@ import {
   SUPER_ADMIN_ROLE,
 } from "@/lib/adminAuthShared";
 
+const getWorkerHomePath = () => "/worker-panel";
+
+const isWorkerAccount = (token: { user?: { role?: string; accountType?: string } } | null) => {
+  const accountType = token?.user?.accountType;
+  const role = token?.user?.role;
+
+  return accountType === "WORKER" || (!accountType && role === "WORKER");
+};
+
+const isOwnerAdminAccount = (
+  token: { user?: { role?: string; accountType?: string } } | null,
+) => token?.user?.accountType !== "WORKER" && token?.user?.role === "ADMIN";
+
+const isWorkerOnlyRoute = (pathname: string) =>
+  pathname.startsWith("/worker-panel");
+
+const isWorkerAllowedRoute = (pathname: string) =>
+  pathname.startsWith("/worker-panel") ||
+  pathname.startsWith("/sales") ||
+  pathname.startsWith("/invoices") ||
+  pathname.startsWith("/simple-bill");
+
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
@@ -43,32 +65,35 @@ export async function proxy(request: NextRequest) {
     req: request,
     secret: process.env.NEXTAUTH_SECRET,
   });
+  const sessionToken = token as
+    | { user?: { role?: string; accountType?: string; is_email_verified?: boolean | null } }
+    | null;
+  const workerSession = isWorkerAccount(sessionToken);
 
   if (!token) {
-    const signInUrl = new URL("/", request.url);
+    const signInUrl = new URL(
+      isWorkerOnlyRoute(pathname) ? "/worker/login" : "/login",
+      request.url,
+    );
     signInUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
     return NextResponse.redirect(signInUrl);
   }
 
-  const role = (token as { user?: { role?: string } } | null)?.user?.role;
-  const isEmailVerified = (
-    token as { user?: { is_email_verified?: boolean | null } } | null
-  )?.user?.is_email_verified;
+  const isEmailVerified = sessionToken?.user?.is_email_verified;
 
-  if (role !== "WORKER" && isEmailVerified === false) {
+  if (!workerSession && isEmailVerified === false) {
     return NextResponse.redirect(new URL("/verify-email", request.url));
   }
 
-  if (pathname.startsWith("/workers") && role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+  if (pathname.startsWith("/workers") && !isOwnerAdminAccount(sessionToken)) {
+    return NextResponse.redirect(
+      new URL(workerSession ? getWorkerHomePath() : "/dashboard", request.url),
+    );
   }
 
-  if (role === "WORKER") {
-    const workerAllowed =
-      pathname.startsWith("/sales") || pathname.startsWith("/invoices");
-
-    if (!workerAllowed) {
-      return NextResponse.redirect(new URL("/sales", request.url));
+  if (workerSession) {
+    if (!isWorkerAllowedRoute(pathname)) {
+      return NextResponse.redirect(new URL(getWorkerHomePath(), request.url));
     }
   }
 
@@ -90,9 +115,11 @@ export const config = {
     "/purchases/:path*",
     "/sales/:path*",
     "/settings/:path*",
+    "/simple-bill/:path*",
     "/suppliers/:path*",
     "/templates/:path*",
     "/warehouses/:path*",
+    "/worker-panel/:path*",
     "/workers/:path*",
   ],
 };

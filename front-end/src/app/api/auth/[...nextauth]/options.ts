@@ -88,6 +88,13 @@ const mapAuthPayloadToUser = (
   };
 };
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeAuthIdentifier = (value: string | null | undefined) =>
+  typeof value === "string" ? value.trim() : "";
+
+const normalizeAuthPhone = (value: string) => value.replace(/[^\d+]/g, "");
+
 /* ================= AUTH OPTIONS ================= */
 
 export const authOptions: AuthOptions = {
@@ -145,13 +152,21 @@ export const authOptions: AuthOptions = {
       id: "worker-credentials",
       name: "Worker Credentials",
       credentials: {
+        identifier: { label: "Email or phone", type: "text" },
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         try {
+          const rawIdentifier = normalizeAuthIdentifier(
+            credentials?.identifier ?? credentials?.email,
+          );
+          const normalizedPhone = normalizeAuthPhone(rawIdentifier);
+          const isEmailIdentifier = EMAIL_REGEX.test(rawIdentifier.toLowerCase());
           const payload = {
-            email: credentials?.email,
+            identifier: rawIdentifier,
+            email: isEmailIdentifier ? rawIdentifier.toLowerCase() : undefined,
+            phone: !isEmailIdentifier ? normalizedPhone || undefined : undefined,
             password: credentials?.password,
           };
 

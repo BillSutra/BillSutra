@@ -164,12 +164,12 @@ const verifyResolvedToken = async (
     }
 
     if (
-      authUser.role === "WORKER" &&
+      authUser.accountType === "WORKER" &&
       !isWorkerRequestAllowed(req.path, req.method)
     ) {
       res.status(403).json({
         status: 403,
-        message: "Workers can only access sales and invoices",
+        message: "Worker access is limited to assigned tools.",
       });
       recordRequestAuthSummary({
         source,

@@ -18,12 +18,16 @@ import { Languages } from "lucide-react";
 import { useI18n } from "@/providers/LanguageProvider";
 import { usePersistedLanguage } from "@/hooks/usePersistedLanguage";
 import { useHydrated } from "@/hooks/useHydrated";
+import { useSession } from "next-auth/react";
 const LogoutModalDynamic = dynamic(() => import("../auth/LogoutModal"));
 const ProfileMenu = ({ name, image }: { name: string; image?: string }) => {
   const [logoutopen, setLogoutOpen] = useState(false);
   const hydrated = useHydrated();
   const { t } = useI18n();
   const { language, setPersistedLanguage } = usePersistedLanguage();
+  const { data: session } = useSession();
+  const isWorkerAccount = session?.user?.accountType === "WORKER";
+  const profileHref = isWorkerAccount ? "/worker-panel" : "/profile";
 
   if (!hydrated) {
     return <UserAvtar name={name} image={image} />;
@@ -44,11 +48,13 @@ const ProfileMenu = ({ name, image }: { name: string; image?: string }) => {
           <DropdownMenuLabel>{t("profileMenu.myAccount")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
-            <Link href="/profile">{t("profileMenu.profile")}</Link>
+            <Link href={profileHref}>{t("profileMenu.profile")}</Link>
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/pricing">{t("landing.nav.pricing")}</Link>
-          </DropdownMenuItem>
+          {!isWorkerAccount ? (
+            <DropdownMenuItem asChild>
+              <Link href="/pricing">{t("landing.nav.pricing")}</Link>
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuLabel className="flex items-center gap-2 text-xs text-muted-foreground">
             <Languages className="h-3.5 w-3.5" />
             {t("profileMenu.languageSection")}

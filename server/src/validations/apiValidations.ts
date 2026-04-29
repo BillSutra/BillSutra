@@ -92,6 +92,14 @@ export const authLoginSchema = z.object({
   rememberMe: z.boolean().optional(),
 });
 
+const normalizeWorkerLoginPhone = (value: string) => value.replace(/\D/g, "");
+const workerLoginEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const emptyWorkerLoginFieldToUndefined = (value: unknown) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+};
+
 export const authOauthSchema = z.object({
   email: z.string().email(),
   name: z.string().min(2).optional(),
@@ -220,7 +228,62 @@ export const adminLoginSchema = z.object({
 export const accessPlanSchema = z.enum(["pro", "pro-plus"]);
 export const accessBillingCycleSchema = z.enum(["monthly", "yearly"]);
 
-export const workerLoginSchema = authLoginSchema;
+export const workerLoginSchema = z
+  .object({
+    identifier: z.preprocess(
+      emptyWorkerLoginFieldToUndefined,
+      z.string().trim().min(3).max(120).optional(),
+    ),
+    email: z.preprocess(
+      emptyWorkerLoginFieldToUndefined,
+      z.string().trim().toLowerCase().email().optional(),
+    ),
+    phone: z.preprocess(
+      emptyWorkerLoginFieldToUndefined,
+      z
+        .string()
+        .trim()
+        .transform((value) => normalizeWorkerLoginPhone(value))
+        .optional(),
+    ),
+    password: z.string().min(6),
+    rememberMe: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const identifier = value.identifier ?? value.email ?? value.phone;
+
+    if (!identifier) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["identifier"],
+        message: "Email or phone number is required",
+      });
+      return;
+    }
+
+    const normalizedPhone = normalizeWorkerLoginPhone(identifier);
+    const identifierLooksLikeEmail = workerLoginEmailPattern.test(identifier);
+    const hasValidEmail = Boolean(value.email) || identifierLooksLikeEmail;
+    const hasValidPhone =
+      (Boolean(value.phone) && /^\d{10,15}$/.test(value.phone!)) ||
+      /^\d{10,15}$/.test(normalizedPhone);
+
+    if (!hasValidEmail && !hasValidPhone) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["identifier"],
+        message: "Enter a valid email or phone number",
+      });
+    }
+
+    if (value.phone && !/^\d{10,15}$/.test(value.phone)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["phone"],
+        message: "Phone number must be between 10 and 15 digits",
+      });
+    }
+  });
 
 const workerAccessRoleSchema = z.enum([
   "ADMIN",

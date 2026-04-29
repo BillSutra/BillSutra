@@ -347,6 +347,7 @@
                  "shared":  {
                                 "loginTab":  "Login",
                                 "signupTab":  "Sign up",
+                                "authTabs":  "Authentication tabs",
                                 "workerPrompt":  "Team member?",
                                 "workerAction":  "Login as Worker",
                                 "emailOrPhoneLabel":  "Email or phone",
@@ -356,7 +357,38 @@
                                 "phoneHelper":  "Use your active Indian mobile number.",
                                 "signingIn":  "Signing in...",
                                 "createAccount":  "Create account",
-                                "creatingAccount":  "Creating account..."
+                                "creatingAccount":  "Creating account...",
+                                "benefits":  {
+                                                 "gstReadyBilling":  "GST Ready Billing",
+                                                 "smartInventory":  "Smart Inventory",
+                                                 "paymentReminders":  "Payment Reminders",
+                                                 "aiInsights":  "AI Insights",
+                                                 "multiUserAccess":  "Multi-user Access"
+                                             },
+                                "trust":  {
+                                              "businesses":  "10,000+ Businesses Trust BillSutra",
+                                              "secureLogin":  "Secure Login",
+                                              "encryptedData":  "Encrypted Data",
+                                              "fastSupport":  "Fast Support"
+                                          },
+                                "stats":  {
+                                              "healthyGrowth":  "Healthy growth this cycle",
+                                              "syncedLive":  "Synced live across billing"
+                                          },
+                                "showcaseCards":  {
+                                                       "revenue":  {
+                                                                       "title":  "Revenue this month",
+                                                                       "value":  "Rs 4.8L"
+                                                                   },
+                                                       "pending":  {
+                                                                       "title":  "Pending invoices",
+                                                                       "value":  "18 follow-ups"
+                                                                   },
+                                                       "stock":  {
+                                                                     "title":  "Low stock alerts",
+                                                                     "value":  "7 items need reorder"
+                                                                 }
+                                                   }
                             },
                  "forgotPage":  {
                                     "badge":  "Reset access",

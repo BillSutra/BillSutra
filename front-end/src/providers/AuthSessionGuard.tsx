@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   AUTH_LOGOUT_EVENT,
@@ -18,8 +18,9 @@ type LogoutEventDetail = {
 };
 
 const AuthSessionGuard = () => {
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const router = useRouter();
+  const pathname = usePathname();
   const logoutInFlightRef = useRef<Promise<void> | null>(null);
 
   const performLogout = useEffectEvent(async (reason = "session_expired") => {
@@ -27,17 +28,23 @@ const AuthSessionGuard = () => {
       return logoutInFlightRef.current;
     }
 
+    const callbackUrl =
+      session?.user?.accountType === "WORKER" ||
+      pathname.startsWith("/worker-panel")
+        ? "/worker/login"
+        : "/login";
+
     clearClientAuthState();
     logClientAuthEvent(`logout_reason=${reason}`);
 
     logoutInFlightRef.current = (async () => {
       try {
         await signOut({
-          callbackUrl: "/login",
+          callbackUrl,
           redirect: true,
         });
       } catch {
-        router.replace("/login");
+        router.replace(callbackUrl);
       }
     })().finally(() => {
       logoutInFlightRef.current = null;

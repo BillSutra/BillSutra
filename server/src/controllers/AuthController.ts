@@ -245,6 +245,86 @@ const authUserWithPasswordSelect = {
   password_hash: true,
 } as const;
 
+const WORKER_LOGIN_DENIED_STATES = new Set([
+  "INACTIVE",
+  "SUSPENDED",
+  "DELETED",
+  "DISABLED",
+  "LEFT_COMPANY",
+  "TERMINATED",
+]);
+
+const WORKER_LOGIN_SETUP_REQUIRED_STATES = new Set([
+  "INVITED",
+  "PENDING",
+  "PENDING_INVITE",
+  "PASSWORD_RESET_REQUIRED",
+  "RESET_REQUIRED",
+]);
+
+const normalizeWorkerIdentifier = (value: unknown) =>
+  typeof value === "string" ? value.trim() : "";
+
+const normalizeWorkerPhone = (value: string) => value.replace(/\D/g, "");
+
+const resolveWorkerLoginLookup = (payload: WorkerLoginPayload) => {
+  const identifier = normalizeWorkerIdentifier(
+    payload.identifier ?? payload.email ?? payload.phone,
+  );
+  const normalizedEmail = payload.email
+    ? normalizeEmailAddress(payload.email)
+    : identifier.includes("@")
+      ? normalizeEmailAddress(identifier)
+      : "";
+  const normalizedPhone = payload.phone
+    ? normalizeWorkerPhone(payload.phone)
+    : normalizedEmail
+      ? ""
+      : normalizeWorkerPhone(identifier);
+
+  return {
+    identifier,
+    email: normalizedEmail || null,
+    phone: normalizedPhone || null,
+  };
+};
+
+const maskWorkerIdentifier = (identifier: string) => {
+  const trimmed = identifier.trim();
+  if (!trimmed) {
+    return "unknown";
+  }
+
+  if (trimmed.includes("@")) {
+    return maskEmail(trimmed);
+  }
+
+  const digits = normalizeWorkerPhone(trimmed);
+  if (digits.length >= 4) {
+    return `${"*".repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
+  }
+
+  return "***";
+};
+
+const getWorkerAccountStateDenial = (status: string | null | undefined) => {
+  const normalizedStatus = typeof status === "string" ? status.trim().toUpperCase() : "";
+
+  if (!normalizedStatus || normalizedStatus === "ACTIVE") {
+    return null;
+  }
+
+  if (WORKER_LOGIN_DENIED_STATES.has(normalizedStatus)) {
+    return "Worker account is inactive. Contact your business admin.";
+  }
+
+  if (WORKER_LOGIN_SETUP_REQUIRED_STATES.has(normalizedStatus)) {
+    return "Worker account setup is incomplete. Contact your business admin.";
+  }
+
+  return "Worker account access is unavailable. Contact your business admin.";
+};
+
 class AuthController {
   static csrfToken(req: Request, res: Response) {
     const csrfToken = resolveOrSetCsrfToken(req, res);
@@ -775,9 +855,28 @@ class AuthController {
   static async workerLogin(req: Request, res: Response) {
     try {
       const body: WorkerLoginPayload = req.body;
+      const loginLookup = resolveWorkerLoginLookup(body);
+      const loginIdentifierMasked = maskWorkerIdentifier(
+        loginLookup.identifier || body.email || body.phone || "",
+      );
+      const workerLookupConditions = [
+        loginLookup.email ? { email: loginLookup.email } : null,
+        loginLookup.phone ? { phone: loginLookup.phone } : null,
+      ].filter((condition): condition is { email: string } | { phone: string } =>
+        Boolean(condition),
+      );
 
-      const worker = await prisma.worker.findUnique({
-        where: { email: body.email },
+      if (workerLookupConditions.length === 0) {
+        return sendResponse(res, 422, {
+          message: "Enter a valid worker email or phone number",
+          errors: { identifier: "Enter a valid worker email or phone number" },
+        });
+      }
+
+      const worker = await prisma.worker.findFirst({
+        where: {
+          OR: workerLookupConditions,
+        },
       });
 
       if (!worker) {
@@ -786,11 +885,18 @@ class AuthController {
           method: AuthMethod.WORKER_PASSWORD,
           success: false,
           actorType: "WORKER",
+          metadata: {
+            reason: "worker_not_found",
+          },
+        });
+        console.warn("[auth] worker_login_failed", {
+          reason: "worker_not_found",
+          identifier: loginIdentifierMasked,
         });
 
-        return sendResponse(res, 422, {
+        return sendResponse(res, 401, {
           message: "Invalid worker credentials",
-          errors: { email: "Invalid worker credentials" },
+          errors: { identifier: "Invalid worker credentials" },
         });
       }
 
@@ -805,11 +911,20 @@ class AuthController {
           method: AuthMethod.WORKER_PASSWORD,
           success: false,
           actorType: "WORKER",
+          metadata: {
+            reason: "invalid_password",
+            workerId: worker.id,
+          },
+        });
+        console.warn("[auth] worker_login_failed", {
+          reason: "invalid_password",
+          workerId: worker.id,
+          businessId: worker.businessId,
         });
 
-        return sendResponse(res, 422, {
+        return sendResponse(res, 401, {
           message: "Invalid worker credentials",
-          errors: { email: "Invalid worker credentials" },
+          errors: { identifier: "Invalid worker credentials" },
         });
       }
 
@@ -821,16 +936,75 @@ class AuthController {
           LIMIT 1
         `;
 
-        if (profileRows[0]?.status === "INACTIVE") {
+        const deniedStateMessage = getWorkerAccountStateDenial(
+          profileRows[0]?.status,
+        );
+        if (deniedStateMessage) {
+          await recordAuthEvent({
+            req,
+            method: AuthMethod.WORKER_PASSWORD,
+            success: false,
+            actorType: "WORKER",
+            metadata: {
+              reason: "worker_status_blocked",
+              workerId: worker.id,
+              status: profileRows[0]?.status ?? null,
+            },
+          });
+          console.warn("[auth] worker_login_denied", {
+            reason: "worker_status_blocked",
+            workerId: worker.id,
+            status: profileRows[0]?.status ?? null,
+          });
           return sendResponse(res, 403, {
-            message: "Worker account is inactive",
+            message: deniedStateMessage,
           });
         }
       } catch {
         // Migration-safe fallback: continue authentication for older schemas.
       }
 
-      const authUser = await buildWorkerAuthUser(worker);
+      let authUser: AuthUser;
+      try {
+        authUser = await buildWorkerAuthUser(worker);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Worker authentication failed";
+        const isBusinessMissing =
+          message.includes("Business not found") ||
+          message.includes("active business");
+        const isMigrationIssue = message.includes("migration");
+
+        console.warn("[auth] worker_login_denied", {
+          reason: isMigrationIssue
+            ? "worker_auth_migration_missing"
+            : "worker_business_missing",
+          workerId: worker.id,
+          businessId: worker.businessId,
+          message,
+        });
+
+        if (isMigrationIssue) {
+          return sendResponse(res, 503, {
+            message:
+              "Worker authentication is temporarily unavailable. Contact your administrator.",
+            code: "AUTH_SERVICE_UNAVAILABLE",
+          });
+        }
+
+        return sendResponse(res, 403, {
+          message: "Worker account is not linked to an active business.",
+        });
+      }
+
+      await maybeHandleSuspiciousLogin({
+        req,
+        userId: authUser.ownerUserId,
+        email: worker.email,
+        actorId: authUser.actorId,
+        actorType: authUser.accountType,
+      });
+
       const { accessToken, accessTokenExpiresAt } = await issueAuthCookies(
         req,
         res,
@@ -858,6 +1032,11 @@ class AuthController {
         success: true,
         actorType: "WORKER",
         metadata: { workerId: worker.id },
+      });
+      console.info("[auth] worker_login_success", {
+        workerId: worker.id,
+        ownerUserId: authUser.ownerUserId,
+        businessId: authUser.businessId,
       });
 
       void dispatchNotification({

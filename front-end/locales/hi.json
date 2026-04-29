@@ -1917,6 +1917,7 @@
                  "shared":  {
                                 "loginTab":  "लॉगिन",
                                 "signupTab":  "साइन अप",
+                                "authTabs":  "ऑथेंटिकेशन टैब",
                                 "workerPrompt":  "टीम सदस्य?",
                                 "workerAction":  "वर्कर लॉगिन",
                                 "emailOrPhoneLabel":  "ईमेल या फोन",
@@ -1926,7 +1927,38 @@
                                 "phoneHelper":  "अपना सक्रिय भारतीय मोबाइल नंबर दर्ज करें।",
                                 "signingIn":  "साइन इन हो रहा है...",
                                 "createAccount":  "अकाउंट बनाएं",
-                                "creatingAccount":  "अकाउंट बन रहा है..."
+                                "creatingAccount":  "अकाउंट बन रहा है...",
+                                "benefits":  {
+                                                 "gstReadyBilling":  "GST रेडी बिलिंग",
+                                                 "smartInventory":  "स्मार्ट इन्वेंटरी",
+                                                 "paymentReminders":  "पेमेंट रिमाइंडर",
+                                                 "aiInsights":  "AI इनसाइट्स",
+                                                 "multiUserAccess":  "मल्टी-यूज़र एक्सेस"
+                                             },
+                                "trust":  {
+                                              "businesses":  "10,000+ बिज़नेस BillSutra पर भरोसा करते हैं",
+                                              "secureLogin":  "सिक्योर लॉगिन",
+                                              "encryptedData":  "एन्क्रिप्टेड डेटा",
+                                              "fastSupport":  "फास्ट सपोर्ट"
+                                          },
+                                "stats":  {
+                                              "healthyGrowth":  "इस चक्र में स्वस्थ ग्रोथ",
+                                              "syncedLive":  "बिलिंग के साथ लाइव सिंक"
+                                          },
+                                "showcaseCards":  {
+                                                       "revenue":  {
+                                                                       "title":  "इस महीने की आय",
+                                                                       "value":  "Rs 4.8L"
+                                                                   },
+                                                       "pending":  {
+                                                                       "title":  "लंबित इनवॉइस",
+                                                                       "value":  "18 फॉलो-अप"
+                                                                   },
+                                                       "stock":  {
+                                                                     "title":  "लो स्टॉक अलर्ट",
+                                                                     "value":  "7 आइटम रीऑर्डर चाहिए"
+                                                                 }
+                                                   }
                             },
                  "forgotPage":  {
                                     "badge":  "एक्सेस रीसेट",
