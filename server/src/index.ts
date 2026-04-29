@@ -20,8 +20,15 @@ import { validateSecurityEnv } from "./lib/securityEnv.js";
 
 loadServerEnv();
 
+const {
+  captureObservabilityException,
+  flushObservability,
+  initServerObservability,
+} = await import("./lib/observability.js");
+
 validateSecurityEnv();
 logAuthSecretDiagnostics(resolveAuthSecrets());
+await initServerObservability();
 
 const PORT = process.env.PORT || 7000;
 const ENABLE_SCHEDULER =
@@ -59,10 +66,11 @@ try {
     { startInvoiceReminderCron },
     { startLowStockAlertCron },
     { startMonthlySalesReportCron },
+    { startBusinessNotificationsCron },
     { startRecurringInvoiceCron },
     { startWeeklyReportCron },
     { ensureSchemaCompatibility },
-    { flushObservability, initServerObservability },
+    { initializeAnalyticsDailyStatsSupport },
     { initRealtimeSocketServer, shutdownRealtimeSocketServer },
     { disconnectDatabase },
     { disconnectRedisClients },
@@ -72,10 +80,11 @@ try {
     import("./jobs/invoiceReminder.job.js"),
     import("./jobs/lowStockAlert.job.js"),
     import("./jobs/monthlySalesReport.job.js"),
+    import("./jobs/businessNotifications.job.js"),
     import("./jobs/recurringInvoice.job.js"),
     import("./jobs/weeklyReport.job.js"),
     import("./lib/schemaCompatibility.js"),
-    import("./lib/observability.js"),
+    import("./services/analyticsDailyStats.service.js"),
     import("./services/realtimeSocket.service.js"),
     import("./config/db.config.js"),
     import("./redis/redisClient.js"),
@@ -84,11 +93,14 @@ try {
   await ensureSchemaCompatibility();
   console.info("[startup.db] schema compatibility completed");
 
-  initServerObservability();
+  const analyticsSupport = await initializeAnalyticsDailyStatsSupport();
+  console.info("[startup.analytics] daily stats mode resolved", analyticsSupport);
+
   if (ENABLE_SCHEDULER) {
     startRecurringInvoiceCron();
     startInventoryInsightsCron();
     startMonthlySalesReportCron();
+    startBusinessNotificationsCron();
     startInvoiceReminderCron();
     startWeeklyReportCron();
     startLowStockAlertCron();
@@ -175,6 +187,16 @@ try {
     console.error("[startup] unhandled promise rejection", {
       message: reason instanceof Error ? reason.message : String(reason),
     });
+    captureObservabilityException(
+      reason instanceof Error ? reason : new Error(String(reason)),
+      {
+        level: "fatal",
+        tags: {
+          component: "server",
+          lifecycle: "unhandled_rejection",
+        },
+      },
+    );
     void shutdown("unhandledRejection", 1);
   });
 
@@ -182,6 +204,13 @@ try {
     console.error("[startup] uncaught exception", {
       message: error.message,
       stack: error.stack,
+    });
+    captureObservabilityException(error, {
+      level: "fatal",
+      tags: {
+        component: "server",
+        lifecycle: "uncaught_exception",
+      },
     });
     void shutdown("uncaughtException", 1);
   });
@@ -199,5 +228,16 @@ try {
   console.error("[startup] failed to boot", {
     message: error instanceof Error ? error.message : String(error),
   });
+  captureObservabilityException(
+    error instanceof Error ? error : new Error(String(error)),
+    {
+      level: "fatal",
+      tags: {
+        component: "server",
+        lifecycle: "startup",
+      },
+    },
+  );
+  await flushObservability();
   process.exit(1);
 }

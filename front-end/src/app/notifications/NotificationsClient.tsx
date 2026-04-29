@@ -6,10 +6,13 @@ import {
   BriefcaseBusiness,
   CheckCheck,
   CreditCard,
+  Shield,
   Package,
   Sparkles,
+  TriangleAlert,
   Trash2,
   Users,
+  BellRing,
 } from "lucide-react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -70,6 +73,34 @@ const notificationMeta: Record<
     accent:
       "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-300",
   },
+  security: {
+    label: "Security",
+    href: "/settings?tab=security",
+    icon: Shield,
+    accent:
+      "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300",
+  },
+  system: {
+    label: "System",
+    href: "/dashboard",
+    icon: BellRing,
+    accent:
+      "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-300",
+  },
+};
+
+const priorityBadgeClass: Record<
+  AppNotification["priority"],
+  string
+> = {
+  critical:
+    "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300",
+  warning:
+    "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300",
+  info:
+    "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300",
+  success:
+    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
 };
 
 const formatRelativeTime = (value: string, locale: string) => {
@@ -141,6 +172,8 @@ const NotificationsClient = ({
         label: notificationMeta.subscription.label,
       },
       { value: "worker" as const, label: notificationMeta.worker.label },
+      { value: "security" as const, label: notificationMeta.security.label },
+      { value: "system" as const, label: notificationMeta.system.label },
     ],
     [],
   );
@@ -265,6 +298,7 @@ const NotificationsClient = ({
             notifications.map((notification) => {
               const meta = notificationMeta[notification.type];
               const Icon = meta.icon;
+              const openHref = notification.actionUrl || meta.href;
 
               return (
                 <div
@@ -289,13 +323,27 @@ const NotificationsClient = ({
                           <Badge variant="default" className="capitalize">
                             {meta.label}
                           </Badge>
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium capitalize",
+                              priorityBadgeClass[notification.priority],
+                            )}
+                          >
+                            {notification.priority === "critical" ? (
+                              <TriangleAlert className="h-3.5 w-3.5" />
+                            ) : null}
+                            {notification.priority}
+                          </span>
                           {!notification.isRead ? (
                             <Badge variant="pending">Unread</Badge>
                           ) : (
                             <Badge variant="default">Read</Badge>
                           )}
                         </div>
-                        <p className="mt-3 text-sm font-medium leading-6 text-foreground">
+                        <p className="mt-2 text-sm font-semibold leading-6 text-foreground">
+                          {notification.title}
+                        </p>
+                        <p className="mt-1 text-sm font-medium leading-6 text-foreground">
                           {notification.message}
                         </p>
                         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -317,7 +365,7 @@ const NotificationsClient = ({
 
                     <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                       <Button asChild variant="ghost" size="sm">
-                        <Link href={meta.href}>Open</Link>
+                        <Link href={openHref}>Open</Link>
                       </Button>
                       {notification.isRead ? (
                         <Button

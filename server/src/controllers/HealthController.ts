@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { verifyDatabaseConnectivity } from "../config/db.config.js";
+import { getAnalyticsDailyStatsSupportStatus } from "../services/analyticsDailyStats.service.js";
 import { isQueueWorkerAvailable } from "../queues/queue.js";
 import {
   getRedisClient,
@@ -72,6 +73,7 @@ class HealthController {
     const queueWorkerAvailable = isQueueEnabled()
       ? await isQueueWorkerAvailable()
       : false;
+    const analytics = getAnalyticsDailyStatsSupportStatus();
 
     const isReady =
       databaseStatus === "ok" &&
@@ -95,6 +97,7 @@ class HealthController {
           enabled: isQueueEnabled(),
           workerAvailable: isQueueEnabled() ? queueWorkerAvailable : false,
         },
+        analytics,
       },
     });
   }

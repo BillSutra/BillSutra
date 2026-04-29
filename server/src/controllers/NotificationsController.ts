@@ -24,6 +24,8 @@ const notificationTypes = new Set<AppNotificationType>([
   "customer",
   "subscription",
   "worker",
+  "security",
+  "system",
 ]);
 
 const NOTIFICATIONS_CACHE_TTL_SECONDS = Math.max(

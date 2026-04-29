@@ -1039,6 +1039,11 @@ router.get(
 router.get("/dashboard/stream", AuthSseMiddleware, DashboardController.stream);
 router.get("/dashboard/overview", AuthMiddleware, DashboardController.overview);
 router.get("/dashboard/metrics", AuthMiddleware, DashboardController.metrics);
+router.get(
+  "/dashboard/quick-insights",
+  AuthMiddleware,
+  DashboardController.quickInsights,
+);
 router.get("/dashboard/sales", AuthMiddleware, DashboardController.sales);
 router.get(
   "/dashboard/payment-methods",

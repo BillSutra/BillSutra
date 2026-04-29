@@ -10,6 +10,9 @@ import { normalizeIndianState } from "../lib/indianAddress.js";
 import { getStateFromGstin, normalizeGstin } from "../lib/gstin.js";
 
 const PASSWORD_MIN_LENGTH = 8;
+const PRODUCT_NAME_PATTERN = /[\p{L}\p{N}]/u;
+const PRODUCT_PRICE_MAX = 1_000_000;
+const ALLOWED_GST_RATES = [0, 5, 12, 18, 28] as const;
 const STRONG_PASSWORD_RULES = [
   {
     regex: /.{8,}/,
@@ -988,13 +991,37 @@ export const userSavedTemplateUpdateSchema = z
     message: "At least one field is required",
   });
 
+const productNameSchema = z
+  .string()
+  .trim()
+  .min(2, "Product name must be at least 2 characters")
+  .max(191, "Product name is too long")
+  .refine((value) => PRODUCT_NAME_PATTERN.test(value), {
+    message: "Product name must contain at least one letter or number",
+  });
+
+const productPriceSchema = z.coerce
+  .number()
+  .nonnegative()
+  .max(PRODUCT_PRICE_MAX, `Price cannot exceed ${PRODUCT_PRICE_MAX}`);
+
+const productGstRateSchema = z.coerce
+  .number()
+  .refine(
+    (value) =>
+      ALLOWED_GST_RATES.includes(value as (typeof ALLOWED_GST_RATES)[number]),
+    {
+      message: `GST rate must be one of ${ALLOWED_GST_RATES.join(", ")}`,
+    },
+  );
+
 export const productCreateSchema = z.object({
-  name: z.string().min(2),
+  name: productNameSchema,
   sku: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  price: z.coerce.number().nonnegative(),
-  cost: z.coerce.number().nonnegative().optional(),
+  price: productPriceSchema,
+  cost: productPriceSchema.optional(),
   barcode: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  gst_rate: z.coerce.number().nonnegative().optional(),
+  gst_rate: productGstRateSchema.optional(),
   stock_on_hand: z.coerce.number().int().optional(),
   reorder_level: z.coerce.number().int().optional(),
   category_id: z.coerce.number().int().positive().nullable().optional(),
@@ -1322,7 +1349,15 @@ export const notificationsQuerySchema = z.object({
   page: z.coerce.number().int().positive().optional(),
   limit: z.coerce.number().int().positive().max(50).optional(),
   type: z
-    .enum(["payment", "inventory", "customer", "subscription", "worker"])
+    .enum([
+      "payment",
+      "inventory",
+      "customer",
+      "subscription",
+      "worker",
+      "security",
+      "system",
+    ])
     .optional(),
   isRead: z.coerce.boolean().optional(),
   unreadOnly: z.coerce.boolean().optional(),

@@ -7,6 +7,7 @@ import {
   BriefcaseBusiness,
   CreditCard,
   Package,
+  Shield,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -61,6 +62,20 @@ const notificationMeta: Record<
     accent:
       "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-300",
   },
+  security: {
+    label: "Security",
+    href: "/settings?tab=security",
+    icon: Shield,
+    accent:
+      "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300",
+  },
+  system: {
+    label: "System",
+    href: "/dashboard",
+    icon: BellRing,
+    accent:
+      "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-300",
+  },
 };
 
 const NotificationsPanel = ({
@@ -93,8 +108,8 @@ const NotificationsPanel = ({
           </div>
         </div>
         <p className="text-sm leading-6 text-muted-foreground dark:text-zinc-400">
-          Invoice, stock, customer, subscription, and team events appear here
-          instantly.
+          Inventory, payment, security, subscription, and team alerts appear
+          here instantly.
         </p>
       </CardHeader>
       <CardContent className="dashboard-chart-content grid gap-3">
@@ -121,7 +136,7 @@ const NotificationsPanel = ({
                   )}
                 >
                   <Link
-                    href={meta.href}
+                    href={notification.actionUrl || meta.href}
                     onClick={() => {
                       if (!notification.isRead) {
                         void markRead(notification.id);
@@ -139,9 +154,14 @@ const NotificationsPanel = ({
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-3">
-                          <p className="min-w-0 flex-1 font-semibold leading-5 text-foreground dark:text-white">
-                            {notification.message}
-                          </p>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-semibold leading-5 text-foreground dark:text-white">
+                              {notification.title}
+                            </p>
+                            <p className="mt-1 line-clamp-2 text-xs text-muted-foreground dark:text-zinc-400">
+                              {notification.message}
+                            </p>
+                          </div>
                           <Badge variant={!notification.isRead ? "pending" : "default"}>
                             {meta.label}
                           </Badge>

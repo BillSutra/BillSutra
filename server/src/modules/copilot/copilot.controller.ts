@@ -1,12 +1,12 @@
 import type { Request, Response } from "express";
 import { sendResponse } from "../../utils/sendResponse.js";
 import {
-  buildFinancialCopilot,
   createCopilotGoal,
   deleteCopilotGoal,
   listCopilotGoals,
   updateCopilotGoal,
 } from "./copilot.service.js";
+import { buildDashboardQuickInsights } from "../../services/dashboardQuickInsights.service.js";
 import type {
   CopilotGoalCreateInput,
   CopilotGoalParamInput,
@@ -23,11 +23,32 @@ class CopilotController {
 
     try {
       const query = req.query as unknown as CopilotSummaryQueryInput;
-      const data = await buildFinancialCopilot({
-        userId,
-        language: query.language,
-        decisionAmount: query.amount ?? null,
-      });
+      const [insights, goals] = await Promise.all([
+        buildDashboardQuickInsights({
+          userId,
+          language: query.language,
+          filters: { range: "30d", granularity: "day" },
+        }),
+        listCopilotGoals(userId),
+      ]);
+
+      const data = {
+        deprecated: true,
+        redirect: "/dashboard/quick-insights",
+        generatedAt: insights.generatedAt,
+        language: query.language ?? "en",
+        overview: {
+          headline: insights.headline,
+          summary: insights.summary,
+          action:
+            "Quick Insights now replaces the old copilot summary for faster business guidance.",
+        },
+        quickInsights: insights.items,
+        goals: {
+          count: goals.length,
+          items: goals.slice(0, 5),
+        },
+      };
 
       return sendResponse(res, 200, { data });
     } catch (error) {

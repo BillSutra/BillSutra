@@ -20,6 +20,7 @@ import {
   revokeRefreshSessionById,
 } from "../services/deviceSessions.service.js";
 import { recordAuditLog } from "../services/auditLog.service.js";
+import { dispatchNotification } from "../services/notification.service.js";
 import {
   buildSettingsPreferencesCachePrefix,
   buildSettingsPreferencesRedisKey,
@@ -321,6 +322,17 @@ class SettingsController {
         currentSessionId,
       },
     });
+    if (req.user?.businessId && revokedCount > 0) {
+      void dispatchNotification({
+        userId,
+        businessId: req.user.businessId,
+        type: "security",
+        title: "Other devices logged out",
+        message: `${revokedCount} other active device session${revokedCount === 1 ? "" : "s"} ${revokedCount === 1 ? "was" : "were"} revoked.`,
+        actionUrl: "/settings?tab=security",
+        priority: "warning",
+      });
+    }
 
     return sendResponse(res, 200, {
       message: revokedCount
@@ -373,6 +385,23 @@ class SettingsController {
       resourceId: sessionId,
       status: "success",
     });
+    if (req.user?.businessId) {
+      void dispatchNotification({
+        userId,
+        businessId: req.user.businessId,
+        type: "security",
+        title:
+          sessionId === currentSessionId
+            ? "Current device logged out"
+            : "Device session revoked",
+        message:
+          sessionId === currentSessionId
+            ? "You logged out the current device session."
+            : "A device session was revoked from your BillSutra account.",
+        actionUrl: "/settings?tab=security",
+        priority: "info",
+      });
+    }
 
     return sendResponse(res, 200, {
       message:
@@ -427,6 +456,17 @@ class SettingsController {
       resourceType: "session",
       status: "success",
     });
+    if (req.user?.businessId) {
+      void dispatchNotification({
+        userId,
+        businessId: req.user.businessId,
+        type: "security",
+        title: "All devices logged out",
+        message: "All active BillSutra sessions were revoked for this account.",
+        actionUrl: "/settings?tab=security",
+        priority: "critical",
+      });
+    }
 
     return sendResponse(res, 200, {
       message: "All active sessions have been revoked.",

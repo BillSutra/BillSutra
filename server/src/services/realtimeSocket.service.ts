@@ -41,8 +41,18 @@ type NotificationRealtimePayload = {
   notification: {
     id: string;
     businessId: string;
-    type: "payment" | "inventory" | "customer" | "subscription" | "worker";
+    type:
+      | "payment"
+      | "inventory"
+      | "customer"
+      | "subscription"
+      | "worker"
+      | "security"
+      | "system";
+    title: string;
     message: string;
+    actionUrl: string;
+    priority: "critical" | "warning" | "info" | "success";
     isRead: boolean;
     createdAt: string;
   };

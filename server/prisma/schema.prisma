@@ -102,7 +102,10 @@ model Notification {
 
   business_id String @db.VarChar(191)
   type        NotificationType
+  title       String?  @db.VarChar(191)
   message     String   @db.VarChar(500)
+  action_url  String?  @db.VarChar(255)
+  priority    String   @default("info") @db.VarChar(16)
   is_read     Boolean  @default(false)
   reference_key String? @db.VarChar(191)
   created_at  DateTime @default(now())
@@ -111,6 +114,7 @@ model Notification {
   @@index([user_id, created_at])
   @@index([user_id, is_read, created_at])
   @@index([user_id, type, created_at])
+  @@index([user_id, priority, created_at])
   @@index([business_id, created_at])
   @@unique([business_id, reference_key])
   @@map("notifications")
@@ -1220,6 +1224,8 @@ enum NotificationType {
   CUSTOMER
   SUBSCRIPTION
   WORKER
+  SECURITY
+  SYSTEM
 }
 
 enum EmailDeliveryStatus {

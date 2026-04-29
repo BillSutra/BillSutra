@@ -1,6 +1,12 @@
 import { Worker } from "bullmq";
 import { loadServerEnv } from "../config/loadEnv.js";
 import {
+  captureObservabilityException,
+  captureObservabilityMessage,
+  flushObservability,
+  initServerObservability,
+} from "../lib/observability.js";
+import {
   initializeRedisConfig,
   logRedisStartupDiagnostics,
   logRedisStartupFailure,
@@ -110,10 +116,32 @@ const registerWorkerLifecycleLogging = (
       attemptsMade: resolvedJob?.attemptsMade ?? 0,
       message: error.message,
     });
+
+    captureObservabilityException(error, {
+      level: "error",
+      tags: {
+        component: "worker",
+        queue_name: queueName,
+        job_name: resolvedJob?.name ?? "unknown",
+        correlation_id: context?.correlationId ?? "unknown",
+      },
+      contexts: {
+        queue: {
+          queueName,
+          jobId: jobId || "unknown",
+          jobName: resolvedJob?.name ?? "unknown",
+          attemptsMade: resolvedJob?.attemptsMade ?? 0,
+        },
+      },
+      extra: {
+        jobData: resolvedJob?.data ?? null,
+      },
+    });
   });
 };
 
 const startWorker = async () => {
+  await initServerObservability();
   const resolvedRedisConfig = initializeRedisConfig();
   logRedisStartupDiagnostics(resolvedRedisConfig);
 
@@ -145,8 +173,21 @@ const startWorker = async () => {
       signal,
       queues: APP_QUEUE_NAMES,
     });
+    captureObservabilityMessage("Worker shutdown requested", {
+      level: "info",
+      tags: {
+        component: "worker",
+        signal,
+      },
+      contexts: {
+        queue: {
+          queues: APP_QUEUE_NAMES,
+        },
+      },
+    });
     stopHeartbeat();
     await Promise.all(workers.map(({ worker }) => worker.close()));
+    await flushObservability();
     process.exit(0);
   };
 
@@ -177,5 +218,46 @@ void startWorker().catch((error) => {
   console.error("[queues.worker] failed to start", {
     message: error instanceof Error ? error.message : String(error),
   });
-  process.exit(1);
+  captureObservabilityException(
+    error instanceof Error ? error : new Error(String(error)),
+    {
+      level: "fatal",
+      tags: {
+        component: "worker",
+        lifecycle: "startup",
+      },
+    },
+  );
+  void flushObservability().finally(() => {
+    process.exit(1);
+  });
+});
+
+process.on("unhandledRejection", (reason) => {
+  captureObservabilityException(
+    reason instanceof Error ? reason : new Error(String(reason)),
+    {
+      level: "fatal",
+      tags: {
+        component: "worker",
+        lifecycle: "unhandled_rejection",
+      },
+    },
+  );
+  void flushObservability().finally(() => {
+    process.exit(1);
+  });
+});
+
+process.on("uncaughtException", (error) => {
+  captureObservabilityException(error, {
+    level: "fatal",
+    tags: {
+      component: "worker",
+      lifecycle: "uncaught_exception",
+    },
+  });
+  void flushObservability().finally(() => {
+    process.exit(1);
+  });
 });

@@ -37,6 +37,9 @@ const PRODUCT_OPTIONS_CACHE_SWR_SECONDS = Math.max(
   0,
 );
 
+const normalizeProductName = (value: string) =>
+  value.trim().replace(/\s+/g, " ");
+
 const buildQuickProductSku = (productName: string) => {
   const base = productName
     .toUpperCase()
@@ -264,6 +267,7 @@ class ProductsController {
       reorder_level,
       category_id,
     } = body;
+    const normalizedName = normalizeProductName(name);
 
     if (category_id) {
       const category = await prisma.category.findFirst({
@@ -285,17 +289,35 @@ class ProductsController {
       }
     }
 
+    const existingProductWithName = await prisma.product.findFirst({
+      where: {
+        user_id: userId,
+        name: {
+          equals: normalizedName,
+          mode: "insensitive",
+        },
+      },
+      include: productCategoryInclude,
+    });
+
+    if (existingProductWithName) {
+      return sendResponse(res, 409, {
+        message: "Product already exists",
+        data: normalizeProductCategoryRecord(existingProductWithName),
+      });
+    }
+
     const resolvedSku = await resolveProductSku({
       userId,
       preferredSku: sku,
-      productName: name,
+      productName: normalizedName,
     });
 
     const product = await prisma.product.create({
       data: {
         user_id: userId,
         category_id,
-        name,
+        name: normalizedName,
         sku: resolvedSku,
         barcode,
         gst_rate,
@@ -365,6 +387,9 @@ class ProductsController {
       reorder_level,
       category_id,
     } = body;
+    const normalizedName = typeof name === "string"
+      ? normalizeProductName(name)
+      : undefined;
 
     if (category_id) {
       const category = await prisma.category.findFirst({
@@ -395,10 +420,31 @@ class ProductsController {
       return sendResponse(res, 404, { message: "Product not found" });
     }
 
+    if (normalizedName) {
+      const duplicateNameProduct = await prisma.product.findFirst({
+        where: {
+          user_id: userId,
+          NOT: { id: existingProduct.id },
+          name: {
+            equals: normalizedName,
+            mode: "insensitive",
+          },
+        },
+        include: productCategoryInclude,
+      });
+
+      if (duplicateNameProduct) {
+        return sendResponse(res, 409, {
+          message: "Product already exists",
+          data: normalizeProductCategoryRecord(duplicateNameProduct),
+        });
+      }
+    }
+
     const updated = await prisma.product.update({
       where: { id: existingProduct.id },
       data: {
-        name,
+        name: normalizedName,
         sku,
         barcode,
         gst_rate,

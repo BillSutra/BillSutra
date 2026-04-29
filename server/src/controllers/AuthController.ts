@@ -162,6 +162,16 @@ const buildOwnerAuthResponse = async (
   const { accessToken } = await issueAuthCookies(req, res, authUser, preferences);
   const expiresAt = getAccessTokenExpiresAt();
 
+  void dispatchNotification({
+    userId: user.id,
+    businessId: authUser.businessId,
+    type: "security",
+    title: "New login detected",
+    message: `${user.name || user.email} signed in to BillSutra.`,
+    actionUrl: "/settings?tab=security",
+    priority: "info",
+  });
+
   return {
     message,
     user: serializeOwnerUser(user, authUser),
@@ -844,8 +854,11 @@ class AuthController {
       void dispatchNotification({
         userId: authUser.ownerUserId,
         businessId: authUser.businessId,
-        type: "worker",
+        type: "security",
+        title: "Worker login detected",
         message: `${worker.name} signed in to BillSutra.`,
+        actionUrl: "/workers",
+        priority: "info",
       });
 
       return sendResponse(res, 200, {

@@ -9,6 +9,8 @@
     "types": ["node"],
     "rootDir": "src",
     "outDir": "dist",
+    "sourceMap": true,
+    "inlineSources": true,
     "jsx": "react-jsx",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true

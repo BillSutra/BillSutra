@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, Package2, Search, ScanLine } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Modal from "@/components/ui/modal";
@@ -10,9 +11,32 @@ import type { Product } from "@/lib/apiClient";
 import { cn } from "@/lib/utils";
 
 const sanitizeDecimalInput = (value: string) => value.replace(/[^\d.]/g, "");
+const MAX_ALLOWED_PRICE = 1_000_000;
+const MAX_MANUAL_QUANTITY = 10_000;
+const ALLOWED_GST_RATES = [0, 5, 12, 18, 28] as const;
 
 const normalizeComparableText = (value: string | null | undefined) =>
   value?.trim().toLowerCase() ?? "";
+
+const normalizeProductName = (value: string | null | undefined) =>
+  value?.trim().replace(/\s+/g, " ") ?? "";
+
+const hasMeaningfulProductName = (value: string) => /[\p{L}\p{N}]/u.test(value);
+
+const isBarcodeLikeQuery = (value: string) => {
+  const normalized = value.trim();
+  return (
+    normalized.length >= 4 &&
+    !/\s/.test(normalized) &&
+    /\d/.test(normalized) &&
+    /^[a-z0-9._/-]+$/i.test(normalized)
+  );
+};
+
+const canSearchProducts = (value: string) => {
+  const normalized = value.trim();
+  return normalized.length >= 2 || isBarcodeLikeQuery(normalized);
+};
 
 const resolveExactMatch = (products: Product[], query: string) => {
   const normalizedQuery = normalizeComparableText(query);
@@ -41,12 +65,34 @@ type QuickCreateProductInput = {
   gstRate: number;
 };
 
+type QuickCreateValidationResult = {
+  valid: boolean;
+  error: string;
+  normalizedName: string;
+  normalizedPrice: number;
+  normalizedGstRate: number;
+};
+
+type ManualItemValidationResult = {
+  valid: boolean;
+  error: string;
+  fallbackName: string;
+  quantity: number;
+  price: number;
+};
+
 type ProductSearchProps = {
   open: boolean;
   isHindi: boolean;
   products: Product[];
   productsLoading: boolean;
   productsError: boolean;
+  allowNegativeStock: boolean;
+  existingItems: Array<{
+    productId?: number;
+    name: string;
+    quantity: string;
+  }>;
   onOpenChange: (open: boolean) => void;
   onRetryProducts: () => void;
   onAddProduct: (product: Product) => void;
@@ -61,6 +107,8 @@ export default function ProductSearch({
   products,
   productsLoading,
   productsError,
+  allowNegativeStock,
+  existingItems,
   onOpenChange,
   onRetryProducts,
   onAddProduct,
@@ -81,6 +129,7 @@ export default function ProductSearch({
   const [quickCreatePrice, setQuickCreatePrice] = useState("");
   const [quickCreateGstRate, setQuickCreateGstRate] = useState("0");
   const [quickCreateError, setQuickCreateError] = useState("");
+  const [manualError, setManualError] = useState("");
 
   useEffect(() => {
     return () => {
@@ -90,9 +139,180 @@ export default function ProductSearch({
     };
   }, []);
 
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [open]);
+
+  const validateManualItem = (
+    currentName: string,
+    currentQuantity: string,
+    currentPrice: string,
+    fallbackQuery: string,
+  ): ManualItemValidationResult => {
+    const fallbackName = normalizeProductName(currentName || fallbackQuery);
+    const quantityValue = Number(currentQuantity);
+    const priceValue = Number(currentPrice);
+
+    if (!fallbackName) {
+      return {
+        valid: false,
+        error: "Enter an item name.",
+        fallbackName,
+        quantity: quantityValue,
+        price: priceValue,
+      };
+    }
+
+    if (fallbackName.length < 2 || !hasMeaningfulProductName(fallbackName)) {
+      return {
+        valid: false,
+        error: "Enter at least 2 valid characters for the item name.",
+        fallbackName,
+        quantity: quantityValue,
+        price: priceValue,
+      };
+    }
+
+    if (!Number.isFinite(quantityValue) || quantityValue <= 0) {
+      return {
+        valid: false,
+        error: "Quantity must be greater than 0.",
+        fallbackName,
+        quantity: quantityValue,
+        price: priceValue,
+      };
+    }
+
+    if (quantityValue > MAX_MANUAL_QUANTITY) {
+      return {
+        valid: false,
+        error: `Quantity cannot exceed ${MAX_MANUAL_QUANTITY}.`,
+        fallbackName,
+        quantity: quantityValue,
+        price: priceValue,
+      };
+    }
+
+    if (!Number.isFinite(priceValue) || priceValue <= 0) {
+      return {
+        valid: false,
+        error: "Price must be greater than 0.",
+        fallbackName,
+        quantity: quantityValue,
+        price: priceValue,
+      };
+    }
+
+    if (priceValue > MAX_ALLOWED_PRICE) {
+      return {
+        valid: false,
+        error: `Price cannot exceed Rs ${MAX_ALLOWED_PRICE.toLocaleString("en-IN")}.`,
+        fallbackName,
+        quantity: quantityValue,
+        price: priceValue,
+      };
+    }
+
+    return {
+      valid: true,
+      error: "",
+      fallbackName,
+      quantity: quantityValue,
+      price: priceValue,
+    };
+  };
+
+  const validateQuickCreateProduct = (
+    currentName: string,
+    currentPrice: string,
+    currentGstRate: string,
+    fallbackQuery: string,
+  ): QuickCreateValidationResult => {
+    const normalizedName = normalizeProductName(currentName || fallbackQuery);
+    const normalizedPrice = Number(currentPrice);
+    const normalizedGstRate = Number(currentGstRate || "0");
+
+    if (!normalizedName) {
+      return {
+        valid: false,
+        error: "Enter a product name.",
+        normalizedName,
+        normalizedPrice,
+        normalizedGstRate,
+      };
+    }
+
+    if (
+      normalizedName.length < 2 ||
+      !hasMeaningfulProductName(normalizedName)
+    ) {
+      return {
+        valid: false,
+        error: "Enter at least 2 valid characters for the product name.",
+        normalizedName,
+        normalizedPrice,
+        normalizedGstRate,
+      };
+    }
+
+    if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
+      return {
+        valid: false,
+        error: "Enter a valid selling price greater than 0.",
+        normalizedName,
+        normalizedPrice,
+        normalizedGstRate,
+      };
+    }
+
+    if (normalizedPrice > MAX_ALLOWED_PRICE) {
+      return {
+        valid: false,
+        error: `Selling price cannot exceed Rs ${MAX_ALLOWED_PRICE.toLocaleString("en-IN")}.`,
+        normalizedName,
+        normalizedPrice,
+        normalizedGstRate,
+      };
+    }
+
+    if (
+      !Number.isFinite(normalizedGstRate) ||
+      !ALLOWED_GST_RATES.includes(
+        normalizedGstRate as (typeof ALLOWED_GST_RATES)[number],
+      )
+    ) {
+      return {
+        valid: false,
+        error: `GST must be one of ${ALLOWED_GST_RATES.join(", ")}%.`,
+        normalizedName,
+        normalizedPrice,
+        normalizedGstRate,
+      };
+    }
+
+    return {
+      valid: true,
+      error: "",
+      normalizedName,
+      normalizedPrice,
+      normalizedGstRate,
+    };
+  };
+
   const handleQueryChange = (value: string) => {
     setQuery(value);
     setHighlightedIndex(0);
+    setManualError("");
+    setQuickCreateError("");
 
     if (debounceTimeoutRef.current) {
       window.clearTimeout(debounceTimeoutRef.current);
@@ -129,6 +349,7 @@ export default function ProductSearch({
     setQuickCreatePrice("");
     setQuickCreateGstRate("0");
     setQuickCreateError("");
+    setManualError("");
     onOpenChange(false);
   };
 
@@ -138,47 +359,122 @@ export default function ProductSearch({
   };
 
   const handleAddManualItem = () => {
-    const fallbackName = manualName.trim() || query.trim();
-    const quantityValue = Number(manualQuantity);
-    const priceValue = Number(manualPrice);
+    const validation = validateManualItem(
+      manualName,
+      manualQuantity,
+      manualPrice,
+      query,
+    );
 
-    if (!fallbackName || !Number.isFinite(quantityValue) || quantityValue <= 0) {
+    if (!validation.valid) {
+      setManualError(validation.error);
       return;
     }
 
-    if (!Number.isFinite(priceValue) || priceValue <= 0) {
-      return;
-    }
-
+    setManualError("");
     onAddManualItem({
-      name: fallbackName,
-      quantity: quantityValue,
-      price: priceValue,
+      name: validation.fallbackName,
+      quantity: validation.quantity,
+      price: validation.price,
     });
     resetAndClose();
   };
+
+  const remoteSearchTerm = useMemo(
+    () => (canSearchProducts(debouncedQuery) ? debouncedQuery : ""),
+    [debouncedQuery],
+  );
 
   const {
     data: searchResults = [],
     isFetching: isSearchingProducts,
     isError: searchError,
-  } = useProductSearchQuery(debouncedQuery, { limit: 12 });
+  } = useProductSearchQuery(remoteSearchTerm, { limit: 12 });
 
   const featuredProducts = useMemo(() => products.slice(0, 8), [products]);
+  const localFilteredProducts = useMemo(() => {
+    const normalizedQuery = normalizeComparableText(debouncedQuery);
+    if (!normalizedQuery) {
+      return [] as Product[];
+    }
+
+    return products
+      .filter((product) =>
+        [product.name, product.sku, product.barcode].some((value) =>
+          normalizeComparableText(value).includes(normalizedQuery),
+        ),
+      )
+      .slice(0, 12);
+  }, [debouncedQuery, products]);
 
   const listedProducts = useMemo(() => {
     if (debouncedQuery) {
-      return searchResults;
+      return remoteSearchTerm ? searchResults : localFilteredProducts;
     }
 
     return featuredProducts;
-  }, [debouncedQuery, featuredProducts, searchResults]);
+  }, [debouncedQuery, featuredProducts, localFilteredProducts, remoteSearchTerm, searchResults]);
 
   const exactMatch = useMemo(
-    () => resolveExactMatch(listedProducts, query),
-    [listedProducts, query],
+    () => resolveExactMatch([...listedProducts, ...products], query),
+    [listedProducts, products, query],
   );
-  const canQuickCreateProduct = Boolean(query.trim()) && !exactMatch;
+  const normalizedQuery = normalizeComparableText(query);
+  const duplicateNamedProduct = useMemo(() => {
+    if (!normalizedQuery) {
+      return null;
+    }
+
+    return (
+      [...listedProducts, ...products].find(
+        (product) => normalizeComparableText(product.name) === normalizedQuery,
+      ) ?? null
+    );
+  }, [listedProducts, normalizedQuery, products]);
+  const canQuickCreateProduct =
+    query.trim().length >= 2 &&
+    !duplicateNamedProduct &&
+    hasMeaningfulProductName(query.trim());
+  const selectedProduct =
+    exactMatch ??
+    listedProducts[
+      Math.min(highlightedIndex, Math.max(listedProducts.length - 1, 0))
+    ] ??
+    null;
+  const existingProductQuantity = useMemo(() => {
+    if (!selectedProduct) {
+      return 0;
+    }
+
+    return existingItems
+      .filter((item) => item.productId === selectedProduct.id)
+      .reduce((sum, item) => sum + Math.max(0, Number(item.quantity) || 0), 0);
+  }, [existingItems, selectedProduct]);
+  const selectedProductStock = Number(selectedProduct?.stock_on_hand) || 0;
+  const selectedProductWouldExceedStock =
+    !!selectedProduct &&
+    !allowNegativeStock &&
+    selectedProductStock > 0 &&
+    existingProductQuantity >= selectedProductStock;
+  const selectedProductOutOfStock =
+    !!selectedProduct && !allowNegativeStock && selectedProductStock <= 0;
+  const blockSelectedProductAdd =
+    selectedProductOutOfStock || selectedProductWouldExceedStock;
+  const quickCreateValidation = validateQuickCreateProduct(
+    quickCreateName,
+    quickCreatePrice,
+    quickCreateGstRate,
+    query,
+  );
+  const manualValidation = validateManualItem(
+    manualName,
+    manualQuantity,
+    manualPrice,
+    query,
+  );
+  const canAddSelectedProduct =
+    Boolean(query.trim()) && Boolean(selectedProduct) && !blockSelectedProductAdd;
+  const queryTooShortForRemoteSearch = Boolean(debouncedQuery) && !remoteSearchTerm;
 
   const openQuickCreatePanel = (nameToUse = query.trim()) => {
     setQuickCreateName(nameToUse);
@@ -189,13 +485,21 @@ export default function ProductSearch({
   };
 
   const handleSubmitSearch = () => {
-    const highlightedProduct =
-      listedProducts[
-        Math.min(highlightedIndex, Math.max(listedProducts.length - 1, 0))
-      ] ?? null;
-    const candidate = highlightedProduct ?? exactMatch ?? null;
+    if (!query.trim()) {
+      return;
+    }
+
+    const candidate = selectedProduct;
 
     if (candidate) {
+      if (blockSelectedProductAdd) {
+        toast.error(
+          selectedProductOutOfStock
+            ? `${candidate.name} is out of stock.`
+            : `Only ${selectedProductStock} in stock for ${candidate.name}.`,
+        );
+        return;
+      }
       addProductAndClose(candidate);
       return;
     }
@@ -211,31 +515,22 @@ export default function ProductSearch({
   };
 
   const handleQuickCreateProduct = async () => {
-    const normalizedName = quickCreateName.trim() || query.trim();
-    const normalizedPrice = Number(quickCreatePrice);
-    const normalizedGstRate = Number(quickCreateGstRate || "0");
-
-    if (!normalizedName) {
-      setQuickCreateError("Enter a product name.");
+    if (!quickCreateValidation.valid) {
+      setQuickCreateError(quickCreateValidation.error);
       return;
     }
 
-    if (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0) {
-      setQuickCreateError("Enter a valid selling price.");
-      return;
-    }
-
-    if (!Number.isFinite(normalizedGstRate) || normalizedGstRate < 0) {
-      setQuickCreateError("Enter a valid GST percentage.");
+    if (duplicateNamedProduct) {
+      setQuickCreateError("Product already exists. Use the existing item instead.");
       return;
     }
 
     try {
       setQuickCreateError("");
       await onQuickCreateProduct({
-        name: normalizedName,
-        price: normalizedPrice,
-        gstRate: normalizedGstRate,
+        name: quickCreateValidation.normalizedName,
+        price: quickCreateValidation.normalizedPrice,
+        gstRate: quickCreateValidation.normalizedGstRate,
       });
       resetAndClose();
     } catch (error) {
@@ -332,6 +627,12 @@ export default function ProductSearch({
                   {isHindi ? "Retry" : "Retry"}
                 </Button>
               </div>
+            ) : queryTooShortForRemoteSearch ? (
+              <div className="px-4 py-4 text-sm text-muted-foreground">
+                {isHindi
+                  ? "Kam se kam 2 characters type karein ya barcode scan karein."
+                  : "Type at least 2 characters to search, or scan a barcode."}
+              </div>
             ) : isSearchingProducts || (!debouncedQuery && productsLoading) ? (
               <div className="flex items-center gap-2 px-4 py-4 text-sm text-muted-foreground">
                 <Loader2 size={16} className="animate-spin" />
@@ -361,6 +662,17 @@ export default function ProductSearch({
                       onClick={() => openQuickCreatePanel(query.trim())}
                     >
                       {`+ Add "${query.trim()}"`}
+                    </Button>
+                  </div>
+                ) : duplicateNamedProduct ? (
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-xl"
+                      onClick={() => addProductAndClose(duplicateNamedProduct)}
+                    >
+                      {isHindi ? "Existing product use karein" : "Use existing product"}
                     </Button>
                   </div>
                 ) : null}
@@ -431,11 +743,11 @@ export default function ProductSearch({
                             (isHindi ? "SKU not available" : "SKU not available")}
                         </p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-sm font-semibold text-foreground">
-                          Rs {Number(product.price || 0).toFixed(2)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
+                    <div className="text-right">
+                      <p className="text-sm font-semibold text-foreground">
+                        Rs {Number(product.price || 0).toFixed(2)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
                           GST {Number(product.gst_rate || 0)}%
                         </p>
                       </div>
@@ -444,6 +756,57 @@ export default function ProductSearch({
                 })}
               </div>
             )}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-muted/20 px-4 py-3">
+            <div className="min-w-0">
+              {selectedProduct ? (
+                <div className="grid gap-1">
+                  <p className="text-sm font-semibold text-foreground">
+                    {selectedProduct.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {`Rs ${Number(selectedProduct.price || 0).toFixed(2)} • GST ${Number(
+                      selectedProduct.gst_rate || 0,
+                    )}%`}
+                  </p>
+                  {existingProductQuantity > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      {isHindi
+                        ? `Bill me pehle se qty ${existingProductQuantity}. Dobara add karne par quantity badhegi.`
+                        : `Already in this bill with qty ${existingProductQuantity}. Adding again will increase quantity.`}
+                    </p>
+                  ) : null}
+                  {selectedProductOutOfStock ? (
+                    <p className="text-xs font-medium text-rose-600">
+                      {isHindi
+                        ? "Product out of stock hai."
+                        : "This product is out of stock."}
+                    </p>
+                  ) : selectedProductWouldExceedStock ? (
+                    <p className="text-xs font-medium text-amber-600">
+                      {isHindi
+                        ? `Sirf ${selectedProductStock} stock available hai.`
+                        : `Only ${selectedProductStock} units are available in stock.`}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {isHindi
+                    ? "Product select kijiye ya naya product create kijiye."
+                    : "Select a product or create a new one to continue."}
+                </p>
+              )}
+            </div>
+            <Button
+              type="button"
+              className="rounded-xl font-semibold"
+              onClick={handleSubmitSearch}
+              disabled={!canAddSelectedProduct}
+            >
+              {isHindi ? "Add selected product" : "Add selected product"}
+            </Button>
           </div>
         </div>
 
@@ -480,7 +843,16 @@ export default function ProductSearch({
                 </label>
                 <Input
                   value={quickCreateName}
-                  onChange={(event) => setQuickCreateName(event.target.value)}
+                  onChange={(event) => {
+                    setQuickCreateName(event.target.value);
+                    setQuickCreateError("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !creatingProduct) {
+                      event.preventDefault();
+                      void handleQuickCreateProduct();
+                    }
+                  }}
                   className="h-11"
                 />
               </div>
@@ -490,9 +862,16 @@ export default function ProductSearch({
                 </label>
                 <Input
                   value={quickCreatePrice}
-                  onChange={(event) =>
-                    setQuickCreatePrice(sanitizeDecimalInput(event.target.value))
-                  }
+                  onChange={(event) => {
+                    setQuickCreatePrice(sanitizeDecimalInput(event.target.value));
+                    setQuickCreateError("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !creatingProduct) {
+                      event.preventDefault();
+                      void handleQuickCreateProduct();
+                    }
+                  }}
                   inputMode="decimal"
                   placeholder="0.00"
                   className="h-11"
@@ -504,11 +883,18 @@ export default function ProductSearch({
                 </label>
                 <Input
                   value={quickCreateGstRate}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setQuickCreateGstRate(
                       sanitizeDecimalInput(event.target.value),
-                    )
-                  }
+                    );
+                    setQuickCreateError("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" && !creatingProduct) {
+                      event.preventDefault();
+                      void handleQuickCreateProduct();
+                    }
+                  }}
                   inputMode="decimal"
                   placeholder="0"
                   className="h-11"
@@ -518,7 +904,11 @@ export default function ProductSearch({
                 type="button"
                 className="h-11 font-semibold"
                 onClick={() => void handleQuickCreateProduct()}
-                disabled={creatingProduct}
+                disabled={
+                  creatingProduct ||
+                  !quickCreateValidation.valid ||
+                  Boolean(duplicateNamedProduct)
+                }
               >
                 {creatingProduct ? (
                   <>
@@ -533,6 +923,24 @@ export default function ProductSearch({
               </Button>
             </div>
 
+            {duplicateNamedProduct ? (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                <span>
+                  {isHindi
+                    ? "Yeh product pehle se maujood hai. Existing item use kijiye."
+                    : "This product already exists. Use the existing item instead."}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-lg"
+                  onClick={() => addProductAndClose(duplicateNamedProduct)}
+                >
+                  {isHindi ? "Use existing" : "Use existing"}
+                </Button>
+              </div>
+            ) : null}
             {quickCreateError ? (
               <p className="mt-3 text-sm text-destructive">{quickCreateError}</p>
             ) : null}
@@ -563,7 +971,16 @@ export default function ProductSearch({
               </label>
               <Input
                 value={manualName}
-                onChange={(event) => setManualName(event.target.value)}
+                onChange={(event) => {
+                  setManualName(event.target.value);
+                  setManualError("");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleAddManualItem();
+                  }
+                }}
                 placeholder={query.trim() ? query.trim() : "Custom item name"}
                 className="h-11"
               />
@@ -574,9 +991,16 @@ export default function ProductSearch({
               </label>
               <Input
                 value={manualQuantity}
-                onChange={(event) =>
-                  setManualQuantity(sanitizeDecimalInput(event.target.value))
-                }
+                onChange={(event) => {
+                  setManualQuantity(sanitizeDecimalInput(event.target.value));
+                  setManualError("");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleAddManualItem();
+                  }
+                }}
                 inputMode="decimal"
                 className="h-11"
               />
@@ -587,9 +1011,16 @@ export default function ProductSearch({
               </label>
               <Input
                 value={manualPrice}
-                onChange={(event) =>
-                  setManualPrice(sanitizeDecimalInput(event.target.value))
-                }
+                onChange={(event) => {
+                  setManualPrice(sanitizeDecimalInput(event.target.value));
+                  setManualError("");
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    handleAddManualItem();
+                  }
+                }}
                 inputMode="decimal"
                 placeholder="0.00"
                 className="h-11"
@@ -599,15 +1030,15 @@ export default function ProductSearch({
               type="button"
               className="h-11 font-semibold"
               onClick={handleAddManualItem}
-              disabled={
-                !(manualName.trim() || query.trim()) ||
-                !(Number(manualQuantity) > 0) ||
-                !(Number(manualPrice) > 0)
-              }
+              disabled={!manualValidation.valid}
             >
               {isHindi ? "Add custom item" : "Add custom item"}
             </Button>
           </div>
+
+          {manualError ? (
+            <p className="mt-3 text-sm text-destructive">{manualError}</p>
+          ) : null}
         </div>
       </div>
     </Modal>

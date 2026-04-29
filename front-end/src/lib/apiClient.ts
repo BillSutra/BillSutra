@@ -1344,13 +1344,24 @@ export type AppNotificationType =
   | "inventory"
   | "customer"
   | "subscription"
-  | "worker";
+  | "worker"
+  | "security"
+  | "system";
+
+export type AppNotificationPriority =
+  | "critical"
+  | "warning"
+  | "info"
+  | "success";
 
 export type AppNotification = {
   id: string;
   businessId: string;
   type: AppNotificationType;
+  title: string;
   message: string;
+  actionUrl: string;
+  priority: AppNotificationPriority;
   isRead: boolean;
   createdAt: string;
 };
@@ -1706,108 +1717,19 @@ export type DashboardForecastResponse = {
 export type AssistantReply = SharedAssistantReply;
 export type AssistantHistoryMessage = SharedAssistantHistoryMessage;
 
-export type FinancialCopilotPayload = {
+export type DashboardQuickInsight = {
+  id: string;
+  tone: "positive" | "warning" | "critical" | "info";
+  title: string;
+  message: string;
+  actionUrl: string;
+};
+
+export type DashboardQuickInsightsResponse = {
   generatedAt: string;
-  language: "en" | "hi" | "hinglish";
-  overview: {
-    headline: string;
-    summary: string;
-    action: string;
-  };
-  budget: {
-    suggestedMonthlyBudget: number;
-    remainingSafeToSpend: number;
-    fixedExpensesEstimate: number;
-    spentThisMonth: number;
-    projectedMonthSpend: number;
-    dailySafeSpend: number;
-    status: "on_track" | "caution" | "over_budget";
-    summary: string;
-    action: string;
-  };
-  savings: {
-    summary: string;
-    monthlySavingsPotential: number;
-    opportunities: Array<{
-      id: string;
-      title: string;
-      description: string;
-      potentialMonthlySavings: number;
-      category: string;
-      priority: "high" | "medium" | "low";
-    }>;
-  };
-  reminders: {
-    summary: string;
-    items: Array<{
-      id: string;
-      title: string;
-      description: string;
-      dueDate: string | null;
-      daysUntilDue: number | null;
-      monthlyAmount: number;
-      priority: "high" | "medium" | "low";
-      suggestedAction: string;
-      behavior: "early" | "on_time" | "late";
-    }>;
-  };
-  healthScore: {
-    score: number;
-    band: "excellent" | "good" | "needs_improvement" | "poor";
-    summary: string;
-    nextBestAction: string;
-    breakdown: Array<{
-      label: string;
-      score: number;
-      outOf: number;
-    }>;
-  };
-  behaviorInsights: {
-    summary: string;
-    items: Array<{
-      id: string;
-      title: string;
-      description: string;
-      priority: "high" | "medium" | "low";
-    }>;
-  };
-  nudges: Array<{
-    id: string;
-    tone: "positive" | "warning" | "critical" | "info";
-    message: string;
-    action: string;
-  }>;
-  goals: {
-    projectedMonthlySavings: number;
-    summary: string;
-    items: Array<{
-      id: number;
-      title: string;
-      emoji: string | null;
-      targetAmount: number;
-      currentAmount: number;
-      monthlyContributionTarget: number | null;
-      targetDate: string | null;
-      progressPercent: number;
-      remainingAmount: number;
-      projectedCompletionDate: string | null;
-      monthsToGoal: number | null;
-      summary: string;
-    }>;
-  };
-  decision: {
-    amount: number;
-    verdict: "safe" | "warning" | "risky";
-    summary: string;
-    explanation: string;
-    suggestedDelayDays: number;
-    impactOnBudget: number;
-    safeRoomAfterPurchase: number;
-    reserveForUpcomingExpenses: number;
-    currentBalanceEstimate: number;
-    projectedClosingBalance: number;
-  } | null;
-  examples: string[];
+  headline: string;
+  summary: string;
+  items: DashboardQuickInsight[];
 };
 
 export type FinancialGoalRecord = {
@@ -3304,12 +3226,15 @@ export const fetchDashboardForecast =
     return response.data.data as DashboardForecastResponse;
   };
 
-export const fetchFinancialCopilot = async (params?: {
+export const fetchDashboardQuickInsights = async (params?: {
   language?: "en" | "hi";
-  amount?: number;
-}): Promise<FinancialCopilotPayload> => {
-  const response = await apiClient.get("/copilot/summary", { params });
-  return response.data.data as FinancialCopilotPayload;
+  range?: "7d" | "30d" | "90d" | "ytd" | "custom";
+  startDate?: string;
+  endDate?: string;
+  granularity?: "day" | "week" | "month";
+}): Promise<DashboardQuickInsightsResponse> => {
+  const response = await apiClient.get("/dashboard/quick-insights", { params });
+  return response.data.data as DashboardQuickInsightsResponse;
 };
 
 export const fetchFinancialGoals = async (): Promise<FinancialGoalRecord[]> => {

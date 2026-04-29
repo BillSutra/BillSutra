@@ -10,7 +10,10 @@ export const enqueueNotificationCreation = async (params: {
   userId: number;
   businessId: string;
   type: AppNotificationType;
+  title?: string | null;
   message: string;
+  actionUrl?: string | null;
+  priority?: "critical" | "warning" | "info" | "success" | null;
   referenceKey?: string | null;
   context?: AppQueueContextInput;
 }) => {
@@ -23,7 +26,10 @@ export const enqueueNotificationCreation = async (params: {
     payload: {
       businessId: params.businessId,
       type: params.type,
+      title: params.title,
       message: params.message,
+      actionUrl: params.actionUrl,
+      priority: params.priority,
       referenceKey: params.referenceKey,
     },
     context: {

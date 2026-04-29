@@ -5,10 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "node --enable-source-maps dist/index.js",
     "worker": "tsx src/queues/worker.ts",
     "worker:dev": "tsx watch src/queues/worker.ts",
-    "worker:start": "node dist/queues/worker.js",
+    "worker:start": "node --enable-source-maps dist/queues/worker.js",
     "watch": "tsc -w",
     "dev": "tsx watch src/index.ts",
     "test:database-url": "tsx --test src/config/databaseUrl.test.ts",
@@ -21,6 +21,7 @@
     "test:settings-security": "tsx --test src/routes/settingsSecurity.contract.test.ts",
     "face:audit": "tsx src/scripts/auditFaceEmbeddings.ts",
     "face:migrate": "tsx src/scripts/migrateFaceEncodings.ts",
+    "analytics:backfill": "tsx src/scripts/backfillAnalyticsDailyStats.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "seed": "prisma db seed"

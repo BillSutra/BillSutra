@@ -9,6 +9,7 @@ import {
   resolveDashboardFilters,
 } from "../services/dashboardAnalyticsService.js";
 import { buildDashboardForecast } from "../services/dashboardForecastService.js";
+import { buildDashboardQuickInsights } from "../services/dashboardQuickInsights.service.js";
 import { onDashboardUpdate } from "../services/dashboardRealtime.js";
 import {
   getAnalyticsDailyStatsRange,
@@ -416,6 +417,48 @@ class DashboardController {
       return sendResponse(res, 200, { data });
     } catch (error) {
       console.error("Dashboard metrics error:", error);
+      return sendResponse(res, 500, {
+        message: "Internal server error",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  static async quickInsights(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return sendResponse(res, 401, { message: "Unauthorized" });
+      }
+
+      const language =
+        typeof req.query.language === "string" ? req.query.language : "en";
+      const cacheQuery = { ...req.query, mode: language };
+      const cacheKey = buildDashboardEndpointCacheKey(
+        "quick-insights",
+        userId,
+        cacheQuery,
+      );
+      const cached = await getDashboardEndpointCache(cacheKey);
+      if (cached) {
+        return sendResponse(res, 200, { data: cached });
+      }
+
+      const data = await buildDashboardQuickInsights({
+        userId,
+        language,
+        filters: {
+          range: req.query.range,
+          startDate: req.query.startDate,
+          endDate: req.query.endDate,
+          granularity: req.query.granularity,
+        },
+      });
+
+      void setDashboardEndpointCache(cacheKey, data);
+      return sendResponse(res, 200, { data });
+    } catch (error) {
+      console.error("Dashboard quick insights error:", error);
       return sendResponse(res, 500, {
         message: "Internal server error",
         error: error instanceof Error ? error.message : String(error),

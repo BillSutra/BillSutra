@@ -36,6 +36,7 @@ yarn-error.log*
 !.env.development.example
 !.env.staging.example
 !.env.production.example
+.env.sentry-build-plugin
 
 # vercel
 .vercel

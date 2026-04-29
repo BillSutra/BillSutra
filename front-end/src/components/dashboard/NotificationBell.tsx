@@ -5,9 +5,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Bell,
+  BellRing,
   BriefcaseBusiness,
   CreditCard,
   Package,
+  Shield,
   Sparkles,
   Users,
 } from "lucide-react";
@@ -62,6 +64,18 @@ const typeMeta: Record<
     accent:
       "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-300",
   },
+  security: {
+    icon: Shield,
+    href: "/settings?tab=security",
+    accent:
+      "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300",
+  },
+  system: {
+    icon: BellRing,
+    href: "/dashboard",
+    accent:
+      "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-300",
+  },
 };
 
 const formatRelativeTime = (value: string, locale: string) => {
@@ -115,10 +129,20 @@ const NotificationRow = ({
       <div className="min-w-0 flex-1">
         <p
           className={cn(
-            "line-clamp-2 text-sm leading-5",
+            "line-clamp-1 text-sm leading-5",
+            notification.isRead
+              ? "text-foreground/80"
+              : "font-semibold text-foreground",
+          )}
+        >
+          {notification.title}
+        </p>
+        <p
+          className={cn(
+            "mt-1 line-clamp-2 text-xs leading-5",
             notification.isRead
               ? "text-muted-foreground"
-              : "font-medium text-foreground",
+              : "text-foreground/80",
           )}
         >
           {notification.message}
@@ -172,7 +196,7 @@ const NotificationBell = () => {
       await markRead(notification.id);
     }
 
-    router.push(typeMeta[notification.type].href);
+    router.push(notification.actionUrl || typeMeta[notification.type].href);
   };
 
   return (

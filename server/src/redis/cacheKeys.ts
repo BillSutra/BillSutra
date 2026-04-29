@@ -127,6 +127,20 @@ export const buildAnalyticsCachePrefix = (userId: number) =>
 export const buildAnalyticsStatsDirtyRedisKey = (userId: number) =>
   buildKey(...buildOwnerScope(userId), "analytics", "daily-stats", "dirty");
 
+export const buildAnalyticsStatsFallbackRedisKey = (params: {
+  userId: number;
+  startDate: string;
+  endDate: string;
+}) =>
+  buildKey(
+    ...buildOwnerScope(params.userId),
+    "analytics",
+    "daily-stats",
+    "fallback",
+    params.startDate,
+    params.endDate,
+  );
+
 export const buildInventoryInsightsRedisKey = (
   userId: number,
   warehouseId?: number,

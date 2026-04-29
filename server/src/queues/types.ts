@@ -1,6 +1,7 @@
 import type { Job } from "bullmq";
 import type { AppNotificationType } from "../services/notification.service.js";
 import type { ExportPayload } from "../modules/export/export.service.js";
+import type { AppNotificationPriority } from "../services/notification.service.js";
 
 export type AppQueueName =
   | "emails"
@@ -100,7 +101,10 @@ export type SanitizeInventoryJobPayload = {
 export type CreateNotificationJobPayload = {
   businessId: string;
   type: AppNotificationType;
+  title?: string | null;
   message: string;
+  actionUrl?: string | null;
+  priority?: AppNotificationPriority | null;
   referenceKey?: string | null;
 };
 

@@ -26,6 +26,7 @@ The backend loader reads these files in order and lets later files override earl
 4. `server/.env.<APP_ENV>.local`
 
 You can also point to a specific file with `SERVER_ENV_FILE`.
+The worker uses the same backend env files as the API server.
 
 ### Frontend env file precedence
 
@@ -50,6 +51,14 @@ Next.js standard env loading still works. The extra loader is there to support `
   - `front-end/.env.development.example`
   - `front-end/.env.staging.example`
   - `front-end/.env.production.example`
+
+## Deployment Assets Included
+
+- PM2 config: `ecosystem.config.cjs`
+- Backend container: `server/Dockerfile`
+- Frontend container: `front-end/Dockerfile`
+- Render example: `deploy/render.yaml`
+- Nginx reverse proxy example: `deploy/nginx/billsutra.conf.example`
 
 ## Local Development
 
@@ -78,19 +87,22 @@ npx prisma generate
 Frontend:
 
 ```powershell
-npm run dev:frontend
+cd front-end
+npm run dev
 ```
 
 Backend:
 
 ```powershell
-npm run dev:server
+cd server
+npm run dev
 ```
 
 Worker:
 
 ```powershell
-npm run dev:worker
+cd server
+npm run worker:dev
 ```
 
 Notes:
@@ -173,18 +185,52 @@ Why:
 - `Render` for simpler all-in-one managed services
 - `Railway` for fastest full-stack setup outside Vercel
 
+## Platform Notes
+
+### Railway
+
+- Deploy frontend separately, preferably on Vercel
+- Deploy `server` as one API service and one worker service
+- Run one dedicated scheduler service only if you want app-managed cron jobs
+- Mount a persistent volume and point `UPLOADS_ROOT` to that path
+
+### Render
+
+- Use `deploy/render.yaml` as a starting point
+- Provision one API service, one worker service, and optionally one scheduler service
+- Attach a persistent disk for uploads
+
+### AWS EC2 + Nginx + PM2
+
+- Run frontend on port `3000` and API on port `8000`
+- Use `ecosystem.config.cjs` for process management
+- Use `deploy/nginx/billsutra.conf.example` as the reverse-proxy starting point
+- Terminate TLS in Nginx or an AWS load balancer
+
+### Vercel + Railway/AWS
+
+- Vercel is the easiest frontend host for this Next.js app
+- Railway is the easiest backend/worker host
+- AWS is best if you want more control over persistent disks and networking
+
 ## PM2 Example
 
 Backend API:
 
 ```powershell
-pm2 start dist/index.js --name billsutra-api
+pm2 start ecosystem.config.cjs --only billsutra-api
 ```
 
 Worker:
 
 ```powershell
-pm2 start "npm run worker" --name billsutra-worker
+pm2 start ecosystem.config.cjs --only billsutra-worker
+```
+
+Scheduler:
+
+```powershell
+pm2 start ecosystem.config.cjs --only billsutra-scheduler
 ```
 
 ## Local Production Smoke Test
@@ -209,7 +255,7 @@ Worker:
 
 ```powershell
 cd server
-npm run worker
+npm run worker:start
 ```
 
 ## Rollback Plan

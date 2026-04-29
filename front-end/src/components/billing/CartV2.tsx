@@ -231,6 +231,8 @@ export default function CartV2({
         products={products}
         productsLoading={productsLoading}
         productsError={productsError}
+        allowNegativeStock={allowNegativeStock}
+        existingItems={activeItems}
         onOpenChange={onProductSearchOpenChange}
         onRetryProducts={onRetryProducts}
         onAddProduct={onAddProduct}

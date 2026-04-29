@@ -1,8 +1,12 @@
 import { Prisma, type AnalyticsDailyStat } from "@prisma/client";
 import prisma from "../config/db.config.js";
-import { ensureExtraEntriesTable } from "../lib/schemaCompatibility.js";
+import {
+  ensureAnalyticsDailyStatsTable,
+  ensureExtraEntriesTable,
+} from "../lib/schemaCompatibility.js";
 import {
   buildAnalyticsStatsDirtyRedisKey,
+  buildAnalyticsStatsFallbackRedisKey,
 } from "../redis/cacheKeys.js";
 import { deleteCache, getCache, setCache } from "../redis/cache.js";
 
@@ -27,6 +31,10 @@ const ANALYTICS_SYNC_REFRESH_COOLDOWN_MS = Math.max(
 const ANALYTICS_RECENT_REFRESH_DAYS = Math.max(
   Number(process.env.ANALYTICS_STATS_RECENT_REFRESH_DAYS ?? 400),
   30,
+);
+const ANALYTICS_FALLBACK_CACHE_TTL_SECONDS = Math.max(
+  Number(process.env.ANALYTICS_STATS_FALLBACK_CACHE_TTL_SECONDS ?? 30),
+  5,
 );
 
 type DailyAmountRow = {
@@ -90,7 +98,16 @@ type AnalyticsDailyStatsDirtyMarker = {
   source?: string;
 };
 
+type AnalyticsDailyStatsSupportStatus = {
+  mode: "preaggregated" | "fallback";
+  fallbackReason: string | null;
+};
+
 const dirtyRefreshCooldown = new Map<number, number>();
+let analyticsDailyStatsSupportMode: AnalyticsDailyStatsSupportStatus["mode"] =
+  "preaggregated";
+let analyticsDailyStatsFallbackReason: string | null = null;
+let analyticsDailyStatsFallbackWarningLogged = false;
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 const toCount = (value: bigint | number | null | undefined) =>
@@ -208,7 +225,7 @@ const fetchExpenseDailyRows = async (params: {
   }
 };
 
-const fetchAnalyticsSourceBounds = async (userId: number) => {
+export const fetchAnalyticsSourceBounds = async (userId: number) => {
   await ensureExtraEntriesTable();
 
   const expenseBoundsPromise = (async () => {
@@ -349,6 +366,70 @@ const markLocalDirtyRefresh = (userId: number) => {
   dirtyRefreshCooldown.set(userId, Date.now());
 };
 
+const isAnalyticsDailyStatsMissingError = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError &&
+  (error.code === "P2021" || error.code === "P2022");
+
+const setAnalyticsDailyStatsFallbackMode = (
+  reason: string,
+  error?: unknown,
+) => {
+  analyticsDailyStatsSupportMode = "fallback";
+  analyticsDailyStatsFallbackReason = reason;
+
+  if (!analyticsDailyStatsFallbackWarningLogged) {
+    analyticsDailyStatsFallbackWarningLogged = true;
+    console.warn(
+      "[analytics.daily-stats] pre-aggregated table unavailable; falling back to raw aggregation",
+      {
+        reason,
+        message: error instanceof Error ? error.message : undefined,
+      },
+    );
+  }
+};
+
+const setAnalyticsDailyStatsPreaggregatedMode = () => {
+  analyticsDailyStatsSupportMode = "preaggregated";
+  analyticsDailyStatsFallbackReason = null;
+};
+
+export const getAnalyticsDailyStatsSupportStatus =
+  (): AnalyticsDailyStatsSupportStatus => ({
+    mode: analyticsDailyStatsSupportMode,
+    fallbackReason: analyticsDailyStatsFallbackReason,
+  });
+
+export const initializeAnalyticsDailyStatsSupport = async () => {
+  try {
+    await ensureAnalyticsDailyStatsTable();
+    setAnalyticsDailyStatsPreaggregatedMode();
+  } catch (error) {
+    setAnalyticsDailyStatsFallbackMode("table_unavailable", error);
+  }
+
+  return getAnalyticsDailyStatsSupportStatus();
+};
+
+const hydrateAnalyticsDailyStatsRecord = (
+  row: AnalyticsDailyStatsRecord,
+): AnalyticsDailyStatsRecord => ({
+  ...row,
+  date: new Date(row.date),
+  updatedAt: new Date(row.updatedAt),
+});
+
+const buildFallbackCacheKey = (params: {
+  userId: number;
+  start: Date;
+  endExclusive: Date;
+}) =>
+  buildAnalyticsStatsFallbackRedisKey({
+    userId: params.userId,
+    startDate: buildDateKey(params.start),
+    endDate: buildDateKey(params.endExclusive),
+  });
+
 const toAnalyticsRecord = (
   row: AnalyticsDailyStat,
 ): AnalyticsDailyStatsRecord => ({
@@ -380,6 +461,15 @@ export const rebuildAnalyticsDailyStatsRange = async (params: {
   start: Date;
   endExclusive: Date;
 }) => {
+  if (analyticsDailyStatsSupportMode !== "fallback") {
+    try {
+      await ensureAnalyticsDailyStatsTable();
+      setAnalyticsDailyStatsPreaggregatedMode();
+    } catch (error) {
+      setAnalyticsDailyStatsFallbackMode("table_unavailable", error);
+    }
+  }
+
   const start = startOfDayUtc(params.start);
   const endExclusive = startOfDayUtc(params.endExclusive);
 
@@ -734,8 +824,55 @@ export const rebuildAnalyticsDailyStatsRange = async (params: {
     suppliersCreated: item.suppliersCreated,
   }));
 
-  await prisma.$transaction([
-    prisma.analyticsDailyStat.deleteMany({
+  const computedRows: AnalyticsDailyStatsRecord[] = createData.map((item) => ({
+    date: item.date,
+    bookedSales: item.bookedSales,
+    collectedSales: item.collectedSales,
+    pendingSales: item.pendingSales,
+    saleCount: item.saleCount,
+    invoiceBilled: item.invoiceBilled,
+    invoiceCount: item.invoiceCount,
+    invoiceCollections: item.invoiceCollections,
+    invoicePending: item.invoicePending,
+    bookedPurchases: item.bookedPurchases,
+    cashOutPurchases: item.cashOutPurchases,
+    pendingPurchases: item.pendingPurchases,
+    purchaseCount: item.purchaseCount,
+    expenses: item.expenses,
+    extraIncome: item.extraIncome,
+    extraExpense: item.extraExpense,
+    extraLoss: item.extraLoss,
+    extraInvestment: item.extraInvestment,
+    customersCreated: item.customersCreated,
+    suppliersCreated: item.suppliersCreated,
+    updatedAt: new Date(),
+  }));
+
+  if (analyticsDailyStatsSupportMode === "fallback") {
+    return computedRows;
+  }
+
+  try {
+    await prisma.$transaction([
+      prisma.analyticsDailyStat.deleteMany({
+        where: {
+          userId: params.userId,
+          date: {
+            gte: start,
+            lt: endExclusive,
+          },
+        },
+      }),
+      ...(createData.length > 0
+        ? [
+            prisma.analyticsDailyStat.createMany({
+              data: createData,
+            }),
+          ]
+        : []),
+    ]);
+
+    const persistedRows = await prisma.analyticsDailyStat.findMany({
       where: {
         userId: params.userId,
         date: {
@@ -743,28 +880,18 @@ export const rebuildAnalyticsDailyStatsRange = async (params: {
           lt: endExclusive,
         },
       },
-    }),
-    ...(createData.length > 0
-      ? [
-          prisma.analyticsDailyStat.createMany({
-            data: createData,
-          }),
-        ]
-      : []),
-  ]);
+      orderBy: { date: "asc" },
+    });
 
-  const persistedRows = await prisma.analyticsDailyStat.findMany({
-    where: {
-      userId: params.userId,
-      date: {
-        gte: start,
-        lt: endExclusive,
-      },
-    },
-    orderBy: { date: "asc" },
-  });
+    return persistedRows.map(toAnalyticsRecord);
+  } catch (error) {
+    if (!isAnalyticsDailyStatsMissingError(error)) {
+      throw error;
+    }
 
-  return persistedRows.map(toAnalyticsRecord);
+    setAnalyticsDailyStatsFallbackMode("table_missing_at_runtime", error);
+    return computedRows;
+  }
 };
 
 export const getAnalyticsDailyStatsRange = async (params: {
@@ -780,21 +907,69 @@ export const getAnalyticsDailyStatsRange = async (params: {
     return [] as AnalyticsDailyStatsRecord[];
   }
 
+  if (analyticsDailyStatsSupportMode !== "fallback") {
+    try {
+      await ensureAnalyticsDailyStatsTable();
+      setAnalyticsDailyStatsPreaggregatedMode();
+    } catch (error) {
+      setAnalyticsDailyStatsFallbackMode("table_unavailable", error);
+    }
+  }
+
+  const getFallbackRows = async () => {
+    const cacheKey = buildFallbackCacheKey({
+      userId: params.userId,
+      start,
+      endExclusive,
+    });
+    const cached = await getCache<AnalyticsDailyStatsRecord[]>(cacheKey);
+    if (cached) {
+      return cached.map(hydrateAnalyticsDailyStatsRecord);
+    }
+
+    const rebuiltRows = await rebuildAnalyticsDailyStatsRange({
+      userId: params.userId,
+      start,
+      endExclusive,
+    });
+    await setCache(
+      cacheKey,
+      rebuiltRows,
+      ANALYTICS_FALLBACK_CACHE_TTL_SECONDS,
+    );
+    return rebuiltRows;
+  };
+
+  if (analyticsDailyStatsSupportMode === "fallback") {
+    return getFallbackRows();
+  }
+
   const expectedDays = buildDateSeries(start, endExclusive).length;
   const dirtyMarker = params.refreshIfDirty === false
     ? null
     : await getAnalyticsStatsDirtyMarker(params.userId);
 
-  let rows = await prisma.analyticsDailyStat.findMany({
-    where: {
-      userId: params.userId,
-      date: {
-        gte: start,
-        lt: endExclusive,
+  let rows: AnalyticsDailyStat[];
+
+  try {
+    rows = await prisma.analyticsDailyStat.findMany({
+      where: {
+        userId: params.userId,
+        date: {
+          gte: start,
+          lt: endExclusive,
+        },
       },
-    },
-    orderBy: { date: "asc" },
-  });
+      orderBy: { date: "asc" },
+    });
+  } catch (error) {
+    if (!isAnalyticsDailyStatsMissingError(error)) {
+      throw error;
+    }
+
+    setAnalyticsDailyStatsFallbackMode("table_missing_at_runtime", error);
+    return getFallbackRows();
+  }
 
   const hasMissingDays = (() => {
     if (rows.length !== expectedDays) {

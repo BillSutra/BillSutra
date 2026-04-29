@@ -90,7 +90,13 @@ if (process.env.NEXT_PUBLIC_SENTRY_DSN || process.env.SENTRY_DSN) {
   try {
     const { withSentryConfig } = await import("@sentry/nextjs");
     exportedConfig = withSentryConfig(nextConfig, {
+      org: process.env.SENTRY_ORG,
+      project: process.env.SENTRY_PROJECT,
+      authToken: process.env.SENTRY_AUTH_TOKEN,
       silent: true,
+      disableLogger: true,
+      telemetry: false,
+      widenClientFileUpload: false,
       webpack: {
         treeshake: {
           removeDebugLogging: true,

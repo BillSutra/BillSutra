@@ -2466,6 +2466,7 @@ const SimpleBillClient = ({
 
       let mergedItemId: string | null = null;
       let blockedByStock = false;
+      let mergedExistingProduct = false;
 
       updateBillState((current) => {
         const existingIndex = current.items.findIndex(
@@ -2485,6 +2486,7 @@ const SimpleBillClient = ({
           }
 
           mergedItemId = existingItem.id;
+          mergedExistingProduct = true;
 
           return {
             ...current,
@@ -2546,6 +2548,10 @@ const SimpleBillClient = ({
           itemQuantityRefs.current[mergedItemId]?.focus();
         }
       }, 0);
+
+      if (mergedExistingProduct) {
+        toast.success(`${product.name} quantity increased in the bill.`);
+      }
     },
     [allowNegativeStock, selectedTaxMode, updateBillState],
   );
@@ -2574,6 +2580,7 @@ const SimpleBillClient = ({
       }
 
       let targetItemId: string | null = null;
+      let mergedExistingItem = false;
 
       updateBillState((current) => {
         const existingIndex = current.items.findIndex(
@@ -2586,6 +2593,7 @@ const SimpleBillClient = ({
         if (existingIndex >= 0) {
           const existingItem = current.items[existingIndex];
           targetItemId = existingItem.id;
+          mergedExistingItem = true;
           return {
             ...current,
             items: current.items.map((item, index) =>
@@ -2641,6 +2649,10 @@ const SimpleBillClient = ({
           itemQuantityRefs.current[targetItemId]?.focus();
         }
       }, 0);
+
+      if (mergedExistingItem) {
+        toast.success(`${trimmedName} quantity increased in the bill.`);
+      }
     },
     [gstRate, selectedTaxMode, updateBillState],
   );
