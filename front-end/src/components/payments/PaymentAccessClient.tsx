@@ -1,6 +1,6 @@
 "use client";
 
-import Script from "next/script";
+import NextScript from "next/script";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -43,6 +43,9 @@ type PaymentAccessClientProps = {
   userName: string;
   userEmail: string;
 };
+
+const RAZORPAY_CHECKOUT_SCRIPT_URL =
+  "https://checkout.razorpay.com/v1/checkout.js";
 
 type RazorpaySuccessPayload = {
   razorpay_order_id: string;
@@ -391,7 +394,10 @@ export default function PaymentAccessClient({
 
   return (
     <>
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+      <NextScript
+        src={RAZORPAY_CHECKOUT_SCRIPT_URL}
+        strategy="lazyOnload"
+      />
 
       <div className="grid gap-6">
         <Card className="overflow-hidden border-0 bg-[linear-gradient(135deg,#0f172a_0%,#1d4ed8_48%,#38bdf8_100%)] text-white shadow-[0_36px_90px_-54px_rgba(37,99,235,0.7)]">
