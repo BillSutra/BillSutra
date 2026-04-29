@@ -35,7 +35,10 @@ const OWNER_AUTH_COOKIE_NAMES = new Set([
   "bill_sutra_refresh_token",
   "refreshToken",
 ]);
-const ADMIN_AUTH_COOKIE_NAMES = new Set(["bill_sutra_admin_session"]);
+const ADMIN_AUTH_COOKIE_NAMES = new Set([
+  "bill_sutra_admin_session",
+  "bill_sutra_admin_refresh",
+]);
 const csrfDiagnosticsEnabled =
   process.env.AUTH_DIAGNOSTICS_ENABLED === "true" ||
   (process.env.NODE_ENV !== "production" &&

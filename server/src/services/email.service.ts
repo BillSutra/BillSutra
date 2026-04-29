@@ -288,7 +288,7 @@ export const sendPlanApprovedEmail = async ({
     user_name: payment.user.name,
     plan_name: planNameMap[payment.plan_id] ?? payment.plan_id,
     amount: Number(payment.amount),
-    status_page_url: `${getFrontendAppUrl()}/payments`,
+    status_page_url: `${getFrontendAppUrl()}/payments/access`,
   }, {
     audit: {
       userId: payment.user_id,

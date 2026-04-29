@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 import {
-  ADMIN_TOKEN_COOKIE_KEY,
+  ADMIN_SESSION_COOKIE_KEY,
+  ADMIN_TOKEN_STORAGE_KEY,
   getAdminRoleFromToken,
   SUPER_ADMIN_ROLE,
 } from "@/lib/adminAuthShared";
@@ -11,7 +12,9 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
   if (pathname.startsWith("/admin")) {
-    const adminToken = request.cookies.get(ADMIN_TOKEN_COOKIE_KEY)?.value;
+    const adminToken =
+      request.cookies.get(ADMIN_SESSION_COOKIE_KEY)?.value ??
+      request.cookies.get(ADMIN_TOKEN_STORAGE_KEY)?.value;
     const adminRole = getAdminRoleFromToken(adminToken);
     const isAdminLoginRoute = pathname === "/admin/login";
 

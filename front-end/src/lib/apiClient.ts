@@ -880,10 +880,23 @@ export type Invoice = {
       | "CARD"
       | "BANK_TRANSFER"
       | "UPI"
+      | "NEFT"
+      | "RTGS"
+      | "IMPS"
       | "CHEQUE"
+      | "WALLET"
       | "OTHER"
       | null;
+    provider?: string | null;
+    transaction_id?: string | null;
+    utrNumber?: string | null;
+    reference?: string | null;
+    notes?: string | null;
+    chequeNumber?: string | null;
+    bankName?: string | null;
+    depositDate?: string | null;
     paid_at?: string | null;
+    created_at?: string | null;
   }>;
   items: Array<{
     id: number;
@@ -1233,14 +1246,80 @@ const buildDashboardFilterParams = (filters?: DashboardOverviewFilters) => {
 export type PaymentInput = {
   invoice_id: number;
   amount: number;
-  method?: "CASH" | "CARD" | "BANK_TRANSFER" | "UPI" | "CHEQUE" | "OTHER";
+  status: "PAID" | "PARTIAL" | "PENDING" | "FAILED";
+  method:
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "NEFT"
+    | "RTGS"
+    | "IMPS"
+    | "CHEQUE"
+    | "WALLET"
+    | "OTHER";
   provider?: string;
   transaction_id?: string;
   reference?: string;
+  notes?: string;
+  cheque_number?: string;
+  bank_name?: string;
+  deposit_date?: string | Date;
+  failure_reason?: string;
   paid_at?: string | Date;
 };
 
 export type PaymentUpdateInput = Partial<Omit<PaymentInput, "invoice_id">>;
+
+export type PaymentRecord = {
+  id: number;
+  user_id: number;
+  invoice_id: number;
+  amount: number;
+  method:
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "NEFT"
+    | "RTGS"
+    | "IMPS"
+    | "CHEQUE"
+    | "WALLET"
+    | "OTHER"
+    | null;
+  provider?: string | null;
+  utrNumber?: string | null;
+  transaction_id?: string | null;
+  reference?: string | null;
+  notes?: string | null;
+  chequeNumber?: string | null;
+  bankName?: string | null;
+  depositDate?: string | null;
+  proofUrl?: string | null;
+  proofFileName?: string | null;
+  proofMimeType?: string | null;
+  proofSize?: number | null;
+  uploadedAt?: string | null;
+  uploadedBy?: string | null;
+  verifiedBy?: string | null;
+  hasProof?: boolean;
+  paid_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  invoice?: {
+    id: number;
+    invoice_number: string;
+    status: string;
+    total: number;
+    due_date?: string | null;
+    customer?: {
+      id: number;
+      name: string;
+      email?: string | null;
+    } | null;
+  };
+};
 
 export type AccessPaymentRecord = {
   id: string;
@@ -2729,6 +2808,29 @@ export const deleteInvoice = async (invoiceId: number): Promise<void> => {
   await apiClient.delete(`/invoices/${invoiceId}`);
 };
 
+export const fetchPayments = async (
+  options?: { signal?: AbortSignal },
+): Promise<PaymentRecord[]> => {
+  const response = await apiClient.get("/payments", { signal: options?.signal });
+  return response.data.data as PaymentRecord[];
+};
+
+export const checkPaymentTransactionReference = async (params: {
+  transaction_id: string;
+  payment_id?: number;
+  signal?: AbortSignal;
+}): Promise<{ exists: boolean }> => {
+  const response = await apiClient.get("/payments/reference/check", {
+    params: {
+      transaction_id: params.transaction_id,
+      ...(params.payment_id ? { payment_id: params.payment_id } : {}),
+    },
+    signal: params.signal,
+  });
+
+  return response.data.data as { exists: boolean };
+};
+
 export const createPayment = async (payload: PaymentInput): Promise<void> => {
   await apiClient.post("/payments", payload);
 };
@@ -2738,6 +2840,42 @@ export const updatePayment = async (
   payload: PaymentUpdateInput,
 ): Promise<void> => {
   await apiClient.put(`/payments/${paymentId}`, payload);
+};
+
+export const deletePayment = async (paymentId: number): Promise<void> => {
+  await apiClient.delete(`/payments/${paymentId}`);
+};
+
+export const uploadPaymentProof = async (
+  paymentId: number,
+  file: File,
+  options?: {
+    onUploadProgress?: (progressPercent: number) => void;
+  },
+): Promise<PaymentRecord> => {
+  const formData = new FormData();
+  formData.append("paymentProof", file);
+
+  const response = await apiClient.post(`/payments/${paymentId}/proof`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (event) => {
+      if (!options?.onUploadProgress || !event.total || event.total <= 0) {
+        return;
+      }
+
+      const progressPercent = Math.round((event.loaded / event.total) * 100);
+      options.onUploadProgress(progressPercent);
+    },
+  });
+
+  return response.data.data as PaymentRecord;
+};
+
+export const deletePaymentProof = async (
+  paymentId: number,
+): Promise<PaymentRecord> => {
+  const response = await apiClient.delete(`/payments/${paymentId}/proof`);
+  return response.data.data as PaymentRecord;
 };
 
 export const fetchAccessPaymentStatus =

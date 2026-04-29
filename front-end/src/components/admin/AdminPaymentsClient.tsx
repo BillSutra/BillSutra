@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { isAxiosError } from "axios";
-import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -24,14 +22,15 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { clearAdminToken } from "@/lib/adminAuth";
 import {
   approveAdminPayment,
   fetchAdminPayments,
-  fetchAdminSession,
+  isAdminRequestCanceled,
+  isAdminUnauthorizedError,
   rejectAdminPayment,
   type AdminAccessPaymentRecord,
 } from "@/lib/adminApiClient";
+import { useAdminAuth } from "@/providers/AdminAuthProvider";
 
 type FilterKey = "all" | "pending" | "approved" | "rejected";
 
@@ -78,7 +77,7 @@ const getPaymentUserEmail = (payment: AdminAccessPaymentRecord) =>
   payment.user?.email?.trim() || "Email unavailable";
 
 export default function AdminPaymentsClient() {
-  const router = useRouter();
+  const { status } = useAdminAuth();
   const [payments, setPayments] = useState<AdminAccessPaymentRecord[]>([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<FilterKey>("all");
@@ -90,22 +89,13 @@ export default function AdminPaymentsClient() {
 
   const deferredQuery = useDeferredValue(query.trim().toLowerCase());
 
-  const handleUnauthorized = () => {
-    clearAdminToken();
-    router.replace("/admin/login");
-  };
-
-  const loadPayments = async () => {
+  const loadPayments = async (signal?: AbortSignal) => {
     try {
       setError(null);
-      const nextPayments = await fetchAdminPayments();
+      const nextPayments = await fetchAdminPayments({ signal });
       setPayments(nextPayments);
     } catch (loadError) {
-      if (
-        isAxiosError(loadError) &&
-        [401, 403].includes(loadError.response?.status ?? 0)
-      ) {
-        handleUnauthorized();
+      if (isAdminRequestCanceled(loadError) || isAdminUnauthorizedError(loadError)) {
         return;
       }
 
@@ -118,32 +108,23 @@ export default function AdminPaymentsClient() {
   };
 
   useEffect(() => {
-    const run = async () => {
-      setIsLoading(true);
-      try {
-        await fetchAdminSession();
-        await loadPayments();
-      } catch (sessionError) {
-        if (
-          isAxiosError(sessionError) &&
-          [401, 403].includes(sessionError.response?.status ?? 0)
-        ) {
-          handleUnauthorized();
-          return;
-        }
+    if (status !== "authenticated") {
+      return;
+    }
 
-        setError(
-          sessionError instanceof Error
-            ? sessionError.message
-            : "Unable to restore admin session.",
-        );
-      } finally {
+    const controller = new AbortController();
+
+    setIsLoading(true);
+    void loadPayments(controller.signal).finally(() => {
+      if (!controller.signal.aborted) {
         setIsLoading(false);
       }
-    };
+    });
 
-    void run();
-  }, []);
+    return () => {
+      controller.abort();
+    };
+  }, [status]);
 
   const filteredPayments = useMemo(() => {
     return payments.filter((payment) => {
@@ -194,11 +175,7 @@ export default function AdminPaymentsClient() {
         [paymentId]: "",
       }));
     } catch (reviewError) {
-      if (
-        isAxiosError(reviewError) &&
-        [401, 403].includes(reviewError.response?.status ?? 0)
-      ) {
-        handleUnauthorized();
+      if (isAdminRequestCanceled(reviewError) || isAdminUnauthorizedError(reviewError)) {
         return;
       }
 
@@ -218,7 +195,7 @@ export default function AdminPaymentsClient() {
     setIsRefreshing(false);
   };
 
-  if (isLoading) {
+  if (status !== "authenticated" || isLoading) {
     return (
       <div className="min-h-screen bg-[linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-4 py-10 text-slate-900 sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-6xl items-center justify-center rounded-3xl border border-white/70 bg-white/85 p-20 shadow-xl">

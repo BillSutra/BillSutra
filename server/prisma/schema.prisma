@@ -748,9 +748,23 @@ model Payment {
   payment_idempotency_key String? @db.VarChar(191)
 
   reference String?
+  notes String? @db.VarChar(500)
+  cheque_number String? @db.VarChar(64)
+  bank_name String? @db.VarChar(191)
+  deposit_date DateTime?
+  proof_url String? @db.VarChar(255)
+  proof_file_name String? @db.VarChar(191)
+  proof_file_path String? @db.VarChar(255)
+  proof_file_id String? @db.VarChar(191)
+  proof_mime_type String? @db.VarChar(191)
+  proof_size Int?
+  proof_uploaded_at DateTime?
+  proof_uploaded_by String? @db.VarChar(191)
+  verified_by String? @db.VarChar(191)
 
   paid_at    DateTime @default(now())
   created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   @@index([invoice_id])
   @@index([user_id])
@@ -1117,7 +1131,11 @@ enum PaymentMethod {
   CARD
   BANK_TRANSFER
   UPI
+  NEFT
+  RTGS
+  IMPS
   CHEQUE
+  WALLET
   OTHER
 }
 

@@ -1182,7 +1182,7 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
               Downgrade to Free
             </Button>
             <Button asChild variant="outline">
-              <Link href="/payments">View billing history</Link>
+              <Link href="/payments/access">View billing history</Link>
             </Button>
           </div>
         </SectionCard>

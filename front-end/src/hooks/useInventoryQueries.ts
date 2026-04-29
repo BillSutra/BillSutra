@@ -28,10 +28,12 @@ import {
   fetchInvoices,
   fetchInvoice,
   fetchInvoiceBootstrap,
+  fetchPayments,
   createInvoice,
   updateInvoice,
   deleteInvoice,
   createPayment,
+  deletePayment,
   updatePayment,
   createCategory,
   fetchSuppliers,
@@ -603,6 +605,13 @@ export const useInvoicesQuery = () =>
     ...defaultListQueryOptions,
   });
 
+export const usePaymentsQuery = () =>
+  useQuery({
+    queryKey: ["payments"],
+    queryFn: ({ signal }) => fetchPayments({ signal }),
+    ...defaultListQueryOptions,
+  });
+
 export const useInvoiceQuery = (invoiceId?: number) =>
   useQuery({
     queryKey: ["invoices", invoiceId],
@@ -723,6 +732,21 @@ export const useUpdatePaymentMutation = () => {
       id: number;
       payload: Parameters<typeof updatePayment>[1];
     }) => updatePayment(id, payload),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        queryClient.invalidateQueries({ queryKey: ["customers"] }),
+        queryClient.invalidateQueries({ queryKey: ["customer-ledger"] }),
+        queryClient.invalidateQueries({ queryKey: ["payments"] }),
+        invalidateDashboard(queryClient),
+      ]),
+  });
+};
+
+export const useDeletePaymentMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deletePayment,
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoices"] }),

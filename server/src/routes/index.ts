@@ -97,6 +97,7 @@ import {
   productCreateSchema,
   productUpdateSchema,
   paymentCreateSchema,
+  paymentTransactionReferenceCheckSchema,
   paymentUpdateSchema,
   purchaseCreateSchema,
   purchaseUpdateSchema,
@@ -193,8 +194,9 @@ router.post(
   validate({ body: adminLoginSchema }),
   AdminController.login,
 );
+router.post("/admin/refresh", AdminController.refresh);
 router.get("/admin/session", AdminAuthMiddleware, AdminController.session);
-router.post("/admin/logout", AdminAuthMiddleware, AdminController.logout);
+router.post("/admin/logout", AdminController.logout);
 router.get("/admin/summary", AdminAuthMiddleware, AdminController.summary);
 router.get(
   "/admin/businesses",
@@ -865,6 +867,13 @@ router.get(
   AccessPaymentsController.status,
 );
 router.get(
+  "/payments/reference/check",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
+  validate({ query: paymentTransactionReferenceCheckSchema }),
+  PaymentsController.checkTransactionReference,
+);
+router.get(
   "/payments/:invoiceId",
   AuthMiddleware,
   RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
@@ -884,6 +893,30 @@ router.put(
   RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
   validate({ params: idParamSchema, body: paymentUpdateSchema }),
   PaymentsController.update,
+);
+router.delete(
+  "/payments/:id",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
+  validate({ params: idParamSchema }),
+  PaymentsController.destroy,
+);
+router.post(
+  "/payments/:id/proof",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
+  paymentRateLimiter,
+  uploadRateLimiter,
+  paymentProofUploadMiddleware,
+  validate({ params: idParamSchema }),
+  PaymentsController.uploadProof,
+);
+router.delete(
+  "/payments/:id/proof",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
+  validate({ params: idParamSchema }),
+  PaymentsController.deleteProof,
 );
 router.post(
   "/payments/access/razorpay/order",

@@ -12,6 +12,7 @@ import {
   buildPublicInvoiceReference,
   buildPublicInvoiceUrl,
 } from "../../lib/appUrls.js";
+import { maybeDecryptSensitiveValue } from "../../lib/fieldEncryption.js";
 import { renderPublicInvoiceHtml } from "./publicInvoiceView.js";
 import {
   buildBusinessAddressLines,
@@ -149,6 +150,11 @@ const invoicePaymentSelect = {
   provider: true,
   transaction_id: true,
   reference: true,
+  notes: true,
+  cheque_number: true,
+  bank_name: true,
+  deposit_date: true,
+  verified_by: true,
   paid_at: true,
   created_at: true,
 } satisfies Prisma.PaymentSelect;
@@ -163,6 +169,10 @@ const invoiceInclude = {
 
 type PublicInvoiceRecord = Prisma.InvoiceGetPayload<{
   include: typeof publicInvoiceInclude;
+}>;
+
+type InvoicePaymentRecord = Prisma.PaymentGetPayload<{
+  select: typeof invoicePaymentSelect;
 }>;
 
 type CustomerInvoiceProfile = {
@@ -646,6 +656,22 @@ const formatDate = (value: Date | null | undefined) => {
   });
 };
 
+const serializeInvoicePaymentRecord = (payment: InvoicePaymentRecord) => ({
+  ...payment,
+  transaction_id: maybeDecryptSensitiveValue(payment.transaction_id),
+  utrNumber: maybeDecryptSensitiveValue(payment.transaction_id),
+  reference: maybeDecryptSensitiveValue(payment.reference),
+  notes: payment.notes ?? null,
+  chequeNumber: payment.cheque_number ?? null,
+  bankName: payment.bank_name ?? null,
+  depositDate: payment.deposit_date
+    ? new Date(payment.deposit_date).toISOString()
+    : null,
+  verifiedBy: payment.verified_by ?? null,
+  paid_at: payment.paid_at ? new Date(payment.paid_at).toISOString() : null,
+  created_at: new Date(payment.created_at).toISOString(),
+});
+
 const attachInvoiceGstMetadata = async <
   T extends
     | (Prisma.InvoiceGetPayload<{ include: typeof invoiceInclude }> & {
@@ -690,6 +716,7 @@ const attachInvoiceGstMetadata = async <
     grand_total: invoiceRow?.grand_total ?? null,
     totalPaid: paymentSnapshot.paidAmount,
     computedStatus: paymentSnapshot.dynamicPaymentStatus,
+    payments: invoice.payments.map(serializeInvoicePaymentRecord),
     items: invoice.items.map((item) => {
       const meta = itemMetaById.get(item.id);
       return {
@@ -779,6 +806,7 @@ const attachInvoiceGstMetadataBatch = async <
       grand_total: invoiceMeta?.grand_total ?? null,
       totalPaid: paymentSnapshot.paidAmount,
       computedStatus: paymentSnapshot.dynamicPaymentStatus,
+      payments: invoice.payments.map(serializeInvoicePaymentRecord),
       items: invoice.items.map((item) => {
         const meta = itemMetaById.get(item.id);
         return {

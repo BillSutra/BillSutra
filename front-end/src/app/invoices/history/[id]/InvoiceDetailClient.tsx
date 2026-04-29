@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Modal from "@/components/ui/modal";
 import {
+  checkPaymentTransactionReference,
   sendInvoiceEmail,
   type PaymentInput,
 } from "@/lib/apiClient";
@@ -33,6 +34,13 @@ import {
   formatPaymentMethodLabel,
   getInvoicePaymentSnapshot,
 } from "@/lib/invoicePayments";
+import {
+  createEmptyPaymentFormValues,
+  normalizeTransactionReference,
+  PAYMENT_METHOD_OPTIONS,
+  PAYMENT_STATUS_OPTIONS,
+  validatePaymentForm,
+} from "@/lib/paymentValidation";
 import { buildInvoiceRenderPayload } from "@/lib/invoiceRenderPayload";
 import {
   formatBusinessAddressFromRecord,
@@ -75,15 +83,6 @@ const DEFAULT_INVOICE_THEME: InvoiceTheme = {
   tableStyle: "grid",
 };
 
-const PAYMENT_METHOD_OPTIONS: Array<NonNullable<PaymentInput["method"]>> = [
-  "CASH",
-  "CARD",
-  "BANK_TRANSFER",
-  "UPI",
-  "CHEQUE",
-  "OTHER",
-];
-
 const toDateInputValue = (value?: string | null) => {
   if (!value) {
     return new Date().toISOString().slice(0, 10);
@@ -113,23 +112,32 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   const createPayment = useCreatePaymentMutation();
   const updatePayment = useUpdatePaymentMutation();
   const [partialOpen, setPartialOpen] = useState(false);
-  const [partialAmount, setPartialAmount] = useState("");
+  const [partialForm, setPartialForm] = useState(() =>
+    createEmptyPaymentFormValues({ status: "PARTIAL" }),
+  );
   const [partialError, setPartialError] = useState<string | null>(null);
   const [paymentEditOpen, setPaymentEditOpen] = useState(false);
   const [editingPaymentId, setEditingPaymentId] = useState<number | null>(null);
-  const [editingPaymentAmount, setEditingPaymentAmount] = useState("");
-  const [editingPaymentMethod, setEditingPaymentMethod] =
-    useState<NonNullable<PaymentInput["method"]>>("CASH");
-  const [editingPaymentDate, setEditingPaymentDate] = useState(
-    toDateInputValue(),
+  const [paymentEditForm, setPaymentEditForm] = useState(() =>
+    createEmptyPaymentFormValues(),
   );
   const [paymentEditError, setPaymentEditError] = useState<string | null>(null);
+  const [paymentEditFieldErrors, setPaymentEditFieldErrors] = useState<
+    ReturnType<typeof validatePaymentForm>
+  >({});
+  const [partialFieldErrors, setPartialFieldErrors] = useState<
+    ReturnType<typeof validatePaymentForm>
+  >({});
   const [invoiceEmailOpen, setInvoiceEmailOpen] = useState(false);
   const [invoiceEmailRecipient, setInvoiceEmailRecipient] = useState("");
   const [invoiceEmailError, setInvoiceEmailError] = useState<string | null>(
     null,
   );
   const [invoiceEmailSending, setInvoiceEmailSending] = useState(false);
+  const [checkingEditTransactionId, setCheckingEditTransactionId] =
+    useState(false);
+  const [checkingPartialTransactionId, setCheckingPartialTransactionId] =
+    useState(false);
   const { downloadPdf } = useInvoicePdf();
   const fallbackActiveTemplate = useMemo(
     () => ({
@@ -218,6 +226,51 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
       paymentHistory.find((payment) => payment.id === editingPaymentId) ?? null,
     [editingPaymentId, paymentHistory],
   );
+  const paymentEditDueAmount = useMemo(
+    () =>
+      paymentSnapshot && editingPayment
+        ? paymentSnapshot.remaining + Number(editingPayment.amount ?? 0)
+        : paymentSnapshot?.remaining ?? 0,
+    [editingPayment, paymentSnapshot],
+  );
+  const paymentEditLiveErrors = useMemo(
+    () =>
+      validatePaymentForm(paymentEditForm, {
+        dueAmount: paymentEditDueAmount,
+        customerName: data?.customer?.name,
+        invoiceReference: data?.invoice_number,
+      }),
+    [
+      data?.customer?.name,
+      data?.invoice_number,
+      paymentEditDueAmount,
+      paymentEditForm,
+    ],
+  );
+  const partialPaymentLiveErrors = useMemo(
+    () =>
+      validatePaymentForm(partialForm, {
+        dueAmount: paymentSnapshot?.remaining ?? 0,
+        customerName: data?.customer?.name,
+        invoiceReference: data?.invoice_number,
+      }),
+    [
+      data?.customer?.name,
+      data?.invoice_number,
+      partialForm,
+      paymentSnapshot?.remaining,
+    ],
+  );
+  const canUpdatePayment =
+    Boolean(data && editingPaymentId !== null) &&
+    Object.keys(paymentEditLiveErrors).length === 0 &&
+    paymentEditFieldErrors.transactionId !== "UTR already used." &&
+    !checkingEditTransactionId;
+  const canSavePartial =
+    Boolean(data && paymentSnapshot) &&
+    Object.keys(partialPaymentLiveErrors).length === 0 &&
+    partialFieldErrors.transactionId !== "UTR already used." &&
+    !checkingPartialTransactionId;
 
   const formatLocalizedPaymentMethod = useCallback(
     (method?: Parameters<typeof formatPaymentMethodLabel>[0]) => {
@@ -541,41 +594,51 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
 
   const openEditPaymentModal = useCallback(
     (payment: (typeof paymentHistory)[number]) => {
+      const dueBeforeWrite =
+        (paymentSnapshot?.remaining ?? 0) + Number(payment.amount ?? 0);
       setEditingPaymentId(payment.id);
-      setEditingPaymentAmount(String(Number(payment.amount ?? 0)));
-      setEditingPaymentMethod(
-        payment.method && PAYMENT_METHOD_OPTIONS.includes(payment.method)
-          ? payment.method
-          : "CASH",
+      setPaymentEditForm(
+        createEmptyPaymentFormValues({
+          amount: String(Number(payment.amount ?? 0)),
+          status: Number(payment.amount ?? 0) < dueBeforeWrite - 0.009 ? "PARTIAL" : "PAID",
+          method:
+            payment.method && PAYMENT_METHOD_OPTIONS.includes(payment.method)
+              ? payment.method
+              : "CASH",
+          paymentDate: toDateInputValue(payment.paid_at),
+          transactionId: payment.transaction_id ?? payment.utrNumber ?? "",
+          notes: payment.notes ?? "",
+          chequeNumber: payment.chequeNumber ?? "",
+          bankName: payment.bankName ?? "",
+          depositDate: toDateInputValue(payment.depositDate),
+        }),
       );
-      setEditingPaymentDate(toDateInputValue(payment.paid_at));
       setPaymentEditError(null);
+      setPaymentEditFieldErrors({});
       setPaymentEditOpen(true);
     },
-    [],
+    [paymentSnapshot],
   );
 
   const closeEditPaymentModal = useCallback(() => {
     setPaymentEditOpen(false);
     setEditingPaymentId(null);
-    setEditingPaymentAmount("");
-    setEditingPaymentMethod("CASH");
-    setEditingPaymentDate(toDateInputValue());
+    setPaymentEditForm(createEmptyPaymentFormValues());
     setPaymentEditError(null);
+    setPaymentEditFieldErrors({});
   }, []);
 
   const handleUpdatePayment = async () => {
     if (!data || editingPaymentId === null) return;
+    const nextErrors = validatePaymentForm(paymentEditForm, {
+      dueAmount: paymentEditDueAmount,
+      customerName: data.customer?.name,
+      invoiceReference: data.invoice_number,
+    });
+    setPaymentEditFieldErrors(nextErrors);
 
-    const amount = Number(editingPaymentAmount);
-    if (!Number.isFinite(amount) || amount < 0) {
-      setPaymentEditError("Payment amount must be zero or greater.");
-      return;
-    }
-
-    const paidAt = new Date(editingPaymentDate);
-    if (Number.isNaN(paidAt.getTime())) {
-      setPaymentEditError("Choose a valid payment date.");
+    if (Object.keys(nextErrors).length > 0) {
+      setPaymentEditError("Please fix the payment details before saving.");
       return;
     }
 
@@ -583,9 +646,19 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
       await updatePayment.mutateAsync({
         id: editingPaymentId,
         payload: {
-          amount,
-          method: editingPaymentMethod,
-          paid_at: paidAt.toISOString(),
+          amount: Number(paymentEditForm.amount),
+          status: paymentEditForm.status as PaymentInput["status"],
+          method: paymentEditForm.method as NonNullable<PaymentInput["method"]>,
+          transaction_id: normalizeTransactionReference(
+            paymentEditForm.transactionId,
+          ) || undefined,
+          notes: paymentEditForm.notes.trim() || undefined,
+          cheque_number: paymentEditForm.chequeNumber.trim() || undefined,
+          bank_name: paymentEditForm.bankName.trim() || undefined,
+          deposit_date: paymentEditForm.depositDate
+            ? new Date(paymentEditForm.depositDate).toISOString()
+            : undefined,
+          paid_at: new Date(paymentEditForm.paymentDate).toISOString(),
         },
       });
       await Promise.all([
@@ -601,6 +674,12 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
           ? error.message
           : "Failed to update payment";
       setPaymentEditError(message);
+      if (/transaction reference already exists/i.test(message)) {
+        setPaymentEditFieldErrors((current) => ({
+          ...current,
+          transactionId: "UTR already used.",
+        }));
+      }
       toast.error("Failed to update payment");
     }
   };
@@ -613,6 +692,8 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
         await createPayment.mutateAsync({
           invoice_id: data.id,
           amount: paymentSnapshot.remaining,
+          status: "PAID",
+          method: "CASH",
           paid_at: new Date().toISOString(),
         });
       } else {
@@ -629,34 +710,121 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
 
   const handleSavePartial = async () => {
     if (!data || !paymentSnapshot) return;
+    const nextErrors = validatePaymentForm(partialForm, {
+      dueAmount: paymentSnapshot.remaining,
+      customerName: data.customer?.name,
+      invoiceReference: data.invoice_number,
+    });
+    setPartialFieldErrors(nextErrors);
 
-    const amount = Number(partialAmount);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setPartialError(t("invoiceDetail.messages.enterValidPaidAmount"));
-      return;
-    }
-
-    if (amount >= paymentSnapshot.remaining) {
-      setPartialError(
-        t("invoiceDetail.messages.partialLessThanRemaining", {
-          amount: formatCurrency(paymentSnapshot.remaining, "INR"),
-        }),
-      );
+    if (Object.keys(nextErrors).length > 0) {
+      setPartialError("Please fix the payment details before saving.");
       return;
     }
 
     try {
       await createPayment.mutateAsync({
         invoice_id: data.id,
-        amount,
-        paid_at: new Date().toISOString(),
+        amount: Number(partialForm.amount),
+        status: partialForm.status as PaymentInput["status"],
+        method: partialForm.method as NonNullable<PaymentInput["method"]>,
+        transaction_id: normalizeTransactionReference(partialForm.transactionId) || undefined,
+        notes: partialForm.notes.trim() || undefined,
+        cheque_number: partialForm.chequeNumber.trim() || undefined,
+        bank_name: partialForm.bankName.trim() || undefined,
+        deposit_date: partialForm.depositDate
+          ? new Date(partialForm.depositDate).toISOString()
+          : undefined,
+        paid_at: new Date(partialForm.paymentDate).toISOString(),
       });
-      setPartialAmount("");
+      setPartialForm(createEmptyPaymentFormValues({ status: "PARTIAL" }));
       setPartialError(null);
+      setPartialFieldErrors({});
       setPartialOpen(false);
       toast.success(t("invoiceDetail.messages.partialRecorded"));
-    } catch {
-      setPartialError(t("invoiceDetail.messages.paymentError"));
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("invoiceDetail.messages.paymentError");
+      setPartialError(message);
+      if (/transaction reference already exists/i.test(message)) {
+        setPartialFieldErrors((current) => ({
+          ...current,
+          transactionId: "UTR already used.",
+        }));
+      }
+    }
+  };
+
+  const verifyEditTransactionReference = async () => {
+    if (
+      !paymentEditForm.method ||
+      paymentEditForm.method === "CASH" ||
+      paymentEditForm.method === "CHEQUE"
+    ) {
+      return;
+    }
+
+    const normalizedReference = normalizeTransactionReference(
+      paymentEditForm.transactionId,
+    );
+    if (normalizedReference.length < 6) {
+      return;
+    }
+
+    try {
+      setCheckingEditTransactionId(true);
+      const result = await checkPaymentTransactionReference({
+        transaction_id: normalizedReference,
+        payment_id: editingPaymentId ?? undefined,
+      });
+
+      setPaymentEditFieldErrors((current) => ({
+        ...current,
+        transactionId: result.exists
+          ? "UTR already used."
+          : current.transactionId === "UTR already used."
+            ? undefined
+            : current.transactionId,
+      }));
+    } finally {
+      setCheckingEditTransactionId(false);
+    }
+  };
+
+  const verifyPartialTransactionReference = async () => {
+    if (
+      !partialForm.method ||
+      partialForm.method === "CASH" ||
+      partialForm.method === "CHEQUE"
+    ) {
+      return;
+    }
+
+    const normalizedReference = normalizeTransactionReference(
+      partialForm.transactionId,
+    );
+    if (normalizedReference.length < 6) {
+      return;
+    }
+
+    try {
+      setCheckingPartialTransactionId(true);
+      const result = await checkPaymentTransactionReference({
+        transaction_id: normalizedReference,
+      });
+
+      setPartialFieldErrors((current) => ({
+        ...current,
+        transactionId: result.exists
+          ? "UTR already used."
+          : current.transactionId === "UTR already used."
+            ? undefined
+            : current.transactionId,
+      }));
+    } finally {
+      setCheckingPartialTransactionId(false);
     }
   };
 
@@ -1042,6 +1210,8 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
         >
           <div className="grid gap-4">
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+              <p>Customer: {data?.customer?.name ?? t("invoiceDetail.customerFallback")}</p>
+              <p className="mt-1">Invoice: {data?.invoice_number ?? "-"}</p>
               <p>
                 Invoice total: {formatCurrency(paymentSnapshot?.total ?? 0, "INR")}
               </p>
@@ -1050,53 +1220,203 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
               </p>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-payment-amount">Amount</Label>
-              <Input
-                id="edit-payment-amount"
-                type="number"
-                min="0"
-                step="0.01"
-                value={editingPaymentAmount}
-                onChange={(event) => {
-                  setEditingPaymentAmount(event.target.value);
-                  setPaymentEditError(null);
-                }}
-                placeholder="Enter payment amount"
-              />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="edit-payment-amount">Amount</Label>
+                <Input
+                  id="edit-payment-amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={paymentEditForm.amount}
+                  onChange={(event) => {
+                    setPaymentEditForm((current) => ({
+                      ...current,
+                      amount: event.target.value,
+                    }));
+                    setPaymentEditError(null);
+                  }}
+                  placeholder="Enter payment amount"
+                />
+                {paymentEditFieldErrors.amount ? (
+                  <p className="text-sm text-amber-700">{paymentEditFieldErrors.amount}</p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="edit-payment-status">Payment status</Label>
+                <select
+                  id="edit-payment-status"
+                  value={paymentEditForm.status}
+                  onChange={(event) => {
+                    setPaymentEditForm((current) => ({
+                      ...current,
+                      status: event.target.value as PaymentInput["status"],
+                    }));
+                    setPaymentEditError(null);
+                  }}
+                  className="app-field h-11 w-full rounded-xl px-3 py-2"
+                >
+                  {PAYMENT_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status === "PAID" ? "Paid" : "Partial"}
+                    </option>
+                  ))}
+                </select>
+                {paymentEditFieldErrors.status ? (
+                  <p className="text-sm text-amber-700">{paymentEditFieldErrors.status}</p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="edit-payment-method">Method</Label>
+                <select
+                  id="edit-payment-method"
+                  value={paymentEditForm.method}
+                  onChange={(event) => {
+                    setPaymentEditForm((current) => ({
+                      ...current,
+                      method: event.target.value as NonNullable<PaymentInput["method"]>,
+                      transactionId:
+                        event.target.value === "CASH" ? "" : current.transactionId,
+                    }));
+                    setPaymentEditError(null);
+                  }}
+                  className="app-field h-11 w-full rounded-xl px-3 py-2"
+                >
+                  {PAYMENT_METHOD_OPTIONS.map((method) => (
+                    <option key={method} value={method}>
+                      {formatLocalizedPaymentMethod(method)}
+                    </option>
+                  ))}
+                </select>
+                {paymentEditFieldErrors.method ? (
+                  <p className="text-sm text-amber-700">{paymentEditFieldErrors.method}</p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="edit-payment-date">Payment date</Label>
+                <Input
+                  id="edit-payment-date"
+                  type="date"
+                  value={paymentEditForm.paymentDate}
+                  onChange={(event) => {
+                    setPaymentEditForm((current) => ({
+                      ...current,
+                      paymentDate: event.target.value,
+                    }));
+                    setPaymentEditError(null);
+                  }}
+                />
+                {paymentEditFieldErrors.paymentDate ? (
+                  <p className="text-sm text-amber-700">{paymentEditFieldErrors.paymentDate}</p>
+                ) : null}
+              </div>
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="edit-payment-method">Method</Label>
-              <select
-                id="edit-payment-method"
-                value={editingPaymentMethod}
-                onChange={(event) => {
-                  setEditingPaymentMethod(
-                    event.target.value as NonNullable<PaymentInput["method"]>,
-                  );
-                  setPaymentEditError(null);
-                }}
-                className="app-field h-11 w-full rounded-xl px-3 py-2"
-              >
-                {PAYMENT_METHOD_OPTIONS.map((method) => (
-                  <option key={method} value={method}>
-                    {formatLocalizedPaymentMethod(method)}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {paymentEditForm.method !== "CASH" ? (
+              <div className="grid gap-2">
+                <Label htmlFor="edit-payment-transaction">
+                  {paymentEditForm.method === "CHEQUE"
+                    ? "Reference / deposit tracking"
+                    : "UTR / transaction reference"}
+                </Label>
+                <Input
+                  id="edit-payment-transaction"
+                  value={paymentEditForm.transactionId}
+                  onChange={(event) => {
+                    setPaymentEditForm((current) => ({
+                      ...current,
+                      transactionId: event.target.value.toUpperCase(),
+                    }));
+                    setPaymentEditFieldErrors((current) => ({
+                      ...current,
+                      transactionId: undefined,
+                    }));
+                  }}
+                  onBlur={() => void verifyEditTransactionReference()}
+                  placeholder="Enter payment reference"
+                />
+                {checkingEditTransactionId ? (
+                  <p className="text-xs text-muted-foreground">Checking reference...</p>
+                ) : null}
+                {paymentEditFieldErrors.transactionId ? (
+                  <p className="text-sm text-amber-700">{paymentEditFieldErrors.transactionId}</p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {paymentEditForm.method === "CHEQUE" ? (
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-payment-cheque-number">Cheque number</Label>
+                  <Input
+                    id="edit-payment-cheque-number"
+                    value={paymentEditForm.chequeNumber}
+                    onChange={(event) =>
+                      setPaymentEditForm((current) => ({
+                        ...current,
+                        chequeNumber: event.target.value,
+                      }))
+                    }
+                    placeholder="Enter cheque number"
+                  />
+                  {paymentEditFieldErrors.chequeNumber ? (
+                    <p className="text-sm text-amber-700">{paymentEditFieldErrors.chequeNumber}</p>
+                  ) : null}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-payment-bank-name">Bank name</Label>
+                  <Input
+                    id="edit-payment-bank-name"
+                    value={paymentEditForm.bankName}
+                    onChange={(event) =>
+                      setPaymentEditForm((current) => ({
+                        ...current,
+                        bankName: event.target.value,
+                      }))
+                    }
+                    placeholder="Enter bank name"
+                  />
+                  {paymentEditFieldErrors.bankName ? (
+                    <p className="text-sm text-amber-700">{paymentEditFieldErrors.bankName}</p>
+                  ) : null}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-payment-deposit-date">Deposit date</Label>
+                  <Input
+                    id="edit-payment-deposit-date"
+                    type="date"
+                    value={paymentEditForm.depositDate}
+                    onChange={(event) =>
+                      setPaymentEditForm((current) => ({
+                        ...current,
+                        depositDate: event.target.value,
+                      }))
+                    }
+                  />
+                  {paymentEditFieldErrors.depositDate ? (
+                    <p className="text-sm text-amber-700">{paymentEditFieldErrors.depositDate}</p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
 
             <div className="grid gap-2">
-              <Label htmlFor="edit-payment-date">Payment date</Label>
-              <Input
-                id="edit-payment-date"
-                type="date"
-                value={editingPaymentDate}
-                onChange={(event) => {
-                  setEditingPaymentDate(event.target.value);
-                  setPaymentEditError(null);
-                }}
+              <Label htmlFor="edit-payment-notes">Notes</Label>
+              <textarea
+                id="edit-payment-notes"
+                value={paymentEditForm.notes}
+                onChange={(event) =>
+                  setPaymentEditForm((current) => ({
+                    ...current,
+                    notes: event.target.value,
+                  }))
+                }
+                rows={3}
+                className="app-field w-full rounded-xl px-3 py-2"
+                placeholder="Optional payment notes"
               />
             </div>
 
@@ -1116,7 +1436,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
               <Button
                 type="button"
                 onClick={() => void handleUpdatePayment()}
-                disabled={updatePayment.isPending}
+                disabled={updatePayment.isPending || !canUpdatePayment}
               >
                 {updatePayment.isPending ? "Updating..." : "Update Payment"}
               </Button>
@@ -1129,8 +1449,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
           onOpenChange={(open) => {
             setPartialOpen(open);
             if (!open) {
-              setPartialAmount("");
+              setPartialForm(createEmptyPaymentFormValues({ status: "PARTIAL" }));
               setPartialError(null);
+              setPartialFieldErrors({});
             }
           }}
           title={t("invoiceDetail.partialModalTitle")}
@@ -1152,21 +1473,193 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
               </p>
             </div>
 
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-2">
+                <Label htmlFor="partial-payment-amount">
+                  {t("invoiceDetail.amountReceived")}
+                </Label>
+                <Input
+                  id="partial-payment-amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={partialForm.amount}
+                  onChange={(event) => {
+                    setPartialForm((current) => ({
+                      ...current,
+                      amount: event.target.value,
+                    }));
+                    setPartialError(null);
+                  }}
+                  placeholder={t("invoiceDetail.amountPlaceholder")}
+                />
+                {partialFieldErrors.amount ? (
+                  <p className="text-sm text-amber-700">{partialFieldErrors.amount}</p>
+                ) : null}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="partial-payment-date">Payment date</Label>
+                <Input
+                  id="partial-payment-date"
+                  type="date"
+                  value={partialForm.paymentDate}
+                  onChange={(event) =>
+                    setPartialForm((current) => ({
+                      ...current,
+                      paymentDate: event.target.value,
+                    }))
+                  }
+                />
+                {partialFieldErrors.paymentDate ? (
+                  <p className="text-sm text-amber-700">{partialFieldErrors.paymentDate}</p>
+                ) : null}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="partial-payment-status">Payment status</Label>
+                <select
+                  id="partial-payment-status"
+                  value={partialForm.status}
+                  onChange={(event) =>
+                    setPartialForm((current) => ({
+                      ...current,
+                      status: event.target.value as PaymentInput["status"],
+                    }))
+                  }
+                  className="app-field h-11 w-full rounded-xl px-3 py-2"
+                >
+                  {PAYMENT_STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status === "PAID" ? "Paid" : "Partial"}
+                    </option>
+                  ))}
+                </select>
+                {partialFieldErrors.status ? (
+                  <p className="text-sm text-amber-700">{partialFieldErrors.status}</p>
+                ) : null}
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="partial-payment-method">Payment method</Label>
+                <select
+                  id="partial-payment-method"
+                  value={partialForm.method}
+                  onChange={(event) =>
+                    setPartialForm((current) => ({
+                      ...current,
+                      method: event.target.value as NonNullable<PaymentInput["method"]>,
+                      transactionId:
+                        event.target.value === "CASH" ? "" : current.transactionId,
+                    }))
+                  }
+                  className="app-field h-11 w-full rounded-xl px-3 py-2"
+                >
+                  {PAYMENT_METHOD_OPTIONS.map((method) => (
+                    <option key={method} value={method}>
+                      {formatLocalizedPaymentMethod(method)}
+                    </option>
+                  ))}
+                </select>
+                {partialFieldErrors.method ? (
+                  <p className="text-sm text-amber-700">{partialFieldErrors.method}</p>
+                ) : null}
+              </div>
+            </div>
+
+            {partialForm.method !== "CASH" ? (
+              <div className="grid gap-2">
+                <Label htmlFor="partial-payment-transaction">
+                  {partialForm.method === "CHEQUE"
+                    ? "Reference / deposit tracking"
+                    : "UTR / transaction reference"}
+                </Label>
+                <Input
+                  id="partial-payment-transaction"
+                  value={partialForm.transactionId}
+                  onChange={(event) =>
+                    setPartialForm((current) => ({
+                      ...current,
+                      transactionId: event.target.value.toUpperCase(),
+                    }))
+                  }
+                  onBlur={() => void verifyPartialTransactionReference()}
+                  placeholder="Enter payment reference"
+                />
+                {checkingPartialTransactionId ? (
+                  <p className="text-xs text-muted-foreground">Checking reference...</p>
+                ) : null}
+                {partialFieldErrors.transactionId ? (
+                  <p className="text-sm text-amber-700">{partialFieldErrors.transactionId}</p>
+                ) : null}
+              </div>
+            ) : null}
+
+            {partialForm.method === "CHEQUE" ? (
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="grid gap-2">
+                  <Label htmlFor="partial-payment-cheque-number">Cheque number</Label>
+                  <Input
+                    id="partial-payment-cheque-number"
+                    value={partialForm.chequeNumber}
+                    onChange={(event) =>
+                      setPartialForm((current) => ({
+                        ...current,
+                        chequeNumber: event.target.value,
+                      }))
+                    }
+                  />
+                  {partialFieldErrors.chequeNumber ? (
+                    <p className="text-sm text-amber-700">{partialFieldErrors.chequeNumber}</p>
+                  ) : null}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="partial-payment-bank-name">Bank name</Label>
+                  <Input
+                    id="partial-payment-bank-name"
+                    value={partialForm.bankName}
+                    onChange={(event) =>
+                      setPartialForm((current) => ({
+                        ...current,
+                        bankName: event.target.value,
+                      }))
+                    }
+                  />
+                  {partialFieldErrors.bankName ? (
+                    <p className="text-sm text-amber-700">{partialFieldErrors.bankName}</p>
+                  ) : null}
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="partial-payment-deposit-date">Deposit date</Label>
+                  <Input
+                    id="partial-payment-deposit-date"
+                    type="date"
+                    value={partialForm.depositDate}
+                    onChange={(event) =>
+                      setPartialForm((current) => ({
+                        ...current,
+                        depositDate: event.target.value,
+                      }))
+                    }
+                  />
+                  {partialFieldErrors.depositDate ? (
+                    <p className="text-sm text-amber-700">{partialFieldErrors.depositDate}</p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
             <div className="grid gap-2">
-              <Label htmlFor="partial-payment-amount">
-                {t("invoiceDetail.amountReceived")}
-              </Label>
-              <Input
-                id="partial-payment-amount"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={partialAmount}
-                onChange={(event) => {
-                  setPartialAmount(event.target.value);
-                  setPartialError(null);
-                }}
-                placeholder={t("invoiceDetail.amountPlaceholder")}
+              <Label htmlFor="partial-payment-notes">Notes</Label>
+              <textarea
+                id="partial-payment-notes"
+                value={partialForm.notes}
+                onChange={(event) =>
+                  setPartialForm((current) => ({
+                    ...current,
+                    notes: event.target.value,
+                  }))
+                }
+                rows={3}
+                className="app-field w-full rounded-xl px-3 py-2"
+                placeholder="Optional payment notes"
               />
             </div>
 
@@ -1180,8 +1673,9 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
                 variant="outline"
                 onClick={() => {
                   setPartialOpen(false);
-                  setPartialAmount("");
+                  setPartialForm(createEmptyPaymentFormValues({ status: "PARTIAL" }));
                   setPartialError(null);
+                  setPartialFieldErrors({});
                 }}
               >
                 {t("common.cancel")}
@@ -1189,7 +1683,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
               <Button
                 type="button"
                 onClick={() => void handleSavePartial()}
-                disabled={createPayment.isPending}
+                disabled={createPayment.isPending || !canSavePartial}
               >
                 {t("invoiceDetail.savePayment")}
               </Button>

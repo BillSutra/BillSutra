@@ -69,13 +69,13 @@ const AdminAuthMiddleware = (
 ): void => {
   const { headerToken, cookieToken } = getAdminTokenFromRequest(req);
 
-  if (headerToken) {
-    verifyAdminToken(headerToken, req, res, next);
+  if (cookieToken) {
+    verifyAdminToken(cookieToken, req, res, next);
     return;
   }
 
-  if (cookieToken) {
-    verifyAdminToken(cookieToken, req, res, next);
+  if (headerToken) {
+    verifyAdminToken(headerToken, req, res, next);
     return;
   }
 

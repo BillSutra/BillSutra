@@ -1,40 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { isAxiosError } from "axios";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ValidationField } from "@/components/ui/ValidationField";
-import { fetchAdminSession, loginSuperAdmin } from "@/lib/adminApiClient";
+import { loginSuperAdmin } from "@/lib/adminApiClient";
+import { useAdminAuth } from "@/providers/AdminAuthProvider";
 import { validateEmail } from "@/lib/validation";
 
 const AdminLoginClient = () => {
   const router = useRouter();
+  const { handleLoginSuccess, status } = useAdminAuth();
   const [email, setEmail] = useState("admin@billsutra.com");
   const [password, setPassword] = useState("qwerty123");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const restoreAdminSession = async () => {
-      try {
-        await fetchAdminSession();
-        if (!cancelled) {
-          router.replace("/admin/dashboard");
-        }
-      } catch {
-        // Stay on the login page when no active admin session exists.
-      }
-    };
-
-    void restoreAdminSession();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -42,7 +23,8 @@ const AdminLoginClient = () => {
     setIsSubmitting(true);
 
     try {
-      await loginSuperAdmin({ email, password });
+      const session = await loginSuperAdmin({ email, password });
+      handleLoginSuccess(session.user);
       router.replace("/admin/dashboard");
     } catch (requestError) {
       if (isAxiosError<{ message?: string }>(requestError)) {
@@ -135,7 +117,7 @@ const AdminLoginClient = () => {
             <Button
               type="submit"
               className="h-11 w-full bg-[#1f1b16] text-white hover:bg-[#2d241d]"
-              disabled={isSubmitting}
+              disabled={isSubmitting || status === "loading"}
             >
               {isSubmitting ? "Signing in..." : "Enter Admin Panel"}
             </Button>

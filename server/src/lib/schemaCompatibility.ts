@@ -17,6 +17,7 @@ let invoiceTemplateCompatibilityPromise: Promise<void> | null = null;
 let modernAuthCompatibilityPromise: Promise<void> | null = null;
 let analyticsDailyStatsCompatibilityPromise: Promise<void> | null = null;
 let notificationSchemaCompatibilityPromise: Promise<void> | null = null;
+let paymentSchemaCompatibilityPromise: Promise<void> | null = null;
 
 const ensureInvoiceDiscountMetadataColumnsInternal = async () => {
   await prisma.$executeRawUnsafe(`
@@ -239,6 +240,63 @@ const ensureExtraEntriesTableInternal = async () => {
         ON DELETE CASCADE ON UPDATE CASCADE;
       END IF;
     END $$;
+  `);
+};
+
+const ensurePaymentSchemaCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      BEGIN
+        ALTER TYPE "PaymentMethod" ADD VALUE IF NOT EXISTS 'NEFT';
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END;
+      BEGIN
+        ALTER TYPE "PaymentMethod" ADD VALUE IF NOT EXISTS 'RTGS';
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END;
+      BEGIN
+        ALTER TYPE "PaymentMethod" ADD VALUE IF NOT EXISTS 'IMPS';
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END;
+      BEGIN
+        ALTER TYPE "PaymentMethod" ADD VALUE IF NOT EXISTS 'WALLET';
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END;
+    END $$;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "payments"
+      ADD COLUMN IF NOT EXISTS "notes" VARCHAR(500),
+      ADD COLUMN IF NOT EXISTS "cheque_number" VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS "bank_name" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "deposit_date" TIMESTAMP(3),
+      ADD COLUMN IF NOT EXISTS "proof_url" VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS "proof_file_name" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "proof_file_path" VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS "proof_file_id" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "proof_mime_type" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "proof_size" INTEGER,
+      ADD COLUMN IF NOT EXISTS "proof_uploaded_at" TIMESTAMP(3),
+      ADD COLUMN IF NOT EXISTS "proof_uploaded_by" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "verified_by" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE "payments"
+    SET "updated_at" = COALESCE("updated_at", "created_at", CURRENT_TIMESTAMP)
+    WHERE "updated_at" IS NULL;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "payments_invoice_id_paid_at_idx"
+    ON "payments"("invoice_id", "paid_at");
   `);
 };
 
@@ -935,11 +993,24 @@ export const ensureNotificationSchemaCompatibility = async () => {
   await notificationSchemaCompatibilityPromise;
 };
 
+export const ensurePaymentSchemaCompatibility = async () => {
+  if (!paymentSchemaCompatibilityPromise) {
+    paymentSchemaCompatibilityPromise =
+      ensurePaymentSchemaCompatibilityInternal().catch((error) => {
+        paymentSchemaCompatibilityPromise = null;
+        throw error;
+      });
+  }
+
+  await paymentSchemaCompatibilityPromise;
+};
+
 export const ensureSchemaCompatibility = async () => {
   if (!schemaCompatibilityPromise) {
     schemaCompatibilityPromise = (async () => {
       await ensureModernAuthCompatibility();
       await ensureInvoiceDiscountMetadataColumnsInternal();
+      await ensurePaymentSchemaCompatibility();
       await ensureBillingInventoryCompatibilityInternal();
       await ensureInventoryIssueCompatibilityInternal();
       await ensureExtraEntriesTable();

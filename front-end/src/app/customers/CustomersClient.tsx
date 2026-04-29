@@ -38,7 +38,19 @@ import type {
   CustomerLedger,
   CustomerPaymentTerms,
 } from "@/lib/apiClient";
-import { downloadCustomerLedgerPdf } from "@/lib/apiClient";
+import {
+  checkPaymentTransactionReference,
+  downloadCustomerLedgerPdf,
+  type PaymentInput,
+} from "@/lib/apiClient";
+import {
+  createEmptyPaymentFormValues,
+  isDigitalPaymentMethod,
+  normalizeTransactionReference,
+  PAYMENT_METHOD_OPTIONS,
+  PAYMENT_STATUS_OPTIONS,
+  validatePaymentForm,
+} from "@/lib/paymentValidation";
 import {
   INDIAN_STATES,
   formatBusinessAddress,
@@ -147,6 +159,13 @@ const suggestEmailTypo = (value: string) => {
 
   return `${localPart}@${EMAIL_TYPO_MAP[domain]}`;
 };
+
+const formatPaymentOptionLabel = (value: string) =>
+  value
+    .toLowerCase()
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
 
 const validateCustomerForm = (
   form: CustomerFormState,
@@ -311,8 +330,15 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
   const [lastAutofilledPincode, setLastAutofilledPincode] = useState("");
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentInvoiceId, setPaymentInvoiceId] = useState("");
-  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentForm, setPaymentForm] = useState(() =>
+    createEmptyPaymentFormValues(),
+  );
   const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentFieldErrors, setPaymentFieldErrors] = useState<
+    ReturnType<typeof validatePaymentForm>
+  >({});
+  const [checkingPaymentTransactionId, setCheckingPaymentTransactionId] =
+    useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
   const [statementShareAction, setStatementShareAction] = useState<
     "copy" | "email" | "system" | "whatsapp" | null
@@ -475,6 +501,33 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     selectedCustomerId ?? undefined,
   );
   const hasOpenInvoices = (ledger?.summary.openInvoices.length ?? 0) > 0;
+  const selectedPaymentInvoice = useMemo(
+    () =>
+      ledger?.summary.openInvoices.find(
+        (invoice) => invoice.id === Number(paymentInvoiceId),
+      ) ?? null,
+    [ledger, paymentInvoiceId],
+  );
+  const livePaymentErrors = useMemo(
+    () =>
+      validatePaymentForm(paymentForm, {
+        dueAmount: selectedPaymentInvoice?.remaining ?? 0,
+        customerName: selectedCustomer?.name ?? ledger?.customer.name ?? null,
+        invoiceReference: selectedPaymentInvoice?.invoiceNumber ?? null,
+      }),
+    [
+      ledger?.customer.name,
+      paymentForm,
+      selectedCustomer?.name,
+      selectedPaymentInvoice?.invoiceNumber,
+      selectedPaymentInvoice?.remaining,
+    ],
+  );
+  const canSavePayment =
+    Boolean(selectedPaymentInvoice) &&
+    Object.keys(livePaymentErrors).length === 0 &&
+    paymentFieldErrors.transactionId !== "UTR already used." &&
+    !checkingPaymentTransactionId;
 
   const statementShareText = useMemo(() => {
     if (!selectedCustomer || !ledger) return "";
@@ -796,8 +849,15 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
 
     const nextInvoice = ledger.summary.openInvoices[0];
     setPaymentInvoiceId(String(nextInvoice.id));
-    setPaymentAmount(String(nextInvoice.remaining));
+    setPaymentForm(
+      createEmptyPaymentFormValues({
+        amount: String(nextInvoice.remaining),
+        status: "PAID",
+        method: "CASH",
+      }),
+    );
     setPaymentError(null);
+    setPaymentFieldErrors({});
     setPaymentModalOpen(true);
   };
 
@@ -817,7 +877,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
     if (!ledger) return;
 
     const invoiceId = Number(paymentInvoiceId);
-    const amount = Number(paymentAmount);
+    const amount = Number(paymentForm.amount);
     const targetInvoice = ledger.summary.openInvoices.find(
       (invoice) => invoice.id === invoiceId,
     );
@@ -827,17 +887,15 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
       return;
     }
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setPaymentError(t("customersPage.messages.enterValidPaymentAmount"));
-      return;
-    }
+    const nextErrors = validatePaymentForm(paymentForm, {
+      dueAmount: targetInvoice.remaining,
+      customerName: selectedCustomer?.name ?? ledger.customer.name ?? null,
+      invoiceReference: targetInvoice.invoiceNumber,
+    });
+    setPaymentFieldErrors(nextErrors);
 
-    if (amount > targetInvoice.remaining) {
-      setPaymentError(
-        t("customersPage.messages.paymentCannotExceed", {
-          amount: formatCurrency(targetInvoice.remaining, "INR"),
-        }),
-      );
+    if (Object.keys(nextErrors).length > 0) {
+      setPaymentError("Please fix the payment details before saving.");
       return;
     }
 
@@ -845,15 +903,67 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
       await createPayment.mutateAsync({
         invoice_id: invoiceId,
         amount,
-        paid_at: new Date().toISOString(),
+        status: paymentForm.status as PaymentInput["status"],
+        method: paymentForm.method as NonNullable<PaymentInput["method"]>,
+        transaction_id:
+          normalizeTransactionReference(paymentForm.transactionId) || undefined,
+        notes: paymentForm.notes.trim() || undefined,
+        cheque_number: paymentForm.chequeNumber.trim() || undefined,
+        bank_name: paymentForm.bankName.trim() || undefined,
+        deposit_date: paymentForm.depositDate
+          ? new Date(paymentForm.depositDate).toISOString()
+          : undefined,
+        paid_at: new Date(paymentForm.paymentDate).toISOString(),
       });
       toast.success(t("customersPage.messages.paymentRecorded"));
       setPaymentModalOpen(false);
-      setPaymentAmount("");
       setPaymentInvoiceId("");
+      setPaymentForm(createEmptyPaymentFormValues());
       setPaymentError(null);
-    } catch {
-      setPaymentError(t("customersPage.messages.paymentRecordError"));
+      setPaymentFieldErrors({});
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : t("customersPage.messages.paymentRecordError");
+      setPaymentError(message);
+      if (/transaction reference already exists/i.test(message)) {
+        setPaymentFieldErrors((current) => ({
+          ...current,
+          transactionId: "UTR already used.",
+        }));
+      }
+    }
+  };
+
+  const verifyPaymentTransactionReference = async () => {
+    if (!isDigitalPaymentMethod(paymentForm.method)) {
+      return;
+    }
+
+    const normalizedReference = normalizeTransactionReference(
+      paymentForm.transactionId,
+    );
+    if (normalizedReference.length < 6) {
+      return;
+    }
+
+    try {
+      setCheckingPaymentTransactionId(true);
+      const result = await checkPaymentTransactionReference({
+        transaction_id: normalizedReference,
+      });
+
+      setPaymentFieldErrors((current) => ({
+        ...current,
+        transactionId: result.exists
+          ? "UTR already used."
+          : current.transactionId === "UTR already used."
+            ? undefined
+            : current.transactionId,
+      }));
+    } finally {
+      setCheckingPaymentTransactionId(false);
     }
   };
 
@@ -2304,13 +2414,26 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
         onOpenChange={(open) => {
           setPaymentModalOpen(open);
           if (!open) {
+            setPaymentInvoiceId("");
+            setPaymentForm(createEmptyPaymentFormValues());
             setPaymentError(null);
+            setPaymentFieldErrors({});
           }
         }}
         title={t("customersPage.actions.addPayment")}
         description={t("customersPage.messages.selectInvoice")}
       >
         <div className="grid gap-4">
+          {selectedPaymentInvoice ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+              <p>Customer: {selectedCustomer?.name ?? ledger?.customer.name ?? "-"}</p>
+              <p className="mt-1">Invoice: {selectedPaymentInvoice.invoiceNumber}</p>
+              <p className="mt-1">
+                Due balance: {formatCurrency(selectedPaymentInvoice.remaining, "INR")}
+              </p>
+            </div>
+          ) : null}
+
           <div className="grid gap-2">
             <Label htmlFor="ledger-payment-invoice">
               {t("customersPage.ledger.selectInvoice")}
@@ -2324,8 +2447,16 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
                   (invoice) => invoice.id === Number(event.target.value),
                 );
                 if (nextInvoice) {
-                  setPaymentAmount(String(nextInvoice.remaining));
+                  setPaymentForm(
+                    createEmptyPaymentFormValues({
+                      amount: String(nextInvoice.remaining),
+                      status: "PAID",
+                      method: "CASH",
+                    }),
+                  );
                 }
+                setPaymentError(null);
+                setPaymentFieldErrors({});
               }}
               className="app-field h-10 w-full px-3 py-2"
             >
@@ -2341,16 +2472,236 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             </select>
           </div>
 
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="ledger-payment-amount">
+                {t("customersPage.ledger.amountPaid")}
+              </Label>
+              <Input
+                id="ledger-payment-amount"
+                value={paymentForm.amount}
+                onChange={(event) => {
+                  const nextAmount = event.target.value;
+                  const dueAmount = selectedPaymentInvoice?.remaining ?? 0;
+                  const parsedAmount = Number(nextAmount);
+                  setPaymentForm((current) => ({
+                    ...current,
+                    amount: nextAmount,
+                    status:
+                      Number.isFinite(parsedAmount) &&
+                      dueAmount > 0 &&
+                      parsedAmount < dueAmount
+                        ? "PARTIAL"
+                        : "PAID",
+                  }));
+                  setPaymentError(null);
+                }}
+                placeholder={t("customersPage.ledger.amountPlaceholder")}
+                inputMode="decimal"
+              />
+              {paymentFieldErrors.amount ? (
+                <p className="text-sm text-amber-700">{paymentFieldErrors.amount}</p>
+              ) : null}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="ledger-payment-date">Payment date</Label>
+              <Input
+                id="ledger-payment-date"
+                type="date"
+                value={paymentForm.paymentDate}
+                onChange={(event) => {
+                  setPaymentForm((current) => ({
+                    ...current,
+                    paymentDate: event.target.value,
+                  }));
+                  setPaymentError(null);
+                }}
+              />
+              {paymentFieldErrors.paymentDate ? (
+                <p className="text-sm text-amber-700">{paymentFieldErrors.paymentDate}</p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="ledger-payment-status">Payment status</Label>
+              <select
+                id="ledger-payment-status"
+                value={paymentForm.status}
+                onChange={(event) => {
+                  setPaymentForm((current) => ({
+                    ...current,
+                    status: event.target.value as PaymentInput["status"],
+                  }));
+                  setPaymentError(null);
+                }}
+                className="app-field h-10 w-full px-3 py-2"
+              >
+                {PAYMENT_STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>
+                    {status === "PAID" ? "Paid" : "Partial"}
+                  </option>
+                ))}
+              </select>
+              {paymentFieldErrors.status ? (
+                <p className="text-sm text-amber-700">{paymentFieldErrors.status}</p>
+              ) : null}
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="ledger-payment-method">Payment method</Label>
+              <select
+                id="ledger-payment-method"
+                value={paymentForm.method}
+                onChange={(event) => {
+                  const nextMethod = event.target.value as NonNullable<
+                    PaymentInput["method"]
+                  >;
+                  setPaymentForm((current) => ({
+                    ...current,
+                    method: nextMethod,
+                    transactionId:
+                      nextMethod === "CASH" ? "" : current.transactionId,
+                    chequeNumber: nextMethod === "CHEQUE" ? current.chequeNumber : "",
+                    bankName: nextMethod === "CHEQUE" ? current.bankName : "",
+                    depositDate:
+                      nextMethod === "CHEQUE" ? current.depositDate : "",
+                  }));
+                  setPaymentError(null);
+                  setPaymentFieldErrors((current) => ({
+                    ...current,
+                    transactionId: undefined,
+                    chequeNumber: undefined,
+                    bankName: undefined,
+                    depositDate: undefined,
+                  }));
+                }}
+                className="app-field h-10 w-full px-3 py-2"
+              >
+                {PAYMENT_METHOD_OPTIONS.map((method) => (
+                  <option key={method} value={method}>
+                    {formatPaymentOptionLabel(method)}
+                  </option>
+                ))}
+              </select>
+              {paymentFieldErrors.method ? (
+                <p className="text-sm text-amber-700">{paymentFieldErrors.method}</p>
+              ) : null}
+            </div>
+          </div>
+
+          {paymentForm.method !== "CASH" ? (
+            <div className="grid gap-2">
+              <Label htmlFor="ledger-payment-transaction">
+                {paymentForm.method === "CHEQUE"
+                  ? "Reference / deposit tracking"
+                  : "UTR / transaction reference"}
+              </Label>
+              <Input
+                id="ledger-payment-transaction"
+                value={paymentForm.transactionId}
+                onChange={(event) => {
+                  setPaymentForm((current) => ({
+                    ...current,
+                    transactionId: event.target.value.toUpperCase(),
+                  }));
+                  setPaymentFieldErrors((current) => ({
+                    ...current,
+                    transactionId: undefined,
+                  }));
+                }}
+                onBlur={() => void verifyPaymentTransactionReference()}
+                placeholder="Enter payment reference"
+              />
+              {checkingPaymentTransactionId ? (
+                <p className="text-xs text-slate-500">Checking reference...</p>
+              ) : null}
+              {paymentFieldErrors.transactionId ? (
+                <p className="text-sm text-amber-700">
+                  {paymentFieldErrors.transactionId}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {paymentForm.method === "CHEQUE" ? (
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-2">
+                <Label htmlFor="ledger-payment-cheque-number">Cheque number</Label>
+                <Input
+                  id="ledger-payment-cheque-number"
+                  value={paymentForm.chequeNumber}
+                  onChange={(event) =>
+                    setPaymentForm((current) => ({
+                      ...current,
+                      chequeNumber: event.target.value,
+                    }))
+                  }
+                  placeholder="Enter cheque number"
+                />
+                {paymentFieldErrors.chequeNumber ? (
+                  <p className="text-sm text-amber-700">
+                    {paymentFieldErrors.chequeNumber}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="ledger-payment-bank-name">Bank name</Label>
+                <Input
+                  id="ledger-payment-bank-name"
+                  value={paymentForm.bankName}
+                  onChange={(event) =>
+                    setPaymentForm((current) => ({
+                      ...current,
+                      bankName: event.target.value,
+                    }))
+                  }
+                  placeholder="Enter bank name"
+                />
+                {paymentFieldErrors.bankName ? (
+                  <p className="text-sm text-amber-700">{paymentFieldErrors.bankName}</p>
+                ) : null}
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="ledger-payment-deposit-date">Deposit date</Label>
+                <Input
+                  id="ledger-payment-deposit-date"
+                  type="date"
+                  value={paymentForm.depositDate}
+                  onChange={(event) =>
+                    setPaymentForm((current) => ({
+                      ...current,
+                      depositDate: event.target.value,
+                    }))
+                  }
+                />
+                {paymentFieldErrors.depositDate ? (
+                  <p className="text-sm text-amber-700">
+                    {paymentFieldErrors.depositDate}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid gap-2">
-            <Label htmlFor="ledger-payment-amount">
-              {t("customersPage.ledger.amountPaid")}
-            </Label>
-            <Input
-              id="ledger-payment-amount"
-              value={paymentAmount}
-              onChange={(event) => setPaymentAmount(event.target.value)}
-              placeholder={t("customersPage.ledger.amountPlaceholder")}
-              inputMode="decimal"
+            <Label htmlFor="ledger-payment-notes">Notes</Label>
+            <textarea
+              id="ledger-payment-notes"
+              value={paymentForm.notes}
+              onChange={(event) =>
+                setPaymentForm((current) => ({
+                  ...current,
+                  notes: event.target.value,
+                }))
+              }
+              rows={3}
+              className="app-field w-full rounded-xl px-3 py-2"
+              placeholder="Optional payment notes"
             />
           </div>
 
@@ -2369,7 +2720,7 @@ const CustomersClient = ({ name, image }: CustomersClientProps) => {
             <Button
               type="button"
               onClick={() => void handleRecordPayment()}
-              disabled={createPayment.isPending}
+              disabled={createPayment.isPending || !canSavePayment}
             >
               {createPayment.isPending
                 ? `${t("customersPage.actions.recordPayment")}...`

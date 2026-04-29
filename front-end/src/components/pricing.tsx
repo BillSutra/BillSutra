@@ -122,7 +122,7 @@ const planAction = ({
   }
 
   return {
-    href: `/payments?plan=${planId}`,
+    href: `/payments/access?plan=${planId}`,
     label: planId === "pro" ? "Upgrade to Pro" : "Upgrade to Pro Plus",
   };
 };

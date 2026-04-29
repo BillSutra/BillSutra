@@ -170,6 +170,8 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
         await createPayment.mutateAsync({
           invoice_id: invoice.id,
           amount,
+          status: "PARTIAL",
+          method: "CASH",
           paid_at: new Date().toISOString(),
         });
         toast.success(t("invoiceHistory.messages.partialRecorded"));
@@ -199,6 +201,8 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
         await createPayment.mutateAsync({
           invoice_id: invoice.id,
           amount: remaining,
+          status: "PAID",
+          method: "CASH",
           paid_at: new Date().toISOString(),
         });
         toast.success(t("invoiceHistory.messages.remainingPaymentRecorded"));
@@ -237,6 +241,8 @@ const InvoicesHistoryClient = ({ name, image }: InvoicesHistoryClientProps) => {
           await createPayment.mutateAsync({
             invoice_id: invoice.id,
             amount: snapshot.remaining,
+            status: "PAID",
+            method: "CASH",
             paid_at: new Date().toISOString(),
           });
           toast.success(t("invoiceHistory.messages.remainingPaymentRecorded"));

@@ -1113,26 +1113,256 @@ export const sendTestEmailSchema = z.object({
 
 export const paymentCreateSchema = z.object({
   invoice_id: z.coerce.number().int().positive(),
-  amount: z.coerce.number().nonnegative(),
-  method: z.nativeEnum(PaymentMethod).optional(),
-  provider: z.string().min(1).max(120).optional(),
-  transaction_id: z.string().min(1).max(191).optional(),
-  reference: z.string().optional(),
-  paid_at: z.coerce.date().optional(),
+  amount: z
+    .coerce
+    .number()
+    .positive("Payment amount must be greater than zero.")
+    .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
+      message: "Payment amount can have at most 2 decimal places.",
+    }),
+  status: z.enum(["PAID", "PARTIAL", "PENDING", "FAILED"]),
+  method: z.nativeEnum(PaymentMethod),
+  provider: z.preprocess(emptyToUndefined, z.string().trim().min(2).max(120).optional()),
+  transaction_id: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .trim()
+      .min(6, "Transaction reference must be at least 6 characters.")
+      .max(30, "Transaction reference must be 30 characters or less.")
+      .regex(/^[A-Za-z0-9-]+$/, "Transaction reference can only use letters, numbers, and hyphens.")
+      .transform((value) => value.toUpperCase())
+      .optional(),
+  ),
+  reference: z.preprocess(emptyToUndefined, z.string().trim().max(191).optional()),
+  notes: z.preprocess(emptyToUndefined, z.string().trim().max(500).optional()),
+  cheque_number: z.preprocess(emptyToUndefined, z.string().trim().min(3).max(64).optional()),
+  bank_name: z.preprocess(emptyToUndefined, z.string().trim().min(2).max(191).optional()),
+  deposit_date: z.coerce.date().optional(),
+  failure_reason: z.preprocess(emptyToUndefined, z.string().trim().min(3).max(500).optional()),
+  paid_at: z.coerce.date(),
+}).superRefine((value, ctx) => {
+  const digitalMethods = new Set<PaymentMethod>([
+    PaymentMethod.UPI,
+    PaymentMethod.BANK_TRANSFER,
+    PaymentMethod.NEFT,
+    PaymentMethod.RTGS,
+    PaymentMethod.IMPS,
+    PaymentMethod.CARD,
+    PaymentMethod.WALLET,
+  ]);
+
+  const now = new Date();
+  const oldestAllowedDate = new Date("2000-01-01T00:00:00.000Z");
+
+  if (digitalMethods.has(value.method) && !value.transaction_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["transaction_id"],
+      message: "Transaction reference is required for digital payments.",
+    });
+  }
+
+  if (value.method === PaymentMethod.CHEQUE) {
+    if (!value.cheque_number) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cheque_number"],
+        message: "Cheque number is required for cheque payments.",
+      });
+    }
+    if (!value.bank_name) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["bank_name"],
+        message: "Bank name is required for cheque payments.",
+      });
+    }
+    if (!value.deposit_date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["deposit_date"],
+        message: "Deposit date is required for cheque payments.",
+      });
+    }
+  }
+
+  if (value.status === "FAILED" && !value.failure_reason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["failure_reason"],
+      message: "Failure reason is required for failed payments.",
+    });
+  }
+
+  if (value.paid_at.getTime() > now.getTime()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["paid_at"],
+      message: "Payment date cannot be in the future.",
+    });
+  }
+
+  if (value.paid_at.getTime() < oldestAllowedDate.getTime()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["paid_at"],
+      message: "Payment date is too old to be valid.",
+    });
+  }
+
+  if (value.deposit_date) {
+    if (value.deposit_date.getTime() > now.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["deposit_date"],
+        message: "Deposit date cannot be in the future.",
+      });
+    }
+
+    if (value.deposit_date.getTime() < oldestAllowedDate.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["deposit_date"],
+        message: "Deposit date is too old to be valid.",
+      });
+    }
+  }
 });
 
 export const paymentUpdateSchema = z
   .object({
-    amount: z.coerce.number().nonnegative().optional(),
-    method: z.nativeEnum(PaymentMethod).optional(),
-    provider: z.string().min(1).max(120).optional(),
-    transaction_id: z.string().min(1).max(191).optional(),
-    reference: z.string().optional(),
-    paid_at: z.coerce.date().optional(),
+    amount: z
+      .coerce
+      .number()
+      .positive("Payment amount must be greater than zero.")
+      .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
+        message: "Payment amount can have at most 2 decimal places.",
+      }),
+    status: z.enum(["PAID", "PARTIAL", "PENDING", "FAILED"]),
+    method: z.nativeEnum(PaymentMethod),
+    provider: z.preprocess(emptyToUndefined, z.string().trim().min(2).max(120).optional()),
+    transaction_id: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .trim()
+        .min(6, "Transaction reference must be at least 6 characters.")
+        .max(30, "Transaction reference must be 30 characters or less.")
+        .regex(/^[A-Za-z0-9-]+$/, "Transaction reference can only use letters, numbers, and hyphens.")
+        .transform((value) => value.toUpperCase())
+        .optional(),
+    ),
+    reference: z.preprocess(emptyToUndefined, z.string().trim().max(191).optional()),
+    notes: z.preprocess(emptyToUndefined, z.string().trim().max(500).optional()),
+    cheque_number: z.preprocess(emptyToUndefined, z.string().trim().min(3).max(64).optional()),
+    bank_name: z.preprocess(emptyToUndefined, z.string().trim().min(2).max(191).optional()),
+    deposit_date: z.coerce.date().optional(),
+    failure_reason: z.preprocess(emptyToUndefined, z.string().trim().min(3).max(500).optional()),
+    paid_at: z.coerce.date(),
+  })
+  .superRefine((value, ctx) => {
+    const digitalMethods = new Set<PaymentMethod>([
+      PaymentMethod.UPI,
+      PaymentMethod.BANK_TRANSFER,
+      PaymentMethod.NEFT,
+      PaymentMethod.RTGS,
+      PaymentMethod.IMPS,
+      PaymentMethod.CARD,
+      PaymentMethod.WALLET,
+    ]);
+
+    const now = new Date();
+    const oldestAllowedDate = new Date("2000-01-01T00:00:00.000Z");
+
+    if (digitalMethods.has(value.method) && !value.transaction_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["transaction_id"],
+        message: "Transaction reference is required for digital payments.",
+      });
+    }
+
+    if (value.method === PaymentMethod.CHEQUE) {
+      if (!value.cheque_number) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["cheque_number"],
+          message: "Cheque number is required for cheque payments.",
+        });
+      }
+      if (!value.bank_name) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["bank_name"],
+          message: "Bank name is required for cheque payments.",
+        });
+      }
+      if (!value.deposit_date) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["deposit_date"],
+          message: "Deposit date is required for cheque payments.",
+        });
+      }
+    }
+
+    if (value.status === "FAILED" && !value.failure_reason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["failure_reason"],
+        message: "Failure reason is required for failed payments.",
+      });
+    }
+
+    if (value.paid_at.getTime() > now.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["paid_at"],
+        message: "Payment date cannot be in the future.",
+      });
+    }
+
+    if (value.paid_at.getTime() < oldestAllowedDate.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["paid_at"],
+        message: "Payment date is too old to be valid.",
+      });
+    }
+
+    if (value.deposit_date) {
+      if (value.deposit_date.getTime() > now.getTime()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["deposit_date"],
+          message: "Deposit date cannot be in the future.",
+        });
+      }
+
+      if (value.deposit_date.getTime() < oldestAllowedDate.getTime()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["deposit_date"],
+          message: "Deposit date is too old to be valid.",
+        });
+      }
+    }
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required",
   });
+
+export const paymentTransactionReferenceCheckSchema = z.object({
+  transaction_id: z
+    .string()
+    .trim()
+    .min(6)
+    .max(30)
+    .regex(/^[A-Za-z0-9-]+$/)
+    .transform((value) => value.toUpperCase()),
+  payment_id: z.coerce.number().int().positive().optional(),
+});
 
 export const accessRazorpayOrderSchema = z.object({
   plan_id: accessPlanSchema,

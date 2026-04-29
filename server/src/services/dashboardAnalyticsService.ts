@@ -302,7 +302,11 @@ type PaymentMethodKey =
   | "CARD"
   | "BANK_TRANSFER"
   | "UPI"
+  | "NEFT"
+  | "RTGS"
+  | "IMPS"
   | "CHEQUE"
+  | "WALLET"
   | "OTHER";
 
 type SaleSnapshot = {
