@@ -1,0 +1,3 @@
+-- This migration file was missing from the repository history.
+-- Access payment review notes are currently stored in metadata, so this
+-- migration is intentionally a no-op to restore a valid migration chain.

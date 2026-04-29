@@ -5,6 +5,11 @@ import { sendResponse } from "../utils/sendResponse.js";
 import { recordAuthEvent } from "../lib/modernAuth.js";
 import { ensureUserPreferenceCompatibility } from "../lib/schemaCompatibility.js";
 import {
+  respondWithRedisCachedData,
+  setRedisResourceCache,
+} from "../lib/redisResourceCache.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
+import {
   clearAuthCookies,
   revokeAllRefreshTokensForUser,
 } from "../lib/authCookies.js";
@@ -15,6 +20,10 @@ import {
   revokeRefreshSessionById,
 } from "../services/deviceSessions.service.js";
 import { recordAuditLog } from "../services/auditLog.service.js";
+import {
+  buildSettingsPreferencesCachePrefix,
+  buildSettingsPreferencesRedisKey,
+} from "../redis/cacheKeys.js";
 
 type SettingsPayload = {
   appPreferences?: {
@@ -89,16 +98,35 @@ const mapPreferenceResponse = (pref: {
   },
 });
 
-const getOrCreatePreference = async (userId: number) =>
-  ensureUserPreferenceCompatibility().then(() =>
-    prisma.userPreference.upsert({
-      where: { user_id: userId },
-      update: {},
-      create: {
-        user_id: userId,
-      },
-    }),
-  );
+const SETTINGS_PREFERENCES_CACHE_TTL_SECONDS = Math.max(
+  Number(process.env.SETTINGS_PREFERENCES_CACHE_TTL_SECONDS ?? 900),
+  30,
+);
+const SETTINGS_PREFERENCES_CACHE_SWR_SECONDS = Math.max(
+  Number(process.env.SETTINGS_PREFERENCES_CACHE_SWR_SECONDS ?? 300),
+  0,
+);
+
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
+const getOrCreatePreference = async (userId: number) => {
+  await ensureUserPreferenceCompatibility();
+
+  const existing = await prisma.userPreference.findUnique({
+    where: { user_id: userId },
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return prisma.userPreference.create({
+    data: {
+      user_id: userId,
+    },
+  });
+};
 
 class SettingsController {
   private static ensureOwnerSecurityAccess(req: Request, res: Response) {
@@ -119,14 +147,31 @@ class SettingsController {
 
   static async preferences(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const preference = await getOrCreatePreference(userId);
-
-    return sendResponse(res, 200, {
-      data: mapPreferenceResponse(preference),
+    return respondWithRedisCachedData({
+      req,
+      res,
+      key: buildSettingsPreferencesRedisKey({ businessId, userId }),
+      label: "settings-preferences",
+      ttlSeconds: SETTINGS_PREFERENCES_CACHE_TTL_SECONDS,
+      staleWhileRevalidateSeconds: SETTINGS_PREFERENCES_CACHE_SWR_SECONDS,
+      invalidationPrefixes: [
+        buildSettingsPreferencesCachePrefix({ businessId, userId }),
+      ],
+      resolver: async () => {
+        const preference = await measureRequestPhase(
+          "settings.db.preferences",
+          () => getOrCreatePreference(userId),
+        );
+        return measureRequestPhase(
+          "settings.serialize.preferences",
+          async () => mapPreferenceResponse(preference),
+        );
+      },
     });
   }
 
@@ -175,9 +220,28 @@ class SettingsController {
       },
     });
 
+    const responseData = mapPreferenceResponse(updated);
+    void setRedisResourceCache(
+      buildSettingsPreferencesRedisKey({
+        businessId: req.user?.businessId?.trim(),
+        userId,
+      }),
+      {
+        value: responseData,
+        ttlSeconds: SETTINGS_PREFERENCES_CACHE_TTL_SECONDS,
+        staleWhileRevalidateSeconds: SETTINGS_PREFERENCES_CACHE_SWR_SECONDS,
+        invalidationPrefixes: [
+          buildSettingsPreferencesCachePrefix({
+            businessId: req.user?.businessId?.trim(),
+            userId,
+          }),
+        ],
+      },
+    );
+
     return sendResponse(res, 200, {
       message: "Settings saved",
-      data: mapPreferenceResponse(updated),
+      data: responseData,
     });
   }
 
@@ -272,7 +336,7 @@ class SettingsController {
     const userId = SettingsController.ensureOwnerSecurityAccess(req, res);
     if (!userId) return;
 
-    const sessionId = req.params.id?.trim();
+    const sessionId = readRouteParam(req.params.id)?.trim();
     if (!sessionId) {
       return sendResponse(res, 422, { message: "Session id is required" });
     }

@@ -976,13 +976,6 @@ export const authenticateFace = async (req: Request, res: Response) => {
       reason: payload.reason,
       processing_time_ms: payload.processing_time_ms,
     });
-    console.log("Face similarity score:", {
-      userId: user.id,
-      confidence: payload.confidence,
-      score: payload.score,
-      distance: payload.distance,
-      matched: payload.matched,
-    });
 
     if (!payload.matched) {
       await recordAuthEvent({

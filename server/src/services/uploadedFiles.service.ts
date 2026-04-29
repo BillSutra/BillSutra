@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { Prisma } from "@prisma/client";
 import prisma from "../config/db.config.js";
 import { getBackendAppUrl } from "../lib/appUrls.js";
+import { getJwtSecret } from "../lib/authSecrets.js";
 
 const TABLE_CACHE_TTL_MS = 60_000;
 const tableAvailabilityCache = new Map<string, { value: boolean; checkedAt: number }>();
@@ -38,7 +39,7 @@ const setTableAvailability = (tableName: string, value: boolean) => {
 
 const getSecureFileSigningSecret = () =>
   process.env.SECURE_FILE_SIGNING_SECRET?.trim() ||
-  process.env.JWT_SECRET?.trim() ||
+  getJwtSecret() ||
   "";
 
 const buildSecureFileSignature = (fileId: string, expiresAt: number) =>

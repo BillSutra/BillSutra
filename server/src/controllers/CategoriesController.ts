@@ -6,59 +6,64 @@ import {
   categoryCreateSchema,
   categoryUpdateSchema,
 } from "../validations/apiValidations.js";
+import {
+  invalidateRedisResourceCacheByPrefix,
+  respondWithRedisCachedData,
+  setRedisResourceCache,
+} from "../lib/redisResourceCache.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
+import {
+  buildCategoriesCachePrefix,
+  buildCategoriesRedisKey,
+} from "../redis/cacheKeys.js";
 
 type CategoryCreateInput = z.infer<typeof categoryCreateSchema>;
 type CategoryUpdateInput = z.infer<typeof categoryUpdateSchema>;
 
-const CATEGORY_CACHE_MS = Number(process.env.CATEGORY_CACHE_MS ?? 30_000);
-const categoryListCache = new Map<
-  number,
-  {
-    expiresAt: number;
-    data: Array<{
-      id: number;
-      name: string;
-      created_at: Date;
-      updated_at: Date;
-    }>;
-  }
->();
+const CATEGORY_CACHE_TTL_SECONDS = Math.max(
+  Number(process.env.CATEGORY_CACHE_TTL_SECONDS ?? 900),
+  30,
+);
+const CATEGORY_CACHE_SWR_SECONDS = Math.max(
+  Number(process.env.CATEGORY_CACHE_SWR_SECONDS ?? 300),
+  0,
+);
 
-const invalidateCategoryCache = (userId: number) => {
-  categoryListCache.delete(userId);
-};
+const invalidateCategoryCache = (businessId: string | undefined, userId: number) =>
+  invalidateRedisResourceCacheByPrefix(
+    buildCategoriesCachePrefix({ businessId, userId }),
+  );
 
 class CategoriesController {
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const cached = categoryListCache.get(userId);
-    if (cached && cached.expiresAt > Date.now()) {
-      return sendResponse(res, 200, { data: cached.data });
-    }
-
-    const categories = await prisma.category.findMany({
-      where: { user_id: userId },
-      orderBy: { created_at: "desc" },
-      select: {
-        id: true,
-        name: true,
-        created_at: true,
-        updated_at: true,
-      },
+    return respondWithRedisCachedData({
+      req,
+      res,
+      key: buildCategoriesRedisKey({ businessId, userId }),
+      label: "categories",
+      ttlSeconds: CATEGORY_CACHE_TTL_SECONDS,
+      staleWhileRevalidateSeconds: CATEGORY_CACHE_SWR_SECONDS,
+      invalidationPrefixes: [buildCategoriesCachePrefix({ businessId, userId })],
+      resolver: async () =>
+        measureRequestPhase("categories.db.list", () =>
+          prisma.category.findMany({
+            where: { user_id: userId },
+            orderBy: { created_at: "desc" },
+            select: {
+              id: true,
+              name: true,
+              created_at: true,
+              updated_at: true,
+            },
+          }),
+        ),
     });
-
-    if (CATEGORY_CACHE_MS > 0) {
-      categoryListCache.set(userId, {
-        expiresAt: Date.now() + CATEGORY_CACHE_MS,
-        data: categories,
-      });
-    }
-
-    return sendResponse(res, 200, { data: categories });
   }
 
   static async store(req: Request, res: Response) {
@@ -74,7 +79,7 @@ class CategoriesController {
       data: { user_id: userId, name },
     });
 
-    invalidateCategoryCache(userId);
+    void invalidateCategoryCache(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 201, {
       message: "Category created",
@@ -119,7 +124,7 @@ class CategoriesController {
       return sendResponse(res, 404, { message: "Category not found" });
     }
 
-    invalidateCategoryCache(userId);
+    void invalidateCategoryCache(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, { message: "Category updated" });
   }
@@ -139,7 +144,7 @@ class CategoriesController {
       return sendResponse(res, 404, { message: "Category not found" });
     }
 
-    invalidateCategoryCache(userId);
+    void invalidateCategoryCache(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, { message: "Category removed" });
   }

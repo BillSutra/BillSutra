@@ -2,6 +2,7 @@ import fs from "fs";
 import jwt from "jsonwebtoken";
 import path from "path";
 import type { Request, Response } from "express";
+import { getAccessTokenSecret } from "../lib/authSecrets.js";
 import {
   findUploadedFileById,
   verifySignedSecureFileRequest,
@@ -25,6 +26,9 @@ import {
 
 const ADMIN_AUTH_COOKIE_NAME = "bill_sutra_admin_session";
 
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
 type SecureFileActor =
   | {
       kind: "owner";
@@ -42,7 +46,7 @@ const verifyOwnerToken = async (token: string) => {
   let decoded: string | jwt.JwtPayload;
 
   try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    decoded = jwt.verify(token, getAccessTokenSecret());
   } catch {
     return null;
   }
@@ -71,7 +75,7 @@ const verifyOwnerToken = async (token: string) => {
 
 const verifyAdminToken = (token: string) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    const decoded = jwt.verify(token, getAccessTokenSecret());
     if (!decoded || typeof decoded === "string") {
       return null;
     }
@@ -176,7 +180,7 @@ const resolveSecureFileActor = async (
 
 class SecureFilesController {
   static async show(req: Request, res: Response) {
-    const fileId = req.params.id?.trim();
+    const fileId = readRouteParam(req.params.id)?.trim();
     if (!fileId) {
       return res.status(400).json({ status: 400, message: "File id is required" });
     }

@@ -9,7 +9,7 @@ import {
   Palette,
   Sparkles,
 } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import BusinessAddressFields from "@/components/business-profile/BusinessAddressFields";
@@ -53,10 +53,12 @@ import {
   validateBusinessWebsite,
 } from "@/lib/businessProfileValidation";
 import {
-  fetchBusinessProfile,
-  fetchTemplates,
   saveBusinessProfile,
 } from "@/lib/apiClient";
+import {
+  useBusinessProfileQuery,
+  useTemplatesQuery,
+} from "@/hooks/useWorkspaceQueries";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   BusinessProfileInput,
@@ -123,15 +125,9 @@ const BusinessProfileClient = ({
     },
   ];
 
-  const { data: templateRecords = [] } = useQuery({
-    queryKey: ["templates"],
-    queryFn: fetchTemplates,
-  });
+  const { data: templateRecords = [] } = useTemplatesQuery();
 
-  const { data: businessProfileRecord } = useQuery({
-    queryKey: ["business-profile"],
-    queryFn: fetchBusinessProfile,
-  });
+  const { data: businessProfileRecord } = useBusinessProfileQuery();
 
   const saveProfileMutation = useMutation({
     mutationFn: saveBusinessProfile,

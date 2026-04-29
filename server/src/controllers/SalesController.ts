@@ -33,6 +33,10 @@ import {
 } from "../lib/workerPermissions.js";
 import { computeInvoiceStatus } from "../utils/invoicePaymentSnapshot.js";
 import { dispatchNotification } from "../services/notification.service.js";
+import {
+  invalidateCustomerListCaches,
+  invalidateProductOptionCaches,
+} from "../lib/cacheInvalidation.js";
 
 type SaleCreateInput = z.infer<typeof saleCreateSchema>;
 type SaleUpdateInput = z.infer<typeof saleUpdateSchema>;
@@ -446,6 +450,8 @@ class SalesController {
     }
 
     invalidateInventoryInsightsCacheByUser(userId);
+    void invalidateCustomerListCaches(businessId, userId);
+    void invalidateProductOptionCaches(businessId, userId);
     emitDashboardUpdate({ userId, source: "sale.create" });
     if (businessId) {
       const largeSaleThreshold = Number(
@@ -489,6 +495,7 @@ class SalesController {
 
   static async update(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -578,6 +585,8 @@ class SalesController {
     }
 
     invalidateInventoryInsightsCacheByUser(userId);
+    void invalidateCustomerListCaches(businessId, userId);
+    void invalidateProductOptionCaches(businessId, userId);
     emitDashboardUpdate({ userId, source: "sale.update" });
     if (syncedInvoiceUpdate) {
       emitRealtimeInvoiceUpdated({
@@ -594,6 +603,7 @@ class SalesController {
 
   static async destroy(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -651,6 +661,8 @@ class SalesController {
     }
 
     invalidateInventoryInsightsCacheByUser(userId);
+    void invalidateCustomerListCaches(businessId, userId);
+    void invalidateProductOptionCaches(businessId, userId);
     emitDashboardUpdate({ userId, source: "sale.delete" });
     return sendResponse(res, 200, { message: "Sale deleted" });
   }

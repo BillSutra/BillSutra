@@ -35,3 +35,24 @@ jobs:
 
       - name: Build Server
         run: npm run build --if-present
+
+  frontend-build:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.11.1"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Workspace Dependencies
+        run: npm ci
+
+      - name: Build Frontend
+        run: npm run build --workspace front-end

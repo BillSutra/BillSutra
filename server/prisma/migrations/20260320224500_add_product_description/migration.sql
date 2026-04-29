@@ -1,0 +1,3 @@
+-- This migration file was missing from the repository history.
+-- The current Prisma schema no longer models a product description column,
+-- so this migration is intentionally a no-op to restore a valid migration chain.

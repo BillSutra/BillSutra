@@ -1,36 +1,14 @@
-const DEFAULT_BACKEND_URL = "http://localhost:7000";
+import {
+  resolveFrontendBackendUrl,
+  validateFrontendEnv,
+} from "./runtimeEnv";
 
-const normalizeBackendUrl = (rawValue?: string): string => {
-  const trimmed = rawValue?.trim();
-
-  if (!trimmed) {
-    return DEFAULT_BACKEND_URL;
-  }
-
-  // Accept values like :7000, 7000, localhost:7000, or full http(s) URLs.
-  if (/^:\d+$/.test(trimmed)) {
-    return `http://localhost${trimmed}`;
-  }
-
-  if (/^\d+$/.test(trimmed)) {
-    return `http://localhost:${trimmed}`;
-  }
-
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed;
-  }
-
-  if (/^[a-z0-9.-]+:\d+$/i.test(trimmed)) {
-    return `http://${trimmed}`;
-  }
-
-  return trimmed;
-};
+validateFrontendEnv();
 
 class Env {
   static APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
-  static BACKEND_URL = normalizeBackendUrl(process.env.NEXT_PUBLIC_BACKEND_URL);
+  static BACKEND_URL = resolveFrontendBackendUrl();
 
   static SENTRY_DSN = process.env.NEXT_PUBLIC_SENTRY_DSN ?? "";
 

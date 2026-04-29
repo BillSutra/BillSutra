@@ -8,6 +8,7 @@ import {
   isBusinessTableAvailable,
   isWorkersTableAvailable,
 } from "../lib/authSession.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
 import { dispatchNotification } from "../services/notification.service.js";
 import { recordAuditLog } from "../services/auditLog.service.js";
 
@@ -480,6 +481,14 @@ const resolveWorkerRouteBusinessId = async (req: Request) => {
     return null;
   }
 
+  if (
+    req.user.accountType === "OWNER" &&
+    req.user.businessId &&
+    !req.user.businessId.startsWith("legacy-business-")
+  ) {
+    return req.user.businessId;
+  }
+
   if (req.user.accountType === "OWNER") {
     const business = await ensureBusinessForUser(
       req.user.ownerUserId,
@@ -505,21 +514,26 @@ class WorkersController {
 
     const period = parsePeriod(req.query.period);
 
-    const workers = await prisma.worker.findMany({
-      where: { businessId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        businessId: true,
-        createdAt: true,
-      },
-    });
+    const workers = await measureRequestPhase("workers.db.index", () =>
+      prisma.worker.findMany({
+        where: { businessId },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          businessId: true,
+          createdAt: true,
+        },
+      }),
+    );
 
-    const { workerCards } = await buildWorkerPerformance(workers, period);
+    const { workerCards } = await measureRequestPhase(
+      "workers.serialize.index",
+      () => buildWorkerPerformance(workers, period),
+    );
 
     return sendResponse(res, 200, { data: workerCards });
   }
@@ -536,26 +550,29 @@ class WorkersController {
 
     const period = parsePeriod(req.query.period);
 
-    const workers = await prisma.worker.findMany({
-      where: { businessId },
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        role: true,
-        businessId: true,
-        createdAt: true,
-      },
-    });
-
-    const { workerCards, summary } = await buildWorkerPerformance(
-      workers,
-      period,
+    const workers = await measureRequestPhase("workers.db.overview", () =>
+      prisma.worker.findMany({
+        where: { businessId },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          role: true,
+          businessId: true,
+          createdAt: true,
+        },
+      }),
     );
-    const recentActivity = await loadRecentWorkerActivity(
-      workerCards.map((worker) => worker.id),
+
+    const { workerCards, summary } = await measureRequestPhase(
+      "workers.serialize.overview_cards",
+      () => buildWorkerPerformance(workers, period),
+    );
+    const recentActivity = await measureRequestPhase(
+      "workers.db.overview_recent_activity",
+      () => loadRecentWorkerActivity(workerCards.map((worker) => worker.id)),
     );
     const workerMap = new Map(
       workerCards.map((worker) => [worker.id, worker.name]),

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -39,12 +40,15 @@ const DashboardLayout = ({
   actions,
   children,
 }: DashboardLayoutProps) => {
+  const router = useRouter();
+  const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [demoSeeded, setDemoSeeded] = useState(false);
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);
+  const [assistantReady, setAssistantReady] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -52,6 +56,46 @@ const DashboardLayout = ({
     setDemoSeeded(state.demoSeeded);
     setOnboardingOpen(!state.onboardingSeen);
   }, []);
+
+  useEffect(() => {
+    const routesToPrefetch = [
+      "/dashboard",
+      "/simple-bill",
+      "/invoices",
+      "/invoices/history",
+      "/products",
+      "/customers",
+      "/settings",
+      "/notifications",
+    ].filter((route) => route !== pathname);
+
+    const supportsIdleCallback =
+      typeof window !== "undefined" &&
+      typeof window.requestIdleCallback === "function" &&
+      typeof window.cancelIdleCallback === "function";
+
+    const runPrefetch = () => {
+      startTransition(() => {
+        routesToPrefetch.forEach((route) => {
+          void router.prefetch(route);
+        });
+        setAssistantReady(true);
+      });
+    };
+
+    const handle = supportsIdleCallback
+      ? window.requestIdleCallback(runPrefetch, { timeout: 1200 })
+      : window.setTimeout(runPrefetch, 450);
+
+    return () => {
+      if (!supportsIdleCallback) {
+        window.clearTimeout(handle);
+        return;
+      }
+
+      window.cancelIdleCallback(handle);
+    };
+  }, [pathname, router]);
 
   const handleCompleteOnboarding = () => {
     markOnboardingSeen();
@@ -151,7 +195,7 @@ const DashboardLayout = ({
         demoSeeded={demoSeeded}
       />
 
-      <BillSutraAssistant />
+      {assistantReady ? <BillSutraAssistant /> : null}
     </div>
   );
 };

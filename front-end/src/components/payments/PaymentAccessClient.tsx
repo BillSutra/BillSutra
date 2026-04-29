@@ -3,8 +3,9 @@
 import Script from "next/script";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { isAxiosError } from "axios";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Clock3,
@@ -36,6 +37,7 @@ import {
   uploadAccessPaymentProof,
   verifyAccessRazorpayPayment,
 } from "@/lib/apiClient";
+import { workspaceQueryKeys } from "@/hooks/useWorkspaceQueries";
 
 type PaymentAccessClientProps = {
   userName: string;
@@ -111,6 +113,8 @@ export default function PaymentAccessClient({
   userName,
   userEmail,
 }: PaymentAccessClientProps) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const requestedPlan = searchParams.get("plan");
   const [statusData, setStatusData] = useState<AccessPaymentStatusResponse | null>(
@@ -132,6 +136,23 @@ export default function PaymentAccessClient({
   const [isLoading, startLoadingTransition] = useTransition();
   const [isPaying, startPaymentTransition] = useTransition();
   const [isSubmittingUpi, startUpiTransition] = useTransition();
+
+  const syncBillingQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.subscriptionStatus,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.subscriptionPermissions,
+      }),
+      queryClient.invalidateQueries({ queryKey: ["workers"] }),
+      queryClient.invalidateQueries({ queryKey: ["workers", "overview"] }),
+      queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.businessProfile,
+      }),
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.userProfile }),
+    ]);
+  };
 
   const loadStatus = () => {
     startLoadingTransition(() => {
@@ -267,8 +288,10 @@ export default function PaymentAccessClient({
             },
             handler: async (response) => {
               await verifyAccessRazorpayPayment(response);
+              await syncBillingQueries();
               setBanner("Razorpay payment verified and access unlocked.");
               loadStatus();
+              router.refresh();
             },
           });
 

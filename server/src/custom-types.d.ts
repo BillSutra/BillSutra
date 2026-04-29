@@ -9,6 +9,7 @@ declare global {
     actorId: string;
     businessId: string;
     sessionVersion: number;
+    latestSessionVersion?: number | null;
     isEmailVerified: boolean;
     role: "ADMIN" | "WORKER";
     accountType: "OWNER" | "WORKER";
@@ -31,6 +32,7 @@ declare global {
       file?: Multer.File;
       requestId?: string;
       requestStartedAt?: number;
+      parsedCookies?: Map<string, string>;
     }
   }
 }

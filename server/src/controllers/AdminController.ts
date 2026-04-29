@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../config/db.config.js";
+import { getAccessTokenSecret } from "../lib/authSecrets.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
 const ADMIN_AUTH_COOKIE_NAME = "bill_sutra_admin_session";
@@ -17,7 +18,7 @@ const readRouteParam = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
 
 const createAdminToken = (payload: AdminAuthUser) =>
-  `Bearer ${jwt.sign(payload, process.env.JWT_SECRET as string, {
+  `Bearer ${jwt.sign(payload, getAccessTokenSecret(), {
     expiresIn: "1d",
   })}`;
 

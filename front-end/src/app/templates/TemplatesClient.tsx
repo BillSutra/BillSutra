@@ -40,8 +40,6 @@ import type {
 import {
   createUserSavedTemplate,
   deleteUserSavedTemplate,
-  fetchBusinessProfile,
-  fetchTemplates,
   fetchUserSavedTemplates,
   fetchUserTemplates,
   saveUserTemplate,
@@ -49,6 +47,10 @@ import {
 } from "@/lib/apiClient";
 import { formatBusinessAddressFromRecord } from "@/lib/indianAddress";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
+import {
+  useBusinessProfileQuery,
+  useTemplatesQuery,
+} from "@/hooks/useWorkspaceQueries";
 import { useI18n } from "@/providers/LanguageProvider";
 
 const MemoTemplatePreview = memo(TemplatePreviewRenderer);
@@ -173,10 +175,10 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
   const [backgroundHexInput, setBackgroundHexInput] = useState("#ffffff");
   const [textHexInput, setTextHexInput] = useState("#334155");
 
-  const { data: templateRecords = [], isLoading: templatesLoading } = useQuery({
-    queryKey: ["templates"],
-    queryFn: fetchTemplates,
-  });
+  const {
+    data: templateRecords = [],
+    isLoading: templatesLoading,
+  } = useTemplatesQuery();
 
   const { data: userTemplateRecords = [] } = useQuery({
     queryKey: ["user-templates"],
@@ -188,10 +190,7 @@ const TemplatesClient = ({ name, image }: { name: string; image?: string }) => {
     queryFn: fetchUserSavedTemplates,
   });
 
-  const { data: businessProfile } = useQuery({
-    queryKey: ["business-profile"],
-    queryFn: fetchBusinessProfile,
-  });
+  const { data: businessProfile } = useBusinessProfileQuery();
 
   const { downloadPdf } = useInvoicePdf();
 

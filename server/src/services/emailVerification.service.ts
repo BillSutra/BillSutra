@@ -9,6 +9,7 @@ import {
   normalizeEmailAddress,
 } from "../lib/modernAuth.js";
 import { enqueueEmailVerificationEmail } from "../queues/jobs/email.jobs.js";
+import type { AppQueueContextInput } from "../queues/types.js";
 
 const EMAIL_VERIFICATION_TTL_MS = 60 * 60 * 1000;
 const EMAIL_VERIFICATION_RESEND_COOLDOWN_MS = 60 * 1000;
@@ -85,12 +86,35 @@ export const sendVerificationEmail = async ({
   });
 };
 
-export const dispatchVerificationEmail = async ({
+export const sendFreshVerificationEmail = async ({
   userId,
-  rawToken,
+  reason,
 }: {
   userId: number;
-  rawToken: string;
+  reason?: "signup" | "manual";
+}) => {
+  const token = await createEmailVerificationToken(userId);
+  await sendVerificationEmail({
+    userId,
+    rawToken: token.rawToken,
+  });
+
+  return {
+    ...token,
+    reason: reason ?? "manual",
+  };
+};
+
+export const dispatchVerificationEmail = async ({
+  userId,
+  reason,
+  context,
+  fallbackRawToken,
+}: {
+  userId: number;
+  reason?: "signup" | "manual";
+  context?: AppQueueContextInput;
+  fallbackRawToken?: string;
 }) => {
   let queued:
     | ({ queued: boolean } & Record<string, unknown>)
@@ -99,7 +123,8 @@ export const dispatchVerificationEmail = async ({
   try {
     queued = await enqueueEmailVerificationEmail({
       userId,
-      rawToken,
+      reason,
+      context,
     });
   } catch (error) {
     console.warn("[email] verification queue enqueue attempt failed", {
@@ -114,7 +139,14 @@ export const dispatchVerificationEmail = async ({
   }
 
   try {
-    await sendVerificationEmail({ userId, rawToken });
+    if (fallbackRawToken) {
+      await sendVerificationEmail({
+        userId,
+        rawToken: fallbackRawToken,
+      });
+    } else {
+      await sendFreshVerificationEmail({ userId, reason });
+    }
   } catch (error) {
     console.warn("[email] verification fallback failed", {
       userId,
@@ -125,14 +157,21 @@ export const dispatchVerificationEmail = async ({
   return queued;
 };
 
-export const dispatchFreshVerificationEmail = async (userId: number) => {
+export const dispatchFreshVerificationEmail = async (
+  userId: number,
+  options?: {
+    reason?: "signup" | "manual";
+    context?: AppQueueContextInput;
+  },
+) => {
   const token = await createEmailVerificationToken(userId);
-  await dispatchVerificationEmail({
-    userId,
-    rawToken: token.rawToken,
-  });
 
-  return token;
+  return dispatchVerificationEmail({
+    userId,
+    reason: options?.reason,
+    context: options?.context,
+    fallbackRawToken: token.rawToken,
+  });
 };
 
 export const getEmailVerificationResendState = async (userId: number) => {

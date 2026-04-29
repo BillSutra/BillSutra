@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import puppeteer from "puppeteer";
+import puppeteer, { type Browser, type Page } from "puppeteer";
 
 const resolveExistingPath = (candidates: Array<string | undefined>) => {
   for (const candidate of candidates) {
@@ -57,4 +57,45 @@ export const launchPuppeteerBrowser = async () => {
     executablePath,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
+};
+
+let sharedBrowserPromise: Promise<Browser> | null = null;
+
+const resetSharedBrowser = () => {
+  sharedBrowserPromise = null;
+};
+
+export const getSharedPuppeteerBrowser = async (): Promise<Browser> => {
+  if (!sharedBrowserPromise) {
+    sharedBrowserPromise = launchPuppeteerBrowser()
+      .then((browser) => {
+        browser.once("disconnected", resetSharedBrowser);
+        return browser;
+      })
+      .catch((error) => {
+        resetSharedBrowser();
+        throw error;
+      });
+  }
+
+  const browser = await sharedBrowserPromise;
+  if (!browser.connected) {
+    resetSharedBrowser();
+    return getSharedPuppeteerBrowser();
+  }
+
+  return browser;
+};
+
+export const withPuppeteerPage = async <T>(
+  task: (page: Page) => Promise<T>,
+) => {
+  const browser = await getSharedPuppeteerBrowser();
+  const page = await browser.newPage();
+
+  try {
+    return await task(page);
+  } finally {
+    await page.close().catch(() => undefined);
+  }
 };

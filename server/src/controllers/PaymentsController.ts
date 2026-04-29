@@ -31,6 +31,7 @@ import {
   maybeDecryptSensitiveValue,
 } from "../lib/fieldEncryption.js";
 import { recordAuditLog } from "../services/auditLog.service.js";
+import { invalidateCustomerListCaches } from "../lib/cacheInvalidation.js";
 
 type PaymentCreateInput = z.infer<typeof paymentCreateSchema>;
 type PaymentUpdateInput = z.infer<typeof paymentUpdateSchema>;
@@ -646,6 +647,7 @@ class PaymentsController {
           result.paidAmount,
           result.totalAmount,
         );
+        void invalidateCustomerListCaches(businessId, userId);
         emitDashboardUpdate({ userId, source: "payment.create" });
         emitRealtimeInvoiceUpdated({
           userId,
@@ -813,6 +815,7 @@ class PaymentsController {
 
   static async update(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -856,6 +859,7 @@ class PaymentsController {
         result.totalAmount,
       );
 
+      void invalidateCustomerListCaches(businessId, userId);
       emitDashboardUpdate({ userId, source: "payment.update" });
       emitRealtimeInvoiceUpdated({
         userId,

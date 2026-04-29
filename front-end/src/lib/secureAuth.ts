@@ -1,5 +1,6 @@
 import Env from "./env";
 import { API_URL } from "./apiEndPoints";
+import { buildRequiredCsrfHeaders } from "./csrfClient";
 
 export const LEGACY_AUTH_TOKEN_STORAGE_KEY = "token";
 export const SECURE_AUTH_BOOTSTRAPPED_KEY = "bill_sutra_secure_auth_bootstrapped";
@@ -128,14 +129,30 @@ export const getLegacyStoredToken = () => {
 };
 
 export const setLegacyStoredToken = (token: string) => {
-  void token;
   if (typeof window === "undefined") {
     return;
   }
 
-  // New sessions rely on HttpOnly cookies + NextAuth session state.
-  // We intentionally stop writing fresh access tokens into localStorage,
-  // while continuing to read old tokens during the migration window.
+  const normalizedToken = normalizeAuthToken(token);
+  setInMemoryAccessToken(normalizedToken);
+
+  if (!normalizedToken) {
+    clearLegacyStoredToken();
+    return;
+  }
+
+  if (isCookieOnlyAuthEnabled()) {
+    logClientAuthEvent("token_stored_in_memory_only", {
+      mode: "cookie_only",
+    });
+    return;
+  }
+
+  window.localStorage.setItem(LEGACY_AUTH_TOKEN_STORAGE_KEY, normalizedToken);
+  logClientAuthEvent("token_stored", {
+    mode: isSecureAuthEnabled() ? "hybrid" : "legacy",
+    expiresAt: getAuthTokenExpiry(normalizedToken),
+  });
 };
 
 export const clearLegacyStoredToken = () => {
@@ -143,6 +160,7 @@ export const clearLegacyStoredToken = () => {
     return;
   }
 
+  setInMemoryAccessToken(null);
   window.localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
 };
 
@@ -315,11 +333,13 @@ export const bootstrapSecureAuthSession = async (
   }
 
   try {
+    const csrfHeaders = await buildRequiredCsrfHeaders();
     const response = await fetch(`${API_URL}/auth/session/bootstrap`, {
       method: "POST",
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
+        ...csrfHeaders,
         Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}`,
       },
       body:
@@ -377,9 +397,11 @@ export const refreshSecureAuthSessionDetailed =
     if (!refreshRequestInFlight) {
       refreshRequestInFlight = (async () => {
         try {
+          const csrfHeaders = await buildRequiredCsrfHeaders();
           const response = await fetch(`${API_URL}/auth/refresh`, {
             method: "POST",
             credentials: "include",
+            headers: csrfHeaders,
           });
 
           if (!response.ok) {

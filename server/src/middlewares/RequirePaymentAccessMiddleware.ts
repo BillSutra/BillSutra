@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { hasPaidAccess } from "../services/subscription.service.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
 
 const RequirePaymentAccessMiddleware = async (
   req: Request,
@@ -13,7 +14,10 @@ const RequirePaymentAccessMiddleware = async (
     return;
   }
 
-  const allowed = await hasPaidAccess(userId);
+  const allowed = await measureRequestPhase(
+    "subscription.payment_access_check",
+    () => hasPaidAccess(userId),
+  );
 
   if (!allowed) {
     res.status(403).json({

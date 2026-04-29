@@ -9,6 +9,8 @@ declare module "bullmq" {
     id?: string | number;
     name: TName;
     data: TData;
+    attemptsMade?: number;
+    failedReason?: string;
     returnvalue?: TResult;
   }
 
@@ -42,6 +44,10 @@ declare module "bullmq" {
       options?: {
         connection?: unknown;
         concurrency?: number;
+        limiter?: {
+          max: number;
+          duration: number;
+        };
       },
     );
     on(

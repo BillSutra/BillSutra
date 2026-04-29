@@ -2,23 +2,44 @@ import crypto from "crypto";
 import type { NextFunction, Request, Response } from "express";
 import { parseCookies } from "../lib/authCookies.js";
 import { isAllowedCorsOrigin } from "../lib/corsOrigins.js";
-
-export const CSRF_COOKIE_NAME = "bill_sutra_csrf_token";
-export const CSRF_HEADER_NAME = "x-csrf-token";
-
-const isProd = process.env.NODE_ENV === "production";
+import {
+  CSRF_TOKEN_MIN_LENGTH,
+  hasValidCsrfToken,
+  readCsrfCookieToken,
+  readCsrfHeaderToken,
+  resolveOrSetCsrfToken,
+} from "../lib/csrf.js";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 const CSRF_EXEMPT_PATHS = new Set(["/api/payments/access/webhooks/razorpay"]);
-const AUTH_COOKIE_NAMES = new Set([
+const SESSIONLESS_PUBLIC_PATHS = new Set([
+  "/api/auth/signup",
+  "/api/auth/login",
+  "/api/auth/logincheck",
+  "/api/auth/register",
+  "/api/auth/verify-email",
+  "/api/auth/resend-otp",
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
+  "/api/auth/worker/login",
+  "/api/auth/otp/send",
+  "/api/auth/otp/verify",
+  "/api/auth/passkeys/authenticate/options",
+  "/api/auth/passkeys/authenticate/verify",
+  "/api/auth/session/bootstrap",
+  "/api/auth/csrf",
+]);
+const OWNER_AUTH_COOKIE_NAMES = new Set([
   "bill_sutra_access_token",
   "accessToken",
   "bill_sutra_refresh_token",
   "refreshToken",
-  "bill_sutra_admin_session",
 ]);
-
-const createCsrfToken = () => crypto.randomBytes(24).toString("base64url");
+const ADMIN_AUTH_COOKIE_NAMES = new Set(["bill_sutra_admin_session"]);
+const csrfDiagnosticsEnabled =
+  process.env.AUTH_DIAGNOSTICS_ENABLED === "true" ||
+  (process.env.NODE_ENV !== "production" &&
+    process.env.AUTH_DIAGNOSTICS_ENABLED !== "false");
 
 const getOriginFromRequest = (req: Request) => {
   const originHeader = req.headers.origin;
@@ -38,38 +59,44 @@ const getOriginFromRequest = (req: Request) => {
   return null;
 };
 
-const hasProtectedSessionCookie = (req: Request) => {
+const logCsrfDiagnostic = (
+  event: string,
+  detail?: Record<string, unknown>,
+  level: "info" | "warn" = "info",
+) => {
+  if (!csrfDiagnosticsEnabled) {
+    return;
+  }
+
+  const logger = level === "warn" ? console.warn : console.info;
+  logger(`[csrf] ${event}`, detail ?? {});
+};
+
+const getProtectionScope = (req: Request) => {
+  if (CSRF_EXEMPT_PATHS.has(req.path) || SESSIONLESS_PUBLIC_PATHS.has(req.path)) {
+    return "none" as const;
+  }
+
+  if (req.path.startsWith("/api/admin")) {
+    return "admin" as const;
+  }
+
+  return "owner" as const;
+};
+
+const hasProtectedSessionCookie = (
+  req: Request,
+  cookieNames: ReadonlySet<string>,
+) => {
   const cookies = parseCookies(req.headers.cookie);
 
-  for (const cookieName of AUTH_COOKIE_NAMES) {
+  for (const cookieName of cookieNames) {
     if (cookies.get(cookieName)) {
       return true;
     }
   }
 
   return false;
-};
-
-const setCsrfCookie = (res: Response, token: string) => {
-  res.cookie(CSRF_COOKIE_NAME, token, {
-    httpOnly: false,
-    secure: isProd,
-    sameSite: "strict",
-    path: "/",
-  });
-};
-
-const getHeaderToken = (req: Request) => {
-  const rawHeader = req.headers[CSRF_HEADER_NAME];
-  if (typeof rawHeader === "string") {
-    return rawHeader.trim();
-  }
-
-  if (Array.isArray(rawHeader)) {
-    return rawHeader[0]?.trim() ?? "";
-  }
-
-  return "";
 };
 
 const tokensMatch = (left: string, right: string) => {
@@ -88,11 +115,7 @@ export const ensureCsrfCookie = (
   res: Response,
   next: NextFunction,
 ) => {
-  const existing = parseCookies(req.headers.cookie).get(CSRF_COOKIE_NAME);
-  if (!existing || existing.length < 24) {
-    setCsrfCookie(res, createCsrfToken());
-  }
-
+  resolveOrSetCsrfToken(req, res);
   next();
 };
 
@@ -101,18 +124,58 @@ const csrfProtectionMiddleware = (
   res: Response,
   next: NextFunction,
 ) => {
+  const protectionScope = getProtectionScope(req);
+  const ownerSessionCookiePresent = hasProtectedSessionCookie(
+    req,
+    OWNER_AUTH_COOKIE_NAMES,
+  );
+  const adminSessionCookiePresent = hasProtectedSessionCookie(
+    req,
+    ADMIN_AUTH_COOKIE_NAMES,
+  );
+  const cookieToken = readCsrfCookieToken(req);
+  const headerToken = readCsrfHeaderToken(req);
+  const requestOrigin = getOriginFromRequest(req);
+
+  logCsrfDiagnostic("middleware_entered", {
+    method: req.method,
+    path: req.path,
+    protectionScope,
+    origin: requestOrigin,
+    hasOwnerSessionCookie: ownerSessionCookiePresent,
+    hasAdminSessionCookie: adminSessionCookiePresent,
+    hasCsrfCookie: hasValidCsrfToken(cookieToken),
+    hasCsrfHeader: hasValidCsrfToken(headerToken),
+  });
+
   if (SAFE_METHODS.has(req.method.toUpperCase())) {
+    logCsrfDiagnostic("skipped_safe_method", {
+      method: req.method,
+      path: req.path,
+    });
     next();
     return;
   }
 
   if (CSRF_EXEMPT_PATHS.has(req.path)) {
+    logCsrfDiagnostic("skipped_exempt_path", {
+      method: req.method,
+      path: req.path,
+    });
     next();
     return;
   }
 
-  const requestOrigin = getOriginFromRequest(req);
   if (requestOrigin && !isAllowedCorsOrigin(requestOrigin)) {
+    logCsrfDiagnostic(
+      "rejected_origin",
+      {
+        method: req.method,
+        path: req.path,
+        origin: requestOrigin,
+      },
+      "warn",
+    );
     res.status(403).json({
       status: 403,
       message: "Origin not allowed",
@@ -121,24 +184,71 @@ const csrfProtectionMiddleware = (
     return;
   }
 
-  if (!hasProtectedSessionCookie(req)) {
+  logCsrfDiagnostic("origin_validated", {
+    method: req.method,
+    path: req.path,
+    origin: requestOrigin,
+  });
+
+  if (protectionScope === "none") {
+    logCsrfDiagnostic("skipped_sessionless_route", {
+      method: req.method,
+      path: req.path,
+    });
     next();
     return;
   }
 
-  const cookieToken = parseCookies(req.headers.cookie).get(CSRF_COOKIE_NAME) ?? "";
-  const headerToken = getHeaderToken(req);
+  const relevantSessionCookiePresent =
+    protectionScope === "admin"
+      ? adminSessionCookiePresent
+      : ownerSessionCookiePresent;
 
-  if (cookieToken.length < 24) {
-    setCsrfCookie(res, createCsrfToken());
+  if (!relevantSessionCookiePresent) {
+    logCsrfDiagnostic("skipped_no_relevant_session_cookie", {
+      method: req.method,
+      path: req.path,
+      protectionScope,
+    });
     next();
+    return;
+  }
+
+  if (!hasValidCsrfToken(cookieToken)) {
+    resolveOrSetCsrfToken(req, res);
+    logCsrfDiagnostic(
+      "rejected_missing_cookie_token",
+      {
+        method: req.method,
+        path: req.path,
+        protectionScope,
+      },
+      "warn",
+    );
+    res.status(403).json({
+      status: 403,
+      message: "CSRF validation failed",
+      code: "CSRF_TOKEN_ISSUED_RETRY_REQUIRED",
+    });
     return;
   }
 
   if (
-    headerToken.length < 24 ||
+    !hasValidCsrfToken(headerToken) ||
+    cookieToken.length < CSRF_TOKEN_MIN_LENGTH ||
     !tokensMatch(cookieToken, headerToken)
   ) {
+    logCsrfDiagnostic(
+      "rejected_header_mismatch",
+      {
+        method: req.method,
+        path: req.path,
+        protectionScope,
+        headerLength: headerToken.length,
+        cookieLength: cookieToken.length,
+      },
+      "warn",
+    );
     res.status(403).json({
       status: 403,
       message: "CSRF validation failed",
@@ -147,6 +257,11 @@ const csrfProtectionMiddleware = (
     return;
   }
 
+  logCsrfDiagnostic("validated", {
+    method: req.method,
+    path: req.path,
+    protectionScope,
+  });
   next();
 };
 

@@ -7,11 +7,17 @@
   ],
   "scripts": {
     "dev": "npm --prefix front-end run dev",
+    "dev:frontend": "npm --prefix front-end run dev",
+    "dev:server": "npm --prefix server run dev",
+    "dev:worker": "npm --prefix server run worker:dev",
     "build": "npm --prefix server run build && npm --prefix front-end run build",
+    "build:server": "npm --prefix server run build",
+    "build:frontend": "npm --prefix front-end run build",
     "start": "npm --prefix front-end run start",
     "lint": "npm --prefix front-end run lint",
     "server": "npm --prefix server run start",
     "worker": "npm --prefix server run worker",
+    "worker:start": "npm --prefix server run worker:start",
     "face-service": "powershell -ExecutionPolicy Bypass -File .\\face_recognition_service\\start.ps1"
   }
 }

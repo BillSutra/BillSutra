@@ -33,6 +33,10 @@ import {
 } from "./invoiceEmail.service.js";
 import { renderInvoicePreviewPdfBuffer } from "./invoicePreviewPdf.service.js";
 import {
+  invalidateCustomerListCaches,
+  invalidateProductOptionCaches,
+} from "../../lib/cacheInvalidation.js";
+import {
   enqueueInvoiceEmailDelivery,
   enqueueInvoicePdfGeneration,
   enqueueInvoiceReminderDelivery,
@@ -227,6 +231,8 @@ export const store = async (req: Request, res: Response) => {
     const body = req.body as InvoiceCreateInput;
     const invoice = await createInvoice(userId, body);
     invalidateInventoryInsightsCacheByUser(userId);
+    void invalidateCustomerListCaches(businessId, userId);
+    void invalidateProductOptionCaches(businessId, userId);
 
     try {
       await incrementInvoiceUsage(userId);
@@ -257,6 +263,15 @@ export const store = async (req: Request, res: Response) => {
     void enqueueInvoicePdfGeneration({
       userId,
       invoiceId: invoice.id,
+      context: {
+        businessId: req.user?.businessId,
+        userId,
+        actorId: req.user?.actorId,
+        correlationId: req.requestId,
+        metadata: {
+          source: "invoice.create",
+        },
+      },
     });
     const hydratedInvoice = await getInvoice(userId, invoice.id);
     if (hydratedInvoice) {
@@ -323,6 +338,7 @@ export const show = async (req: Request, res: Response) => {
 
 export const update = async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  const businessId = req.user?.businessId?.trim();
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
@@ -339,10 +355,21 @@ export const update = async (req: Request, res: Response) => {
     return res.status(404).json({ message: "Invoice not found" });
   }
 
+  void invalidateCustomerListCaches(businessId, userId);
+  void invalidateProductOptionCaches(businessId, userId);
   emitDashboardUpdate({ userId, source: "invoice.update" });
   void enqueueInvoicePdfGeneration({
     userId,
     invoiceId: id,
+    context: {
+      businessId: req.user?.businessId,
+      userId,
+      actorId: req.user?.actorId,
+      correlationId: req.requestId,
+      metadata: {
+        source: "invoice.update",
+      },
+    },
   });
   const invoice = await getInvoice(userId, id);
   if (invoice) {
@@ -375,6 +402,7 @@ export const update = async (req: Request, res: Response) => {
 
 export const destroy = async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  const businessId = req.user?.businessId?.trim();
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
@@ -385,6 +413,8 @@ export const destroy = async (req: Request, res: Response) => {
     return res.status(404).json({ message: "Invoice not found" });
   }
 
+  void invalidateCustomerListCaches(businessId, userId);
+  void invalidateProductOptionCaches(businessId, userId);
   emitDashboardUpdate({ userId, source: "invoice.delete" });
   await recordAuditLog({
     req,
@@ -401,6 +431,7 @@ export const destroy = async (req: Request, res: Response) => {
 
 export const duplicate = async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  const businessId = req.user?.businessId?.trim();
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
@@ -408,10 +439,21 @@ export const duplicate = async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     const invoice = await duplicateInvoice(userId, id);
+    void invalidateCustomerListCaches(businessId, userId);
+    void invalidateProductOptionCaches(businessId, userId);
     emitDashboardUpdate({ userId, source: "invoice.duplicate" });
     void enqueueInvoicePdfGeneration({
       userId,
       invoiceId: invoice.id,
+      context: {
+        businessId: req.user?.businessId,
+        userId,
+        actorId: req.user?.actorId,
+        correlationId: req.requestId,
+        metadata: {
+          source: "invoice.duplicate",
+        },
+      },
     });
     emitRealtimeInvoiceUpdated({
       userId,
@@ -567,6 +609,15 @@ export const send = async (req: Request, res: Response) => {
             userId,
             invoiceId: id,
             requestedEmail,
+            context: {
+              businessId: req.user?.businessId,
+              userId,
+              actorId: req.user?.actorId,
+              correlationId: req.requestId,
+              metadata: {
+                source: "invoice.send",
+              },
+            },
           })
         : { queued: false as const };
 
@@ -579,6 +630,7 @@ export const send = async (req: Request, res: Response) => {
           email: recipientEmail,
           queued: true,
           jobId: queued.jobId,
+          trackingId: queued.trackingId,
         },
       });
     }
@@ -640,6 +692,15 @@ export const reminder = async (req: Request, res: Response) => {
       userId,
       invoiceId: id,
       requestedEmail,
+      context: {
+        businessId: req.user?.businessId,
+        userId,
+        actorId: req.user?.actorId,
+        correlationId: req.requestId,
+        metadata: {
+          source: "invoice.reminder",
+        },
+      },
     });
 
     if (!queued.queued) {
@@ -651,8 +712,16 @@ export const reminder = async (req: Request, res: Response) => {
     }
 
     return res.status(200).json({
-      message: `Invoice reminder sent to ${recipientEmail}`,
-      data: { invoiceId: invoice.id, email: recipientEmail },
+      message: queued.queued
+        ? `Invoice reminder queued for ${recipientEmail}`
+        : `Invoice reminder sent to ${recipientEmail}`,
+      data: {
+        invoiceId: invoice.id,
+        email: recipientEmail,
+        queued: queued.queued,
+        jobId: queued.queued ? queued.jobId : null,
+        trackingId: queued.queued ? queued.trackingId : null,
+      },
     });
   } catch (error) {
     const err = error as HttpLikeError;

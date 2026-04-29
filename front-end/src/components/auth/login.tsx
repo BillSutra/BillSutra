@@ -31,7 +31,10 @@ import {
 } from "@/lib/authClient";
 import {
   bootstrapSecureAuthSession,
+  getAuthTokenExpiry,
   isSecureAuthEnabled,
+  logClientAuthEvent,
+  setLegacyStoredToken,
   setPendingRememberMePreference,
 } from "@/lib/secureAuth";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
@@ -164,6 +167,7 @@ export default function Login({
       rawToken: unknown,
       options?: {
         isEmailVerified?: boolean | null;
+        rememberMe?: boolean | null;
       },
     ) => {
       const token = normalizeToken(rawToken);
@@ -174,11 +178,30 @@ export default function Login({
 
       setIsSigningIn(true);
       try {
+        setLegacyStoredToken(token);
+        logClientAuthEvent("login_token_received", {
+          mode,
+          callbackUrl,
+          secureAuthEnabled: isSecureAuthEnabled(),
+          rememberMe: options?.rememberMe ?? null,
+          expiresAt: getAuthTokenExpiry(token),
+        });
+
         if (isSecureAuthEnabled()) {
-          const bootstrapped = await bootstrapSecureAuthSession(token);
+          const bootstrapped = await bootstrapSecureAuthSession(token, {
+            rememberMe:
+              typeof options?.rememberMe === "boolean"
+                ? options.rememberMe
+                : undefined,
+          });
           if (!bootstrapped) {
             throw new Error("Unable to establish your secure session.");
           }
+
+          logClientAuthEvent("secure_session_bootstrapped", {
+            mode,
+            callbackUrl,
+          });
         }
 
         const result = await signIn("auth-token", {
@@ -190,11 +213,20 @@ export default function Login({
           throw new Error("Unable to create your session.");
         }
 
+        logClientAuthEvent("nextauth_session_created", {
+          mode,
+          callbackUrl,
+        });
+
         const destination =
           !isWorkerMode && options?.isEmailVerified === false
             ? "/verify-email"
             : callbackUrl;
 
+        logClientAuthEvent("login_redirecting", {
+          destination,
+          mode,
+        });
         router.push(destination);
         router.refresh();
         return true;
@@ -333,6 +365,10 @@ export default function Login({
           typeof state.data?.user?.is_email_verified === "boolean"
             ? state.data.user.is_email_verified
             : null,
+        rememberMe:
+          typeof state.data?.rememberMe === "boolean"
+            ? state.data.rememberMe
+            : rememberMe,
       });
     }
   }, [
@@ -419,6 +455,7 @@ export default function Login({
           typeof authPayload.user?.is_email_verified === "boolean"
             ? authPayload.user.is_email_verified
             : null,
+        rememberMe,
       });
     } catch (error) {
       captureAnalyticsEvent("auth_login_failed", {
@@ -546,6 +583,7 @@ export default function Login({
             typeof authPayload.user?.is_email_verified === "boolean"
               ? authPayload.user.is_email_verified
               : null,
+          rememberMe,
         });
       } catch (error) {
         captureAnalyticsEvent("auth_login_failed", {
@@ -739,6 +777,7 @@ export default function Login({
                 typeof auth.user?.is_email_verified === "boolean"
                   ? auth.user.is_email_verified
                   : null,
+              rememberMe,
             });
             if (completed) {
               setIsFaceLoginOpen(false);

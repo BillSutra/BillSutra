@@ -4,7 +4,11 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const UPLOADS_ROOT = path.resolve(__dirname, "../../uploads");
+const configuredUploadsRoot = process.env.UPLOADS_ROOT?.trim();
+
+export const UPLOADS_ROOT = configuredUploadsRoot
+  ? path.resolve(configuredUploadsRoot)
+  : path.resolve(__dirname, "../../uploads");
 export const PUBLIC_UPLOADS_ROOT = path.join(UPLOADS_ROOT, "public");
 export const PRIVATE_UPLOADS_ROOT = path.join(UPLOADS_ROOT, "private");
 export const PUBLIC_LOGOS_ROOT = path.join(PUBLIC_UPLOADS_ROOT, "logos");

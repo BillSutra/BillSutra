@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model User {
@@ -52,6 +53,7 @@ model User {
   preferences                 UserPreference?
   notifications               Notification[]
   extra_entries               ExtraEntry[]
+  analytics_daily_stats       AnalyticsDailyStat[]
   email_verification_tokens   EmailVerificationToken[]
   email_logs                  EmailLog[]
 
@@ -108,6 +110,7 @@ model Notification {
 
   @@index([user_id, created_at])
   @@index([user_id, is_read, created_at])
+  @@index([user_id, type, created_at])
   @@index([business_id, created_at])
   @@unique([business_id, reference_key])
   @@map("notifications")
@@ -149,6 +152,7 @@ model Worker {
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
 
   @@index([businessId])
+  @@index([businessId, createdAt])
   @@map("workers")
 }
 
@@ -274,6 +278,42 @@ model ExtraEntry {
   @@index([userId])
   @@index([userId, date])
   @@map("extra_entries")
+}
+
+model AnalyticsDailyStat {
+  id Int @id @default(autoincrement())
+
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int  @map("user_id")
+
+  date DateTime
+
+  bookedSales         Decimal @default(0) @map("booked_sales") @db.Decimal(14, 2)
+  collectedSales      Decimal @default(0) @map("collected_sales") @db.Decimal(14, 2)
+  pendingSales        Decimal @default(0) @map("pending_sales") @db.Decimal(14, 2)
+  saleCount           Int     @default(0) @map("sale_count")
+  invoiceBilled       Decimal @default(0) @map("invoice_billed") @db.Decimal(14, 2)
+  invoiceCount        Int     @default(0) @map("invoice_count")
+  invoiceCollections  Decimal @default(0) @map("invoice_collections") @db.Decimal(14, 2)
+  invoicePending      Decimal @default(0) @map("invoice_pending") @db.Decimal(14, 2)
+  bookedPurchases     Decimal @default(0) @map("booked_purchases") @db.Decimal(14, 2)
+  cashOutPurchases    Decimal @default(0) @map("cash_out_purchases") @db.Decimal(14, 2)
+  pendingPurchases    Decimal @default(0) @map("pending_purchases") @db.Decimal(14, 2)
+  purchaseCount       Int     @default(0) @map("purchase_count")
+  expenses            Decimal @default(0) @db.Decimal(14, 2)
+  extraIncome         Decimal @default(0) @map("extra_income") @db.Decimal(14, 2)
+  extraExpense        Decimal @default(0) @map("extra_expense") @db.Decimal(14, 2)
+  extraLoss           Decimal @default(0) @map("extra_loss") @db.Decimal(14, 2)
+  extraInvestment     Decimal @default(0) @map("extra_investment") @db.Decimal(14, 2)
+  customersCreated    Int     @default(0) @map("customers_created")
+  suppliersCreated    Int     @default(0) @map("suppliers_created")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@index([userId, updatedAt])
+  @@map("analytics_daily_stats")
 }
 
 model Customer {

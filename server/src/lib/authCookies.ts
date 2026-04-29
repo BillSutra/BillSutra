@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { Prisma } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import prisma from "../config/db.config.js";
+import { getRefreshTokenSecret } from "./authSecrets.js";
 import { hashSecretValue } from "./modernAuth.js";
 import { recordAuditLog } from "../services/auditLog.service.js";
 import { createNotification } from "../services/notification.service.js";
@@ -233,11 +234,19 @@ export const parseCookies = (cookieHeader?: string | null) => {
   return cookies;
 };
 
+const getRequestCookies = (req: Request) => {
+  if (!req.parsedCookies) {
+    req.parsedCookies = parseCookies(req.headers.cookie);
+  }
+
+  return req.parsedCookies;
+};
+
 export const getCookieValue = (req: Request, cookieName: string) =>
-  parseCookies(req.headers.cookie).get(cookieName) ?? null;
+  getRequestCookies(req).get(cookieName) ?? null;
 
 const getCookieValueFromNames = (req: Request, cookieNames: string[]) => {
-  const cookies = parseCookies(req.headers.cookie);
+  const cookies = getRequestCookies(req);
 
   for (const cookieName of cookieNames) {
     const value = cookies.get(cookieName);
@@ -333,8 +342,7 @@ const signRefreshToken = (
       token_type: "refresh_v1",
       remember_me: rememberMe,
     },
-    process.env.REFRESH_TOKEN_SECRET?.trim() ||
-      (process.env.JWT_SECRET as string),
+    getRefreshTokenSecret(),
     {
       expiresIn: refreshTokenTtl as jwt.SignOptions["expiresIn"],
     },
@@ -380,6 +388,14 @@ export const issueAuthCookies = async (
     );
     logRefreshTableFallback({
       ownerUserId: authUser.ownerUserId,
+      reason: preferences?.reason ?? "login",
+    });
+    logAuth("session_issued", {
+      ownerUserId: authUser.ownerUserId,
+      accountType: authUser.accountType,
+      role: authUser.role,
+      rememberMe: sessionPreferences.rememberMe,
+      storage: "stateless_fallback",
       reason: preferences?.reason ?? "login",
     });
     return {
@@ -502,6 +518,14 @@ export const issueAuthCookies = async (
     throw error;
   }
 
+  logAuth("session_issued", {
+    ownerUserId: authUser.ownerUserId,
+    accountType: authUser.accountType,
+    role: authUser.role,
+    rememberMe: sessionPreferences.rememberMe,
+    storage: "refresh_table",
+    reason: preferences?.reason ?? "login",
+  });
   return {
     accessToken,
     refreshToken,
@@ -618,8 +642,7 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
   try {
     decoded = jwt.verify(
       refreshToken,
-      process.env.REFRESH_TOKEN_SECRET?.trim() ||
-        (process.env.JWT_SECRET as string),
+      getRefreshTokenSecret(),
     );
   } catch (error) {
     await revokeRefreshTokenByHash(refreshToken, "jwt_verify_failed");
@@ -787,12 +810,12 @@ export const resolveAccessTokenFromRequest = (req: Request) => {
       ? authHeader.trim().slice("bearer ".length).trim()
       : null;
 
-  const cookieToken = getCookieValue(req, ACCESS_TOKEN_COOKIE_NAME);
-  const cookieAliasToken = getCookieValue(req, ACCESS_TOKEN_COOKIE_ALIAS);
-
   return {
     headerToken,
-    cookieToken: cookieToken ?? cookieAliasToken,
+    cookieToken: getCookieValueFromNames(req, [
+      ACCESS_TOKEN_COOKIE_NAME,
+      ACCESS_TOKEN_COOKIE_ALIAS,
+    ]),
   };
 };
 

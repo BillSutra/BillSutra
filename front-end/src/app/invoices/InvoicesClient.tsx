@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -45,8 +45,6 @@ import Modal from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  fetchBusinessProfile,
-  fetchUserSettingsPreferences,
   sendInvoiceEmail,
 } from "@/lib/apiClient";
 import {
@@ -67,6 +65,10 @@ import {
 } from "@/hooks/invoice/useInvoiceDrafts";
 import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
+import {
+  useBusinessProfileQuery,
+  useUserSettingsPreferencesQuery,
+} from "@/hooks/useWorkspaceQueries";
 import {
   formatBusinessAddressFromRecord,
   formatCustomerAddressFromRecord,
@@ -364,14 +366,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     isError: warehousesError,
     refetch: refetchWarehouses,
   } = useWarehousesQuery();
-  const { data: businessProfile } = useQuery({
-    queryKey: ["business-profile"],
-    queryFn: fetchBusinessProfile,
-  });
-  const { data: userSettingsPreferences } = useQuery({
-    queryKey: ["settings", "preferences"],
-    queryFn: fetchUserSettingsPreferences,
-  });
+  const { data: businessProfile } = useBusinessProfileQuery();
+  const { data: userSettingsPreferences } = useUserSettingsPreferencesQuery();
   const sendInvoiceEmailMutation = useMutation({
     mutationFn: ({
       invoiceId,

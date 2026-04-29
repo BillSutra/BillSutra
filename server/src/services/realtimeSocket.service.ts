@@ -2,6 +2,7 @@ import type { Server as HttpServer } from "http";
 import jwt from "jsonwebtoken";
 import { Server as SocketIOServer, type Socket } from "socket.io";
 import { ACCESS_TOKEN_COOKIE_NAME, parseCookies } from "../lib/authCookies.js";
+import { getAccessTokenSecret } from "../lib/authSecrets.js";
 import {
   hasSupportedAccessTokenType,
   getUserSessionVersionIfAvailable,
@@ -141,7 +142,7 @@ const authenticateSocket = async (socket: AuthenticatedSocket) => {
     throw new Error("missing_token");
   }
 
-  const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+  const decoded = jwt.verify(token, getAccessTokenSecret());
   if (!hasSupportedAccessTokenType(decoded)) {
     throw new Error("invalid_token_type");
   }
@@ -238,6 +239,19 @@ export const initRealtimeSocketServer = (server: HttpServer) => {
   });
 
   return io;
+};
+
+export const shutdownRealtimeSocketServer = async () => {
+  if (!io) {
+    return;
+  }
+
+  const activeServer = io;
+  io = null;
+
+  await new Promise<void>((resolve) => {
+    activeServer.close(() => resolve());
+  });
 };
 
 const emitToUserRoom = <T extends object>(

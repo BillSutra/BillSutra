@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import prisma from "../../config/db.config.js";
 import XLSX from "xlsx";
-import { launchPuppeteerBrowser } from "../../lib/launchPuppeteerBrowser.js";
+import { withPuppeteerPage } from "../../lib/launchPuppeteerBrowser.js";
 import { enqueueExportEmailDelivery } from "../../queues/jobs/export.jobs.js";
 import { sendExportEmail as sendExportEmailNotification } from "../../services/email.service.js";
 
@@ -594,10 +594,7 @@ const createPdfBuffer = async <TRecord>(
   records: TRecord[],
   fields: ExportFieldDefinition<TRecord>[],
 ) => {
-  const browser = await launchPuppeteerBrowser();
-
-  try {
-    const page = await browser.newPage();
+  return withPuppeteerPage(async (page) => {
     await page.setContent(
       createPdfHtml(
         `${resource.charAt(0).toUpperCase()}${resource.slice(1)} Export`,
@@ -623,9 +620,7 @@ const createPdfBuffer = async <TRecord>(
         left: "24px",
       },
     })) as Buffer;
-  } finally {
-    await browser.close();
-  }
+  });
 };
 
 const buildProductWhere = (userId: number, payload: ExportPayload) => {
@@ -979,7 +974,12 @@ const logExport = async (
 };
 
 export const executeQueuedExportEmail = async (
-  authUser: { id: number; email?: string; actorId?: string },
+  authUser: {
+    id: number;
+    email?: string;
+    actorId?: string;
+    businessId?: string | null;
+  },
   payload: ExportPayload,
 ) => {
   const recipientEmail = payload.email?.trim() || authUser.email?.trim();
@@ -1014,7 +1014,13 @@ export const executeQueuedExportEmail = async (
 };
 
 export const executeExport = async (
-  authUser: { id: number; email?: string; actorId?: string },
+  authUser: {
+    id: number;
+    email?: string;
+    actorId?: string;
+    businessId?: string | null;
+    requestId?: string;
+  },
   payload: ExportPayload,
 ) => {
   if (payload.delivery === "email") {
@@ -1032,8 +1038,20 @@ export const executeExport = async (
     const queued = await enqueueExportEmailDelivery({
       userId: authUser.id,
       actorId: authUser.actorId,
+      businessId: authUser.businessId,
       email: recipientEmail,
       payload: normalizedPayload,
+      context: {
+        businessId: authUser.businessId ?? null,
+        userId: authUser.id,
+        actorId: authUser.actorId ?? null,
+        correlationId: authUser.requestId ?? null,
+        metadata: {
+          resource: normalizedPayload.resource,
+          format: normalizedPayload.format,
+          scope: normalizedPayload.scope,
+        },
+      },
     });
 
     if (queued.queued) {
@@ -1048,10 +1066,18 @@ export const executeExport = async (
           normalizedPayload.format,
           normalizedPayload.filters,
         ),
+        queued: true as const,
+        jobId: queued.jobId,
+        trackingId: queued.trackingId,
       };
     }
 
-    return executeQueuedExportEmail(authUser, normalizedPayload);
+    return {
+      ...(await executeQueuedExportEmail(authUser, normalizedPayload)),
+      queued: false as const,
+      jobId: null,
+      trackingId: null,
+    };
   }
 
   const records = await fetchRecords(authUser.id, payload);

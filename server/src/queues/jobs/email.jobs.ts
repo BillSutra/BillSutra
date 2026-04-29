@@ -1,61 +1,144 @@
-import { enqueueDefaultJob } from "../queue.js";
+import { enqueueQueueJob } from "../queue.js";
+import type { AppQueueContextInput } from "../types.js";
 
-export const enqueueWelcomeEmail = async (params: { userId: number }) =>
-  enqueueDefaultJob({
+export const enqueueWelcomeEmail = async (params: {
+  userId: number;
+  context?: AppQueueContextInput;
+}) =>
+  enqueueQueueJob({
     jobName: "sendWelcomeEmail",
-    data: params,
+    payload: {},
+    context: {
+      userId: params.userId,
+      ...params.context,
+      metadata: {
+        ...(params.context?.metadata ?? {}),
+        task: "welcome_email",
+      },
+    },
     jobId: `email:welcome:${params.userId}`,
   });
 
 export const enqueueEmailVerificationEmail = async (params: {
   userId: number;
-  rawToken: string;
+  reason?: "signup" | "manual";
+  context?: AppQueueContextInput;
 }) =>
-  enqueueDefaultJob({
+  enqueueQueueJob({
     jobName: "sendEmailVerificationEmail",
-    data: params,
+    payload: {
+      reason: params.reason,
+    },
+    context: {
+      userId: params.userId,
+      ...params.context,
+      metadata: {
+        ...(params.context?.metadata ?? {}),
+        task: "email_verification",
+        reason: params.reason ?? "manual",
+      },
+    },
     jobId: `email:verify:${params.userId}`,
   });
 
-export const enqueuePlanApprovedEmail = async (params: { paymentId: string }) =>
-  enqueueDefaultJob({
+export const enqueuePlanApprovedEmail = async (params: {
+  paymentId: string;
+  context?: AppQueueContextInput;
+}) =>
+  enqueueQueueJob({
     jobName: "sendPlanApprovedEmail",
-    data: params,
+    payload: {
+      paymentId: params.paymentId,
+    },
+    context: {
+      ...params.context,
+      metadata: {
+        ...(params.context?.metadata ?? {}),
+        paymentId: params.paymentId,
+        task: "plan_approved_email",
+      },
+    },
     jobId: `email:plan-approved:${params.paymentId}`,
   });
 
 export const enqueueMonthlySalesReportEmail = async (params: {
   userId: number;
   monthKey: string;
+  context?: AppQueueContextInput;
 }) =>
-  enqueueDefaultJob({
+  enqueueQueueJob({
     jobName: "sendMonthlySalesReportEmail",
-    data: params,
+    payload: {
+      monthKey: params.monthKey,
+    },
+    context: {
+      userId: params.userId,
+      ...params.context,
+      metadata: {
+        ...(params.context?.metadata ?? {}),
+        monthKey: params.monthKey,
+        task: "monthly_sales_report_email",
+      },
+    },
     jobId: `email:monthly-report:${params.userId}:${params.monthKey}`,
   });
 
 export const enqueuePaymentReceivedEmail = async (params: {
   paymentId: number;
+  context?: AppQueueContextInput;
 }) =>
-  enqueueDefaultJob({
+  enqueueQueueJob({
     jobName: "sendPaymentReceivedEmail",
-    data: params,
+    payload: {
+      paymentId: params.paymentId,
+    },
+    context: {
+      ...params.context,
+      metadata: {
+        ...(params.context?.metadata ?? {}),
+        paymentId: params.paymentId,
+        task: "payment_received_email",
+      },
+    },
     jobId: `email:payment-received:${params.paymentId}`,
   });
 
 export const enqueueWeeklyReportEmail = async (params: {
   userId: number;
   weekKey: string;
+  context?: AppQueueContextInput;
 }) =>
-  enqueueDefaultJob({
+  enqueueQueueJob({
     jobName: "sendWeeklyReportEmail",
-    data: params,
+    payload: {
+      weekKey: params.weekKey,
+    },
+    context: {
+      userId: params.userId,
+      ...params.context,
+      metadata: {
+        ...(params.context?.metadata ?? {}),
+        weekKey: params.weekKey,
+        task: "weekly_report_email",
+      },
+    },
     jobId: `email:weekly-report:${params.userId}:${params.weekKey}`,
   });
 
-export const enqueueLowStockAlertEmail = async (params: { userId: number }) =>
-  enqueueDefaultJob({
+export const enqueueLowStockAlertEmail = async (params: {
+  userId: number;
+  context?: AppQueueContextInput;
+}) =>
+  enqueueQueueJob({
     jobName: "sendLowStockAlertEmail",
-    data: params,
+    payload: {},
+    context: {
+      userId: params.userId,
+      ...params.context,
+      metadata: {
+        ...(params.context?.metadata ?? {}),
+        task: "low_stock_alert_email",
+      },
+    },
     jobId: `email:low-stock:${params.userId}:${new Date().toISOString().slice(0, 10)}`,
   });

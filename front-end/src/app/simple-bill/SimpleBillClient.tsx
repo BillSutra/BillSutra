@@ -8,7 +8,6 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import {
   Download,
@@ -37,16 +36,18 @@ import {
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import {
-  fetchBusinessProfile,
   fetchCustomers,
   sendInvoiceEmail,
-  fetchUserSettingsPreferences,
   type BusinessProfileRecord,
   type Customer,
   type Invoice,
   type InvoiceInput,
   type Product,
 } from "@/lib/apiClient";
+import {
+  useBusinessProfileQuery,
+  useUserSettingsPreferencesQuery,
+} from "@/hooks/useWorkspaceQueries";
 import { API_URL } from "@/lib/apiEndPoints";
 import {
   formatBusinessAddressFromRecord,
@@ -1566,14 +1567,8 @@ const SimpleBillClient = ({
     isError: productsError,
     refetch: refetchProducts,
   } = useProductsQuery({ limit: 1000 });
-  const { data: businessProfile } = useQuery({
-    queryKey: ["business-profile"],
-    queryFn: fetchBusinessProfile,
-  });
-  const { data: userSettingsPreferences } = useQuery({
-    queryKey: ["settings", "preferences"],
-    queryFn: fetchUserSettingsPreferences,
-  });
+  const { data: businessProfile } = useBusinessProfileQuery();
+  const { data: userSettingsPreferences } = useUserSettingsPreferencesQuery();
   const createCustomer = useCreateCustomerMutation();
   const createInvoice = useCreateInvoiceMutation();
   const createProduct = useCreateProductMutation();

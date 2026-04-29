@@ -15,9 +15,27 @@ import {
   normalizeProductCategoryRecords,
   productCategoryInclude,
 } from "../lib/productCategories.js";
+import {
+  respondWithRedisCachedData,
+} from "../lib/redisResourceCache.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
+import {
+  buildProductOptionsCachePrefix,
+  buildProductOptionsRedisKey,
+} from "../redis/cacheKeys.js";
+import { invalidateProductOptionCaches } from "../lib/cacheInvalidation.js";
 
 type ProductCreateInput = z.infer<typeof productCreateSchema>;
 type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
+
+const PRODUCT_OPTIONS_CACHE_TTL_SECONDS = Math.max(
+  Number(process.env.PRODUCT_OPTIONS_CACHE_TTL_SECONDS ?? 180),
+  15,
+);
+const PRODUCT_OPTIONS_CACHE_SWR_SECONDS = Math.max(
+  Number(process.env.PRODUCT_OPTIONS_CACHE_SWR_SECONDS ?? 60),
+  0,
+);
 
 const buildQuickProductSku = (productName: string) => {
   const base = productName
@@ -68,6 +86,7 @@ const resolveProductSku = async ({
 class ProductsController {
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -143,47 +162,76 @@ class ProductsController {
     void maintainProductCategoryReferences(userId);
 
     if (isOptionsMode) {
-      const items = await prisma.product.findMany({
-        where,
-        select: {
-          id: true,
-          name: true,
-          sku: true,
-          barcode: true,
-          price: true,
-          cost: true,
-          gst_rate: true,
-          stock_on_hand: true,
-          reorder_level: true,
-          category: productCategoryInclude.category,
-        },
-        orderBy: { name: "asc" },
-        skip,
-        take: limit,
-      });
-      const normalizedItems = normalizeProductCategoryRecords(items);
-
-      return sendResponse(res, 200, {
-        data: {
-          products: normalizedItems,
-          items: normalizedItems,
+      return respondWithRedisCachedData({
+        req,
+        res,
+        key: buildProductOptionsRedisKey({
+          businessId,
+          userId,
+          search,
+          category,
           page,
           limit,
-          total: normalizedItems.length,
-          totalPages: 1,
+        }),
+        label: "products-options",
+        ttlSeconds: PRODUCT_OPTIONS_CACHE_TTL_SECONDS,
+        staleWhileRevalidateSeconds: PRODUCT_OPTIONS_CACHE_SWR_SECONDS,
+        invalidationPrefixes: [
+          buildProductOptionsCachePrefix({ businessId, userId }),
+        ],
+        resolver: async () => {
+          const items = await measureRequestPhase("products.db.options", () =>
+            prisma.product.findMany({
+              where,
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                barcode: true,
+                price: true,
+                cost: true,
+                gst_rate: true,
+                stock_on_hand: true,
+                reorder_level: true,
+                category: productCategoryInclude.category,
+              },
+              orderBy: { name: "asc" },
+              skip,
+              take: limit,
+            }),
+          );
+          const normalizedItems = await measureRequestPhase(
+            "products.serialize.options",
+            async () => normalizeProductCategoryRecords(items),
+          );
+          return {
+            products: normalizedItems,
+            items: normalizedItems,
+            page,
+            limit,
+            total: normalizedItems.length,
+            totalPages: 1,
+          };
         },
       });
     }
 
-    const items = await prisma.product.findMany({
-      where,
-      include: productCategoryInclude,
-      orderBy: { created_at: "desc" },
-      skip,
-      take: limit,
-    });
-    const normalizedItems = normalizeProductCategoryRecords(items);
-    const total = await prisma.product.count({ where });
+    const [items, total] = await measureRequestPhase("products.db.index", () =>
+      Promise.all([
+        prisma.product.findMany({
+          where,
+          include: productCategoryInclude,
+          orderBy: { created_at: "desc" },
+          skip,
+          take: limit,
+        }),
+        prisma.product.count({ where }),
+      ]),
+    );
+    const normalizedItems = await measureRequestPhase(
+      "products.serialize.index",
+      async () => normalizeProductCategoryRecords(items),
+    );
 
     return sendResponse(res, 200, {
       data: {
@@ -258,6 +306,7 @@ class ProductsController {
       },
       include: productCategoryInclude,
     });
+    void invalidateProductOptionCaches(req.user?.businessId?.trim(), userId);
 
     if (businessId) {
       void dispatchNotification({
@@ -361,6 +410,7 @@ class ProductsController {
       },
       include: productCategoryInclude,
     });
+    void invalidateProductOptionCaches(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, {
       message: "Product updated",
@@ -382,6 +432,8 @@ class ProductsController {
     if (!deleted.count) {
       return sendResponse(res, 404, { message: "Product not found" });
     }
+
+    void invalidateProductOptionCaches(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, { message: "Product removed" });
   }

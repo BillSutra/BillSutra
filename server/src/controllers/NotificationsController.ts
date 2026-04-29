@@ -3,6 +3,7 @@ import { sendResponse } from "../utils/sendResponse.js";
 import {
   countUnreadNotifications,
   deleteNotification,
+  invalidateNotificationCaches,
   listNotifications,
   markAllNotificationsAsRead,
   serializeNotification,
@@ -10,6 +11,12 @@ import {
   updateNotificationReadState,
 } from "../services/notification.service.js";
 import type { AppNotificationType } from "../services/notification.service.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
+import { respondWithRedisCachedData } from "../lib/redisResourceCache.js";
+import {
+  buildNotificationsCachePrefix,
+  buildNotificationsRedisKey,
+} from "../redis/cacheKeys.js";
 
 const notificationTypes = new Set<AppNotificationType>([
   "payment",
@@ -18,6 +25,15 @@ const notificationTypes = new Set<AppNotificationType>([
   "subscription",
   "worker",
 ]);
+
+const NOTIFICATIONS_CACHE_TTL_SECONDS = Math.max(
+  Number(process.env.NOTIFICATIONS_CACHE_TTL_SECONDS ?? 30),
+  10,
+);
+const NOTIFICATIONS_CACHE_SWR_SECONDS = Math.max(
+  Number(process.env.NOTIFICATIONS_CACHE_SWR_SECONDS ?? 30),
+  0,
+);
 
 class NotificationsController {
   static async index(req: Request, res: Response) {
@@ -48,40 +64,66 @@ class NotificationsController {
             : null
           : null;
 
-    const syncPromise = syncNotificationsIfStale({ userId, businessId });
-
-    let [notificationResult, unreadCount] = await Promise.all([
-      listNotifications({
+    return respondWithRedisCachedData({
+      req,
+      res,
+      key: buildNotificationsRedisKey({
+        businessId,
         userId,
         page,
         limit,
         type,
         isRead,
       }),
-      countUnreadNotifications(userId),
-    ]);
+      label: "notifications",
+      ttlSeconds: NOTIFICATIONS_CACHE_TTL_SECONDS,
+      staleWhileRevalidateSeconds: NOTIFICATIONS_CACHE_SWR_SECONDS,
+      invalidationPrefixes: [
+        buildNotificationsCachePrefix({ businessId, userId }),
+      ],
+      resolver: async () => {
+        const syncPromise = syncNotificationsIfStale({ userId, businessId });
 
-    if (notificationResult.notifications.length === 0 && unreadCount === 0) {
-      await syncPromise;
-      [notificationResult, unreadCount] = await Promise.all([
-        listNotifications({
-          userId,
-          page,
-          limit,
-          type,
-          isRead,
-        }),
-        countUnreadNotifications(userId),
-      ]);
-    }
+        let [notificationResult, unreadCount] = await measureRequestPhase(
+          "notifications.db.index",
+          () =>
+            Promise.all([
+              listNotifications({
+                userId,
+                page,
+                limit,
+                type,
+                isRead,
+              }),
+              countUnreadNotifications(userId),
+            ]),
+        );
 
-    return sendResponse(res, 200, {
-      data: {
-        notifications: notificationResult.notifications.map(serializeNotification),
-        unreadCount,
-        total: notificationResult.total,
-        page: notificationResult.page,
-        limit: notificationResult.limit,
+        if (notificationResult.notifications.length === 0 && unreadCount === 0) {
+          await syncPromise;
+          [notificationResult, unreadCount] = await measureRequestPhase(
+            "notifications.db.resync",
+            () =>
+              Promise.all([
+                listNotifications({
+                  userId,
+                  page,
+                  limit,
+                  type,
+                  isRead,
+                }),
+                countUnreadNotifications(userId),
+              ]),
+          );
+        }
+
+        return measureRequestPhase("notifications.serialize.index", async () => ({
+          notifications: notificationResult.notifications.map(serializeNotification),
+          unreadCount,
+          total: notificationResult.total,
+          page: notificationResult.page,
+          limit: notificationResult.limit,
+        }));
       },
     });
   }
@@ -105,6 +147,7 @@ class NotificationsController {
     if (!updated) {
       return sendResponse(res, 404, { message: "Notification not found" });
     }
+    void invalidateNotificationCaches(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, {
       message: isRead
@@ -122,6 +165,7 @@ class NotificationsController {
     }
 
     await markAllNotificationsAsRead(userId);
+    void invalidateNotificationCaches(req.user?.businessId?.trim(), userId);
     return sendResponse(res, 200, { message: "All notifications marked as read" });
   }
 
@@ -141,6 +185,7 @@ class NotificationsController {
     if (!deleted.count) {
       return sendResponse(res, 404, { message: "Notification not found" });
     }
+    void invalidateNotificationCaches(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, { message: "Notification deleted" });
   }

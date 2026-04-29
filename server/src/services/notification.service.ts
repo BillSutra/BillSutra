@@ -12,6 +12,8 @@ import {
   emitRealtimeNotificationsReadAll,
   emitRealtimeNotificationUpdated,
 } from "./realtimeSocket.service.js";
+import { invalidateRedisResourceCacheByPrefix } from "../lib/redisResourceCache.js";
+import { buildNotificationsCachePrefix } from "../redis/cacheKeys.js";
 
 const PAYMENT_DUE_LOOKAHEAD_DAYS = 2;
 const SUBSCRIPTION_WARNING_DAYS = 5;
@@ -47,6 +49,14 @@ const notificationSyncState = new Map<
   number,
   { syncedAt: number; inFlight: Promise<void> | null }
 >();
+
+export const invalidateNotificationCaches = (
+  businessId: string | undefined,
+  userId: number,
+) =>
+  invalidateRedisResourceCacheByPrefix(
+    buildNotificationsCachePrefix({ businessId, userId }),
+  );
 
 const isNotificationTableMissingError = (error: unknown) => {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
@@ -184,6 +194,7 @@ export const createNotification = async ({
         },
         create: data,
       });
+      void invalidateNotificationCaches(businessId, userId);
       serializeAndEmitCreated(notification, userId);
       return notification;
     } catch (error) {
@@ -200,6 +211,7 @@ export const createNotification = async ({
 
   try {
     const notification = await prisma.notification.create({ data });
+    void invalidateNotificationCaches(businessId, userId);
     serializeAndEmitCreated(notification, userId);
     return notification;
   } catch (error) {
@@ -215,7 +227,17 @@ export const createNotification = async ({
 };
 
 export const dispatchNotification = async (input: CreateNotificationInput) => {
-  const queued = await enqueueNotificationCreation(input);
+  const queued = await enqueueNotificationCreation({
+    ...input,
+    context: {
+      businessId: input.businessId,
+      userId: input.userId,
+      metadata: {
+        type: input.type,
+        referenceKey: input.referenceKey ?? null,
+      },
+    },
+  });
   if (queued.queued) {
     return null;
   }
@@ -311,6 +333,7 @@ export const updateNotificationReadState = async (
         where: { id: notification.id },
         data: { is_read: isRead },
       });
+      void invalidateNotificationCaches(notification.business_id, userId);
       serializeAndEmitUpdated(updated, userId);
       return updated;
     } catch (error) {
@@ -337,6 +360,14 @@ export const markAllNotificationsAsRead = async (userId: number) =>
         data: { is_read: true },
       });
       if (result.count > 0) {
+        const businessIds = await prisma.notification.findMany({
+          where: { user_id: userId },
+          select: { business_id: true },
+          distinct: ["business_id"],
+        });
+        for (const business of businessIds) {
+          void invalidateNotificationCaches(business.business_id, userId);
+        }
         emitRealtimeNotificationsReadAll({ userId });
       }
       return result;
@@ -358,11 +389,21 @@ export const deleteNotification = async (userId: number, id: string) => {
   }
 
   try {
+    const notification = await prisma.notification.findFirst({
+      where: { id, user_id: userId },
+      select: { business_id: true },
+    });
+
+    if (!notification) {
+      return { count: 0 };
+    }
+
     const deleted = await prisma.notification.deleteMany({
       where: { id, user_id: userId },
     });
 
     if (deleted.count > 0) {
+      void invalidateNotificationCaches(notification.business_id, userId);
       emitRealtimeNotificationDeleted({
         userId,
         notificationId: id,

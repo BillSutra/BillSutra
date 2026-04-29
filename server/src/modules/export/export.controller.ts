@@ -3,6 +3,9 @@ import { sendResponse } from "../../utils/sendResponse.js";
 import { executeExport, previewExport } from "./export.service.js";
 import { recordAuditLog } from "../../services/auditLog.service.js";
 
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
 class ExportController {
   static async preview(req: Request, res: Response) {
     const authUser = req.user;
@@ -44,6 +47,8 @@ class ExportController {
           id: authUser.id,
           email: authUser.email,
           actorId: authUser.actorId,
+          businessId: authUser.businessId,
+          requestId: req.requestId,
         },
         {
           resource: req.params.resource as "products" | "customers" | "invoices",
@@ -63,7 +68,7 @@ class ExportController {
         actorType: authUser.accountType,
         action: "export.run",
         resourceType: "export",
-        resourceId: req.params.resource,
+        resourceId: readRouteParam(req.params.resource),
         status: "success",
         metadata: {
           format: req.body.format,
@@ -77,12 +82,17 @@ class ExportController {
 
       if (result.delivery === "email") {
         return sendResponse(res, 200, {
-          message: `Export sent to ${result.email}`,
+          message: result.queued
+            ? `Export queued for ${result.email}`
+            : `Export sent to ${result.email}`,
           data: {
             delivery: result.delivery,
             exportedCount: result.exportedCount,
             fileName: result.fileName,
             email: result.email,
+            queued: result.queued,
+            jobId: result.jobId,
+            trackingId: result.trackingId,
           },
         });
       }

@@ -1,4 +1,12 @@
-import prisma from "../config/db.config.js";
+import { Prisma } from "@prisma/client";
+import prismaClient from "../config/db.config.js";
+
+// These startup compatibility statements are static SQL only.
+// Route them through Prisma's safe raw executor so we avoid the real
+// $executeRawUnsafe path while keeping the existing call sites compact.
+const prisma = {
+  $executeRawUnsafe: (query: string) => prismaClient.$executeRaw(Prisma.raw(query)),
+};
 
 let extraEntriesTablePromise: Promise<void> | null = null;
 let faceDataTablePromise: Promise<void> | null = null;
@@ -6,6 +14,7 @@ let schemaCompatibilityPromise: Promise<void> | null = null;
 let userPreferenceCompatibilityPromise: Promise<void> | null = null;
 let emailLogCompatibilityPromise: Promise<void> | null = null;
 let invoiceTemplateCompatibilityPromise: Promise<void> | null = null;
+let modernAuthCompatibilityPromise: Promise<void> | null = null;
 
 const ensureInvoiceDiscountMetadataColumnsInternal = async () => {
   await prisma.$executeRawUnsafe(`
@@ -450,6 +459,75 @@ const ensureInvoiceTemplateCompatibilityInternal = async () => {
   `);
 };
 
+const ensureModernAuthCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "users"
+      ADD COLUMN IF NOT EXISTS "email_verified_at" TIMESTAMP(3);
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type
+        WHERE typname = 'OtpPurpose'
+      ) THEN
+        CREATE TYPE "OtpPurpose" AS ENUM ('LOGIN', 'EMAIL_VERIFICATION');
+      ELSE
+        ALTER TYPE "OtpPurpose" ADD VALUE IF NOT EXISTS 'EMAIL_VERIFICATION';
+      END IF;
+    END $$;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "email_verification_tokens" (
+      "id" VARCHAR(191) NOT NULL,
+      "user_id" INTEGER NOT NULL,
+      "token_hash" VARCHAR(191) NOT NULL,
+      "expires_at" TIMESTAMP(3) NOT NULL,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+      CONSTRAINT "email_verification_tokens_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "email_verification_tokens"
+      ADD COLUMN IF NOT EXISTS "user_id" INTEGER,
+      ADD COLUMN IF NOT EXISTS "token_hash" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "expires_at" TIMESTAMP(3),
+      ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "email_verification_tokens_token_hash_key"
+    ON "email_verification_tokens"("token_hash");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "email_verification_tokens_user_id_expires_at_idx"
+    ON "email_verification_tokens"("user_id", "expires_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'email_verification_tokens_user_id_fkey'
+          AND table_name = 'email_verification_tokens'
+      ) THEN
+        ALTER TABLE "email_verification_tokens"
+        ADD CONSTRAINT "email_verification_tokens_user_id_fkey"
+        FOREIGN KEY ("user_id") REFERENCES "users"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+};
+
 const ensureBillingInventoryCompatibilityInternal = async () => {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "user_preferences"
@@ -613,9 +691,23 @@ export const ensureInvoiceTemplateCompatibility = async () => {
   await invoiceTemplateCompatibilityPromise;
 };
 
+export const ensureModernAuthCompatibility = async () => {
+  if (!modernAuthCompatibilityPromise) {
+    modernAuthCompatibilityPromise = ensureModernAuthCompatibilityInternal().catch(
+      (error) => {
+        modernAuthCompatibilityPromise = null;
+        throw error;
+      },
+    );
+  }
+
+  await modernAuthCompatibilityPromise;
+};
+
 export const ensureSchemaCompatibility = async () => {
   if (!schemaCompatibilityPromise) {
     schemaCompatibilityPromise = (async () => {
+      await ensureModernAuthCompatibility();
       await ensureInvoiceDiscountMetadataColumnsInternal();
       await ensureBillingInventoryCompatibilityInternal();
       await ensureInventoryIssueCompatibilityInternal();

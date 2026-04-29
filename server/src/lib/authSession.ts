@@ -1,6 +1,7 @@
 import { Prisma, type Business, type User, type Worker } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import prisma from "../config/db.config.js";
+import { getAccessTokenSecret } from "./authSecrets.js";
 
 const DEFAULT_BUSINESS_NAME = "Bill Sutra Business";
 
@@ -232,6 +233,7 @@ export const buildOwnerAuthUser = async (
     businessId: business.id,
     sessionVersion: sessionVersion ?? 0,
     isEmailVerified: user.is_email_verified,
+    latestSessionVersion: sessionVersion ?? 0,
     role: "ADMIN",
     accountType: "OWNER",
     name: user.name,
@@ -287,6 +289,7 @@ export const buildWorkerAuthUser = async (
     name: worker.name,
     email: worker.email,
     workerId: worker.id,
+    latestSessionVersion: ownerSessionVersion ?? 0,
   };
 };
 
@@ -409,7 +412,7 @@ export const signAuthToken = (
       token_type: "access_v2",
       remember_me: normalizeRememberMe(preferences?.rememberMe),
     },
-    process.env.JWT_SECRET as string,
+    getAccessTokenSecret(),
     {
       expiresIn: getAccessTokenTtl() as jwt.SignOptions["expiresIn"],
     },
@@ -512,6 +515,7 @@ export const resolveAuthUserFromDecoded = async (
       where: { id: ownerUserId },
       select: {
         is_email_verified: true,
+        session_version: true,
       },
     });
 
@@ -520,6 +524,23 @@ export const resolveAuthUserFromDecoded = async (
     }
 
     isEmailVerified = owner.is_email_verified;
+    return {
+      id: ownerUserId,
+      ownerUserId,
+      actorId:
+        normalizeString(decodedRecord.actorId) ??
+        (workerId ? `worker:${workerId}` : `owner:${ownerUserId}`),
+      businessId,
+      sessionVersion,
+      latestSessionVersion: owner.session_version ?? 0,
+      isEmailVerified,
+      role,
+      accountType,
+      name,
+      email,
+      workerId: workerId ?? undefined,
+      rememberMe: resolveRememberMeFromDecoded(decoded),
+    };
   }
 
   return {
@@ -530,6 +551,7 @@ export const resolveAuthUserFromDecoded = async (
       (workerId ? `worker:${workerId}` : `owner:${ownerUserId}`),
     businessId,
     sessionVersion,
+    latestSessionVersion: null,
     isEmailVerified,
     role,
     accountType,

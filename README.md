@@ -109,17 +109,21 @@ npm run dev                        # runs on http://localhost:3000
 ### Server (`server/.env`)
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | Secret key for JWT signing |
-| `PORT` | Server port (default: 5000) |
-| `RESEND_API_KEY` | Resend API key for email delivery |
+| `DATABASE_URL` | PostgreSQL connection string with URL-encoded credentials |
+| `JWT_SECRET` | Base auth secret used for compatibility and fallback signing |
+| `ACCESS_TOKEN_SECRET` | Optional separate secret for access tokens; falls back to `JWT_SECRET` when omitted |
+| `REFRESH_TOKEN_SECRET` | Refresh-token signing secret (required in production, quote if it contains `#`) |
+| `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` | Shared Redis for cache and rate limiting |
+| `REDIS_URL` | TLS Redis URL required when BullMQ queues are enabled |
+| `PORT` | Server port (default: 7000) |
 
 ### Front-End (`front-end/.env.local`)
 | Variable | Description |
 |---|---|
 | `NEXTAUTH_SECRET` | NextAuth session secret |
 | `NEXTAUTH_URL` | App base URL (e.g. http://localhost:3000) |
-| `NEXT_PUBLIC_API_URL` | Backend API base URL |
+| `NEXT_PUBLIC_BACKEND_URL` | Preferred backend base URL |
+| `NEXT_PUBLIC_API_URL` | Legacy backend `/api` URL alias |
 | `GOOGLE_CLIENT_ID` | Google OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret |
 

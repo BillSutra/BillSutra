@@ -1,4 +1,4 @@
-import { Router, type Request } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import AuthController from "../controllers/AuthController.js";
 import AdminController from "../controllers/AdminController.js";
 import CustomersController from "../controllers/CustomersController.js";
@@ -31,6 +31,7 @@ import NotificationsController from "../controllers/NotificationsController.js";
 import InventoryInsightsController from "../controllers/InventoryInsightsController.js";
 import ExtraEntryController from "../controllers/ExtraEntryController.js";
 import MailController from "../controllers/MailController.js";
+import QueueJobsController from "../controllers/QueueJobsController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
 import AdminAuthMiddleware from "../middlewares/AdminAuthMiddleware.js";
 import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
@@ -130,6 +131,25 @@ import faceRecognitionRoutes from "./faceRecognition.js";
 import * as FaceRecognitionController from "../controllers/FaceRecognitionController.js";
 
 const router = Router();
+const authDiagnosticsEnabled =
+  process.env.AUTH_DIAGNOSTICS_ENABLED === "true" ||
+  (process.env.NODE_ENV !== "production" &&
+    process.env.AUTH_DIAGNOSTICS_ENABLED !== "false");
+
+const traceAuthRoute =
+  (label: string) =>
+  (req: Request, _res: Response, next: NextFunction) => {
+    if (authDiagnosticsEnabled) {
+      console.info("[auth.diagnostic] route_middleware", {
+        label,
+        method: req.method,
+        path: req.path,
+      });
+    }
+
+    next();
+  };
+
 const readRouteParam = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
 
@@ -251,6 +271,7 @@ router.post(
   validate({ body: authRegisterSchema }),
   AuthController.register,
 );
+router.get("/auth/csrf", authRateLimiter, AuthController.csrfToken);
 router.get(
   "/auth/verify-email",
   authRateLimiter,
@@ -309,12 +330,14 @@ router.post(
 router.post(
   "/auth/passkeys/authenticate/options",
   authRateLimiter,
+  traceAuthRoute("passkeys_authenticate_options"),
   validate({ body: passkeyAuthenticateOptionsSchema }),
   AuthController.passkeyAuthenticateOptions,
 );
 router.post(
   "/auth/passkeys/authenticate/verify",
   authRateLimiter,
+  traceAuthRoute("passkeys_authenticate_verify"),
   validate({ body: passkeyAuthenticateVerifySchema }),
   AuthController.passkeyAuthenticateVerify,
 );
@@ -445,6 +468,12 @@ router.delete(
 
 // Users
 router.get("/users/me", AuthMiddleware, UsersController.me);
+router.get(
+  "/jobs/:id",
+  AuthMiddleware,
+  validate({ params: stringIdParamSchema }),
+  QueueJobsController.show,
+);
 router.put(
   "/users/me",
   AuthMiddleware,

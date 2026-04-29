@@ -7,7 +7,7 @@ import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
 import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
 import { normalizeTaxMode } from "../../utils/invoiceCalculations.js";
-import { launchPuppeteerBrowser } from "../../lib/launchPuppeteerBrowser.js";
+import { withPuppeteerPage } from "../../lib/launchPuppeteerBrowser.js";
 import {
   buildPublicInvoiceReference,
   buildPublicInvoiceUrl,
@@ -2107,6 +2107,13 @@ export const createInvoice = async (
         warehouseId: item.warehouseId,
         triggeredBy: "invoice",
         referenceId: result.invoice.id,
+        context: {
+          userId,
+          metadata: {
+            invoiceId: result.invoice.id,
+            source: "invoice.create",
+          },
+        },
       });
 
       if (!queueResult.queued) {
@@ -2471,10 +2478,7 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
 };
 
 const renderInvoicePdfBuffer = async (html: string) => {
-  const browser = await launchPuppeteerBrowser();
-
-  try {
-    const page = await browser.newPage();
+  return withPuppeteerPage(async (page) => {
     await page.setContent(html, { waitUntil: "networkidle0" });
 
     const pdfBuffer = await page.pdf({
@@ -2489,9 +2493,7 @@ const renderInvoicePdfBuffer = async (html: string) => {
     });
 
     return Buffer.from(pdfBuffer);
-  } finally {
-    await browser.close();
-  }
+  });
 };
 
 export const generatePublicInvoicePdf = async (reference: string) => {

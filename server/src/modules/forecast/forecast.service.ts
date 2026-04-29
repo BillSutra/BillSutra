@@ -1,5 +1,4 @@
-import { Prisma } from "@prisma/client";
-import prisma from "../../config/db.config.js";
+import { getAnalyticsDailyStatsRange } from "../../services/analyticsDailyStats.service.js";
 
 type PeriodType = "weekly" | "monthly" | "yearly";
 
@@ -174,11 +173,8 @@ const forecastValues = (
     const rollingAverages = calculateRollingAverage(historical, windowSize);
     const lastAverage = rollingAverages[rollingAverages.length - 1] || 0;
 
-    console.log(`[FORECAST] Window size: ${windowSize}, Last average: ${lastAverage}`);
-
     // If last average is 0 and we have no data, just return zeros
     if (lastAverage === 0 && historical.every((v) => v === 0)) {
-        console.log("[FORECAST] All historical values are 0, predicting zeros");
         return Array(periods).fill(0);
     }
 
@@ -201,7 +197,7 @@ const forecastValues = (
 const aggregateRevenue = (
     sales: Array<{
         sale_date: Date;
-        total: Prisma.Decimal;
+        total: number;
     }>,
     period: PeriodType,
 ): Map<string, number> => {
@@ -277,66 +273,27 @@ export const getSalesForecast = async (
     userId: number,
     period: PeriodType = "monthly",
 ): Promise<ForecastResult> => {
-    // Get date range
     const { from, to } = getDateRange(period);
-
-    console.log(`[FORECAST] Fetching sales for user ${userId}, period: ${period}`);
-    console.log(`[FORECAST] Date range: ${from.toISOString()} to ${to.toISOString()}`);
-
-    const sales = await prisma.sale.findMany({
-        where: {
-            user_id: userId,
-            sale_date: {
-                gte: from,
-                lt: to,
-            },
-        },
-        select: {
-            sale_date: true,
-            total: true,
-            id: true,
-        },
-        orderBy: { sale_date: "asc" },
+    const statsRows = await getAnalyticsDailyStatsRange({
+        userId,
+        start: from,
+        endExclusive: to,
     });
 
-    console.log(`[FORECAST] Found ${sales.length} sales`);
-    sales.slice(0, 5).forEach((sale) => {
-        console.log(`[FORECAST] Sale ${sale.id}: ${sale.sale_date} - ${sale.total}`);
-    });
+    const sales = statsRows.map((row) => ({
+        sale_date: row.date,
+        total: row.bookedSales,
+    }));
 
-    // Aggregate revenue by period
     const aggregated = aggregateRevenue(sales, period);
-
-    console.log(`[FORECAST] Aggregated data: ${aggregated.size} periods`);
-
-    // Build continuous date series
     const dateSeries = buildDateSeries(from, to, period);
-
-    console.log(`[FORECAST] Date series length: ${dateSeries.length}`);
-
-    // Build historical data with all dates (including zeros)
     const historical: HistoricalDataPoint[] = dateSeries.map((dateStr) => ({
         date: getDateLabel(dateStr, period),
         revenue: aggregated.get(dateStr) ?? 0,
     }));
-
-    console.log(`[FORECAST] Historical data points: ${historical.length}`);
-    console.log(`[FORECAST] First entry: ${historical[0]?.date} = ${historical[0]?.revenue}`);
-    console.log(`[FORECAST] Last entry: ${historical[historical.length - 1]?.date} = ${historical[historical.length - 1]?.revenue}`);
-
-    // Extract revenue values for forecasting
     const revenueValues = dateSeries.map((dateStr) => aggregated.get(dateStr) ?? 0);
-
-    console.log(`[FORECAST] Revenue values (first 5): ${revenueValues.slice(0, 5)}`);
-    console.log(`[FORECAST] Sum of all revenue: ${revenueValues.reduce((a, b) => a + b, 0)}`);
-
-    // Generate forecasts
     const forecastPeriods = getForecastPeriods(period);
     const predictions = forecastValues(revenueValues, forecastPeriods);
-
-    console.log(`[FORECAST] Predictions (first 3): ${predictions.slice(0, 3)}`);
-
-    // Build forecast data points
     const forecast: ForecastDataPoint[] = (() => {
         let lastDateStr = dateSeries[dateSeries.length - 1];
 
@@ -348,8 +305,6 @@ export const getSalesForecast = async (
             };
         });
     })();
-
-    console.log(`[FORECAST] Forecast complete: ${historical.length} historical, ${forecast.length} predicted`);
 
     return {
         historical,

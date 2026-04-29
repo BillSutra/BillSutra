@@ -3,7 +3,7 @@
 import React, { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Clock3,
@@ -26,7 +26,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Modal from "@/components/ui/modal";
 import {
-  fetchBusinessProfile,
   sendInvoiceEmail,
   type PaymentInput,
 } from "@/lib/apiClient";
@@ -48,6 +47,7 @@ import {
   useUpdatePaymentMutation,
   useUpdateInvoiceMutation,
 } from "@/hooks/useInventoryQueries";
+import { useBusinessProfileQuery } from "@/hooks/useWorkspaceQueries";
 import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
 import { useI18n } from "@/providers/LanguageProvider";
@@ -108,10 +108,7 @@ const InvoiceDetailClient = ({ name, image }: InvoiceDetailClientProps) => {
   const queryClient = useQueryClient();
   const { formatCurrency, formatDate, t, safeT } = useI18n();
   const { data, isLoading, isError, refetch: refetchInvoice } = useInvoiceQuery(id);
-  const { data: businessProfile } = useQuery({
-    queryKey: ["business-profile"],
-    queryFn: fetchBusinessProfile,
-  });
+  const { data: businessProfile } = useBusinessProfileQuery();
   const updateInvoice = useUpdateInvoiceMutation();
   const createPayment = useCreatePaymentMutation();
   const updatePayment = useUpdatePaymentMutation();

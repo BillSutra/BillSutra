@@ -14,12 +14,16 @@ import {
   parseLegacyBusinessAddress,
 } from "../lib/indianAddress.js";
 import { normalizeGstin } from "../lib/gstin.js";
-import { launchPuppeteerBrowser } from "../lib/launchPuppeteerBrowser.js";
+import { withPuppeteerPage } from "../lib/launchPuppeteerBrowser.js";
 import { dispatchNotification } from "../services/notification.service.js";
 import {
   encryptSensitiveValue,
   maybeDecryptSensitiveValue,
 } from "../lib/fieldEncryption.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
+import { respondWithRedisCachedData } from "../lib/redisResourceCache.js";
+import { buildCustomerListCachePrefix, buildCustomerListRedisKey } from "../redis/cacheKeys.js";
+import { invalidateCustomerListCaches } from "../lib/cacheInvalidation.js";
 
 type CustomerCreateInput = z.infer<typeof customerCreateSchema>;
 type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
@@ -27,6 +31,15 @@ type CustomerUpdateInput = z.infer<typeof customerUpdateSchema>;
 type CustomerType = "individual" | "business";
 
 type CustomerPaymentTerms = "DUE_ON_RECEIPT" | "NET_7" | "NET_15" | "NET_30";
+
+const CUSTOMER_LIST_CACHE_TTL_SECONDS = Math.max(
+  Number(process.env.CUSTOMER_LIST_CACHE_TTL_SECONDS ?? 120),
+  15,
+);
+const CUSTOMER_LIST_CACHE_SWR_SECONDS = Math.max(
+  Number(process.env.CUSTOMER_LIST_CACHE_SWR_SECONDS ?? 60),
+  0,
+);
 
 type CustomerExtendedFields = {
   id: number;
@@ -976,6 +989,7 @@ const buildLedgerPdfHtml = (
 class CustomersController {
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -1015,38 +1029,65 @@ class CustomersController {
           }
         : {}),
     };
-    const [items, total] = await prisma.$transaction([
-      prisma.customer.findMany({
-        where,
-        orderBy: { created_at: "desc" },
-        skip,
-        take: limit,
-        select: customerBaseSelect,
-      }),
-      prisma.customer.count({ where }),
-    ]);
-
-    const customerIds = items.map((item) => item.id);
-    const [extendedMap, summaryMap] = await Promise.all([
-      loadExtendedCustomerFields(userId, customerIds),
-      loadCustomerListSummaries(userId, customerIds),
-    ]);
-
-    const enrichedCustomers = items.map((customer) => ({
-      ...serializeCustomer(customer, extendedMap.get(customer.id)),
-      ...buildCustomerListSummary(
-        customer,
-        extendedMap.get(customer.id),
-        summaryMap.get(customer.id),
-      ),
-    }));
-
-    return sendResponse(res, 200, {
-      data: {
-        items: enrichedCustomers,
-        total,
+    return respondWithRedisCachedData({
+      req,
+      res,
+      key: buildCustomerListRedisKey({
+        businessId,
+        userId,
         page,
-        totalPages: getTotalPages(total, limit),
+        limit,
+        search,
+      }),
+      label: "customers-index",
+      ttlSeconds: CUSTOMER_LIST_CACHE_TTL_SECONDS,
+      staleWhileRevalidateSeconds: CUSTOMER_LIST_CACHE_SWR_SECONDS,
+      invalidationPrefixes: [buildCustomerListCachePrefix({ businessId, userId })],
+      resolver: async () => {
+        const [items, total] = await measureRequestPhase(
+          "customers.db.index",
+          () =>
+            prisma.$transaction([
+              prisma.customer.findMany({
+                where,
+                orderBy: { created_at: "desc" },
+                skip,
+                take: limit,
+                select: customerBaseSelect,
+              }),
+              prisma.customer.count({ where }),
+            ]),
+        );
+
+        const customerIds = items.map((item) => item.id);
+        const [extendedMap, summaryMap] = await measureRequestPhase(
+          "customers.db.enrichment",
+          () =>
+            Promise.all([
+              loadExtendedCustomerFields(userId, customerIds),
+              loadCustomerListSummaries(userId, customerIds),
+            ]),
+        );
+
+        const enrichedCustomers = await measureRequestPhase(
+          "customers.serialize.index",
+          async () =>
+            items.map((customer) => ({
+              ...serializeCustomer(customer, extendedMap.get(customer.id)),
+              ...buildCustomerListSummary(
+                customer,
+                extendedMap.get(customer.id),
+                summaryMap.get(customer.id),
+              ),
+            })),
+        );
+
+        return {
+          items: enrichedCustomers,
+          total,
+          page,
+          totalPages: getTotalPages(total, limit),
+        };
       },
     });
   }
@@ -1101,6 +1142,7 @@ class CustomersController {
         Math.max(toNumber(body.openingBalance ?? body.opening_balance ?? 0), 0),
       ),
     });
+    void invalidateCustomerListCaches(req.user?.businessId?.trim(), userId);
 
     const extendedMap = await loadExtendedCustomerFields(userId, [customer.id]);
 
@@ -1272,9 +1314,7 @@ class CustomersController {
     const html = buildLedgerPdfHtml(ledger, businessProfile?.business_name ?? null);
 
     try {
-      const browser = await launchPuppeteerBrowser();
-      try {
-        const page = await browser.newPage();
+      return await withPuppeteerPage(async (page) => {
         await page.setContent(html, { waitUntil: "networkidle0" });
 
         const pdfBuffer = await page.pdf({
@@ -1301,9 +1341,7 @@ class CustomersController {
           `attachment; filename="${fileName || "customer-ledger-statement.pdf"}"`,
         );
         return res.status(200).send(Buffer.from(pdfBuffer));
-      } finally {
-        await browser.close();
-      }
+      });
     } catch (error) {
       return sendResponse(res, 503, {
         message:
@@ -1418,6 +1456,7 @@ class CustomersController {
         ),
       ),
     });
+    void invalidateCustomerListCaches(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, { message: "Customer updated" });
   }
@@ -1436,6 +1475,7 @@ class CustomersController {
     if (!deleted.count) {
       return sendResponse(res, 404, { message: "Customer not found" });
     }
+    void invalidateCustomerListCaches(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, { message: "Customer removed" });
   }

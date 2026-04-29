@@ -6,13 +6,14 @@ import {
   buildDashboardOverview,
   buildDashboardCardMetrics,
   buildNotifications,
-  fetchCashInflowSnapshot,
-  getDailyExpenses,
-  getExpenseTotals,
   resolveDashboardFilters,
 } from "../services/dashboardAnalyticsService.js";
 import { buildDashboardForecast } from "../services/dashboardForecastService.js";
 import { onDashboardUpdate } from "../services/dashboardRealtime.js";
+import {
+  getAnalyticsDailyStatsRange,
+  type AnalyticsDailyStatsRecord,
+} from "../services/analyticsDailyStats.service.js";
 import {
   getCachedMetrics,
   setCachedMetrics,
@@ -22,6 +23,8 @@ import {
   setCachedDashboardOverview,
 } from "../services/dashboardOverviewCache.js";
 import {
+  buildDashboardCachePrefix,
+  buildDashboardEndpointRedisKey,
   buildDashboardMetricsRedisKey,
   buildDashboardOverviewRedisKey,
 } from "../redis/cacheKeys.js";
@@ -202,35 +205,20 @@ const DASHBOARD_METRICS_CACHE_TTL_SECONDS = Number(
 const DASHBOARD_ENDPOINT_CACHE_TTL_SECONDS = Number(
   process.env.DASHBOARD_ENDPOINT_CACHE_TTL_SECONDS ?? 30,
 );
+const DASHBOARD_FORECAST_CACHE_TTL_SECONDS = Number(
+  process.env.DASHBOARD_FORECAST_CACHE_TTL_SECONDS ?? 300,
+);
 
 const dashboardEndpointCache = new Map<
   string,
   { expiresAt: number; data: unknown }
 >();
 
-const serializeCacheQueryValue = (value: unknown) => {
-  if (typeof value === "string") {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    return value.join(",");
-  }
-
-  return "";
-};
-
 const buildDashboardEndpointCacheKey = (
   endpoint: string,
   userId: number,
   query: Request["query"] = {},
-) =>
-  `dashboard:${userId}:${endpoint}:${[
-    serializeCacheQueryValue(query.range),
-    serializeCacheQueryValue(query.startDate),
-    serializeCacheQueryValue(query.endDate),
-    serializeCacheQueryValue(query.granularity),
-  ].join("|")}`;
+) => buildDashboardEndpointRedisKey(userId, endpoint, query);
 
 const getDashboardEndpointCache = async <T>(cacheKey: string) => {
   const cached = dashboardEndpointCache.get(cacheKey);
@@ -255,21 +243,17 @@ const getDashboardEndpointCache = async <T>(cacheKey: string) => {
 };
 
 const setDashboardEndpointCache = async (cacheKey: string, data: unknown) => {
+  const ownerMatch = cacheKey.match(/:owner:(\d+):dashboard:/);
+  const invalidationPrefixes = ownerMatch
+    ? [buildDashboardCachePrefix(Number(ownerMatch[1]))]
+    : undefined;
   dashboardEndpointCache.set(cacheKey, {
     expiresAt: Date.now() + DASHBOARD_ENDPOINT_CACHE_TTL_SECONDS * 1000,
     data,
   });
-  await setCache(cacheKey, data, DASHBOARD_ENDPOINT_CACHE_TTL_SECONDS);
-};
-
-type DashboardSalesDailyRow = {
-  day: Date;
-  total: Prisma.Decimal | number | null;
-};
-
-type DashboardSalesMonthlyRow = {
-  month: Date;
-  total: Prisma.Decimal | number | null;
+  await setCache(cacheKey, data, DASHBOARD_ENDPOINT_CACHE_TTL_SECONDS, {
+    invalidationPrefixes,
+  });
 };
 
 type DashboardCategoryRow = {
@@ -380,7 +364,9 @@ class DashboardController {
       });
 
       setCachedDashboardOverview(cacheKey, data);
-      void setCache(redisCacheKey, data, 60);
+      void setCache(redisCacheKey, data, 60, {
+        invalidationPrefixes: [buildDashboardCachePrefix(userId)],
+      });
 
       return sendResponse(res, 200, { data });
     } catch (error) {
@@ -423,7 +409,9 @@ class DashboardController {
       });
 
       setCachedMetrics(cacheKey, data);
-      void setCache(redisCacheKey, data, DASHBOARD_METRICS_CACHE_TTL_SECONDS);
+      void setCache(redisCacheKey, data, DASHBOARD_METRICS_CACHE_TTL_SECONDS, {
+        invalidationPrefixes: [buildDashboardCachePrefix(userId)],
+      });
 
       return sendResponse(res, 200, { data });
     } catch (error) {
@@ -467,57 +455,15 @@ class DashboardController {
     );
     const endDate = resolved.endExclusive;
 
-    const [
-      dailySalesRows,
-      dailyPurchaseRows,
-      monthlySalesRows,
-      monthlyPurchaseRows,
-      categoryRows,
+    const [analyticsRows, categoryRows]: [
+      AnalyticsDailyStatsRecord[],
+      DashboardCategoryRow[],
     ] = await Promise.all([
-      prisma.$queryRaw<DashboardSalesDailyRow[]>(Prisma.sql`
-        SELECT
-          date_trunc('day', "sale_date")::date AS day,
-          COALESCE(SUM(COALESCE("total_amount", "total")), 0) AS total
-        FROM "sales"
-        WHERE "user_id" = ${userId}
-          AND "sale_date" >= ${start30}
-          AND "sale_date" < ${endDate}
-        GROUP BY date_trunc('day', "sale_date")
-        ORDER BY day ASC
-      `),
-      prisma.$queryRaw<DashboardSalesDailyRow[]>(Prisma.sql`
-        SELECT
-          date_trunc('day', "purchase_date")::date AS day,
-          COALESCE(SUM(COALESCE("total_amount", "total")), 0) AS total
-        FROM "purchases"
-        WHERE "user_id" = ${userId}
-          AND "purchase_date" >= ${start30}
-          AND "purchase_date" < ${endDate}
-        GROUP BY date_trunc('day', "purchase_date")
-        ORDER BY day ASC
-      `),
-      prisma.$queryRaw<DashboardSalesMonthlyRow[]>(Prisma.sql`
-        SELECT
-          date_trunc('month', "sale_date")::date AS month,
-          COALESCE(SUM(COALESCE("total_amount", "total")), 0) AS total
-        FROM "sales"
-        WHERE "user_id" = ${userId}
-          AND "sale_date" >= ${start6Months}
-          AND "sale_date" < ${endDate}
-        GROUP BY date_trunc('month', "sale_date")
-        ORDER BY month ASC
-      `),
-      prisma.$queryRaw<DashboardSalesMonthlyRow[]>(Prisma.sql`
-        SELECT
-          date_trunc('month', "purchase_date")::date AS month,
-          COALESCE(SUM(COALESCE("total_amount", "total")), 0) AS total
-        FROM "purchases"
-        WHERE "user_id" = ${userId}
-          AND "purchase_date" >= ${start6Months}
-          AND "purchase_date" < ${endDate}
-        GROUP BY date_trunc('month', "purchase_date")
-        ORDER BY month ASC
-      `),
+      getAnalyticsDailyStatsRange({
+        userId,
+        start: start6Months,
+        endExclusive: endDate,
+      }),
       prisma.$queryRaw<DashboardCategoryRow[]>(Prisma.sql`
         SELECT
           COALESCE(cat."name", 'Uncategorized') AS name,
@@ -539,13 +485,10 @@ class DashboardController {
     ]);
 
     const dailySalesTotals = new Map(
-      dailySalesRows.map((row) => [toDateKey(new Date(row.day)), toNumber(row.total)]),
+      analyticsRows.map((row) => [toDateKey(row.date), row.bookedSales]),
     );
     const dailyPurchaseTotals = new Map(
-      dailyPurchaseRows.map((row) => [
-        toDateKey(new Date(row.day)),
-        toNumber(row.total),
-      ]),
+      analyticsRows.map((row) => [toDateKey(row.date), row.bookedPurchases]),
     );
 
     const last30Days = buildDateSeries(start30, 30).map((key) => ({
@@ -575,19 +518,12 @@ class DashboardController {
       });
     }
 
-    monthlySalesRows.forEach((sale) => {
-      const key = toMonthKey(new Date(sale.month));
+    analyticsRows.forEach((row) => {
+      const key = toMonthKey(row.date);
       const entry = monthlyMap.get(key);
       if (entry) {
-        entry.sales += toNumber(sale.total);
-      }
-    });
-
-    monthlyPurchaseRows.forEach((purchase) => {
-      const key = toMonthKey(new Date(purchase.month));
-      const entry = monthlyMap.get(key);
-      if (entry) {
-        entry.purchases += toNumber(purchase.total);
+        entry.sales += row.bookedSales;
+        entry.purchases += row.bookedPurchases;
       }
     });
 
@@ -1450,54 +1386,24 @@ class DashboardController {
       req.query.inflowMode ?? process.env.DASHBOARD_CASHFLOW_INFLOW_MODE,
     );
 
-    const { cashInflow, purchases, dailyExpenses } = await resolveSequentially({
-        cashInflow: () =>
-          fetchCashInflowSnapshot({
-            userId,
-            start: startOfMonth,
-            endExclusive: addDays(startOfMonth, daysInMonth),
-            debugLabel: "dashboard cashflow",
-          }),
-        purchases: () =>
-          prisma.purchase.findMany({
-            where: {
-              user_id: userId,
-              purchase_date: { gte: startOfMonth },
-              paymentStatus: { in: ["PAID", "PARTIALLY_PAID", "UNPAID"] },
-            },
-            select: {
-              purchase_date: true,
-              paymentDate: true,
-              paidAmount: true,
-            },
-          }),
-        dailyExpenses: () => getDailyExpenses({ userId, from: startOfMonth }),
-      });
-
-    const inflowMap = new Map<string, number>();
-    cashInflow.entries
-      .filter((entry) => {
-        if (inflowMode === "sales") return entry.source === "sale_receipt";
-        if (inflowMode === "payments") return entry.source !== "sale_receipt";
-        return true;
-      })
-      .forEach((entry) => {
-        const key = toDateKey(entry.date);
-        inflowMap.set(key, (inflowMap.get(key) ?? 0) + entry.amount);
-      });
-
-    const outflowMap = new Map<string, number>();
-    purchases.forEach((purchase) => {
-      const key = toDateKey(purchase.paymentDate ?? purchase.purchase_date);
-      outflowMap.set(
-        key,
-        (outflowMap.get(key) ?? 0) + toNumber(purchase.paidAmount),
-      );
+    const analyticsRows: AnalyticsDailyStatsRecord[] = await getAnalyticsDailyStatsRange({
+      userId,
+      start: startOfMonth,
+      endExclusive: addDays(startOfMonth, daysInMonth),
     });
 
-    dailyExpenses.forEach((expense) => {
-      const key = toDateKey(expense.day);
-      outflowMap.set(key, (outflowMap.get(key) ?? 0) + expense.amount);
+    const inflowMap = new Map<string, number>();
+    const outflowMap = new Map<string, number>();
+    analyticsRows.forEach((row) => {
+      const key = toDateKey(row.date);
+      const inflow =
+        inflowMode === "sales"
+          ? row.collectedSales
+          : inflowMode === "payments"
+            ? row.invoiceCollections
+            : row.collectedSales + row.invoiceCollections;
+      inflowMap.set(key, inflow);
+      outflowMap.set(key, row.cashOutPurchases + row.expenses);
     });
 
     const series = buildDateSeries(startOfMonth, daysInMonth).map((key) => ({
@@ -1606,7 +1512,18 @@ class DashboardController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    const cacheKey = buildDashboardEndpointRedisKey(userId, "forecast", req.query);
+    const cached = await getCache<Awaited<ReturnType<typeof buildDashboardForecast>>>(
+      cacheKey,
+    );
+    if (cached) {
+      return sendResponse(res, 200, { data: cached });
+    }
+
     const data = await buildDashboardForecast({ userId });
+    void setCache(cacheKey, data, DASHBOARD_FORECAST_CACHE_TTL_SECONDS, {
+      invalidationPrefixes: [buildDashboardCachePrefix(userId)],
+    });
 
     return sendResponse(res, 200, {
       data,

@@ -30,33 +30,19 @@ import {
   getLegacyStoredToken,
   isAuthTokenExpired,
   isSecureAuthEnabled,
+  logClientAuthEvent,
   requestClientLogout,
 } from "./secureAuth";
+import {
+  buildCsrfHeadersIfAvailable,
+  buildRequiredCsrfHeaders,
+  isSafeHttpMethod,
+} from "./csrfClient";
 
 export const apiClient = axios.create({
   baseURL: API_URL,
   withCredentials: true,
 });
-
-const CSRF_COOKIE_NAME = "bill_sutra_csrf_token";
-
-const getCookieValue = (cookieName: string) => {
-  if (typeof document === "undefined") {
-    return null;
-  }
-
-  const encodedName = `${cookieName}=`;
-  const matchedCookie = document.cookie
-    .split(";")
-    .map((entry) => entry.trim())
-    .find((entry) => entry.startsWith(encodedName));
-
-  if (!matchedCookie) {
-    return null;
-  }
-
-  return decodeURIComponent(matchedCookie.slice(encodedName.length));
-};
 
 const isFaceAuthenticationRequest = (requestUrl: string) =>
   requestUrl.includes("/face/authenticate");
@@ -64,11 +50,11 @@ const isFaceAuthenticationRequest = (requestUrl: string) =>
 apiClient.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
     config.withCredentials = true;
-    const csrfToken = getCookieValue(CSRF_COOKIE_NAME);
-    if (csrfToken) {
-      config.headers = config.headers ?? {};
-      config.headers["X-CSRF-Token"] = csrfToken;
-    }
+    config.headers = config.headers ?? {};
+    const csrfHeaders = isSafeHttpMethod(config.method)
+      ? buildCsrfHeadersIfAvailable()
+      : await buildRequiredCsrfHeaders();
+    Object.assign(config.headers, csrfHeaders);
 
     const requestUrl = typeof config.url === "string" ? config.url : "";
     const isAuthLifecycleRequest =
@@ -95,6 +81,12 @@ apiClient.interceptors.request.use(async (config) => {
       if (config.headers?.Authorization) {
         delete config.headers.Authorization;
       }
+      logClientAuthEvent("request_auth_context", {
+        requestUrl,
+        mode: "secure_cookie",
+        hasAuthorizationHeader: false,
+        withCredentials: config.withCredentials === true,
+      });
       return config;
     }
 
@@ -111,6 +103,13 @@ apiClient.interceptors.request.use(async (config) => {
     } else if (config.headers?.Authorization) {
       delete config.headers.Authorization;
     }
+
+    logClientAuthEvent("request_auth_context", {
+      requestUrl,
+      mode: token ? "bearer_token" : "anonymous",
+      hasAuthorizationHeader: Boolean(config.headers?.Authorization),
+      withCredentials: config.withCredentials === true,
+    });
   }
   return config;
 });
@@ -1934,6 +1933,10 @@ export type BusinessProfileRecord = {
   updated_at: string;
 };
 
+type RequestOptions = {
+  signal?: AbortSignal;
+};
+
 export const fetchReportsSummary = async (): Promise<ReportsSummary> => {
   const response = await apiClient.get("/reports/summary");
   return response.data.data as ReportsSummary;
@@ -1941,6 +1944,7 @@ export const fetchReportsSummary = async (): Promise<ReportsSummary> => {
 
 export const fetchProducts = async (
   params?: ProductListParams,
+  options?: RequestOptions,
 ): Promise<ProductListResponse> => {
   const searchParams = new URLSearchParams();
 
@@ -1963,6 +1967,7 @@ export const fetchProducts = async (
   const query = searchParams.toString();
   const response = await apiClient.get(
     query ? `/products?${query}` : "/products",
+    { signal: options?.signal },
   );
   const payload = response.data?.data;
   const products = normalizeListResponse<Product>(
@@ -1985,6 +1990,7 @@ export const fetchProducts = async (
 
 export const fetchProductOptions = async (
   params?: ProductListParams,
+  options?: RequestOptions,
 ): Promise<Product[]> => {
   const requestedLimit =
     typeof params?.limit === "number" && Number.isFinite(params.limit)
@@ -1996,7 +2002,7 @@ export const fetchProductOptions = async (
     category: params?.category ?? null,
     search: params?.search ?? null,
     mode: "options",
-  });
+  }, options);
 
   return response.products;
 };
@@ -2464,6 +2470,7 @@ const normalizeSupplierPayload = (
 
 export const fetchCustomers = async (
   params?: CustomerListParams,
+  options?: RequestOptions,
 ): Promise<Customer[]> => {
   const response = await apiClient.get("/customers", {
     params: {
@@ -2471,6 +2478,7 @@ export const fetchCustomers = async (
       limit: params?.limit,
       search: params?.search?.trim() || undefined,
     },
+    signal: options?.signal,
   });
   return normalizeListResponse<Customer>(response.data?.data).map(
     normalizeCustomerRecord,

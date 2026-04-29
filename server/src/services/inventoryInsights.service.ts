@@ -144,15 +144,15 @@ export const getInventoryInsights = async (
   const cacheKey = buildCacheKey(userId, options.warehouseId);
   const redisCacheKey = buildInventoryInsightsRedisKey(userId, options.warehouseId);
   if (options.useCache !== false) {
+    const cached = getCachedInsights(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const redisCached = await getCache<InventoryInsightsResponse>(redisCacheKey);
     if (redisCached) {
       setCachedInsights(cacheKey, redisCached);
       return redisCached;
-    }
-
-    const cached = getCachedInsights(cacheKey);
-    if (cached) {
-      return cached;
     }
   }
 
@@ -208,6 +208,9 @@ export const getInventoryInsights = async (
       redisCacheKey,
       emptyPayload,
       Math.max(30, Math.floor(INVENTORY_INSIGHTS_CACHE_MS / 1000)),
+      {
+        invalidationPrefixes: [buildInventoryInsightsCachePrefix(userId)],
+      },
     );
     return emptyPayload;
   }
@@ -544,6 +547,9 @@ export const getInventoryInsights = async (
     redisCacheKey,
     response,
     Math.max(30, Math.floor(INVENTORY_INSIGHTS_CACHE_MS / 1000)),
+    {
+      invalidationPrefixes: [buildInventoryInsightsCachePrefix(userId)],
+    },
   );
   return response;
 };

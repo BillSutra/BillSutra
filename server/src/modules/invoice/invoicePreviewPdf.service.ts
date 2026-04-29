@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import puppeteer from "puppeteer";
 import { getFrontendAppUrl } from "../../lib/appUrls.js";
+import { withPuppeteerPage } from "../../lib/launchPuppeteerBrowser.js";
 import type { InvoiceEmailPreviewPayload } from "../../emails/types.js";
 
 const MAX_PAYLOAD_BYTES = 300_000;
@@ -73,15 +73,12 @@ export const renderInvoicePreviewPdfBuffer = async (
   const encodedPayload = encodePayload(payload);
   const targetUrl = `${getFrontendAppUrl()}/pdf/preview?payload=${encodedPayload}`;
   const executablePath = resolveInvoicePdfExecutablePath();
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
+  if (executablePath && !process.env.PUPPETEER_EXECUTABLE_PATH) {
+    process.env.PUPPETEER_EXECUTABLE_PATH = executablePath;
+  }
   const timeoutMs = Number(process.env.PDF_RENDER_TIMEOUT_MS ?? 60000);
 
-  try {
-    const page = await browser.newPage();
+  return withPuppeteerPage(async (page) => {
     await page.setViewport({
       width: 1280,
       height: 1810,
@@ -106,7 +103,5 @@ export const renderInvoicePreviewPdfBuffer = async (
     });
 
     return Buffer.from(pdfBuffer);
-  } finally {
-    await browser.close();
-  }
+  });
 };

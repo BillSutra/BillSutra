@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -24,11 +25,20 @@ const SidebarNavItem = ({
   icon: Icon,
   label,
 }: SidebarNavItemProps) => {
+  const router = useRouter();
+
+  const handlePrefetch = () => {
+    void router.prefetch(href);
+  };
+
   return (
     <Link
       href={href}
+      prefetch
       aria-current={active ? "page" : undefined}
       title={collapsed ? [label, badge].filter(Boolean).join(" - ") : undefined}
+      onMouseEnter={handlePrefetch}
+      onFocus={handlePrefetch}
       className={cn(
         "group relative flex h-10 items-center rounded-xl border border-transparent px-3 py-2 text-sm transition-all duration-200",
         collapsed ? "justify-center" : "gap-3",

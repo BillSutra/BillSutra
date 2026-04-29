@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { signOut } from "next-auth/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   Bell,
@@ -26,20 +26,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ValidationField } from "@/components/ui/ValidationField";
+import { useWorkersQuery } from "@/hooks/useInventoryQueries";
 import {
   cancelSubscription,
   createWorker,
   deleteWorker,
-  fetchBusinessProfile,
-  fetchLogoUrl,
-  fetchSecuritySessions,
-  fetchSecurityActivity,
-  fetchUserPermissions,
-  fetchUserSettingsPreferences,
-  fetchSubscriptionStatus,
-  fetchTemplates,
-  fetchUserProfile,
-  fetchWorkers,
   logoutAllDevices,
   logoutCurrentSession,
   logoutOtherDevices,
@@ -54,9 +45,22 @@ import {
   updateUserProfile,
   updateWorker,
   uploadLogo,
+  type UserSettingsPreferences,
   type Worker,
 } from "@/lib/apiClient";
 import { isValidIndianState } from "@/lib/indianAddress";
+import {
+  useBusinessProfileQuery,
+  useLogoUrlQuery,
+  useSecurityActivityQuery,
+  useSecuritySessionsQuery,
+  useSubscriptionStatusQuery,
+  useTemplatesQuery,
+  useUserPermissionsQuery,
+  useUserProfileQuery,
+  useUserSettingsPreferencesQuery,
+  workspaceQueryKeys,
+} from "@/hooks/useWorkspaceQueries";
 import { useI18n } from "@/providers/LanguageProvider";
 import {
   clearLegacyStoredToken,
@@ -414,55 +418,50 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const settingsSaveTimeoutRef = useRef<number | null>(null);
+  const pendingSettingsPatchRef = useRef<Partial<UserSettingsPreferences>>({});
 
-  const { data: userProfile } = useQuery({
-    queryKey: ["settings", "user-profile"],
-    queryFn: fetchUserProfile,
+  const { data: userProfile } = useUserProfileQuery({
+    enabled: sections["business-profile"],
   });
 
-  const { data: profile } = useQuery({
-    queryKey: ["settings", "business-profile"],
-    queryFn: fetchBusinessProfile,
+  const { data: profile } = useBusinessProfileQuery({
+    enabled: sections["business-profile"] || sections["billing-subscription"],
   });
 
-  const { data: subscription } = useQuery({
-    queryKey: ["subscription-status"],
-    queryFn: fetchSubscriptionStatus,
+  const { data: subscription } = useSubscriptionStatusQuery({
+    enabled: sections["billing-subscription"],
   });
 
-  const { data: permissions } = useQuery({
-    queryKey: ["subscription-permissions"],
-    queryFn: fetchUserPermissions,
+  const {
+    data: permissions,
+    isLoading: isPermissionsLoading,
+    isError: isPermissionsError,
+  } = useUserPermissionsQuery();
+
+  const teamAccessEnabled = permissions?.features.teamAccess ?? false;
+  const exportEnabled = permissions?.features.export ?? false;
+
+  const { data: workers = [] } = useWorkersQuery(
+    teamAccessEnabled && sections["team-permissions"],
+  );
+
+  const { data: templates = [] } = useTemplatesQuery({
+    enabled: sections["invoice-branding"],
   });
 
-  const { data: workers = [] } = useQuery({
-    queryKey: ["workers"],
-    queryFn: fetchWorkers,
+  const { data: logoUrl } = useLogoUrlQuery({
+    enabled: sections["invoice-branding"],
   });
 
-  const { data: templates = [] } = useQuery({
-    queryKey: ["templates"],
-    queryFn: fetchTemplates,
+  const { data: settingsPrefs } = useUserSettingsPreferencesQuery();
+
+  const { data: securityActivity = [] } = useSecurityActivityQuery({
+    enabled: sections.security,
   });
 
-  const { data: logoUrl } = useQuery({
-    queryKey: ["settings", "logo"],
-    queryFn: fetchLogoUrl,
-  });
-
-  const { data: settingsPrefs } = useQuery({
-    queryKey: ["settings", "preferences"],
-    queryFn: fetchUserSettingsPreferences,
-  });
-
-  const { data: securityActivity = [] } = useQuery({
-    queryKey: ["settings", "security-activity"],
-    queryFn: fetchSecurityActivity,
-  });
-
-  const { data: securitySessions = [] } = useQuery({
-    queryKey: ["settings", "security-sessions"],
-    queryFn: fetchSecuritySessions,
+  const { data: securitySessions = [] } = useSecuritySessionsQuery({
+    enabled: sections.security,
   });
 
   useEffect(() => {
@@ -577,10 +576,10 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
       setBusinessSubmitAttempted(false);
       toast.success("Business profile updated.");
       void queryClient.invalidateQueries({
-        queryKey: ["settings", "business-profile"],
+        queryKey: workspaceQueryKeys.businessProfile,
       });
       void queryClient.invalidateQueries({
-        queryKey: ["settings", "user-profile"],
+        queryKey: workspaceQueryKeys.userProfile,
       });
     },
     onError: (error) => {
@@ -605,11 +604,12 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
       if (language !== data.appPreferences.language) {
         setLanguage(data.appPreferences.language);
       }
-      void queryClient.invalidateQueries({
-        queryKey: ["settings", "preferences"],
-      });
+      queryClient.setQueryData(workspaceQueryKeys.userSettingsPreferences, data);
     },
     onError: (error) => {
+      void queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.userSettingsPreferences,
+      });
       toast.error(
         error instanceof Error ? error.message : "Unable to save preferences.",
       );
@@ -620,9 +620,11 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     mutationFn: cancelSubscription,
     onSuccess: () => {
       toast.success("Subscription cancelled.");
-      void queryClient.invalidateQueries({ queryKey: ["subscription-status"] });
       void queryClient.invalidateQueries({
-        queryKey: ["subscription-permissions"],
+        queryKey: workspaceQueryKeys.subscriptionStatus,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.subscriptionPermissions,
       });
     },
     onError: (error) => {
@@ -638,9 +640,11 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     mutationFn: switchToFreePlan,
     onSuccess: () => {
       toast.success("Switched to Free plan.");
-      void queryClient.invalidateQueries({ queryKey: ["subscription-status"] });
       void queryClient.invalidateQueries({
-        queryKey: ["subscription-permissions"],
+        queryKey: workspaceQueryKeys.subscriptionStatus,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.subscriptionPermissions,
       });
     },
     onError: (error) => {
@@ -739,7 +743,7 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     onSuccess: (data) => {
       setCurrentLogoUrl(data.logo_url);
       toast.success("Logo saved.");
-      void queryClient.invalidateQueries({ queryKey: ["settings", "logo"] });
+      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.logo });
     },
     onError: (error) => {
       toast.error(
@@ -753,7 +757,7 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     onSuccess: () => {
       setCurrentLogoUrl(null);
       toast.success("Logo removed.");
-      void queryClient.invalidateQueries({ queryKey: ["settings", "logo"] });
+      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.logo });
     },
     onError: (error) => {
       toast.error(
@@ -776,6 +780,62 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
       );
     },
   });
+
+  useEffect(
+    () => () => {
+      if (settingsSaveTimeoutRef.current) {
+        window.clearTimeout(settingsSaveTimeoutRef.current);
+      }
+    },
+    [],
+  );
+
+  const buildSettingsSnapshot = (
+    patch?: Partial<UserSettingsPreferences>,
+  ): UserSettingsPreferences => {
+    const cached =
+      queryClient.getQueryData<UserSettingsPreferences>(
+        workspaceQueryKeys.userSettingsPreferences,
+      ) ?? settingsPrefs;
+
+    return {
+      appPreferences:
+        patch?.appPreferences ??
+        cached?.appPreferences ?? {
+          language,
+          currency: appPrefs.currency,
+          dateFormat: appPrefs.dateFormat,
+        },
+      inventory: patch?.inventory ?? cached?.inventory ?? { allowNegativeStock: false },
+      notifications:
+        patch?.notifications ?? cached?.notifications ?? notificationPrefs,
+      backup: patch?.backup ?? cached?.backup ?? backupPrefs,
+      branding: patch?.branding ?? cached?.branding ?? brandingPrefs,
+    };
+  };
+
+  const scheduleSettingsSave = (patch: Partial<UserSettingsPreferences>) => {
+    pendingSettingsPatchRef.current = {
+      ...pendingSettingsPatchRef.current,
+      ...patch,
+    };
+    queryClient.setQueryData(
+      workspaceQueryKeys.userSettingsPreferences,
+      buildSettingsSnapshot({
+        ...pendingSettingsPatchRef.current,
+      }),
+    );
+
+    if (settingsSaveTimeoutRef.current) {
+      window.clearTimeout(settingsSaveTimeoutRef.current);
+    }
+
+    settingsSaveTimeoutRef.current = window.setTimeout(() => {
+      const payload = pendingSettingsPatchRef.current;
+      pendingSettingsPatchRef.current = {};
+      saveSettingsMutation.mutate(payload);
+    }, 250);
+  };
 
   const logoutCurrentSessionMutation = useMutation({
     mutationFn: logoutCurrentSession,
@@ -801,7 +861,7 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
           : "No other active sessions found.",
       );
       void queryClient.invalidateQueries({
-        queryKey: ["settings", "security-sessions"],
+        queryKey: workspaceQueryKeys.securitySessions,
       });
     },
     onError: (error) => {
@@ -816,7 +876,7 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     onSuccess: () => {
       toast.success("Session revoked.");
       void queryClient.invalidateQueries({
-        queryKey: ["settings", "security-sessions"],
+        queryKey: workspaceQueryKeys.securitySessions,
       });
     },
     onError: (error) => {
@@ -844,11 +904,14 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
     return formatDate(subscription.currentPeriodEnd);
   }, [subscription]);
 
-  const exportEnabled = permissions?.features.export ?? true;
-
   const runExport = async (resource: "invoices" | "customers" | "products") => {
+    if (!permissions) {
+      toast.error("Unable to verify your export access right now.");
+      return;
+    }
+
     if (permissions && !permissions.features.export) {
-      toast.error("Upgrade to Pro to export data.");
+      toast.error("Upgrade your plan to unlock data export.");
       return;
     }
 
@@ -892,7 +955,7 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
 
   const persistAppPrefs = (next: AppPrefs) => {
     setAppPrefs(next);
-    saveSettingsMutation.mutate({
+    scheduleSettingsSave({
       appPreferences: {
         language,
         currency: next.currency,
@@ -903,7 +966,7 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
 
   const persistLanguage = (nextLanguage: "en" | "hi") => {
     setLanguage(nextLanguage);
-    saveSettingsMutation.mutate({
+    scheduleSettingsSave({
       appPreferences: {
         language: nextLanguage,
         currency: appPrefs.currency,
@@ -914,17 +977,17 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
 
   const persistNotificationPrefs = (next: NotificationPrefs) => {
     setNotificationPrefs(next);
-    saveSettingsMutation.mutate({ notifications: next });
+    scheduleSettingsSave({ notifications: next });
   };
 
   const persistBrandingPrefs = (next: BrandingPrefs) => {
     setBrandingPrefs(next);
-    saveSettingsMutation.mutate({ branding: next });
+    scheduleSettingsSave({ branding: next });
   };
 
   const persistBackupPrefs = (next: BackupPrefs) => {
     setBackupPrefs(next);
-    saveSettingsMutation.mutate({ backup: next });
+    scheduleSettingsSave({ backup: next });
   };
 
   return (
@@ -1132,107 +1195,136 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
           open={sections["team-permissions"]}
           onToggle={toggleSection}
         >
-          <div className="grid gap-3 rounded-xl border border-border/70 p-4 md:grid-cols-2">
-            <Input
-              placeholder="Worker name"
-              value={workerName}
-              onChange={(e) => setWorkerName(e.target.value)}
-            />
-            <Input
-              placeholder="Email"
-              value={workerEmail}
-              onChange={(e) => setWorkerEmail(e.target.value)}
-            />
-            <Input
-              placeholder="Phone"
-              value={workerPhone}
-              onChange={(e) => setWorkerPhone(e.target.value)}
-            />
-            <Input
-              placeholder={
-                editingWorkerId ? "Password (optional for update)" : "Password"
-              }
-              value={workerPassword}
-              onChange={(e) => setWorkerPassword(e.target.value)}
-              type="password"
-            />
-            <select
-              className="app-field h-10 rounded-xl border border-border/70 px-3 text-sm"
-              value={workerRole}
-              onChange={(e) =>
-                setWorkerRole(e.target.value as "ADMIN" | "STAFF" | "VIEWER")
-              }
-            >
-              <option value="ADMIN">Admin</option>
-              <option value="STAFF">Staff</option>
-              <option value="VIEWER">Viewer</option>
-            </select>
-            <div className="flex gap-2">
-              <Button
-                onClick={() => upsertWorkerMutation.mutate()}
-                disabled={upsertWorkerMutation.isPending}
-              >
-                {editingWorkerId ? "Update worker" : "Add worker"}
-              </Button>
-              {editingWorkerId ? (
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setEditingWorkerId(null);
-                    setWorkerName("");
-                    setWorkerEmail("");
-                    setWorkerPhone("");
-                    setWorkerPassword("");
-                    setWorkerRole("STAFF");
-                  }}
-                >
-                  Cancel edit
-                </Button>
-              ) : null}
+          {isPermissionsLoading ? (
+            <div className="rounded-xl border border-border/70 p-4 text-sm text-muted-foreground">
+              Checking your workspace access for team settings...
             </div>
-          </div>
+          ) : isPermissionsError ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              We could not verify your team access right now. Please refresh and
+              try again.
+            </div>
+          ) : teamAccessEnabled ? (
+            <>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                Included in your {subscription?.planName ?? "paid"} plan. Team
+                access changes sync across your workspace automatically.
+              </div>
 
-          <div className="mt-4 grid gap-3">
-            {workers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No workers added yet.
-              </p>
-            ) : (
-              workers.map((worker) => (
-                <div
-                  key={worker.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 p-3"
+              <div className="mt-4 grid gap-3 rounded-xl border border-border/70 p-4 md:grid-cols-2">
+                <Input
+                  placeholder="Worker name"
+                  value={workerName}
+                  onChange={(e) => setWorkerName(e.target.value)}
+                />
+                <Input
+                  placeholder="Email"
+                  value={workerEmail}
+                  onChange={(e) => setWorkerEmail(e.target.value)}
+                />
+                <Input
+                  placeholder="Phone"
+                  value={workerPhone}
+                  onChange={(e) => setWorkerPhone(e.target.value)}
+                />
+                <Input
+                  placeholder={
+                    editingWorkerId ? "Password (optional for update)" : "Password"
+                  }
+                  value={workerPassword}
+                  onChange={(e) => setWorkerPassword(e.target.value)}
+                  type="password"
+                />
+                <select
+                  className="app-field h-10 rounded-xl border border-border/70 px-3 text-sm"
+                  value={workerRole}
+                  onChange={(e) =>
+                    setWorkerRole(e.target.value as "ADMIN" | "STAFF" | "VIEWER")
+                  }
                 >
-                  <div>
-                    <p className="text-sm font-semibold">{worker.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {worker.email}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Role: {worker.roleLabel ?? worker.role}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
+                  <option value="ADMIN">Admin</option>
+                  <option value="STAFF">Staff</option>
+                  <option value="VIEWER">Viewer</option>
+                </select>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => upsertWorkerMutation.mutate()}
+                    disabled={upsertWorkerMutation.isPending}
+                  >
+                    {editingWorkerId ? "Update worker" : "Add worker"}
+                  </Button>
+                  {editingWorkerId ? (
                     <Button
                       variant="outline"
-                      size="sm"
-                      onClick={() => startEditWorker(worker)}
+                      onClick={() => {
+                        setEditingWorkerId(null);
+                        setWorkerName("");
+                        setWorkerEmail("");
+                        setWorkerPhone("");
+                        setWorkerPassword("");
+                        setWorkerRole("STAFF");
+                      }}
                     >
-                      Edit
+                      Cancel edit
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => deleteWorkerMutation.mutate(worker.id)}
-                      disabled={deleteWorkerMutation.isPending}
-                    >
-                      Delete
-                    </Button>
-                  </div>
+                  ) : null}
                 </div>
-              ))
-            )}
-          </div>
+              </div>
+
+              <div className="mt-4 grid gap-3">
+                {workers.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No workers added yet.
+                  </p>
+                ) : (
+                  workers.map((worker) => (
+                    <div
+                      key={worker.id}
+                      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/70 p-3"
+                    >
+                      <div>
+                        <p className="text-sm font-semibold">{worker.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {worker.email}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Role: {worker.roleLabel ?? worker.role}
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startEditWorker(worker)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => deleteWorkerMutation.mutate(worker.id)}
+                          disabled={deleteWorkerMutation.isPending}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-medium">Team controls are locked on this plan.</p>
+              <p className="mt-1">
+                Upgrade to a plan with worker management to add staff accounts,
+                assign roles, and manage team settings here.
+              </p>
+              <Button asChild size="sm" className="mt-3">
+                <Link href="/pricing">Compare plans</Link>
+              </Button>
+            </div>
+          )}
         </SectionCard>
 
         <SectionCard
@@ -1403,11 +1495,11 @@ const SettingsControlCenter = ({ name, image }: SettingsControlCenterProps) => {
             </Button>
           </div>
 
-          {!exportEnabled ? (
+          {!isPermissionsLoading && permissions && !exportEnabled ? (
             <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
               <p>
-                Export is not available on your current plan. Upgrade to Pro to
-                unlock CSV exports.
+                Export is not available on your current plan. Upgrade to unlock
+                CSV exports.
               </p>
               <Button asChild size="sm" className="mt-2">
                 <Link href="/pricing">Upgrade Now</Link>

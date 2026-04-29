@@ -12,9 +12,7 @@ import Link from "next/link";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   fetchDashboardCardMetrics,
-  fetchBusinessProfile,
   fetchDashboardOverview,
-  fetchSubscriptionStatus,
 } from "@/lib/apiClient";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import MetricCard from "@/components/dashboard/metric-card";
@@ -65,6 +63,10 @@ import {
 } from "@/lib/firstRun";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import {
+  useBusinessProfileQuery,
+  useSubscriptionStatusQuery,
+} from "@/hooks/useWorkspaceQueries";
 
 const FIRST_BILL_REDIRECT_KEY = "billsutra.dashboard.first-bill-redirected.v1";
 
@@ -136,14 +138,10 @@ const DashboardClient = ({ name, image, token }: DashboardClientProps) => {
     placeholderData: keepPreviousData,
   });
 
-  const { data: businessProfile } = useQuery({
-    queryKey: ["business-profile"],
-    queryFn: fetchBusinessProfile,
+  const { data: businessProfile } = useBusinessProfileQuery({
     enabled: hydrated,
   });
-  const { data: subscription } = useQuery({
-    queryKey: ["subscription-status"],
-    queryFn: fetchSubscriptionStatus,
+  const { data: subscription } = useSubscriptionStatusQuery({
     enabled: hydrated && nonCriticalReady,
   });
   const [isSeedingDemo, setIsSeedingDemo] = useState(false);

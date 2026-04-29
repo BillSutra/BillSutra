@@ -16,6 +16,7 @@ import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
 import { invalidateInventoryInsightsCacheByUser } from "../services/inventoryInsights.service.js";
 import { applyInventoryDelta } from "../services/inventoryValidation.service.js";
 import { getTotalPages, parsePagination } from "../utils/pagination.js";
+import { invalidateProductOptionCaches } from "../lib/cacheInvalidation.js";
 
 type PurchaseCreateInput = z.infer<typeof purchaseCreateSchema>;
 type PurchaseItemInput = PurchaseCreateInput["items"][number];
@@ -213,6 +214,7 @@ class PurchasesController {
 
   static async store(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -339,6 +341,7 @@ class PurchasesController {
     });
 
     invalidateInventoryInsightsCacheByUser(userId);
+    void invalidateProductOptionCaches(businessId, userId);
     emitDashboardUpdate({ userId, source: "purchase.create" });
     return sendResponse(res, 201, {
       message: "Purchase recorded",
@@ -373,6 +376,7 @@ class PurchasesController {
 
   static async update(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -588,6 +592,7 @@ class PurchasesController {
     });
 
     invalidateInventoryInsightsCacheByUser(userId);
+    void invalidateProductOptionCaches(businessId, userId);
     emitDashboardUpdate({ userId, source: "purchase.update" });
     return sendResponse(res, 200, {
       message: "Purchase updated",

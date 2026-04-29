@@ -14,6 +14,7 @@ import prisma from "../config/db.config.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import type { z } from "zod";
+import { getAccessTokenSecret } from "../lib/authSecrets.js";
 import {
   authForgotSchema,
   authLoginSchema,
@@ -63,6 +64,7 @@ import {
   toPublicKeyBytes,
   toStoredPublicKey,
 } from "../lib/modernAuth.js";
+import { resolveOrSetCsrfToken } from "../lib/csrf.js";
 import { sendEmail } from "../emails/index.js";
 import { buildResetPasswordUrl } from "../lib/appUrls.js";
 import { dispatchWelcomeEmail } from "../services/email.service.js";
@@ -106,6 +108,23 @@ type PasskeyRegisterVerifyPayload = z.infer<typeof passkeyRegisterVerifySchema>;
 
 const PASSKEY_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const PASSKEY_TIMEOUT_MS = 60 * 1000;
+const authDiagnosticsEnabled =
+  process.env.AUTH_DIAGNOSTICS_ENABLED === "true" ||
+  (process.env.NODE_ENV !== "production" &&
+    process.env.AUTH_DIAGNOSTICS_ENABLED !== "false");
+
+const logAuthDiagnostic = (
+  event: string,
+  detail?: Record<string, unknown>,
+  level: "info" | "warn" = "info",
+) => {
+  if (!authDiagnosticsEnabled) {
+    return;
+  }
+
+  const logger = level === "warn" ? console.warn : console.info;
+  logger(`[auth.diagnostic] ${event}`, detail ?? {});
+};
 
 const serializeOwnerUser = (
   user: SerializableOwnerUser,
@@ -157,7 +176,7 @@ const resolveAuthUserFromAccessToken = async (token: string | null) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    const decoded = jwt.verify(token, getAccessTokenSecret());
     if (!hasSupportedAccessTokenType(decoded)) {
       return null;
     }
@@ -213,6 +232,22 @@ const authUserWithPasswordSelect = {
 } as const;
 
 class AuthController {
+  static csrfToken(req: Request, res: Response) {
+    const csrfToken = resolveOrSetCsrfToken(req, res);
+
+    logAuthDiagnostic("csrf_token_issued", {
+      method: req.method,
+      path: req.path,
+      hasAuthorization: Boolean(req.headers.authorization),
+    });
+
+    return sendResponse(res, 200, {
+      data: {
+        csrfToken,
+      },
+    });
+  }
+
   static async oauthLogin(req: Request, res: Response) {
     try {
       const body: OAuthLoginPayload = req.body;
@@ -1252,6 +1287,13 @@ class AuthController {
   static async passkeyAuthenticateOptions(req: Request, res: Response) {
     try {
       const body: PasskeyAuthenticateOptionsPayload = req.body;
+      logAuthDiagnostic("passkey_authenticate_options_route_hit", {
+        method: req.method,
+        path: req.path,
+        email: normalizeEmailAddress(body.email),
+        hasAuthorization: Boolean(req.headers.authorization),
+      });
+
       const user = await prisma.user.findUnique({
         where: { email: body.email },
         select: {
@@ -1266,6 +1308,15 @@ class AuthController {
       });
 
       if (!user || user.passkey_credentials.length === 0) {
+        logAuthDiagnostic(
+          "passkey_authenticate_options_rejected",
+          {
+            reason: "no_registered_passkey",
+            path: req.path,
+            email: normalizeEmailAddress(body.email),
+          },
+          "warn",
+        );
         return sendResponse(res, 404, {
           message: getCredentialNotFoundMessage(),
         });
@@ -1310,13 +1361,28 @@ class AuthController {
         },
       });
 
+      logAuthDiagnostic("passkey_authenticate_options_challenge_created", {
+        path: req.path,
+        userId: user.id,
+        challengeId: challenge.id,
+        credentialCount: user.passkey_credentials.length,
+      });
+
       return sendResponse(res, 200, {
         data: {
           challenge_id: challenge.id,
           options,
         },
       });
-    } catch {
+    } catch (error) {
+      logAuthDiagnostic(
+        "passkey_authenticate_options_failed",
+        {
+          path: req.path,
+          message: error instanceof Error ? error.message : String(error),
+        },
+        "warn",
+      );
       return sendResponse(res, 500, {
         message: "Unable to start passkey login",
       });
@@ -1326,6 +1392,12 @@ class AuthController {
   static async passkeyAuthenticateVerify(req: Request, res: Response) {
     try {
       const body: PasskeyAuthenticateVerifyPayload = req.body;
+      logAuthDiagnostic("passkey_authenticate_verify_route_hit", {
+        method: req.method,
+        path: req.path,
+        email: normalizeEmailAddress(body.email),
+        challengeId: body.challenge_id,
+      });
       const user = await prisma.user.findUnique({
         where: { email: body.email },
         select: {
@@ -1339,6 +1411,15 @@ class AuthController {
       });
 
       if (!user) {
+        logAuthDiagnostic(
+          "passkey_authenticate_verify_rejected",
+          {
+            reason: "user_not_found",
+            path: req.path,
+            email: normalizeEmailAddress(body.email),
+          },
+          "warn",
+        );
         await recordAuthEvent({
           req,
           method: AuthMethod.PASSKEY,
@@ -1371,6 +1452,18 @@ class AuthController {
         !credentialRecord ||
         credentialRecord.user_id !== user.id
       ) {
+        logAuthDiagnostic(
+          "passkey_authenticate_verify_rejected",
+          {
+            reason: "challenge_or_credential_invalid",
+            path: req.path,
+            userId: user.id,
+            challengeId: body.challenge_id,
+            hasChallenge: Boolean(challenge),
+            hasCredentialRecord: Boolean(credentialRecord),
+          },
+          "warn",
+        );
         await recordAuthEvent({
           req,
           userId: user.id,
@@ -1452,9 +1545,17 @@ class AuthController {
           rememberMe: body.rememberMe,
         }),
       );
-    } catch {
-      return sendResponse(res, 422, {
-        message: "Passkey verification failed",
+    } catch (error) {
+      logAuthDiagnostic(
+        "passkey_authenticate_verify_failed",
+        {
+          path: req.path,
+          message: error instanceof Error ? error.message : String(error),
+        },
+        "warn",
+      );
+      return sendResponse(res, 500, {
+        message: "Unable to verify passkey login",
       });
     }
   }

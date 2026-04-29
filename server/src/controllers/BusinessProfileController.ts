@@ -5,13 +5,31 @@ import type { z } from "zod";
 import prisma from "../config/db.config.js";
 import { ensureBusinessForUser } from "../lib/authSession.js";
 import {
+  respondWithRedisCachedData,
+  setRedisResourceCache,
+} from "../lib/redisResourceCache.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
+import {
   formatBusinessAddress,
   normalizeBusinessAddressDraft,
   parseLegacyBusinessAddress,
 } from "../lib/indianAddress.js";
 import { businessProfileUpsertSchema } from "../validations/apiValidations.js";
+import {
+  buildBusinessProfileCachePrefix,
+  buildBusinessProfileRedisKey,
+} from "../redis/cacheKeys.js";
 
 type BusinessProfileInput = z.infer<typeof businessProfileUpsertSchema>;
+
+const BUSINESS_PROFILE_CACHE_TTL_SECONDS = Math.max(
+  Number(process.env.BUSINESS_PROFILE_CACHE_TTL_SECONDS ?? 900),
+  30,
+);
+const BUSINESS_PROFILE_CACHE_SWR_SECONDS = Math.max(
+  Number(process.env.BUSINESS_PROFILE_CACHE_SWR_SECONDS ?? 300),
+  0,
+);
 
 type BusinessProfileRecordForResponse = {
   address: string | null;
@@ -112,29 +130,55 @@ const serializeProfile = (profile: BusinessProfileRecordForResponse | null) => {
 class BusinessProfileController {
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    let profile: BusinessProfileRecordForResponse | null;
+    const cacheKey = buildBusinessProfileRedisKey({ businessId, userId });
+    const invalidationPrefix = buildBusinessProfileCachePrefix({
+      businessId,
+      userId,
+    });
 
-    try {
-      profile = await prisma.businessProfile.findUnique({
-        where: { user_id: userId },
-        select: structuredProfileSelect,
-      });
-    } catch (error) {
-      if (!isBusinessProfileSchemaMismatchError(error)) {
-        throw error;
-      }
+    return respondWithRedisCachedData({
+      req,
+      res,
+      key: cacheKey,
+      label: "business-profile",
+      ttlSeconds: BUSINESS_PROFILE_CACHE_TTL_SECONDS,
+      staleWhileRevalidateSeconds: BUSINESS_PROFILE_CACHE_SWR_SECONDS,
+      invalidationPrefixes: [invalidationPrefix],
+      resolver: async () => {
+        let profile: BusinessProfileRecordForResponse | null;
 
-      profile = await prisma.businessProfile.findUnique({
-        where: { user_id: userId },
-        select: legacyProfileSelect,
-      });
-    }
+        try {
+          profile = await measureRequestPhase("business_profile.db.read", () =>
+            prisma.businessProfile.findUnique({
+              where: { user_id: userId },
+              select: structuredProfileSelect,
+            }),
+          );
+        } catch (error) {
+          if (!isBusinessProfileSchemaMismatchError(error)) {
+            throw error;
+          }
 
-    return sendResponse(res, 200, { data: serializeProfile(profile) });
+          profile = await measureRequestPhase(
+            "business_profile.db.read_legacy",
+            () =>
+              prisma.businessProfile.findUnique({
+                where: { user_id: userId },
+                select: legacyProfileSelect,
+              }),
+          );
+        }
+
+        return measureRequestPhase("business_profile.serialize", async () =>
+          serializeProfile(profile),
+        );
+      },
+    });
   }
 
   static async store(req: Request, res: Response) {
@@ -214,10 +258,28 @@ class BusinessProfileController {
     }
 
     await ensureBusinessForUser(userId, body.business_name);
+    const responseData = serializeProfile(profile);
+    void setRedisResourceCache(
+      buildBusinessProfileRedisKey({
+        businessId: req.user?.businessId?.trim(),
+        userId,
+      }),
+      {
+        value: responseData,
+        ttlSeconds: BUSINESS_PROFILE_CACHE_TTL_SECONDS,
+        staleWhileRevalidateSeconds: BUSINESS_PROFILE_CACHE_SWR_SECONDS,
+        invalidationPrefixes: [
+          buildBusinessProfileCachePrefix({
+            businessId: req.user?.businessId?.trim(),
+            userId,
+          }),
+        ],
+      },
+    );
 
     return sendResponse(res, 200, {
       message: "Profile saved",
-      data: serializeProfile(profile),
+      data: responseData,
     });
   }
 }

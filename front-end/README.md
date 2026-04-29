@@ -155,11 +155,14 @@ The app will be available at **http://localhost:3000**.
 
 ```env
 # NextAuth
-NEXTAUTH_URL=http://localhost:3000
-NEXTAUTH_SECRET=your-nextauth-secret
+NEXTAUTH_URL=https://app.example.com
+NEXTAUTH_SECRET=replace-with-a-long-random-secret
 
-# Backend API
-NEXT_PUBLIC_API_URL=http://localhost:5000/api
+# Preferred backend base URL
+NEXT_PUBLIC_BACKEND_URL=https://api.example.com
+
+# Legacy alias still supported
+NEXT_PUBLIC_API_URL=https://api.example.com/api
 
 # Google OAuth (optional)
 GOOGLE_CLIENT_ID=your-google-client-id

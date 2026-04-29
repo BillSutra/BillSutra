@@ -8,7 +8,6 @@ import React, {
 } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowRight,
@@ -26,7 +25,6 @@ import {
 } from "@/components/dashboard/dashboard-section-shared";
 import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
 import { useHydrated } from "@/hooks/useHydrated";
-import { fetchUserPermissions } from "@/lib/apiClient";
 import {
   DASHBOARD_REALTIME_ENABLED,
   DASHBOARD_REFRESH_INTERVAL_MS,
@@ -36,6 +34,7 @@ import { useDashboardFormatters } from "@/components/dashboard/use-dashboard-for
 import { useI18n } from "@/providers/LanguageProvider";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { Button } from "@/components/ui/button";
+import { useUserPermissionsQuery } from "@/hooks/useWorkspaceQueries";
 
 const SalesForecast = dynamic(
   () => import("@/components/dashboard/sales-forecast"),
@@ -129,11 +128,7 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
   const { data, isLoading, isError, dataUpdatedAt, isFetching } =
     useDashboardForecast();
 
-  const { data: permissions } = useQuery({
-    queryKey: ["subscription-permissions"],
-    queryFn: fetchUserPermissions,
-    staleTime: 30_000,
-  });
+  const { data: permissions } = useUserPermissionsQuery();
 
   const showLoadingState = !hydrated || isLoading;
 

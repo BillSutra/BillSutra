@@ -3,12 +3,13 @@ import {
   featureRequiredPlan,
   fromPrismaPlanEnum,
   getPlanConfig,
-  isPlanAtLeast,
   type SubscriptionFeatureKey,
   type SubscriptionPlanId,
   toPrismaBillingCycleEnum,
   toPrismaPlanEnum,
 } from "../config/subscriptionPlans.js";
+import { deleteCacheByPrefix } from "../redis/cache.js";
+import { buildSubscriptionPermissionsCachePrefix } from "../redis/cacheKeys.js";
 
 type SubscriptionStatus = "TRIAL" | "ACTIVE" | "EXPIRED" | "CANCELLED";
 
@@ -129,6 +130,7 @@ const setCached = <K extends string | number, T>(
 const clearBusinessScopedCaches = (businessId: string) => {
   userSubscriptionCache.delete(businessId);
   permissionsCache.delete(businessId);
+  void deleteCacheByPrefix(buildSubscriptionPermissionsCachePrefix(businessId));
 };
 
 const rememberBusinessOwner = (
@@ -540,30 +542,17 @@ export const getFeatureAccess = (
   plan: UserSubscriptionPlan,
 ): SubscriptionFeatureAccess => {
   const internalPlan = toInternalPlan(plan);
-
-  if (internalPlan === "free") {
-    return {
-      maxInvoices: 50,
-      analytics: false,
-      teamAccess: false,
-      export: false,
-    };
-  }
-
-  if (internalPlan === "pro") {
-    return {
-      maxInvoices: "unlimited",
-      analytics: true,
-      teamAccess: false,
-      export: true,
-    };
-  }
+  const planConfig = getPlanConfig(internalPlan);
 
   return {
-    maxInvoices: "unlimited",
-    analytics: "advanced",
-    teamAccess: true,
-    export: true,
+    maxInvoices: planConfig.invoiceLimitPerMonth ?? "unlimited",
+    analytics: planConfig.features.ANALYTICS_ADVANCED
+      ? "advanced"
+      : planConfig.features.REPORTS_BASIC
+        ? true
+        : false,
+    teamAccess: planConfig.features.WORKERS_MANAGEMENT,
+    export: planConfig.features.DATA_EXPORT,
   };
 };
 
@@ -650,7 +639,8 @@ export const checkFeatureAccess = async (
   }
 
   const requiredPlan = featureRequiredPlan[feature];
-  if (!isPlanAtLeast(snapshot.planId, requiredPlan)) {
+  const currentPlanConfig = getPlanConfig(snapshot.planId);
+  if (!currentPlanConfig.features[feature]) {
     return {
       allowed: false,
       code: "SUBSCRIPTION_REQUIRED",

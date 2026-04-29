@@ -1,6 +1,10 @@
 import axios from "axios";
 import { API_URL } from "./apiEndPoints";
 import { apiClient } from "./apiClient";
+import {
+  buildCsrfHeadersIfAvailable,
+  buildRequiredCsrfHeaders,
+} from "./csrfClient";
 
 export type AuthSuccessPayload = {
   user: {
@@ -47,10 +51,26 @@ type RetryableError = Error & {
   expiresIn?: number;
 };
 
+const createBrowserRequestConfig = async () => ({
+  withCredentials: true,
+  headers: await buildRequiredCsrfHeaders(),
+});
+
+const createOptionalBrowserRequestConfig = () => ({
+  withCredentials: true,
+  headers: buildCsrfHeadersIfAvailable(),
+});
+
 const extractMessage = (error: unknown, fallback: string) => {
   if (axios.isAxiosError(error)) {
-    const message = (error.response?.data as { message?: string } | undefined)
-      ?.message;
+    const payload = error.response?.data as
+      | { message?: string; code?: string }
+      | undefined;
+    const message = payload?.message;
+    const code = payload?.code;
+    if (typeof code === "string" && code.startsWith("CSRF_")) {
+      return "Security check expired. Please try again.";
+    }
     if (message?.trim()) {
       return message;
     }
@@ -68,7 +88,7 @@ export const requestOtpLoginCode = async (email: string) => {
     const response = await axios.post(
       `${API_URL}/auth/otp/send`,
       { email },
-      { withCredentials: true },
+      await createBrowserRequestConfig(),
     );
     return response.data.data as { retryAfter: number; expiresIn: number };
   } catch (error) {
@@ -98,9 +118,7 @@ export const verifyOtpLoginCode = async (
       email,
       code,
       rememberMe,
-    }, {
-      withCredentials: true,
-    });
+    }, await createBrowserRequestConfig());
     return (response.data.data ?? response.data) as AuthSuccessPayload;
   } catch (error) {
     throw new Error(extractMessage(error, "Unable to verify login code."));
@@ -114,7 +132,7 @@ export const requestPasskeyAuthenticationOptions = async <TOptions>(
     const response = await axios.post(
       `${API_URL}/auth/passkeys/authenticate/options`,
       { email },
-      { withCredentials: true },
+      await createBrowserRequestConfig(),
     );
     return response.data.data as PasskeyOptionsResponse<TOptions>;
   } catch (error) {
@@ -139,7 +157,7 @@ export const verifyPasskeyAuthentication = async (
         rememberMe,
         response: responsePayload,
       },
-      { withCredentials: true },
+      await createBrowserRequestConfig(),
     );
     return (response.data.data ?? response.data) as AuthSuccessPayload;
   } catch (error) {
@@ -200,7 +218,7 @@ export const verifyEmailAddress = async (token: string) => {
   try {
     const response = await axios.get(`${API_URL}/auth/verify-email`, {
       params: { token },
-      withCredentials: true,
+      ...createOptionalBrowserRequestConfig(),
     });
     return (response.data.data ?? response.data) as EmailVerificationResult;
   } catch (error) {
@@ -222,7 +240,7 @@ export const verifyEmailVerificationOtp = async (
         rememberMe:
           typeof rememberMe === "boolean" ? rememberMe : undefined,
       },
-      { withCredentials: true },
+      await createBrowserRequestConfig(),
     );
     return (response.data.data ?? response.data) as EmailVerificationOtpResponse;
   } catch (error) {
@@ -235,7 +253,7 @@ export const resendEmailVerificationOtp = async (email: string) => {
     const response = await axios.post(
       `${API_URL}/auth/resend-otp`,
       { email },
-      { withCredentials: true },
+      await createBrowserRequestConfig(),
     );
     return response.data.data as
       | { email?: string; retryAfter?: number; expiresIn?: number }

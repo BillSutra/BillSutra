@@ -1,17 +1,18 @@
 import { executeQueuedExportEmail } from "../../modules/export/export.service.js";
-import type { DefaultQueueJobHandlerMap } from "../types.js";
+import type { AppQueueJobHandlerMap } from "../types.js";
 
 export const exportJobHandlers: Pick<
-  DefaultQueueJobHandlerMap,
+  AppQueueJobHandlerMap,
   "sendExportEmail"
 > = {
   sendExportEmail: async (job) =>
     executeQueuedExportEmail(
       {
-        id: job.data.userId,
-        actorId: job.data.actorId,
-        email: job.data.email,
+        id: job.data.context.userId as number,
+        actorId: job.data.context.actorId ?? undefined,
+        businessId: job.data.context.businessId ?? undefined,
+        email: job.data.payload.email,
       },
-      job.data.payload,
+      job.data.payload.payload,
     ),
 };
