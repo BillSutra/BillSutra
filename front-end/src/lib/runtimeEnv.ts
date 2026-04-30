@@ -2,6 +2,10 @@ const DEFAULT_BACKEND_URL = "http://localhost:7000";
 
 let validated = false;
 
+type ValidateFrontendEnvOptions = {
+  allowMissingNextAuthSecret?: boolean;
+};
+
 const normalizeString = (value?: string | null) => {
   const normalized = value?.trim();
   return normalized ? normalized : null;
@@ -64,7 +68,12 @@ const isValidUrl = (value: string | null) => {
 export const resolveFrontendBackendUrl = () =>
   normalizeBackendUrl(getRawBackendUrl());
 
-export const validateFrontendEnv = () => {
+const isNextProductionBuild = () =>
+  process.env.NEXT_PHASE === "phase-production-build";
+
+export const validateFrontendEnv = ({
+  allowMissingNextAuthSecret = isNextProductionBuild(),
+}: ValidateFrontendEnvOptions = {}) => {
   if (typeof window !== "undefined" || validated) {
     return;
   }
@@ -80,11 +89,11 @@ export const validateFrontendEnv = () => {
   const googleClientId = normalizeString(process.env.GOOGLE_CLIENT_ID);
   const googleClientSecret = normalizeString(process.env.GOOGLE_CLIENT_SECRET);
 
-  if (!nextAuthSecret) {
+  if (!nextAuthSecret && !allowMissingNextAuthSecret) {
     throw new Error("NEXTAUTH_SECRET is required.");
   }
 
-  if (nextAuthSecret.length < 32) {
+  if (nextAuthSecret && nextAuthSecret.length < 32) {
     throw new Error("NEXTAUTH_SECRET must be at least 32 characters long.");
   }
 
