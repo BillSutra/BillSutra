@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { isAxiosError } from "axios";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
@@ -18,6 +19,7 @@ import {
   validatePhone,
 } from "@/lib/validation";
 import { useI18n } from "@/providers/LanguageProvider";
+import { useUserPermissionsQuery } from "@/hooks/useWorkspaceQueries";
 
 type WorkersClientProps = {
   name: string;
@@ -53,7 +55,16 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
   const [period, setPeriod] = useState<"today" | "this_week" | "this_month">(
     "this_month",
   );
-  const { data, isLoading, isError } = useWorkersOverviewQuery(period);
+  const {
+    data: permissions,
+    isLoading: isPermissionsLoading,
+    isError: isPermissionsError,
+  } = useUserPermissionsQuery();
+  const hasTeamAccess = permissions?.features.teamAccess ?? false;
+  const { data, isLoading, isError } = useWorkersOverviewQuery(
+    period,
+    hasTeamAccess,
+  );
   const createWorker = useCreateWorkerMutation();
   const deleteWorker = useDeleteWorkerMutation();
   const updateWorker = useUpdateWorkerMutation();
@@ -231,6 +242,41 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
       subtitle={t("workersPage.subtitle")}
     >
       <div className="mx-auto w-full max-w-7xl">
+        {isPermissionsLoading ? (
+          <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6 text-sm text-[#5c4b3b]">
+            Checking your plan access for worker management...
+          </div>
+        ) : null}
+
+        {isPermissionsError ? (
+          <div className="rounded-2xl border border-[#ecdccf] bg-white/90 p-6 text-sm text-[#b45309]">
+            We could not verify your worker access right now. Please retry in a
+            moment.
+          </div>
+        ) : null}
+
+        {!isPermissionsLoading && !isPermissionsError && !hasTeamAccess ? (
+          <div className="rounded-3xl border border-[#ecdccf] bg-white/95 p-8 shadow-[0_24px_60px_-42px_rgba(92,75,59,0.22)]">
+            <p className="text-xs uppercase tracking-[0.2em] text-[#8a6d56]">
+              Team access
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold text-[#1f1b16]">
+              Worker settings are not enabled on your current plan.
+            </h2>
+            <p className="mt-3 max-w-2xl text-sm text-[#5c4b3b]">
+              Upgrade your workspace to unlock worker accounts, role permissions,
+              attendance-ready operations, and team controls.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button asChild className="bg-[#1f1b16] text-white hover:bg-[#2c2520]">
+                <Link href="/pricing">View plans</Link>
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {!isPermissionsLoading && !isPermissionsError && hasTeamAccess ? (
+          <>
         <div className="flex flex-col gap-2">
           <p className="text-sm uppercase tracking-[0.2em] text-[#8a6d56]">
             {t("workersPage.kicker")}
@@ -937,6 +983,8 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
             </div>
           </div>
         </section>
+          </>
+        ) : null}
       </div>
     </DashboardLayout>
   );

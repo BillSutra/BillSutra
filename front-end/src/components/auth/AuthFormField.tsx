@@ -20,7 +20,10 @@ type AuthFormFieldProps = {
   disabled?: boolean;
   error?: string;
   helperText?: string;
+  leftAdornment?: ReactNode;
   rightAdornment?: ReactNode;
+  wrapperClassName?: string;
+  inputClassName?: string;
 };
 
 const AuthFormField = ({
@@ -38,11 +41,23 @@ const AuthFormField = ({
   disabled,
   error,
   helperText,
+  leftAdornment,
   rightAdornment,
+  wrapperClassName,
+  inputClassName,
 }: AuthFormFieldProps) => {
+  const helperId = helperText ? `${id}-hint` : undefined;
+  const errorId = error ? `${id}-error` : undefined;
+  const describedBy = [errorId, helperId].filter(Boolean).join(" ") || undefined;
+
   return (
-    <div className="grid gap-2">
-      <Label htmlFor={id}>{label}</Label>
+    <div className={cn("grid gap-2", wrapperClassName)}>
+      <Label
+        htmlFor={id}
+        className="text-sm font-medium tracking-[0.01em] text-foreground"
+      >
+        {label}
+      </Label>
       <div className="relative">
         <Input
           id={id}
@@ -57,11 +72,19 @@ const AuthFormField = ({
           autoFocus={autoFocus}
           disabled={disabled}
           aria-invalid={Boolean(error)}
+          aria-describedby={describedBy}
           className={cn(
-            "transition-[border-color,box-shadow,background-color] duration-200",
+            "h-12 rounded-2xl border-border/70 bg-background/75 text-[0.95rem] shadow-[0_14px_30px_-24px_rgba(15,23,42,0.38)] transition-[border-color,box-shadow,background-color,transform] duration-200 placeholder:text-muted-foreground/80 hover:border-primary/35 hover:bg-background focus-visible:ring-2 focus-visible:ring-primary/20 dark:bg-background/60",
+            leftAdornment ? "pl-11" : "",
             rightAdornment ? "pr-12" : "",
+            inputClassName,
           )}
         />
+        {leftAdornment ? (
+          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4 text-muted-foreground">
+            {leftAdornment}
+          </div>
+        ) : null}
         {rightAdornment ? (
           <div className="absolute inset-y-0 right-2 flex items-center">
             {rightAdornment}
@@ -69,9 +92,13 @@ const AuthFormField = ({
         ) : null}
       </div>
       {error ? (
-        <span className="text-xs text-destructive">{error}</span>
+        <span id={errorId} role="alert" className="text-xs font-medium text-destructive">
+          {error}
+        </span>
       ) : helperText ? (
-        <span className="text-xs text-muted-foreground">{helperText}</span>
+        <span id={helperId} className="text-xs text-muted-foreground">
+          {helperText}
+        </span>
       ) : null}
     </div>
   );

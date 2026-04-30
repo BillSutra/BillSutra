@@ -23,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { workspaceQueryStaleTimes } from "@/hooks/useWorkspaceQueries";
 
 ChartJS.register(
   CategoryScale,
@@ -57,9 +58,9 @@ const BusinessCharts = () => {
   const { data, isLoading } = useQuery({
     queryKey: ["reports", "summary"],
     queryFn: fetchReportsSummary,
-    staleTime: 0,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    staleTime: workspaceQueryStaleTimes.subscriptionPermissions,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const billedBase = data?.total_billed ? Number(data.total_billed) / 6 : 52000;

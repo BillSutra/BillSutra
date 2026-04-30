@@ -9,12 +9,14 @@ declare global {
     actorId: string;
     businessId: string;
     sessionVersion: number;
+    latestSessionVersion?: number | null;
     isEmailVerified: boolean;
     role: "ADMIN" | "WORKER";
     accountType: "OWNER" | "WORKER";
     name: string;
     email: string;
     workerId?: string;
+    rememberMe?: boolean;
   }
 
   interface AdminAuthUser {
@@ -30,6 +32,7 @@ declare global {
       file?: Multer.File;
       requestId?: string;
       requestStartedAt?: number;
+      parsedCookies?: Map<string, string>;
     }
   }
 }

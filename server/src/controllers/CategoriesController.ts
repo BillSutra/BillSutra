@@ -6,23 +6,64 @@ import {
   categoryCreateSchema,
   categoryUpdateSchema,
 } from "../validations/apiValidations.js";
+import {
+  invalidateRedisResourceCacheByPrefix,
+  respondWithRedisCachedData,
+  setRedisResourceCache,
+} from "../lib/redisResourceCache.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
+import {
+  buildCategoriesCachePrefix,
+  buildCategoriesRedisKey,
+} from "../redis/cacheKeys.js";
 
 type CategoryCreateInput = z.infer<typeof categoryCreateSchema>;
 type CategoryUpdateInput = z.infer<typeof categoryUpdateSchema>;
 
+const CATEGORY_CACHE_TTL_SECONDS = Math.max(
+  Number(process.env.CATEGORY_CACHE_TTL_SECONDS ?? 900),
+  30,
+);
+const CATEGORY_CACHE_SWR_SECONDS = Math.max(
+  Number(process.env.CATEGORY_CACHE_SWR_SECONDS ?? 300),
+  0,
+);
+
+const invalidateCategoryCache = (businessId: string | undefined, userId: number) =>
+  invalidateRedisResourceCacheByPrefix(
+    buildCategoriesCachePrefix({ businessId, userId }),
+  );
+
 class CategoriesController {
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const categories = await prisma.category.findMany({
-      where: { user_id: userId },
-      orderBy: { created_at: "desc" },
+    return respondWithRedisCachedData({
+      req,
+      res,
+      key: buildCategoriesRedisKey({ businessId, userId }),
+      label: "categories",
+      ttlSeconds: CATEGORY_CACHE_TTL_SECONDS,
+      staleWhileRevalidateSeconds: CATEGORY_CACHE_SWR_SECONDS,
+      invalidationPrefixes: [buildCategoriesCachePrefix({ businessId, userId })],
+      resolver: async () =>
+        measureRequestPhase("categories.db.list", () =>
+          prisma.category.findMany({
+            where: { user_id: userId },
+            orderBy: { created_at: "desc" },
+            select: {
+              id: true,
+              name: true,
+              created_at: true,
+              updated_at: true,
+            },
+          }),
+        ),
     });
-
-    return sendResponse(res, 200, { data: categories });
   }
 
   static async store(req: Request, res: Response) {
@@ -37,6 +78,8 @@ class CategoriesController {
     const category = await prisma.category.create({
       data: { user_id: userId, name },
     });
+
+    void invalidateCategoryCache(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 201, {
       message: "Category created",
@@ -81,6 +124,8 @@ class CategoriesController {
       return sendResponse(res, 404, { message: "Category not found" });
     }
 
+    void invalidateCategoryCache(req.user?.businessId?.trim(), userId);
+
     return sendResponse(res, 200, { message: "Category updated" });
   }
 
@@ -98,6 +143,8 @@ class CategoriesController {
     if (!deleted.count) {
       return sendResponse(res, 404, { message: "Category not found" });
     }
+
+    void invalidateCategoryCache(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, { message: "Category removed" });
   }

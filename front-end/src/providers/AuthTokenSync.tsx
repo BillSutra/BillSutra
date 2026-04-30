@@ -5,12 +5,14 @@ import { useSession } from "next-auth/react";
 import {
   bootstrapSecureAuthSession,
   clearLegacyStoredToken,
+  clearPendingRememberMePreference,
   clearSecureAuthBootstrapped,
+  ensureFreshSecureAuthSessionDetailed,
+  getPendingRememberMePreference,
   hasSecureAuthBootstrap,
-  isAuthTokenExpired,
+  isSecureAuthSessionExpired,
   isSecureAuthEnabled,
   normalizeAuthToken,
-  refreshSecureAuthSessionDetailed,
   requestClientLogout,
 } from "@/lib/secureAuth";
 
@@ -25,57 +27,68 @@ const AuthTokenSync = () => {
   useEffect(() => {
     if (status === "loading") return;
 
+    if (status === "unauthenticated") {
+      clearLegacyStoredToken();
+      clearSecureAuthBootstrapped();
+      return;
+    }
+
+    if (!isSecureAuthEnabled()) {
+      return;
+    }
+
     const token = normalizeAuthToken(
       (data?.user as SessionUserWithToken | undefined)?.token ?? null,
     );
+    const requiresBootstrap =
+      !hasSecureAuthBootstrap() || isSecureAuthSessionExpired(Date.now() + 60_000);
 
-    if (!token) {
-      if (status === "unauthenticated") {
-        clearLegacyStoredToken();
-        clearSecureAuthBootstrapped();
-      }
+    if (!requiresBootstrap) {
       return;
     }
 
-    if (isAuthTokenExpired(token)) {
-      if (!isSecureAuthEnabled()) {
-        requestClientLogout("token_expired");
-        return;
-      }
+    let cancelled = false;
 
-      if (hasSecureAuthBootstrap()) {
-        return;
-      }
+    const syncAuthSession = async () => {
+      if (token && !hasSecureAuthBootstrap()) {
+        if (bootstrappingTokenRef.current !== token) {
+          bootstrappingTokenRef.current = token;
 
-      void refreshSecureAuthSessionDetailed().then((result) => {
-        if (!result.ok && result.reason === "auth_invalid") {
-          requestClientLogout("refresh_expired");
-        }
-      });
-      return;
-    }
+          try {
+            const bootstrapped = await bootstrapSecureAuthSession(token, {
+              rememberMe: getPendingRememberMePreference(),
+            });
+            if (bootstrapped || cancelled) {
+              return;
+            }
 
-    if (!isSecureAuthEnabled() || hasSecureAuthBootstrap()) {
-      return;
-    }
-
-    if (bootstrappingTokenRef.current === token) {
-      return;
-    }
-
-    bootstrappingTokenRef.current = token;
-
-    void bootstrapSecureAuthSession(token)
-      .then((bootstrapped) => {
-        if (bootstrapped) {
+            return;
+          } finally {
+            if (!cancelled) {
+              bootstrappingTokenRef.current = null;
+            }
+          }
+        } else {
           return;
         }
+      }
 
-        bootstrappingTokenRef.current = null;
-      })
-      .catch(() => {
-        bootstrappingTokenRef.current = null;
+      const refreshResult = await ensureFreshSecureAuthSessionDetailed({
+        force: true,
+        minValidityMs: 0,
       });
+
+      if (!cancelled && !refreshResult.ok && refreshResult.reason === "auth_invalid") {
+        clearPendingRememberMePreference();
+        requestClientLogout("401_refresh_failed");
+      }
+    };
+
+    void syncAuthSession();
+
+    return () => {
+      cancelled = true;
+    };
   }, [data?.user, status]);
 
   return null;

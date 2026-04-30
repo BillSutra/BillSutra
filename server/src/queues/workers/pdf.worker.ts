@@ -1,15 +1,19 @@
 import { generateInvoicePdf } from "../../modules/invoice/invoice.service.js";
-import type { DefaultQueueJobHandlerMap } from "../types.js";
+import type { AppQueueJobHandlerMap } from "../types.js";
 
 export const pdfJobHandlers: Pick<
-  DefaultQueueJobHandlerMap,
+  AppQueueJobHandlerMap,
   "generateInvoicePDF"
 > = {
   generateInvoicePDF: async (job) => {
-    const result = await generateInvoicePdf(job.data.userId, job.data.invoiceId);
+    const invoiceId = job.data.payload.invoiceId;
+    const result = await generateInvoicePdf(
+      job.data.context.userId as number,
+      invoiceId,
+    );
 
     return {
-      invoiceId: job.data.invoiceId,
+      invoiceId,
       invoiceNumber: result.invoiceNumber,
       bytes: result.buffer.length,
     };

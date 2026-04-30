@@ -10,7 +10,7 @@ const RequireAdminMiddleware = (
     return;
   }
 
-  if (req.user.role !== "ADMIN") {
+  if (req.user.accountType !== "OWNER" || req.user.role !== "ADMIN") {
     res.status(403).json({ status: 403, message: "Admin access required" });
     return;
   }

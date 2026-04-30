@@ -1,6 +1,8 @@
 import multer from "multer";
 import type { NextFunction, Request, Response } from "express";
+import path from "path";
 import { sendResponse } from "../utils/sendResponse.js";
+import { matchesAllowedUploadKinds } from "../lib/fileUploadSecurity.js";
 
 const ALLOWED_MIME_TYPES = new Set([
   "image/png",
@@ -9,12 +11,23 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/webp",
   "application/pdf",
 ]);
+const ALLOWED_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".pdf",
+]);
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter(_req, file, cb) {
-    if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    if (
+      ALLOWED_MIME_TYPES.has(file.mimetype) &&
+      ALLOWED_EXTENSIONS.has(extension)
+    ) {
       cb(null, true);
       return;
     }
@@ -45,6 +58,20 @@ export const paymentProofUploadMiddleware = (
         | undefined;
       const paymentProof = files?.paymentProof?.[0] ?? files?.screenshot?.[0];
       if (paymentProof) {
+        if (
+          !matchesAllowedUploadKinds(paymentProof.buffer, [
+            "png",
+            "jpeg",
+            "webp",
+            "pdf",
+          ])
+        ) {
+          sendResponse(res, 400, {
+            message: "The uploaded payment proof content does not match a supported file format.",
+          });
+          return;
+        }
+
         (req as Request & { file?: Express.Multer.File }).file = paymentProof;
       }
       next();

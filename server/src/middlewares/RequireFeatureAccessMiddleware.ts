@@ -4,6 +4,8 @@ import {
   type FeatureAccessResult,
 } from "../services/subscription.service.js";
 import type { SubscriptionFeatureKey } from "../config/subscriptionPlans.js";
+import { dispatchNotification } from "../services/notification.service.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
 
 const sendFeatureError = (res: Response, result: FeatureAccessResult) => {
   res.status(402).json({
@@ -27,8 +29,21 @@ const RequireFeatureAccessMiddleware = (feature: SubscriptionFeatureKey) => {
       return;
     }
 
-    const result = await checkFeatureAccess(userId, feature);
+    const result = await measureRequestPhase(
+      `subscription.feature_check.${feature.toLowerCase()}`,
+      () => checkFeatureAccess(userId, feature),
+    );
     if (!result.allowed) {
+      const businessId = req.user?.businessId?.trim();
+      if (businessId && result.code === "PLAN_LIMIT_REACHED") {
+        void dispatchNotification({
+          userId,
+          businessId,
+          type: "subscription",
+          message: result.message,
+          referenceKey: `feature-limit:${feature}:${result.snapshot.usage.periodKey}`,
+        });
+      }
       sendFeatureError(res, result);
       return;
     }

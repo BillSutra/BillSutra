@@ -8,9 +8,37 @@ import {
   productCreateSchema,
   productUpdateSchema,
 } from "../validations/apiValidations.js";
+import { dispatchNotification } from "../services/notification.service.js";
+import {
+  maintainProductCategoryReferences,
+  normalizeProductCategoryRecord,
+  normalizeProductCategoryRecords,
+  productCategoryInclude,
+} from "../lib/productCategories.js";
+import {
+  respondWithRedisCachedData,
+} from "../lib/redisResourceCache.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
+import {
+  buildProductOptionsCachePrefix,
+  buildProductOptionsRedisKey,
+} from "../redis/cacheKeys.js";
+import { invalidateProductOptionCaches } from "../lib/cacheInvalidation.js";
 
 type ProductCreateInput = z.infer<typeof productCreateSchema>;
 type ProductUpdateInput = z.infer<typeof productUpdateSchema>;
+
+const PRODUCT_OPTIONS_CACHE_TTL_SECONDS = Math.max(
+  Number(process.env.PRODUCT_OPTIONS_CACHE_TTL_SECONDS ?? 180),
+  15,
+);
+const PRODUCT_OPTIONS_CACHE_SWR_SECONDS = Math.max(
+  Number(process.env.PRODUCT_OPTIONS_CACHE_SWR_SECONDS ?? 60),
+  0,
+);
+
+const normalizeProductName = (value: string) =>
+  value.trim().replace(/\s+/g, " ");
 
 const buildQuickProductSku = (productName: string) => {
   const base = productName
@@ -61,6 +89,7 @@ const resolveProductSku = async ({
 class ProductsController {
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -80,6 +109,9 @@ class ProductsController {
       typeof req.query.search === "string" ? req.query.search.trim() : "";
     const category =
       typeof req.query.category === "string" ? req.query.category.trim() : "";
+    const mode =
+      typeof req.query.mode === "string" ? req.query.mode.trim().toLowerCase() : "";
+    const isOptionsMode = mode === "options";
 
     const where: Prisma.ProductWhereInput = {
       user_id: userId,
@@ -119,26 +151,95 @@ class ProductsController {
             mode: "insensitive",
           },
         },
+        {
+          category: {
+            name: {
+              contains: search,
+              mode: "insensitive",
+            },
+          },
+        },
       ];
     }
 
-    const dbQuery = {
-      where,
-      include: { category: true },
-      orderBy: { created_at: "desc" as const },
-      skip,
-      take: limit,
-    };
+    void maintainProductCategoryReferences(userId);
 
-    const [items, total] = await prisma.$transaction([
-      prisma.product.findMany(dbQuery),
-      prisma.product.count({ where }),
-    ]);
+    if (isOptionsMode) {
+      return respondWithRedisCachedData({
+        req,
+        res,
+        key: buildProductOptionsRedisKey({
+          businessId,
+          userId,
+          search,
+          category,
+          page,
+          limit,
+        }),
+        label: "products-options",
+        ttlSeconds: PRODUCT_OPTIONS_CACHE_TTL_SECONDS,
+        staleWhileRevalidateSeconds: PRODUCT_OPTIONS_CACHE_SWR_SECONDS,
+        invalidationPrefixes: [
+          buildProductOptionsCachePrefix({ businessId, userId }),
+        ],
+        resolver: async () => {
+          const items = await measureRequestPhase("products.db.options", () =>
+            prisma.product.findMany({
+              where,
+              select: {
+                id: true,
+                name: true,
+                sku: true,
+                barcode: true,
+                price: true,
+                cost: true,
+                gst_rate: true,
+                stock_on_hand: true,
+                reorder_level: true,
+                category: productCategoryInclude.category,
+              },
+              orderBy: { name: "asc" },
+              skip,
+              take: limit,
+            }),
+          );
+          const normalizedItems = await measureRequestPhase(
+            "products.serialize.options",
+            async () => normalizeProductCategoryRecords(items),
+          );
+          return {
+            products: normalizedItems,
+            items: normalizedItems,
+            page,
+            limit,
+            total: normalizedItems.length,
+            totalPages: 1,
+          };
+        },
+      });
+    }
+
+    const [items, total] = await measureRequestPhase("products.db.index", () =>
+      Promise.all([
+        prisma.product.findMany({
+          where,
+          include: productCategoryInclude,
+          orderBy: { created_at: "desc" },
+          skip,
+          take: limit,
+        }),
+        prisma.product.count({ where }),
+      ]),
+    );
+    const normalizedItems = await measureRequestPhase(
+      "products.serialize.index",
+      async () => normalizeProductCategoryRecords(items),
+    );
 
     return sendResponse(res, 200, {
       data: {
-        products: items,
-        items,
+        products: normalizedItems,
+        items: normalizedItems,
         total,
         page,
         limit,
@@ -149,6 +250,7 @@ class ProductsController {
 
   static async store(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -165,6 +267,7 @@ class ProductsController {
       reorder_level,
       category_id,
     } = body;
+    const normalizedName = normalizeProductName(name);
 
     if (category_id) {
       const category = await prisma.category.findFirst({
@@ -186,17 +289,35 @@ class ProductsController {
       }
     }
 
+    const existingProductWithName = await prisma.product.findFirst({
+      where: {
+        user_id: userId,
+        name: {
+          equals: normalizedName,
+          mode: "insensitive",
+        },
+      },
+      include: productCategoryInclude,
+    });
+
+    if (existingProductWithName) {
+      return sendResponse(res, 409, {
+        message: "Product already exists",
+        data: normalizeProductCategoryRecord(existingProductWithName),
+      });
+    }
+
     const resolvedSku = await resolveProductSku({
       userId,
       preferredSku: sku,
-      productName: name,
+      productName: normalizedName,
     });
 
     const product = await prisma.product.create({
       data: {
         user_id: userId,
         category_id,
-        name,
+        name: normalizedName,
         sku: resolvedSku,
         barcode,
         gst_rate,
@@ -205,11 +326,23 @@ class ProductsController {
         stock_on_hand: stock_on_hand ?? 0,
         reorder_level: reorder_level ?? 0,
       },
+      include: productCategoryInclude,
     });
+    void invalidateProductOptionCaches(req.user?.businessId?.trim(), userId);
+
+    if (businessId) {
+      void dispatchNotification({
+        userId,
+        businessId,
+        type: "inventory",
+        message: `New product ${product.name} added.`,
+        referenceKey: `product-created:${product.id}`,
+      });
+    }
 
     return sendResponse(res, 201, {
       message: "Product created",
-      data: product,
+      data: normalizeProductCategoryRecord(product),
     });
   }
 
@@ -220,16 +353,19 @@ class ProductsController {
     }
 
     const id = Number(req.params.id);
+    void maintainProductCategoryReferences(userId);
     const product = await prisma.product.findFirst({
       where: { id, user_id: userId },
-      include: { category: true },
+      include: productCategoryInclude,
     });
 
     if (!product) {
       return sendResponse(res, 404, { message: "Product not found" });
     }
 
-    return sendResponse(res, 200, { data: product });
+    return sendResponse(res, 200, {
+      data: normalizeProductCategoryRecord(product),
+    });
   }
 
   static async update(req: Request, res: Response) {
@@ -251,6 +387,9 @@ class ProductsController {
       reorder_level,
       category_id,
     } = body;
+    const normalizedName = typeof name === "string"
+      ? normalizeProductName(name)
+      : undefined;
 
     if (category_id) {
       const category = await prisma.category.findFirst({
@@ -272,10 +411,40 @@ class ProductsController {
       }
     }
 
-    const updated = await prisma.product.updateMany({
+    const existingProduct = await prisma.product.findFirst({
       where: { id, user_id: userId },
+      select: { id: true },
+    });
+
+    if (!existingProduct) {
+      return sendResponse(res, 404, { message: "Product not found" });
+    }
+
+    if (normalizedName) {
+      const duplicateNameProduct = await prisma.product.findFirst({
+        where: {
+          user_id: userId,
+          NOT: { id: existingProduct.id },
+          name: {
+            equals: normalizedName,
+            mode: "insensitive",
+          },
+        },
+        include: productCategoryInclude,
+      });
+
+      if (duplicateNameProduct) {
+        return sendResponse(res, 409, {
+          message: "Product already exists",
+          data: normalizeProductCategoryRecord(duplicateNameProduct),
+        });
+      }
+    }
+
+    const updated = await prisma.product.update({
+      where: { id: existingProduct.id },
       data: {
-        name,
+        name: normalizedName,
         sku,
         barcode,
         gst_rate,
@@ -285,13 +454,14 @@ class ProductsController {
         reorder_level,
         category_id,
       },
+      include: productCategoryInclude,
     });
+    void invalidateProductOptionCaches(req.user?.businessId?.trim(), userId);
 
-    if (!updated.count) {
-      return sendResponse(res, 404, { message: "Product not found" });
-    }
-
-    return sendResponse(res, 200, { message: "Product updated" });
+    return sendResponse(res, 200, {
+      message: "Product updated",
+      data: normalizeProductCategoryRecord(updated),
+    });
   }
 
   static async destroy(req: Request, res: Response) {
@@ -308,6 +478,8 @@ class ProductsController {
     if (!deleted.count) {
       return sendResponse(res, 404, { message: "Product not found" });
     }
+
+    void invalidateProductOptionCaches(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, { message: "Product removed" });
   }

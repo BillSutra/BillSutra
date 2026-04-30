@@ -9,10 +9,12 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import {
+  deleteNotification as deleteNotificationRequest,
   fetchNotifications,
   markAllNotificationsAsRead,
-  markNotificationAsRead,
+  updateNotificationReadState,
   type AppNotification,
+  type NotificationListResponse,
 } from "@/lib/apiClient";
 
 type NotificationContextValue = {
@@ -22,12 +24,28 @@ type NotificationContextValue = {
   isFetching: boolean;
   refresh: () => Promise<unknown>;
   markRead: (id: string) => Promise<void>;
+  markUnread: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
+  remove: (id: string) => Promise<void>;
 };
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
 
 const NOTIFICATION_QUERY_KEY = ["notifications", "header"];
+
+type NotificationQuerySnapshot = Array<
+  readonly [readonly unknown[], NotificationListResponse | undefined]
+>;
+
+const updateNotificationQueryCaches = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  updater: (current: NotificationListResponse) => NotificationListResponse,
+) => {
+  queryClient.setQueriesData<NotificationListResponse>(
+    { queryKey: ["notifications"] },
+    (current) => (current ? updater(current) : current),
+  );
+};
 
 export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
@@ -35,20 +53,157 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
 
   const query = useQuery({
     queryKey: NOTIFICATION_QUERY_KEY,
-    queryFn: () => fetchNotifications(10),
+    queryFn: () => fetchNotifications({ limit: 5 }),
     enabled: status === "authenticated",
-    refetchInterval: 30000,
-    staleTime: 15000,
+    refetchInterval: () =>
+      typeof document !== "undefined" && document.hidden ? false : 60_000,
+    refetchIntervalInBackground: false,
+    staleTime: 45_000,
   });
 
   const markReadMutation = useMutation({
-    mutationFn: markNotificationAsRead,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: NOTIFICATION_QUERY_KEY }),
+    mutationFn: (id: string) => updateNotificationReadState(id, true),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["notifications"] });
+      const snapshots = queryClient.getQueriesData<NotificationListResponse>({
+        queryKey: ["notifications"],
+      });
+
+      let unreadDelta = 0;
+      updateNotificationQueryCaches(queryClient, (current) => {
+        let changed = false;
+        const notifications = current.notifications.map((notification) => {
+          if (notification.id !== id || notification.isRead) {
+            return notification;
+          }
+
+          changed = true;
+          return { ...notification, isRead: true };
+        });
+
+        if (changed) {
+          unreadDelta = -1;
+        }
+
+        return {
+          ...current,
+          notifications,
+          unreadCount: Math.max(0, current.unreadCount + unreadDelta),
+        };
+      });
+
+      return { snapshots };
+    },
+    onError: (_error, _id, context) => {
+      context?.snapshots.forEach(([key, value]) => {
+        queryClient.setQueryData(key, value);
+      });
+    },
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  const markUnreadMutation = useMutation({
+    mutationFn: (id: string) => updateNotificationReadState(id, false),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["notifications"] });
+      const snapshots = queryClient.getQueriesData<NotificationListResponse>({
+        queryKey: ["notifications"],
+      });
+
+      let unreadDelta = 0;
+      updateNotificationQueryCaches(queryClient, (current) => {
+        let changed = false;
+        const notifications = current.notifications.map((notification) => {
+          if (notification.id !== id || !notification.isRead) {
+            return notification;
+          }
+
+          changed = true;
+          return { ...notification, isRead: false };
+        });
+
+        if (changed) {
+          unreadDelta = 1;
+        }
+
+        return {
+          ...current,
+          notifications,
+          unreadCount: Math.max(0, current.unreadCount + unreadDelta),
+        };
+      });
+
+      return { snapshots };
+    },
+    onError: (_error, _id, context) => {
+      context?.snapshots.forEach(([key, value]) => {
+        queryClient.setQueryData(key, value);
+      });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
   const markAllReadMutation = useMutation({
     mutationFn: markAllNotificationsAsRead,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: NOTIFICATION_QUERY_KEY }),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["notifications"] });
+      const snapshots = queryClient.getQueriesData<NotificationListResponse>({
+        queryKey: ["notifications"],
+      });
+
+      updateNotificationQueryCaches(queryClient, (current) => ({
+        ...current,
+        notifications: current.notifications.map((notification) => ({
+          ...notification,
+          isRead: true,
+        })),
+        unreadCount: 0,
+      }));
+
+      return { snapshots };
+    },
+    onError: (_error, _variables, context) => {
+      context?.snapshots.forEach(([key, value]) => {
+        queryClient.setQueryData(key, value);
+      });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteNotificationRequest,
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: ["notifications"] });
+      const snapshots = queryClient.getQueriesData<NotificationListResponse>({
+        queryKey: ["notifications"],
+      });
+
+      let unreadDelta = 0;
+      updateNotificationQueryCaches(queryClient, (current) => {
+        const target = current.notifications.find((notification) => notification.id === id);
+        if (target && !target.isRead) {
+          unreadDelta = -1;
+        }
+
+        return {
+          ...current,
+          notifications: current.notifications.filter(
+            (notification) => notification.id !== id,
+          ),
+          unreadCount: Math.max(0, current.unreadCount + unreadDelta),
+          total: target ? Math.max(0, current.total - 1) : current.total,
+        };
+      });
+
+      return { snapshots };
+    },
+    onError: (_error, _id, context) => {
+      context?.snapshots.forEach(([key, value]) => {
+        queryClient.setQueryData(key, value);
+      });
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["notifications"] }),
   });
 
   const value = useMemo<NotificationContextValue>(
@@ -61,11 +216,17 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
       markRead: async (id: string) => {
         await markReadMutation.mutateAsync(id);
       },
+      markUnread: async (id: string) => {
+        await markUnreadMutation.mutateAsync(id);
+      },
       markAllRead: async () => {
         await markAllReadMutation.mutateAsync();
       },
+      remove: async (id: string) => {
+        await deleteMutation.mutateAsync(id);
+      },
     }),
-    [markAllReadMutation, markReadMutation, query],
+    [deleteMutation, markAllReadMutation, markReadMutation, markUnreadMutation, query],
   );
 
   return (

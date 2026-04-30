@@ -3,14 +3,15 @@
 import React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchReportsSummary } from "@/lib/apiClient";
+import { workspaceQueryStaleTimes } from "@/hooks/useWorkspaceQueries";
 
 const ReportSummary = () => {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["reports", "summary"],
     queryFn: fetchReportsSummary,
-    staleTime: 0,
-    refetchOnMount: true,
-    refetchOnWindowFocus: true,
+    staleTime: workspaceQueryStaleTimes.subscriptionPermissions,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   if (isLoading) {

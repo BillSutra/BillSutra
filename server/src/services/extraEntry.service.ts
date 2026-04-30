@@ -284,11 +284,12 @@ export const getExtraEntryStats = async (params: {
   await ensureExtraEntriesTable();
 
   const rows = await prisma.$queryRaw<ExtraEntryAggregateRow[]>(Prisma.sql`
-    SELECT "type", "amount"
+    SELECT "type", COALESCE(SUM("amount"), 0) AS "amount"
     FROM "extra_entries"
     WHERE "user_id" = ${params.userId}
       AND "date" >= ${params.from}
-      AND "date" <= ${params.to}
+      AND "date" < ${params.to}
+    GROUP BY "type"
   `);
 
   let income = 0;

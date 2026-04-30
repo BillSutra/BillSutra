@@ -94,6 +94,7 @@ export const pricingPlans: PricingPlan[] = [
       "Smart Suggestions for upsells and quick reorders",
       "Professional invoice PDF with logo, GST, and branding",
       "Basic analytics for sales and top products",
+      "Worker accounts, role permissions, and team settings",
       "Higher product and customer limits",
     ],
     upgradeHighlights: [
@@ -120,7 +121,6 @@ export const pricingPlans: PricingPlan[] = [
     features: [
       "Everything in Pro",
       "Advanced analytics and downloadable reports",
-      "Multi-user staff accounts",
       "Priority support",
       "Backups and full data export",
       "Advanced invoice themes, branding, and future integrations",

@@ -5,13 +5,26 @@
     "front-end",
     "server"
   ],
+  "engines": {
+    "node": ">=20.19.0",
+    "npm": ">=10"
+  },
   "scripts": {
     "dev": "npm run dev --workspace front-end",
-    "build": "npm run build --workspace front-end",
-    "start": "npm run start --workspace front-end",
+    "dev:frontend": "npm run dev --workspace front-end",
+    "dev:server": "npm run dev --workspace server",
+    "dev:worker": "npm run worker:dev --workspace server",
     "lint": "npm run lint --workspace front-end",
-    "server": "npm start --workspace server",
+    "typecheck": "npm run prisma:generate:ci --workspace server && npm run typecheck --workspace server && npm run typecheck --workspace front-end",
+    "test": "npm run test --workspace front-end && npm run test --workspace server",
+    "build": "npm run build --workspace server && npm run build --workspace front-end",
+    "build:server": "npm run build --workspace server",
+    "build:frontend": "npm run build --workspace front-end",
+    "start": "npm run start --workspace front-end",
+    "server": "npm run start --workspace server",
     "worker": "npm run worker --workspace server",
+    "worker:start": "npm run worker:start --workspace server",
+    "ci:verify": "npm run lint && npm run typecheck && npm test && npm run build",
     "face-service": "powershell -ExecutionPolicy Bypass -File .\\face_recognition_service\\start.ps1"
   }
 }

@@ -44,7 +44,7 @@ export const initProductAnalytics = () => {
     autocapture: true,
     person_profiles: "identified_only",
     opt_out_capturing_by_default: shouldDefaultOptOut(),
-    loaded: (instance) => {
+    loaded: (instance: typeof posthog) => {
       if (getStoredOptOut()) {
         instance.opt_out_capturing();
       }

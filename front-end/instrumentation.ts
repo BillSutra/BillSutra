@@ -1,10 +1,10 @@
 import {
   captureFrontendRequestError,
-  loadFrontendSentry,
-} from "./src/lib/observability/sentry";
+  loadNextjsSentry,
+} from "./src/lib/observability/next-sentry";
 
 export async function register() {
-  const Sentry = await loadFrontendSentry();
+  const Sentry = await loadNextjsSentry();
   if (!Sentry) {
     return;
   }

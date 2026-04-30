@@ -181,7 +181,7 @@ const BusinessInvoice = ({
                     onClick={() => onStartAddCustomer(customerSearch)}
                   >
                     <Plus size={16} />
-                    Add "{customerSearch.trim()}" as customer
+                    Add &quot;{customerSearch.trim()}&quot; as customer
                   </button>
                 ) : null}
               </div>

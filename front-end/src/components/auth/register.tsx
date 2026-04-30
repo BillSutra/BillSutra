@@ -2,7 +2,6 @@
 import React, {
   FormEvent,
   useActionState,
-  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -16,13 +15,20 @@ import { signIn } from "next-auth/react";
 import Image from "next/image";
 import { useI18n } from "@/providers/LanguageProvider";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
-import {
-  bootstrapSecureAuthSession,
-  isSecureAuthEnabled,
-} from "@/lib/secureAuth";
-import { captureFrontendException } from "@/lib/observability/shared";
 import { useRouter } from "next/navigation";
-import { Check, Eye, EyeOff, LoaderCircle, X } from "lucide-react";
+import {
+  Check,
+  Eye,
+  EyeOff,
+  LoaderCircle,
+  LockKeyhole,
+  Mail,
+  Phone,
+  ShieldCheck,
+  Sparkles,
+  User2,
+  X,
+} from "lucide-react";
 
 type RegisterProps = {
   autoFocusFirstField?: boolean;
@@ -250,81 +256,75 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
     confirm_password: asErrorText(state.errors?.confirm_password),
   };
 
-  const completeTokenSignup = useCallback(
-    async (
-      rawToken: unknown,
-      options?: {
-        isEmailVerified?: boolean | null;
-      },
-    ) => {
-      if (typeof rawToken !== "string" || !rawToken.trim()) {
-        toast.error("A valid login token was not returned.");
-        return false;
+  useEffect(() => {
+    if (state.status === 503 && state.data?.verification) {
+      toast.error(
+        state.message ||
+          "Account created, but we could not send the verification code yet.",
+      );
+      const verificationEmail =
+        typeof state.data?.verification?.email === "string" &&
+        state.data.verification.email.trim()
+          ? state.data.verification.email.trim()
+          : email.trim();
+      const nextSearchParams = new URLSearchParams({
+        email: verificationEmail,
+        delivery: "failed",
+      });
+      if (typeof state.data?.verification?.retryAfter === "number") {
+        nextSearchParams.set(
+          "retryAfter",
+          String(state.data.verification.retryAfter),
+        );
       }
-
-      const token = rawToken.trim().startsWith("Bearer ")
-        ? rawToken.trim()
-        : `Bearer ${rawToken.trim()}`;
+      if (typeof state.data?.verification?.expiresIn === "number") {
+        nextSearchParams.set(
+          "expiresIn",
+          String(state.data.verification.expiresIn),
+        );
+      }
 
       setIsCompletingSignup(true);
-      try {
-        const result = await signIn("auth-token", {
-          token,
-          redirect: false,
-        });
-
-        if (result?.error) {
-          throw new Error("Unable to create your session.");
-        }
-
-        if (isSecureAuthEnabled()) {
-          await bootstrapSecureAuthSession(token);
-        }
-
-        router.push(
-          options?.isEmailVerified === false ? "/verify-email" : "/dashboard",
-        );
-        router.refresh();
-        return true;
-      } catch (error) {
-        captureFrontendException(error, {
-          tags: {
-            flow: "auth.complete_signup_login",
-          },
-        });
-        const message =
-          error instanceof Error && error.message.trim()
-            ? error.message
-            : "Unable to complete sign in.";
-        toast.error(message);
-        return false;
-      } finally {
-        setIsCompletingSignup(false);
-      }
-    },
-    [router],
-  );
-
-  useEffect(() => {
-    if (state.status >= 400) {
+      router.push(`/verify-email?${nextSearchParams.toString()}`);
+    } else if (state.status >= 400) {
       captureAnalyticsEvent("auth_signup_failed", {
         method: "password",
         status: state.status,
       });
       toast.error(state.message);
-    } else if (state.status === 200) {
+    } else if (state.status === 201) {
       captureAnalyticsEvent("auth_signup_succeeded", {
         method: "password",
       });
-      toast.success(state.message || "Registration successful.");
-      void completeTokenSignup(state.data?.token, {
-        isEmailVerified:
-          typeof state.data?.user?.is_email_verified === "boolean"
-            ? state.data.user.is_email_verified
-            : null,
+      toast.success(state.message || "Account created. Verify your email to continue.");
+      const verificationEmail =
+        typeof state.data?.verification?.email === "string" &&
+        state.data.verification.email.trim()
+          ? state.data.verification.email.trim()
+          : email.trim();
+      const nextSearchParams = new URLSearchParams({
+        email: verificationEmail,
       });
+      if (typeof state.data?.verification?.retryAfter === "number") {
+        nextSearchParams.set(
+          "retryAfter",
+          String(state.data.verification.retryAfter),
+        );
+      }
+      if (typeof state.data?.verification?.expiresIn === "number") {
+        nextSearchParams.set(
+          "expiresIn",
+          String(state.data.verification.expiresIn),
+        );
+      }
+      if (state.data?.verification?.otpDeliveryFailed === true) {
+        nextSearchParams.set("delivery", "failed");
+      }
+
+      setIsCompletingSignup(true);
+      router.push(`/verify-email?${nextSearchParams.toString()}`);
     }
-  }, [completeTokenSignup, state, t]);
+  }, [email, router, state, t]);
 
   const handleGoogleSignup = () => {
     captureAnalyticsEvent("auth_signup_started", {
@@ -370,12 +370,44 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
 
   return (
     <div>
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        {[
+          "Account details",
+          "Secure password",
+          "Verify email",
+        ].map((step, index) => (
+          <div
+            key={step}
+            className="rounded-2xl border border-white/65 bg-white/72 px-3 py-3 text-sm shadow-[0_18px_42px_-36px_rgba(15,23,42,0.24)] dark:border-white/10 dark:bg-white/5"
+          >
+            <p className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-primary/80">
+              Step {index + 1}
+            </p>
+            <p className="mt-1 font-medium text-foreground">{step}</p>
+          </div>
+        ))}
+      </div>
+
       <form
         action={formAction}
-        className="grid gap-4"
+        className="grid gap-4 rounded-[1.75rem] border border-white/65 bg-white/78 p-4 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.34)] backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:p-5"
         noValidate
         onSubmit={handleSubmit}
       >
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/10 bg-primary/[0.04] px-4 py-3 dark:border-primary/15 dark:bg-primary/[0.08]">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">
+              Workspace setup
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Create your account now and verify your email before entering the dashboard.
+            </p>
+          </div>
+          <div className="hidden h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary sm:flex">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+        </div>
+
         <AuthFormField
           id="name"
           name="name"
@@ -389,6 +421,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           autoFocus={autoFocusFirstField}
           error={clientErrors.name || serverErrors.name}
           disabled={isRegisterSubmitting}
+          leftAdornment={<User2 className="h-4 w-4" />}
         />
 
         <AuthFormField
@@ -403,6 +436,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           autoComplete="email"
           error={clientErrors.email || serverErrors.email}
           disabled={isRegisterSubmitting}
+          leftAdornment={<Mail className="h-4 w-4" />}
         />
 
         <AuthFormField
@@ -419,6 +453,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           error={clientErrors.phone || serverErrors.phone}
           disabled={isRegisterSubmitting}
           helperText={t("auth.shared.phoneHelper")}
+          leftAdornment={<Phone className="h-4 w-4" />}
         />
 
         <AuthFormField
@@ -433,12 +468,13 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           autoComplete="new-password"
           error={clientErrors.password || serverErrors.password}
           disabled={isRegisterSubmitting || isCompletingSignup}
+          leftAdornment={<LockKeyhole className="h-4 w-4" />}
           rightAdornment={
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="h-8 w-8"
+              className="h-8 w-8 rounded-full"
               onClick={() => setShowPassword((current) => !current)}
               aria-label={showPassword ? t("common.hide") : t("common.show")}
             >
@@ -451,9 +487,10 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           }
         />
 
-        <div className="rounded-xl border border-border/80 bg-muted/30 p-3">
+        <div className="rounded-[1.45rem] border border-white/70 bg-slate-950/[0.035] p-4 shadow-[0_18px_42px_-38px_rgba(15,23,42,0.22)] dark:border-white/10 dark:bg-white/[0.04]">
           <div className="mb-3 flex items-center justify-between text-xs">
-            <span className="font-medium text-foreground">
+            <span className="flex items-center gap-2 font-medium text-foreground">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
               Password strength
             </span>
             <span className={passwordStrength.textClassName}>
@@ -499,12 +536,13 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           autoComplete="new-password"
           error={clientErrors.confirm_password || serverErrors.confirm_password}
           disabled={isRegisterSubmitting || isCompletingSignup}
+          leftAdornment={<LockKeyhole className="h-4 w-4" />}
           rightAdornment={
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="h-8 w-8"
+              className="h-8 w-8 rounded-full"
               onClick={() => setShowConfirmPassword((current) => !current)}
               aria-label={showConfirmPassword ? t("common.hide") : t("common.show")}
             >
@@ -517,9 +555,13 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           }
         />
 
+        <div className="rounded-2xl border border-white/60 bg-white/65 px-4 py-3 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]">
+          By continuing, you agree to keep your workspace secure and verify your email before using BillSutra.
+        </div>
+
         <Button
           type="submit"
-          className="mt-2 w-full"
+          className="mt-2 h-12 w-full rounded-2xl shadow-[0_24px_45px_-26px_rgba(2,132,199,0.58)] transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99]"
           disabled={
             isRegisterSubmitting || isCompletingSignup || hasClientError || !isFormValid
           }
@@ -528,13 +570,17 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
             <>
               <LoaderCircle className="h-4 w-4 animate-spin" />
               {isCompletingSignup
-                ? "Signing you in..."
+                ? "Preparing verification..."
                 : t("auth.shared.creatingAccount")}
             </>
           ) : (
             t("auth.shared.createAccount")
           )}
         </Button>
+
+        <div aria-live="polite" className="min-h-5 text-xs text-muted-foreground">
+          {state.status >= 400 && state.message ? state.message : null}
+        </div>
       </form>
 
       <div className="mt-6">
@@ -551,7 +597,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
         <Button
           type="button"
           variant="outline"
-          className="mt-4 flex w-full items-center justify-center gap-3 border-border bg-card hover:bg-accent"
+          className="mt-4 flex h-12 w-full items-center justify-center gap-3 rounded-2xl border-white/70 bg-white/78 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/6 dark:hover:bg-white/10"
           onClick={handleGoogleSignup}
           disabled={isRegisterSubmitting}
         >

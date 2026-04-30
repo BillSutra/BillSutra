@@ -1,11 +1,11 @@
 import { sanitizeInventoryForProduct } from "../../services/inventoryReconciliation.service.js";
-import type { DefaultQueueJobHandlerMap } from "../types.js";
+import type { AppQueueJobHandlerMap } from "../types.js";
 
 export const inventoryJobHandlers = {
   sanitizeInventory: async (job) => {
     return sanitizeInventoryForProduct({
-      productId: job.data.productId,
-      warehouseId: job.data.warehouseId,
+      productId: job.data.payload.productId,
+      warehouseId: job.data.payload.warehouseId,
     });
   },
-} satisfies Pick<DefaultQueueJobHandlerMap, "sanitizeInventory">;
+} satisfies Pick<AppQueueJobHandlerMap, "sanitizeInventory">;

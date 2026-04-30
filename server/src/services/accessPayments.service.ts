@@ -28,6 +28,10 @@ import {
   isUploadedFilesTableAvailable,
   registerUploadedFile,
 } from "./uploadedFiles.service.js";
+import {
+  encryptSensitiveValue,
+  maybeDecryptSensitiveValue,
+} from "../lib/fieldEncryption.js";
 
 const UTR_REGEX = /^[A-Z0-9]{8,22}$/i;
 const RAZORPAY_API_BASE = "https://api.razorpay.com/v1";
@@ -163,7 +167,7 @@ const serializePayment = (payment: AccessPayment) => {
     amount: Number(payment.amount),
     status: normalizeStatus(payment.status),
     name: payment.name,
-    utr: payment.utr,
+    utr: maybeDecryptSensitiveValue(payment.utr),
     proofFileId: proof.fileId,
     proofUrl,
     proofMimeType: proof.mimeType,
@@ -175,7 +179,7 @@ const serializePayment = (payment: AccessPayment) => {
     paymentId: payment.provider_payment_id,
     orderId: payment.provider_order_id,
     provider: payment.provider,
-    providerReference: payment.provider_reference,
+    providerReference: maybeDecryptSensitiveValue(payment.provider_reference),
     reviewedByAdminId: payment.reviewed_by_admin_id,
     reviewedByAdminEmail: payment.reviewed_by_admin_email,
     reviewedAt: payment.reviewed_at?.toISOString() ?? null,
@@ -373,7 +377,7 @@ export const createAccessRazorpayOrder = async ({
       status: AccessPaymentStatus.PENDING,
       provider: "razorpay",
       provider_order_id: order.id,
-      provider_reference: order.receipt,
+      provider_reference: encryptSensitiveValue(order.receipt),
       metadata: {
         flow: "access_payment",
         razorpayOrderStatus: order.status,
@@ -509,10 +513,19 @@ export const submitAccessUpiPayment = async ({
   }
 
   if (normalizedUtr) {
-    const existingPayment = await prisma.accessPayment.findFirst({
-      where: { utr: normalizedUtr },
-      select: { id: true, user_id: true, status: true },
+    const existingPaymentCandidates = await prisma.accessPayment.findMany({
+      where: {
+        method: AccessPaymentMethod.UPI,
+        utr: {
+          not: null,
+        },
+      },
+      select: { id: true, user_id: true, status: true, utr: true },
     });
+    const existingPayment = existingPaymentCandidates.find(
+      (candidate) =>
+        maybeDecryptSensitiveValue(candidate.utr)?.toUpperCase() === normalizedUtr,
+    );
 
     if (
       existingPayment &&
@@ -608,11 +621,11 @@ export const submitAccessUpiPayment = async ({
               amount: quote.amount,
               status: AccessPaymentStatus.PENDING,
               name: normalizedName,
-              utr: normalizedUtr,
+              utr: encryptSensitiveValue(normalizedUtr),
               screenshot_url: proof.url,
               screenshot_path: proof.filePath,
               provider: "manual_upi",
-              provider_reference: normalizedUtr,
+              provider_reference: encryptSensitiveValue(normalizedUtr),
               reviewed_at: null,
               reviewed_by_admin_id: null,
               reviewed_by_admin_email: null,
@@ -635,11 +648,11 @@ export const submitAccessUpiPayment = async ({
             amount: quote.amount,
             status: AccessPaymentStatus.PENDING,
             name: normalizedName,
-            utr: normalizedUtr,
+            utr: encryptSensitiveValue(normalizedUtr),
             screenshot_url: proof.url,
             screenshot_path: proof.filePath,
             provider: "manual_upi",
-            provider_reference: normalizedUtr,
+            provider_reference: encryptSensitiveValue(normalizedUtr),
             metadata: proofMetadata,
           },
         });

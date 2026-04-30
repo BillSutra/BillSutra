@@ -43,7 +43,8 @@ const WorkerLoginPageContent = () => {
               </h1>
               <p className="text-sm leading-6 text-muted-foreground">
                 Use the worker account created by your business admin to access
-                the shared dashboard and daily operations.
+                the shared dashboard and daily operations with your assigned
+                email or phone number.
               </p>
             </div>
           </div>
@@ -69,7 +70,8 @@ const WorkerLoginPageContent = () => {
                 Welcome back
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Sign in with the worker email and password assigned to you.
+                Sign in with the worker email or phone number and password
+                assigned to you.
               </p>
             </div>
             <Login mode="worker" />

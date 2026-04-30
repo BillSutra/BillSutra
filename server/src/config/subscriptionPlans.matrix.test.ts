@@ -41,7 +41,7 @@ test("plan matrix enforces free/pro/pro-plus expectations", () => {
       REPORTS_BASIC: true,
       ANALYTICS_ADVANCED: false,
       REPORTS_ADVANCED: false,
-      WORKERS_MANAGEMENT: false,
+      WORKERS_MANAGEMENT: true,
       DATA_EXPORT: false,
     },
     "pro-plus": {
@@ -71,10 +71,10 @@ test("feature required-plan mapping matches pricing tiers", () => {
   assert.equal(featureRequiredPlan.PAYMENT_TRACKING, "pro");
   assert.equal(featureRequiredPlan.SMART_SUGGESTIONS, "pro");
   assert.equal(featureRequiredPlan.REPORTS_BASIC, "pro");
+  assert.equal(featureRequiredPlan.WORKERS_MANAGEMENT, "pro");
 
   assert.equal(featureRequiredPlan.ANALYTICS_ADVANCED, "pro-plus");
   assert.equal(featureRequiredPlan.REPORTS_ADVANCED, "pro-plus");
-  assert.equal(featureRequiredPlan.WORKERS_MANAGEMENT, "pro-plus");
   assert.equal(featureRequiredPlan.DATA_EXPORT, "pro-plus");
 });
 

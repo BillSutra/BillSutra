@@ -33,10 +33,15 @@ import {
 } from "./invoiceEmail.service.js";
 import { renderInvoicePreviewPdfBuffer } from "./invoicePreviewPdf.service.js";
 import {
+  invalidateCustomerListCaches,
+  invalidateProductOptionCaches,
+} from "../../lib/cacheInvalidation.js";
+import {
   enqueueInvoiceEmailDelivery,
   enqueueInvoicePdfGeneration,
   enqueueInvoiceReminderDelivery,
 } from "./invoice.queue.js";
+import { recordAuditLog } from "../../services/auditLog.service.js";
 
 type InvoiceCreateInput = z.infer<typeof invoiceCreateSchema>;
 type InvoicePreviewPdfRequestInput = z.infer<typeof invoicePreviewPdfRequestSchema>;
@@ -109,6 +114,19 @@ const sanitizeDownloadFileName = (value?: string) => {
   return safe.toLowerCase().endsWith(".pdf") ? safe : `${safe}.pdf`;
 };
 
+const parsePositiveIntQuery = (value?: string) => {
+  if (!value) {
+    return undefined;
+  }
+
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return null;
+  }
+
+  return parsed;
+};
+
 export const index = async (req: Request, res: Response) => {
   const userId = req.user?.id;
   if (!userId) {
@@ -119,6 +137,8 @@ export const index = async (req: Request, res: Response) => {
   const clientIdRaw = readQueryValue(req.query.clientId);
   const fromRaw = readQueryValue(req.query.from);
   const toRaw = readQueryValue(req.query.to);
+  const pageRaw = readQueryValue(req.query.page);
+  const limitRaw = readQueryValue(req.query.limit);
 
   const status = parseInvoiceStatus(statusRaw);
   if (statusRaw && !status) {
@@ -163,11 +183,29 @@ export const index = async (req: Request, res: Response) => {
     });
   }
 
+  const page = parsePositiveIntQuery(pageRaw);
+  if (pageRaw && page === null) {
+    return res.status(422).json({
+      message: "Invalid page filter",
+      errors: { page: ["page must be a positive integer"] },
+    });
+  }
+
+  const limit = parsePositiveIntQuery(limitRaw);
+  if (limitRaw && limit === null) {
+    return res.status(422).json({
+      message: "Invalid limit filter",
+      errors: { limit: ["limit must be a positive integer"] },
+    });
+  }
+
   const invoices = await listInvoices(userId, {
     status,
     clientId,
     from: from ?? undefined,
     to: to ?? undefined,
+    page: page ?? undefined,
+    limit: limit ?? undefined,
   });
   return res.status(200).json({ data: invoices });
 };
@@ -193,6 +231,8 @@ export const store = async (req: Request, res: Response) => {
     const body = req.body as InvoiceCreateInput;
     const invoice = await createInvoice(userId, body);
     invalidateInventoryInsightsCacheByUser(userId);
+    void invalidateCustomerListCaches(businessId, userId);
+    void invalidateProductOptionCaches(businessId, userId);
 
     try {
       await incrementInvoiceUsage(userId);
@@ -223,6 +263,15 @@ export const store = async (req: Request, res: Response) => {
     void enqueueInvoicePdfGeneration({
       userId,
       invoiceId: invoice.id,
+      context: {
+        businessId: req.user?.businessId,
+        userId,
+        actorId: req.user?.actorId,
+        correlationId: req.requestId,
+        metadata: {
+          source: "invoice.create",
+        },
+      },
     });
     const hydratedInvoice = await getInvoice(userId, invoice.id);
     if (hydratedInvoice) {
@@ -239,6 +288,21 @@ export const store = async (req: Request, res: Response) => {
         source: "invoice.create",
       });
     }
+    await recordAuditLog({
+      req,
+      userId,
+      actorId: req.user?.actorId ?? String(userId),
+      actorType: req.user?.accountType ?? "OWNER",
+      action: "invoice.create",
+      resourceType: "invoice",
+      resourceId: String(invoice.id),
+      status: "success",
+      metadata: {
+        invoiceNumber: invoice.invoice_number,
+        status: invoice.status,
+        total: invoice.total,
+      },
+    });
 
     return res.status(201).json({
       message: "Invoice created",
@@ -274,6 +338,7 @@ export const show = async (req: Request, res: Response) => {
 
 export const update = async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  const businessId = req.user?.businessId?.trim();
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
@@ -290,10 +355,21 @@ export const update = async (req: Request, res: Response) => {
     return res.status(404).json({ message: "Invoice not found" });
   }
 
+  void invalidateCustomerListCaches(businessId, userId);
+  void invalidateProductOptionCaches(businessId, userId);
   emitDashboardUpdate({ userId, source: "invoice.update" });
   void enqueueInvoicePdfGeneration({
     userId,
     invoiceId: id,
+    context: {
+      businessId: req.user?.businessId,
+      userId,
+      actorId: req.user?.actorId,
+      correlationId: req.requestId,
+      metadata: {
+        source: "invoice.update",
+      },
+    },
   });
   const invoice = await getInvoice(userId, id);
   if (invoice) {
@@ -307,11 +383,26 @@ export const update = async (req: Request, res: Response) => {
       source: "invoice.update",
     });
   }
+  await recordAuditLog({
+    req,
+    userId,
+    actorId: req.user?.actorId ?? String(userId),
+    actorType: req.user?.accountType ?? "OWNER",
+    action: "invoice.update",
+    resourceType: "invoice",
+    resourceId: String(id),
+    status: "success",
+    metadata: {
+      status: body.status ?? null,
+      dueDate: body.due_date ?? null,
+    },
+  });
   return res.status(200).json({ message: "Invoice updated" });
 };
 
 export const destroy = async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  const businessId = req.user?.businessId?.trim();
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
@@ -322,12 +413,25 @@ export const destroy = async (req: Request, res: Response) => {
     return res.status(404).json({ message: "Invoice not found" });
   }
 
+  void invalidateCustomerListCaches(businessId, userId);
+  void invalidateProductOptionCaches(businessId, userId);
   emitDashboardUpdate({ userId, source: "invoice.delete" });
+  await recordAuditLog({
+    req,
+    userId,
+    actorId: req.user?.actorId ?? String(userId),
+    actorType: req.user?.accountType ?? "OWNER",
+    action: "invoice.delete",
+    resourceType: "invoice",
+    resourceId: String(id),
+    status: "success",
+  });
   return res.status(200).json({ message: "Invoice removed" });
 };
 
 export const duplicate = async (req: Request, res: Response) => {
   const userId = req.user?.id;
+  const businessId = req.user?.businessId?.trim();
   if (!userId) {
     return res.status(401).json({ message: "Unauthorized" });
   }
@@ -335,10 +439,21 @@ export const duplicate = async (req: Request, res: Response) => {
   try {
     const id = Number(req.params.id);
     const invoice = await duplicateInvoice(userId, id);
+    void invalidateCustomerListCaches(businessId, userId);
+    void invalidateProductOptionCaches(businessId, userId);
     emitDashboardUpdate({ userId, source: "invoice.duplicate" });
     void enqueueInvoicePdfGeneration({
       userId,
       invoiceId: invoice.id,
+      context: {
+        businessId: req.user?.businessId,
+        userId,
+        actorId: req.user?.actorId,
+        correlationId: req.requestId,
+        metadata: {
+          source: "invoice.duplicate",
+        },
+      },
     });
     emitRealtimeInvoiceUpdated({
       userId,
@@ -494,6 +609,15 @@ export const send = async (req: Request, res: Response) => {
             userId,
             invoiceId: id,
             requestedEmail,
+            context: {
+              businessId: req.user?.businessId,
+              userId,
+              actorId: req.user?.actorId,
+              correlationId: req.requestId,
+              metadata: {
+                source: "invoice.send",
+              },
+            },
           })
         : { queued: false as const };
 
@@ -506,6 +630,7 @@ export const send = async (req: Request, res: Response) => {
           email: recipientEmail,
           queued: true,
           jobId: queued.jobId,
+          trackingId: queued.trackingId,
         },
       });
     }
@@ -567,6 +692,15 @@ export const reminder = async (req: Request, res: Response) => {
       userId,
       invoiceId: id,
       requestedEmail,
+      context: {
+        businessId: req.user?.businessId,
+        userId,
+        actorId: req.user?.actorId,
+        correlationId: req.requestId,
+        metadata: {
+          source: "invoice.reminder",
+        },
+      },
     });
 
     if (!queued.queued) {
@@ -578,8 +712,16 @@ export const reminder = async (req: Request, res: Response) => {
     }
 
     return res.status(200).json({
-      message: `Invoice reminder sent to ${recipientEmail}`,
-      data: { invoiceId: invoice.id, email: recipientEmail },
+      message: queued.queued
+        ? `Invoice reminder queued for ${recipientEmail}`
+        : `Invoice reminder sent to ${recipientEmail}`,
+      data: {
+        invoiceId: invoice.id,
+        email: recipientEmail,
+        queued: queued.queued,
+        jobId: queued.queued ? queued.jobId : null,
+        trackingId: queued.queued ? queued.trackingId : null,
+      },
     });
   } catch (error) {
     const err = error as HttpLikeError;

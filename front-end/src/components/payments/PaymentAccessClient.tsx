@@ -3,8 +3,9 @@
 import Script from "next/script";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { isAxiosError } from "axios";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   CheckCircle2,
   Clock3,
@@ -36,11 +37,17 @@ import {
   uploadAccessPaymentProof,
   verifyAccessRazorpayPayment,
 } from "@/lib/apiClient";
+import { workspaceQueryKeys } from "@/hooks/useWorkspaceQueries";
 
 type PaymentAccessClientProps = {
   userName: string;
   userEmail: string;
 };
+
+const RAZORPAY_CHECKOUT_SCRIPT_URL =
+  "https://checkout.razorpay.com/v1/checkout.js";
+const RAZORPAY_CHECKOUT_SCRIPT_SELECTOR =
+  'script[data-razorpay-checkout="true"]';
 
 type RazorpaySuccessPayload = {
   razorpay_order_id: string;
@@ -111,6 +118,8 @@ export default function PaymentAccessClient({
   userName,
   userEmail,
 }: PaymentAccessClientProps) {
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const requestedPlan = searchParams.get("plan");
   const [statusData, setStatusData] = useState<AccessPaymentStatusResponse | null>(
@@ -132,6 +141,23 @@ export default function PaymentAccessClient({
   const [isLoading, startLoadingTransition] = useTransition();
   const [isPaying, startPaymentTransition] = useTransition();
   const [isSubmittingUpi, startUpiTransition] = useTransition();
+
+  const syncBillingQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.subscriptionStatus,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.subscriptionPermissions,
+      }),
+      queryClient.invalidateQueries({ queryKey: ["workers"] }),
+      queryClient.invalidateQueries({ queryKey: ["workers", "overview"] }),
+      queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.businessProfile,
+      }),
+      queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.userProfile }),
+    ]);
+  };
 
   const loadStatus = () => {
     startLoadingTransition(() => {
@@ -267,8 +293,10 @@ export default function PaymentAccessClient({
             },
             handler: async (response) => {
               await verifyAccessRazorpayPayment(response);
+              await syncBillingQueries();
               setBanner("Razorpay payment verified and access unlocked.");
               loadStatus();
+              router.refresh();
             },
           });
 
@@ -368,7 +396,17 @@ export default function PaymentAccessClient({
 
   return (
     <>
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+      <Script id="razorpay-checkout-loader" strategy="afterInteractive">
+        {`
+          if (!window.Razorpay && !document.querySelector('${RAZORPAY_CHECKOUT_SCRIPT_SELECTOR}')) {
+            const script = document.createElement('script');
+            script.src = '${RAZORPAY_CHECKOUT_SCRIPT_URL}';
+            script.async = true;
+            script.dataset.razorpayCheckout = 'true';
+            document.body.appendChild(script);
+          }
+        `}
+      </Script>
 
       <div className="grid gap-6">
         <Card className="overflow-hidden border-0 bg-[linear-gradient(135deg,#0f172a_0%,#1d4ed8_48%,#38bdf8_100%)] text-white shadow-[0_36px_90px_-54px_rgba(37,99,235,0.7)]">

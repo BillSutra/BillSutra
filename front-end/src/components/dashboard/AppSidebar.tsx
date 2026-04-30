@@ -42,8 +42,13 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
       dashboardNavItems
         .filter((item) => {
           const role = session?.user?.role;
-          if (role === "WORKER") {
+          const accountType = session?.user?.accountType;
+          const isWorkerAccount =
+            accountType === "WORKER" || (!accountType && role === "WORKER");
+
+          if (isWorkerAccount) {
             return (
+              item.href === "/worker-panel" ||
               item.href === "/sales" ||
               item.href === "/invoices" ||
               item.href === "/simple-bill"
@@ -57,7 +62,7 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
           badge: item.badgeKey ? t(item.badgeKey) : undefined,
           label: t(item.labelKey),
         })),
-    [session?.user?.role, t],
+    [session?.user?.accountType, session?.user?.role, t],
   );
 
   const groupedNavItems = useMemo(

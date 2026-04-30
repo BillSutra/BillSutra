@@ -7,6 +7,7 @@ import {
   enqueuePaymentReceivedEmail,
   enqueueWeeklyReportEmail,
 } from "../queues/jobs/email.jobs.js";
+import type { AppQueueContextInput } from "../queues/types.js";
 import { hasSuccessfulEmailLogSince } from "./emailLog.service.js";
 
 const getStartOfUtcDay = (value = new Date()) =>
@@ -211,7 +212,15 @@ export const sendPaymentReceivedEmail = async ({
 export const dispatchPaymentReceivedEmail = async (paymentId: number) =>
   dispatchWithFallback(
     "payment_received",
-    enqueuePaymentReceivedEmail({ paymentId }),
+    enqueuePaymentReceivedEmail({
+      paymentId,
+      context: {
+        metadata: {
+          flow: "payment_received",
+          paymentId,
+        },
+      },
+    }),
     () => sendPaymentReceivedEmail({ paymentId }),
     { paymentId },
   );
@@ -348,6 +357,7 @@ export const sendWeeklyReportEmail = async ({
 export const dispatchWeeklyReportEmail = async (
   userId: number,
   weekKey?: string,
+  context?: AppQueueContextInput,
 ) => {
   const window = resolveWeeklyReportWindow(weekKey);
 
@@ -356,6 +366,15 @@ export const dispatchWeeklyReportEmail = async (
     enqueueWeeklyReportEmail({
       userId,
       weekKey: window.weekKey,
+      context: {
+        userId,
+        ...context,
+        metadata: {
+          ...(context?.metadata ?? {}),
+          flow: "weekly_report",
+          weekKey: window.weekKey,
+        },
+      },
     }),
     () => sendWeeklyReportEmail({ userId, weekKey: window.weekKey }),
     { userId, weekKey: window.weekKey },
@@ -437,7 +456,15 @@ export const sendLowStockAlertEmail = async ({ userId }: { userId: number }) => 
 export const dispatchLowStockAlertEmail = async (userId: number) =>
   dispatchWithFallback(
     "low_stock_alert",
-    enqueueLowStockAlertEmail({ userId }),
+    enqueueLowStockAlertEmail({
+      userId,
+      context: {
+        userId,
+        metadata: {
+          flow: "low_stock_alert",
+        },
+      },
+    }),
     () => sendLowStockAlertEmail({ userId }),
     { userId },
   );

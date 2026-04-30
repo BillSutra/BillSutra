@@ -8,7 +8,6 @@ import {
   useState,
 } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
 import {
   Download,
@@ -37,16 +36,18 @@ import {
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import {
-  fetchBusinessProfile,
   fetchCustomers,
   sendInvoiceEmail,
-  fetchUserSettingsPreferences,
   type BusinessProfileRecord,
   type Customer,
   type Invoice,
   type InvoiceInput,
   type Product,
 } from "@/lib/apiClient";
+import {
+  useBusinessProfileQuery,
+  useUserSettingsPreferencesQuery,
+} from "@/hooks/useWorkspaceQueries";
 import { API_URL } from "@/lib/apiEndPoints";
 import {
   formatBusinessAddressFromRecord,
@@ -1566,14 +1567,8 @@ const SimpleBillClient = ({
     isError: productsError,
     refetch: refetchProducts,
   } = useProductsQuery({ limit: 1000 });
-  const { data: businessProfile } = useQuery({
-    queryKey: ["business-profile"],
-    queryFn: fetchBusinessProfile,
-  });
-  const { data: userSettingsPreferences } = useQuery({
-    queryKey: ["settings", "preferences"],
-    queryFn: fetchUserSettingsPreferences,
-  });
+  const { data: businessProfile } = useBusinessProfileQuery();
+  const { data: userSettingsPreferences } = useUserSettingsPreferencesQuery();
   const createCustomer = useCreateCustomerMutation();
   const createInvoice = useCreateInvoiceMutation();
   const createProduct = useCreateProductMutation();
@@ -2471,6 +2466,7 @@ const SimpleBillClient = ({
 
       let mergedItemId: string | null = null;
       let blockedByStock = false;
+      let mergedExistingProduct = false;
 
       updateBillState((current) => {
         const existingIndex = current.items.findIndex(
@@ -2490,6 +2486,7 @@ const SimpleBillClient = ({
           }
 
           mergedItemId = existingItem.id;
+          mergedExistingProduct = true;
 
           return {
             ...current,
@@ -2551,6 +2548,10 @@ const SimpleBillClient = ({
           itemQuantityRefs.current[mergedItemId]?.focus();
         }
       }, 0);
+
+      if (mergedExistingProduct) {
+        toast.success(`${product.name} quantity increased in the bill.`);
+      }
     },
     [allowNegativeStock, selectedTaxMode, updateBillState],
   );
@@ -2579,6 +2580,7 @@ const SimpleBillClient = ({
       }
 
       let targetItemId: string | null = null;
+      let mergedExistingItem = false;
 
       updateBillState((current) => {
         const existingIndex = current.items.findIndex(
@@ -2591,6 +2593,7 @@ const SimpleBillClient = ({
         if (existingIndex >= 0) {
           const existingItem = current.items[existingIndex];
           targetItemId = existingItem.id;
+          mergedExistingItem = true;
           return {
             ...current,
             items: current.items.map((item, index) =>
@@ -2646,6 +2649,10 @@ const SimpleBillClient = ({
           itemQuantityRefs.current[targetItemId]?.focus();
         }
       }, 0);
+
+      if (mergedExistingItem) {
+        toast.success(`${trimmedName} quantity increased in the bill.`);
+      }
     },
     [gstRate, selectedTaxMode, updateBillState],
   );

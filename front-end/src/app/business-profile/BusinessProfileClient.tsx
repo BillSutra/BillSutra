@@ -9,7 +9,7 @@ import {
   Palette,
   Sparkles,
 } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import BusinessAddressFields from "@/components/business-profile/BusinessAddressFields";
@@ -53,15 +53,19 @@ import {
   validateBusinessWebsite,
 } from "@/lib/businessProfileValidation";
 import {
-  fetchBusinessProfile,
-  fetchTemplates,
   saveBusinessProfile,
 } from "@/lib/apiClient";
+import {
+  useBusinessProfileQuery,
+  useTemplatesQuery,
+} from "@/hooks/useWorkspaceQueries";
 import { useI18n } from "@/providers/LanguageProvider";
 import type {
   BusinessProfileInput,
   SectionKey,
 } from "@/types/invoice-template";
+
+const BUSINESS_PROFILE_CURRENCY_OPTIONS = ["INR", "USD", "EUR", "GBP", "AED"];
 
 const BusinessProfileClient = ({
   name,
@@ -123,15 +127,9 @@ const BusinessProfileClient = ({
     },
   ];
 
-  const { data: templateRecords = [] } = useQuery({
-    queryKey: ["templates"],
-    queryFn: fetchTemplates,
-  });
+  const { data: templateRecords = [] } = useTemplatesQuery();
 
-  const { data: businessProfileRecord } = useQuery({
-    queryKey: ["business-profile"],
-    queryFn: fetchBusinessProfile,
-  });
+  const { data: businessProfileRecord } = useBusinessProfileQuery();
 
   const saveProfileMutation = useMutation({
     mutationFn: saveBusinessProfile,
@@ -292,6 +290,17 @@ const BusinessProfileClient = ({
       BUSINESS_TYPES[0],
     [businessTypeId],
   );
+
+  const currencyOptions = useMemo(() => {
+    const options = new Set(BUSINESS_PROFILE_CURRENCY_OPTIONS);
+    const currentCurrency = sanitizeBusinessCurrency(profile.currency);
+
+    if (currentCurrency) {
+      options.add(currentCurrency);
+    }
+
+    return ["", ...Array.from(options)];
+  }, [profile.currency]);
 
   useEffect(() => {
     if (!templates.length) return;
@@ -751,17 +760,25 @@ const BusinessProfileClient = ({
           <ValidationField
             id="currency"
             label={t("businessProfilePage.fields.currency")}
+            as="select"
             value={profile.currency}
             onChange={(value) => updateProfile("currency", value)}
             normalizeOnBlur={sanitizeBusinessCurrency}
             validate={validateBusinessCurrency}
             required
-            placeholder={t("businessProfilePage.placeholders.currency")}
             success
             forceTouched={submitAttempted}
-            maxLength={3}
             className="mb-0"
-          />
+          >
+            <option value="">{t("common.selectOption")}</option>
+            {currencyOptions
+              .filter((option) => option)
+              .map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+          </ValidationField>
         </div>
       </section>
     );
@@ -897,6 +914,21 @@ const BusinessProfileClient = ({
     (currentStep === 2 && !isBusinessDetailsStepValid) ||
     (currentStep === 3 && !isBusinessDetailsStepValid);
 
+  const handleAdvanceStep = async () => {
+    if ((currentStep === 2 || currentStep === 3) && !isBusinessDetailsStepValid) {
+      setSubmitAttempted(true);
+      focusFirstInvalidBusinessProfileField();
+      return;
+    }
+
+    if (currentStep === 3) {
+      await handleFinish();
+      return;
+    }
+
+    setCurrentStep((prev) => Math.min(prev + 1, 3));
+  };
+
   return (
     <DashboardLayout
       name={name}
@@ -984,19 +1016,8 @@ const BusinessProfileClient = ({
               </Button>
               <Button
                 type="button"
-                className="rounded-full px-6"
-                onClick={async () => {
-                  if (currentStep === 2 && !isBusinessDetailsStepValid) {
-                    setSubmitAttempted(true);
-                    focusFirstInvalidBusinessProfileField();
-                    return;
-                  }
-                  if (currentStep === 3) {
-                    await handleFinish();
-                    return;
-                  }
-                  setCurrentStep((prev) => Math.min(prev + 1, 3));
-                }}
+                className="rounded-full px-6 disabled:pointer-events-auto disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={handleAdvanceStep}
                 disabled={actionDisabled}
                 aria-disabled={actionDisabled}
               >

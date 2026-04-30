@@ -11,6 +11,9 @@ import {
   listAdminUpiPayments,
 } from "../services/accessPayments.service.js";
 
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
 class AccessPaymentsController {
   static async status(req: Request, res: Response) {
     const userId = req.user?.id;
@@ -131,7 +134,7 @@ class AccessPaymentsController {
 
     const data = await reviewAdminUpiPayment({
       admin: req.admin,
-      paymentId: req.params.id,
+      paymentId: readRouteParam(req.params.id) ?? "",
       status: "approved",
       adminNote: req.body.adminNote,
     });
@@ -149,7 +152,7 @@ class AccessPaymentsController {
 
     const data = await reviewAdminUpiPayment({
       admin: req.admin,
-      paymentId: req.params.id,
+      paymentId: readRouteParam(req.params.id) ?? "",
       status: "rejected",
       adminNote: req.body.adminNote,
     });

@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import type { NextFunction, Request, Response } from "express";
 import { parseCookies } from "../lib/authCookies.js";
+import { getAccessTokenSecret } from "../lib/authSecrets.js";
 
 const ADMIN_AUTH_COOKIE_NAME = "bill_sutra_admin_session";
 
@@ -27,7 +28,7 @@ const verifyAdminToken = (
   res: Response,
   next: NextFunction,
 ) => {
-  jwt.verify(token, process.env.JWT_SECRET as string, (error, decoded) => {
+  jwt.verify(token, getAccessTokenSecret(), (error, decoded) => {
     if (error || !decoded || typeof decoded === "string") {
       res.status(401).json({
         status: 401,
@@ -68,13 +69,13 @@ const AdminAuthMiddleware = (
 ): void => {
   const { headerToken, cookieToken } = getAdminTokenFromRequest(req);
 
-  if (headerToken) {
-    verifyAdminToken(headerToken, req, res, next);
+  if (cookieToken) {
+    verifyAdminToken(cookieToken, req, res, next);
     return;
   }
 
-  if (cookieToken) {
-    verifyAdminToken(cookieToken, req, res, next);
+  if (headerToken) {
+    verifyAdminToken(headerToken, req, res, next);
     return;
   }
 

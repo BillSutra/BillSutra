@@ -6,6 +6,20 @@ import {
   getSubscriptionSnapshot,
   switchToFreePlan,
 } from "../services/subscription.service.js";
+import { respondWithRedisCachedData } from "../lib/redisResourceCache.js";
+import {
+  buildSubscriptionPermissionsCachePrefix,
+  buildSubscriptionPermissionsRedisKey,
+} from "../redis/cacheKeys.js";
+
+const SUBSCRIPTION_PERMISSIONS_CACHE_TTL_SECONDS = Math.max(
+  Number(process.env.SUBSCRIPTION_PERMISSIONS_CACHE_TTL_SECONDS ?? 300),
+  15,
+);
+const SUBSCRIPTION_PERMISSIONS_CACHE_SWR_SECONDS = Math.max(
+  Number(process.env.SUBSCRIPTION_PERMISSIONS_CACHE_SWR_SECONDS ?? 60),
+  0,
+);
 
 class SubscriptionController {
   static async me(req: Request, res: Response) {
@@ -52,8 +66,16 @@ class SubscriptionController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const data = await getUserPermissions(businessId);
-    return sendResponse(res, 200, { data });
+    return respondWithRedisCachedData({
+      req,
+      res,
+      key: buildSubscriptionPermissionsRedisKey(businessId),
+      label: "subscription-permissions",
+      ttlSeconds: SUBSCRIPTION_PERMISSIONS_CACHE_TTL_SECONDS,
+      staleWhileRevalidateSeconds: SUBSCRIPTION_PERMISSIONS_CACHE_SWR_SECONDS,
+      invalidationPrefixes: [buildSubscriptionPermissionsCachePrefix(businessId)],
+      resolver: () => getUserPermissions(businessId),
+    });
   }
 }
 

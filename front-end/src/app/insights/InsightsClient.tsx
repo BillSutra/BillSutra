@@ -8,7 +8,6 @@ import React, {
 } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
   ArrowRight,
@@ -26,7 +25,6 @@ import {
 } from "@/components/dashboard/dashboard-section-shared";
 import { useDashboardRealtime } from "@/hooks/useDashboardRealtime";
 import { useHydrated } from "@/hooks/useHydrated";
-import { fetchUserPermissions } from "@/lib/apiClient";
 import {
   DASHBOARD_REALTIME_ENABLED,
   DASHBOARD_REFRESH_INTERVAL_MS,
@@ -36,6 +34,7 @@ import { useDashboardFormatters } from "@/components/dashboard/use-dashboard-for
 import { useI18n } from "@/providers/LanguageProvider";
 import DashboardCardStatus from "@/components/dashboard/DashboardCardStatus";
 import { Button } from "@/components/ui/button";
+import { useUserPermissionsQuery } from "@/hooks/useWorkspaceQueries";
 
 const SalesForecast = dynamic(
   () => import("@/components/dashboard/sales-forecast"),
@@ -78,8 +77,8 @@ const ForecastInsightsPanel = dynamic(
   () => import("@/components/dashboard/forecast-insights-panel"),
   { loading: () => dashboardSectionFallback("h-[320px]") },
 );
-const FinancialCopilotPanel = dynamic(
-  () => import("@/components/dashboard/financial-copilot-panel"),
+const QuickInsightsPanel = dynamic(
+  () => import("@/components/dashboard/quick-insights-panel"),
   { loading: () => dashboardSectionFallback("h-[420px]") },
 );
 const DemandSupplyPanel = dynamic(
@@ -120,27 +119,18 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
   const deferredFilters = useDeferredValue(filters);
 
   const displayName = name.trim() || t("common.guest");
-  const hasValidSessionToken =
-    typeof token === "string" &&
-    token.trim().length > 0 &&
-    token !== "undefined" &&
-    token !== "null";
 
   useDashboardRealtime({
-    enabled: hydrated && hasValidSessionToken && DASHBOARD_REALTIME_ENABLED,
+    enabled: hydrated && DASHBOARD_REALTIME_ENABLED,
     token,
   });
 
   const { data, isLoading, isError, dataUpdatedAt, isFetching } =
     useDashboardForecast();
 
-  const { data: permissions } = useQuery({
-    queryKey: ["subscription-permissions"],
-    queryFn: fetchUserPermissions,
-    staleTime: 30_000,
-  });
+  const { data: permissions } = useUserPermissionsQuery();
 
-  const showLoadingState = !hydrated || (hasValidSessionToken && isLoading);
+  const showLoadingState = !hydrated || isLoading;
 
   const sectionLinks = [
     { label: t("dashboard.sectionLinks.overview"), href: "#summary" },
@@ -151,7 +141,7 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
       href: "#demand-supply",
     },
     { label: t("insights.sections.ai.title"), href: "#intelligence" },
-    { label: "Copilot", href: "#copilot" },
+    { label: "Quick insights", href: "#copilot" },
     { label: t("dashboard.sectionLinks.records"), href: "#records" },
   ];
 
@@ -414,11 +404,11 @@ const InsightsClient = ({ name, image, token }: InsightsClientProps) => {
         <section id="copilot" className="grid gap-4">
           <DashboardSectionIntro
             headingId="insights-copilot-heading"
-            kicker="Level 4 + 5"
-            title="Predictive finance copilot"
-            description="Dynamic budgets, savings guidance, nudges, bill reminders, goal tracking, and real-time spending decisions now live in one place."
+            kicker="Fast actions"
+            title="Quick business insights"
+            description="Instant signals for sales, collections, stock pressure, and financial goals, without the slow copilot summary call."
           />
-          <FinancialCopilotPanel />
+          <QuickInsightsPanel />
         </section>
 
         <section className="grid gap-4">

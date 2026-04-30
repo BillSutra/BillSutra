@@ -51,6 +51,7 @@
                    "productName":  "Product Name",
                    "sku":  "SKU",
                    "skuLabel":  "SKU: {value}",
+                   "noCategory":  "No Category",
                    "currencyCode":  "INR",
                    "currencySymbol":  "Rs"
                },
@@ -346,6 +347,7 @@
                  "shared":  {
                                 "loginTab":  "Login",
                                 "signupTab":  "Sign up",
+                                "authTabs":  "Authentication tabs",
                                 "workerPrompt":  "Team member?",
                                 "workerAction":  "Login as Worker",
                                 "emailOrPhoneLabel":  "Email or phone",
@@ -355,7 +357,38 @@
                                 "phoneHelper":  "Use your active Indian mobile number.",
                                 "signingIn":  "Signing in...",
                                 "createAccount":  "Create account",
-                                "creatingAccount":  "Creating account..."
+                                "creatingAccount":  "Creating account...",
+                                "benefits":  {
+                                                 "gstReadyBilling":  "GST Ready Billing",
+                                                 "smartInventory":  "Smart Inventory",
+                                                 "paymentReminders":  "Payment Reminders",
+                                                 "aiInsights":  "AI Insights",
+                                                 "multiUserAccess":  "Multi-user Access"
+                                             },
+                                "trust":  {
+                                              "businesses":  "10,000+ Businesses Trust BillSutra",
+                                              "secureLogin":  "Secure Login",
+                                              "encryptedData":  "Encrypted Data",
+                                              "fastSupport":  "Fast Support"
+                                          },
+                                "stats":  {
+                                              "healthyGrowth":  "Healthy growth this cycle",
+                                              "syncedLive":  "Synced live across billing"
+                                          },
+                                "showcaseCards":  {
+                                                       "revenue":  {
+                                                                       "title":  "Revenue this month",
+                                                                       "value":  "Rs 4.8L"
+                                                                   },
+                                                       "pending":  {
+                                                                       "title":  "Pending invoices",
+                                                                       "value":  "18 follow-ups"
+                                                                   },
+                                                       "stock":  {
+                                                                     "title":  "Low stock alerts",
+                                                                     "value":  "7 items need reorder"
+                                                                 }
+                                                   }
                             },
                  "forgotPage":  {
                                     "badge":  "Reset access",
@@ -520,13 +553,14 @@
                                         "healthySummary":  "{count} items healthy",
                                         "allInventoryTitle":  "All Inventory",
                                         "allInventoryDescription":  "Search products, check stock status, and restock quickly.",
-                                        "searchPlaceholder":  "Search product or SKU",
+                                        "searchPlaceholder":  "Search product, SKU, or category",
                                         "allCategories":  "All categories",
                                         "allWarehouses":  "All warehouses",
                                         "allStatus":  "All status",
                                         "sortStockLowHigh":  "Stock: Low to High",
                                         "sortStockHighLow":  "Stock: High to Low",
                                         "sortName":  "Name: A to Z",
+                                        "sortCategory":  "Category: A to Z",
                                         "selectVisible":  "Select visible products",
                                         "selectPage":  "Select page",
                                         "showing":  "Showing {from}-{to} of {total}",
@@ -2083,10 +2117,20 @@
                        "validGstin":  "Enter a valid GSTIN",
                        "validPan":  "Enter a valid PAN",
                        "gstinStateMismatch":  "GSTIN state code does not match selected state",
+                       "businessNameRequired":  "Business name is required",
+                       "businessNameMin":  "Business name must be at least 2 characters",
+                       "phoneRequired":  "Phone number is required",
+                       "validPhoneShort":  "Enter valid phone number",
                        "requiredAddressLine":  "Address line 1 is required",
+                       "addressLine1Min":  "Address line 1 must be at least 5 characters",
                        "requiredCity":  "City is required",
+                       "cityDistrictRequired":  "City / District is required",
+                       "emailRequired":  "Email is required",
+                       "validEmailShort":  "Enter valid email",
                        "requiredState":  "State is required",
                        "requiredPincode":  "Pincode is required",
+                       "pincodeSixDigits":  "Pincode must be 6 digits",
+                       "currencyRequired":  "Currency is required",
                        "nonNegative":  "Opening balance cannot be negative",
                        "invoiceSelectCustomer":  "Select a customer.",
                        "invoiceSelectWarehouse":  "Select a warehouse to sync inventory.",

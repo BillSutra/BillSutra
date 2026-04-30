@@ -13,9 +13,14 @@ type TranslateFn = (key: string) => string;
 
 const VALIDATION_TRANSLATION_KEYS: Record<string, string> = {
   "This field is required": "validation.required",
+  "Business name is required": "validation.businessNameRequired",
+  "Business name must be at least 2 characters": "validation.businessNameMin",
+  "Phone number is required": "validation.phoneRequired",
   "Please enter a valid name (letters only)": "validation.validName",
   "Enter a valid phone number": "validation.validPhone",
+  "Enter valid phone number": "validation.validPhoneShort",
   "Enter a valid email address": "validation.validEmail",
+  "Enter valid email": "validation.validEmailShort",
   "Enter a valid number": "validation.validNumber",
   "Select a valid date": "validation.validDate",
   "Please select an option": "common.selectOption",
@@ -26,9 +31,15 @@ const VALIDATION_TRANSLATION_KEYS: Record<string, string> = {
   "GSTIN state code does not match selected state":
     "validation.gstinStateMismatch",
   "Address line 1 is required": "validation.requiredAddressLine",
+  "Address line 1 must be at least 5 characters": "validation.addressLine1Min",
   "City is required": "validation.requiredCity",
+  "City / District is required": "validation.cityDistrictRequired",
+  "Email is required": "validation.emailRequired",
   "State is required": "validation.requiredState",
   "Pincode is required": "validation.requiredPincode",
+  "Pincode must be 6 digits": "validation.pincodeSixDigits",
+  "Currency is required": "validation.currencyRequired",
+  "Please select a currency": "validation.currencyRequired",
   "Opening balance cannot be negative": "validation.nonNegative",
 };
 

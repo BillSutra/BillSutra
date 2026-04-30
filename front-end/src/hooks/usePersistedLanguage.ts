@@ -1,22 +1,19 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
 import {
-  fetchUserSettingsPreferences,
   saveUserSettingsPreferences,
 } from "@/lib/apiClient";
+import { useUserSettingsPreferencesQuery } from "@/hooks/useWorkspaceQueries";
 import { useI18n } from "@/providers/LanguageProvider";
 
 export const usePersistedLanguage = () => {
   const queryClient = useQueryClient();
   const { language, setLanguage } = useI18n();
   const { status } = useSession();
-  const settingsQuery = useQuery({
-    queryKey: ["settings", "preferences"],
-    queryFn: fetchUserSettingsPreferences,
+  const settingsQuery = useUserSettingsPreferencesQuery({
     enabled: status === "authenticated",
-    staleTime: 60000,
   });
 
   const mutation = useMutation({

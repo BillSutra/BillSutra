@@ -13,7 +13,11 @@ const SessionProvider = ({
   children: React.ReactNode;
 }) => {
   return (
-    <NextAuthSessionProvider>
+    <NextAuthSessionProvider
+      refetchOnWindowFocus={false}
+      refetchInterval={0}
+      refetchWhenOffline={false}
+    >
       {children as NextAuthSessionProviderProps["children"]}
     </NextAuthSessionProvider>
   );

@@ -10,6 +10,9 @@ import { normalizeIndianState } from "../lib/indianAddress.js";
 import { getStateFromGstin, normalizeGstin } from "../lib/gstin.js";
 
 const PASSWORD_MIN_LENGTH = 8;
+const PRODUCT_NAME_PATTERN = /[\p{L}\p{N}]/u;
+const PRODUCT_PRICE_MAX = 1_000_000;
+const ALLOWED_GST_RATES = [0, 5, 12, 18, 28] as const;
 const STRONG_PASSWORD_RULES = [
   {
     regex: /.{8,}/,
@@ -86,7 +89,16 @@ export const categoryUpdateSchema = categoryCreateSchema.partial();
 export const authLoginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
+  rememberMe: z.boolean().optional(),
 });
+
+const normalizeWorkerLoginPhone = (value: string) => value.replace(/\D/g, "");
+const workerLoginEmailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const emptyWorkerLoginFieldToUndefined = (value: unknown) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed === "" ? undefined : trimmed;
+};
 
 export const authOauthSchema = z.object({
   email: z.string().email(),
@@ -94,6 +106,7 @@ export const authOauthSchema = z.object({
   provider: z.string().min(2).optional(),
   oauth_id: z.string().min(1).optional(),
   image: z.string().url().optional(),
+  rememberMe: z.boolean().optional(),
 });
 
 export const authRegisterSchema = z
@@ -114,6 +127,16 @@ export const authForgotSchema = z.object({
 
 export const authVerifyEmailQuerySchema = z.object({
   token: z.string().trim().min(32).max(191),
+});
+
+export const authVerifyEmailOtpSchema = z.object({
+  email: z.string().email(),
+  otp: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+  rememberMe: z.boolean().optional(),
+});
+
+export const authResendVerificationOtpSchema = z.object({
+  email: z.string().email(),
 });
 
 const webAuthnRegistrationResponseSchema = z.object({
@@ -150,6 +173,10 @@ export const authTokenSchema = z.object({
   token: z.string().min(10),
 });
 
+export const authSessionBootstrapSchema = z.object({
+  rememberMe: z.boolean().optional(),
+});
+
 export const authOtpSendSchema = z.object({
   email: z.string().email(),
 });
@@ -157,6 +184,7 @@ export const authOtpSendSchema = z.object({
 export const authOtpVerifySchema = z.object({
   email: z.string().email(),
   code: z.string().regex(/^\d{6}$/, "OTP must be 6 digits"),
+  rememberMe: z.boolean().optional(),
 });
 
 export const passkeyAuthenticateOptionsSchema = z.object({
@@ -166,6 +194,7 @@ export const passkeyAuthenticateOptionsSchema = z.object({
 export const passkeyAuthenticateVerifySchema = z.object({
   email: z.string().email(),
   challenge_id: z.coerce.number().int().positive(),
+  rememberMe: z.boolean().optional(),
   response: webAuthnAuthenticationResponseSchema,
 });
 
@@ -199,7 +228,62 @@ export const adminLoginSchema = z.object({
 export const accessPlanSchema = z.enum(["pro", "pro-plus"]);
 export const accessBillingCycleSchema = z.enum(["monthly", "yearly"]);
 
-export const workerLoginSchema = authLoginSchema;
+export const workerLoginSchema = z
+  .object({
+    identifier: z.preprocess(
+      emptyWorkerLoginFieldToUndefined,
+      z.string().trim().min(3).max(120).optional(),
+    ),
+    email: z.preprocess(
+      emptyWorkerLoginFieldToUndefined,
+      z.string().trim().toLowerCase().email().optional(),
+    ),
+    phone: z.preprocess(
+      emptyWorkerLoginFieldToUndefined,
+      z
+        .string()
+        .trim()
+        .transform((value) => normalizeWorkerLoginPhone(value))
+        .optional(),
+    ),
+    password: z.string().min(6),
+    rememberMe: z.boolean().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const identifier = value.identifier ?? value.email ?? value.phone;
+
+    if (!identifier) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["identifier"],
+        message: "Email or phone number is required",
+      });
+      return;
+    }
+
+    const normalizedPhone = normalizeWorkerLoginPhone(identifier);
+    const identifierLooksLikeEmail = workerLoginEmailPattern.test(identifier);
+    const hasValidEmail = Boolean(value.email) || identifierLooksLikeEmail;
+    const hasValidPhone =
+      (Boolean(value.phone) && /^\d{10,15}$/.test(value.phone!)) ||
+      /^\d{10,15}$/.test(normalizedPhone);
+
+    if (!hasValidEmail && !hasValidPhone) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["identifier"],
+        message: "Enter a valid email or phone number",
+      });
+    }
+
+    if (value.phone && !/^\d{10,15}$/.test(value.phone)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["phone"],
+        message: "Phone number must be between 10 and 15 digits",
+      });
+    }
+  });
 
 const workerAccessRoleSchema = z.enum([
   "ADMIN",
@@ -970,16 +1054,40 @@ export const userSavedTemplateUpdateSchema = z
     message: "At least one field is required",
   });
 
+const productNameSchema = z
+  .string()
+  .trim()
+  .min(2, "Product name must be at least 2 characters")
+  .max(191, "Product name is too long")
+  .refine((value) => PRODUCT_NAME_PATTERN.test(value), {
+    message: "Product name must contain at least one letter or number",
+  });
+
+const productPriceSchema = z.coerce
+  .number()
+  .nonnegative()
+  .max(PRODUCT_PRICE_MAX, `Price cannot exceed ${PRODUCT_PRICE_MAX}`);
+
+const productGstRateSchema = z.coerce
+  .number()
+  .refine(
+    (value) =>
+      ALLOWED_GST_RATES.includes(value as (typeof ALLOWED_GST_RATES)[number]),
+    {
+      message: `GST rate must be one of ${ALLOWED_GST_RATES.join(", ")}`,
+    },
+  );
+
 export const productCreateSchema = z.object({
-  name: z.string().min(2),
+  name: productNameSchema,
   sku: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  price: z.coerce.number().nonnegative(),
-  cost: z.coerce.number().nonnegative().optional(),
+  price: productPriceSchema,
+  cost: productPriceSchema.optional(),
   barcode: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
-  gst_rate: z.coerce.number().nonnegative().optional(),
+  gst_rate: productGstRateSchema.optional(),
   stock_on_hand: z.coerce.number().int().optional(),
   reorder_level: z.coerce.number().int().optional(),
-  category_id: z.coerce.number().int().positive().optional(),
+  category_id: z.coerce.number().int().positive().nullable().optional(),
 });
 
 export const productUpdateSchema = productCreateSchema.partial();
@@ -1068,26 +1176,256 @@ export const sendTestEmailSchema = z.object({
 
 export const paymentCreateSchema = z.object({
   invoice_id: z.coerce.number().int().positive(),
-  amount: z.coerce.number().nonnegative(),
-  method: z.nativeEnum(PaymentMethod).optional(),
-  provider: z.string().min(1).max(120).optional(),
-  transaction_id: z.string().min(1).max(191).optional(),
-  reference: z.string().optional(),
-  paid_at: z.coerce.date().optional(),
+  amount: z
+    .coerce
+    .number()
+    .positive("Payment amount must be greater than zero.")
+    .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
+      message: "Payment amount can have at most 2 decimal places.",
+    }),
+  status: z.enum(["PAID", "PARTIAL", "PENDING", "FAILED"]),
+  method: z.nativeEnum(PaymentMethod),
+  provider: z.preprocess(emptyToUndefined, z.string().trim().min(2).max(120).optional()),
+  transaction_id: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .trim()
+      .min(6, "Transaction reference must be at least 6 characters.")
+      .max(30, "Transaction reference must be 30 characters or less.")
+      .regex(/^[A-Za-z0-9-]+$/, "Transaction reference can only use letters, numbers, and hyphens.")
+      .transform((value) => value.toUpperCase())
+      .optional(),
+  ),
+  reference: z.preprocess(emptyToUndefined, z.string().trim().max(191).optional()),
+  notes: z.preprocess(emptyToUndefined, z.string().trim().max(500).optional()),
+  cheque_number: z.preprocess(emptyToUndefined, z.string().trim().min(3).max(64).optional()),
+  bank_name: z.preprocess(emptyToUndefined, z.string().trim().min(2).max(191).optional()),
+  deposit_date: z.coerce.date().optional(),
+  failure_reason: z.preprocess(emptyToUndefined, z.string().trim().min(3).max(500).optional()),
+  paid_at: z.coerce.date(),
+}).superRefine((value, ctx) => {
+  const digitalMethods = new Set<PaymentMethod>([
+    PaymentMethod.UPI,
+    PaymentMethod.BANK_TRANSFER,
+    PaymentMethod.NEFT,
+    PaymentMethod.RTGS,
+    PaymentMethod.IMPS,
+    PaymentMethod.CARD,
+    PaymentMethod.WALLET,
+  ]);
+
+  const now = new Date();
+  const oldestAllowedDate = new Date("2000-01-01T00:00:00.000Z");
+
+  if (digitalMethods.has(value.method) && !value.transaction_id) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["transaction_id"],
+      message: "Transaction reference is required for digital payments.",
+    });
+  }
+
+  if (value.method === PaymentMethod.CHEQUE) {
+    if (!value.cheque_number) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["cheque_number"],
+        message: "Cheque number is required for cheque payments.",
+      });
+    }
+    if (!value.bank_name) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["bank_name"],
+        message: "Bank name is required for cheque payments.",
+      });
+    }
+    if (!value.deposit_date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["deposit_date"],
+        message: "Deposit date is required for cheque payments.",
+      });
+    }
+  }
+
+  if (value.status === "FAILED" && !value.failure_reason) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["failure_reason"],
+      message: "Failure reason is required for failed payments.",
+    });
+  }
+
+  if (value.paid_at.getTime() > now.getTime()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["paid_at"],
+      message: "Payment date cannot be in the future.",
+    });
+  }
+
+  if (value.paid_at.getTime() < oldestAllowedDate.getTime()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["paid_at"],
+      message: "Payment date is too old to be valid.",
+    });
+  }
+
+  if (value.deposit_date) {
+    if (value.deposit_date.getTime() > now.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["deposit_date"],
+        message: "Deposit date cannot be in the future.",
+      });
+    }
+
+    if (value.deposit_date.getTime() < oldestAllowedDate.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["deposit_date"],
+        message: "Deposit date is too old to be valid.",
+      });
+    }
+  }
 });
 
 export const paymentUpdateSchema = z
   .object({
-    amount: z.coerce.number().nonnegative().optional(),
-    method: z.nativeEnum(PaymentMethod).optional(),
-    provider: z.string().min(1).max(120).optional(),
-    transaction_id: z.string().min(1).max(191).optional(),
-    reference: z.string().optional(),
-    paid_at: z.coerce.date().optional(),
+    amount: z
+      .coerce
+      .number()
+      .positive("Payment amount must be greater than zero.")
+      .refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-6, {
+        message: "Payment amount can have at most 2 decimal places.",
+      }),
+    status: z.enum(["PAID", "PARTIAL", "PENDING", "FAILED"]),
+    method: z.nativeEnum(PaymentMethod),
+    provider: z.preprocess(emptyToUndefined, z.string().trim().min(2).max(120).optional()),
+    transaction_id: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .trim()
+        .min(6, "Transaction reference must be at least 6 characters.")
+        .max(30, "Transaction reference must be 30 characters or less.")
+        .regex(/^[A-Za-z0-9-]+$/, "Transaction reference can only use letters, numbers, and hyphens.")
+        .transform((value) => value.toUpperCase())
+        .optional(),
+    ),
+    reference: z.preprocess(emptyToUndefined, z.string().trim().max(191).optional()),
+    notes: z.preprocess(emptyToUndefined, z.string().trim().max(500).optional()),
+    cheque_number: z.preprocess(emptyToUndefined, z.string().trim().min(3).max(64).optional()),
+    bank_name: z.preprocess(emptyToUndefined, z.string().trim().min(2).max(191).optional()),
+    deposit_date: z.coerce.date().optional(),
+    failure_reason: z.preprocess(emptyToUndefined, z.string().trim().min(3).max(500).optional()),
+    paid_at: z.coerce.date(),
+  })
+  .superRefine((value, ctx) => {
+    const digitalMethods = new Set<PaymentMethod>([
+      PaymentMethod.UPI,
+      PaymentMethod.BANK_TRANSFER,
+      PaymentMethod.NEFT,
+      PaymentMethod.RTGS,
+      PaymentMethod.IMPS,
+      PaymentMethod.CARD,
+      PaymentMethod.WALLET,
+    ]);
+
+    const now = new Date();
+    const oldestAllowedDate = new Date("2000-01-01T00:00:00.000Z");
+
+    if (digitalMethods.has(value.method) && !value.transaction_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["transaction_id"],
+        message: "Transaction reference is required for digital payments.",
+      });
+    }
+
+    if (value.method === PaymentMethod.CHEQUE) {
+      if (!value.cheque_number) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["cheque_number"],
+          message: "Cheque number is required for cheque payments.",
+        });
+      }
+      if (!value.bank_name) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["bank_name"],
+          message: "Bank name is required for cheque payments.",
+        });
+      }
+      if (!value.deposit_date) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["deposit_date"],
+          message: "Deposit date is required for cheque payments.",
+        });
+      }
+    }
+
+    if (value.status === "FAILED" && !value.failure_reason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["failure_reason"],
+        message: "Failure reason is required for failed payments.",
+      });
+    }
+
+    if (value.paid_at.getTime() > now.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["paid_at"],
+        message: "Payment date cannot be in the future.",
+      });
+    }
+
+    if (value.paid_at.getTime() < oldestAllowedDate.getTime()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["paid_at"],
+        message: "Payment date is too old to be valid.",
+      });
+    }
+
+    if (value.deposit_date) {
+      if (value.deposit_date.getTime() > now.getTime()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["deposit_date"],
+          message: "Deposit date cannot be in the future.",
+        });
+      }
+
+      if (value.deposit_date.getTime() < oldestAllowedDate.getTime()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["deposit_date"],
+          message: "Deposit date is too old to be valid.",
+        });
+      }
+    }
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: "At least one field is required",
   });
+
+export const paymentTransactionReferenceCheckSchema = z.object({
+  transaction_id: z
+    .string()
+    .trim()
+    .min(6)
+    .max(30)
+    .regex(/^[A-Za-z0-9-]+$/)
+    .transform((value) => value.toUpperCase()),
+  payment_id: z.coerce.number().int().positive().optional(),
+});
 
 export const accessRazorpayOrderSchema = z.object({
   plan_id: accessPlanSchema,
@@ -1298,4 +1636,26 @@ export const settingsPreferencesUpsertSchema = z.object({
       signature: z.string().max(191).optional(),
     })
     .optional(),
+});
+
+export const notificationsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().optional(),
+  limit: z.coerce.number().int().positive().max(50).optional(),
+  type: z
+    .enum([
+      "payment",
+      "inventory",
+      "customer",
+      "subscription",
+      "worker",
+      "security",
+      "system",
+    ])
+    .optional(),
+  isRead: z.coerce.boolean().optional(),
+  unreadOnly: z.coerce.boolean().optional(),
+});
+
+export const notificationReadStateSchema = z.object({
+  isRead: z.boolean().optional(),
 });

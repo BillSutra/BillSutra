@@ -1,26 +1,118 @@
+# ===============================
+# BillSutra Production .gitignore
+# Node.js + Next.js + Express + TS
+# ===============================
+
+# Dependencies
 node_modules/
+server/node_modules/
+front-end/node_modules/
+jspm_packages/
+.pnp/
+.pnp.js
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime files
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Build outputs
 dist/
 build/
 .next/
-.turbo/
-.cache/
+out/
+.vercel/
 coverage/
-*.log
+storybook-static/
+
+# TypeScript
+*.tsbuildinfo
+
+# Cache
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+.sass-cache/
+
+# Environment variables
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 .env.*
 !.env.example
-server/node_modules/
-server/dist/
-front-end/node_modules/
-front-end/.next/
-front-end/out/
+!.env.development.example
+!.env.staging.example
+!.env.production.example
+
+# Database
+*.sqlite
+*.sqlite3
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+
+# Uploads / temp storage
+uploads/
+tmp/
+temp/
+*.tmp
+
+# Testing
+playwright-report/
+test-results/
+.cypress/screenshots/
+.cypress/videos/
+
+# Docker
+docker-compose.override.yml
+*.tar
+
+# IDE / Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS files
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# Python helpers
 .venv/
 venv/
 __pycache__/
 *.pyc
 *.pyo
 .python-version
-.idea/
-.vscode/
+
+# Package manager files (keep only one lockfile if using one manager)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# Misc
+*.bak
+*.old
+*.orig
+*.pem
+
+# Optional generated assets
+.generated/

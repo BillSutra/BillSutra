@@ -1,8 +1,10 @@
 import type { Request, Response } from "express";
+import { AuthMethod } from "@prisma/client";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
 import { storageProvider } from "../services/storage/storage.provider.js";
 import { UPLOADS_ROOT, resolveUploadPath } from "../lib/uploadPaths.js";
+import { recordAuthEvent } from "../lib/modernAuth.js";
 
 /**
  * Derive the absolute file path from the stored public URL.
@@ -75,6 +77,17 @@ class LogoController {
       },
     });
 
+    await recordAuthEvent({
+      req,
+      userId: req.user?.ownerUserId ?? userId,
+      method: AuthMethod.PASSWORD,
+      success: true,
+      actorType: req.user?.accountType ?? "OWNER",
+      metadata: {
+        action: "logo_uploaded",
+      },
+    });
+
     return sendResponse(res, 201, {
       message: "Logo uploaded successfully.",
       data: { logo_url: url },
@@ -121,6 +134,17 @@ class LogoController {
       },
     });
 
+    await recordAuthEvent({
+      req,
+      userId: req.user?.ownerUserId ?? userId,
+      method: AuthMethod.PASSWORD,
+      success: true,
+      actorType: req.user?.accountType ?? "OWNER",
+      metadata: {
+        action: "logo_updated",
+      },
+    });
+
     return sendResponse(res, 200, {
       message: "Logo updated successfully.",
       data: { logo_url: url },
@@ -154,6 +178,17 @@ class LogoController {
     await prisma.businessProfile.update({
       where: { user_id: userId },
       data: { logo_url: null },
+    });
+
+    await recordAuthEvent({
+      req,
+      userId: req.user?.ownerUserId ?? userId,
+      method: AuthMethod.PASSWORD,
+      success: true,
+      actorType: req.user?.accountType ?? "OWNER",
+      metadata: {
+        action: "logo_removed",
+      },
     });
 
     return sendResponse(res, 200, { message: "Logo removed successfully." });

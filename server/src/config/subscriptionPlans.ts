@@ -47,7 +47,7 @@ export const SUBSCRIPTION_PLAN_CONFIG: Record<
       REPORTS_BASIC: true,
       ANALYTICS_ADVANCED: false,
       REPORTS_ADVANCED: false,
-      WORKERS_MANAGEMENT: false,
+      WORKERS_MANAGEMENT: true,
       DATA_EXPORT: false,
     },
   },
@@ -95,7 +95,7 @@ export const featureRequiredPlan: Record<
   REPORTS_BASIC: "pro",
   ANALYTICS_ADVANCED: "pro-plus",
   REPORTS_ADVANCED: "pro-plus",
-  WORKERS_MANAGEMENT: "pro-plus",
+  WORKERS_MANAGEMENT: "pro",
   DATA_EXPORT: "pro-plus",
 };
 

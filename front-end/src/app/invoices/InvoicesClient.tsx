@@ -2,7 +2,7 @@
 
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -45,8 +45,6 @@ import Modal from "@/components/ui/modal";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  fetchBusinessProfile,
-  fetchUserSettingsPreferences,
   sendInvoiceEmail,
 } from "@/lib/apiClient";
 import {
@@ -67,6 +65,10 @@ import {
 } from "@/hooks/invoice/useInvoiceDrafts";
 import { useActiveInvoiceTemplate } from "@/hooks/invoice/useActiveInvoiceTemplate";
 import { useInvoicePdf } from "@/hooks/invoice/useInvoicePdf";
+import {
+  useBusinessProfileQuery,
+  useUserSettingsPreferencesQuery,
+} from "@/hooks/useWorkspaceQueries";
 import {
   formatBusinessAddressFromRecord,
   formatCustomerAddressFromRecord,
@@ -222,6 +224,14 @@ const getStoredWarehousePreference = () => {
   );
 };
 
+const clearStoredWarehousePreference = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.removeItem(LAST_WAREHOUSE_STORAGE_KEY);
+};
+
 const getPreferredWarehouseFromSettings = (
   preferences: unknown,
 ): string | null => {
@@ -356,14 +366,8 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
     isError: warehousesError,
     refetch: refetchWarehouses,
   } = useWarehousesQuery();
-  const { data: businessProfile } = useQuery({
-    queryKey: ["business-profile"],
-    queryFn: fetchBusinessProfile,
-  });
-  const { data: userSettingsPreferences } = useQuery({
-    queryKey: ["settings", "preferences"],
-    queryFn: fetchUserSettingsPreferences,
-  });
+  const { data: businessProfile } = useBusinessProfileQuery();
+  const { data: userSettingsPreferences } = useUserSettingsPreferencesQuery();
   const sendInvoiceEmailMutation = useMutation({
     mutationFn: ({
       invoiceId,
@@ -611,6 +615,10 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
         )
       ) {
         return current;
+      }
+
+      if (current.warehouse_id) {
+        clearStoredWarehousePreference();
       }
 
       return {
@@ -1626,6 +1634,15 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
           : (form.payment_date ||
             form.date ||
             new Date().toISOString().slice(0, 10));
+      const selectedWarehouseId = form.warehouse_id
+        ? warehouses.some(
+            (warehouse) => String(warehouse.id) === form.warehouse_id,
+          )
+          ? Number(form.warehouse_id)
+          : resolvedDefaultWarehouseId
+            ? Number(resolvedDefaultWarehouseId)
+            : undefined
+        : undefined;
 
       const checkoutResult = await runInvoiceCheckoutPipeline({
         createInvoice: createInvoice.mutateAsync,
@@ -1662,9 +1679,7 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
             designConfig: activeDesignConfig,
           },
           sync_sales: true,
-          warehouse_id: form.warehouse_id
-            ? Number(form.warehouse_id)
-            : undefined,
+          warehouse_id: selectedWarehouseId,
           items: items.map((item) => ({
             product_id: item.product_id ? Number(item.product_id) : undefined,
             name: item.name.trim(),

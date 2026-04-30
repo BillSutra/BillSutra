@@ -22,6 +22,13 @@ export type VerifyEmailData = {
   expires_in_minutes: number;
 };
 
+export type VerifyEmailOtpData = {
+  email: string;
+  user_name: string;
+  code: string;
+  expires_in_minutes: number;
+};
+
 export type PasswordResetEmailData = {
   email: string;
   user_name: string;
@@ -198,6 +205,7 @@ export type LowStockAlertEmailData = {
 export type EmailTemplateDataMap = {
   welcome: WelcomeEmailData;
   verify_email: VerifyEmailData;
+  verify_email_otp: VerifyEmailOtpData;
   password_reset: PasswordResetEmailData;
   otp_login: OtpLoginEmailData;
   invoice_sent: InvoiceSentEmailData;

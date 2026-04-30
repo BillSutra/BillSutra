@@ -9,8 +9,6 @@ type SentryScope = {
 type SentryModule = {
   init: (options: Record<string, unknown>) => void;
   captureException: (error: unknown) => void;
-  captureRequestError?: (...args: unknown[]) => unknown;
-  captureRouterTransitionStart?: (...args: unknown[]) => unknown;
   setUser: (user: Record<string, unknown> | null) => void;
   withScope: (callback: (scope: SentryScope) => void) => void;
 };
@@ -27,14 +25,17 @@ export const loadFrontendSentry = async (): Promise<SentryModule | null> => {
   }
 
   if (!sentryModulePromise) {
-    sentryModulePromise = import("@sentry/nextjs")
+    sentryModulePromise = import("@sentry/browser")
       .then((module) => module as unknown as SentryModule)
       .catch((error) => {
         if (!sentryMissingLogged) {
           sentryMissingLogged = true;
-          console.warn("[observability] Frontend Sentry disabled because @sentry/nextjs is not installed.", {
-            message: error instanceof Error ? error.message : String(error),
-          });
+          console.warn(
+            "[observability] Frontend Sentry disabled because the browser SDK is unavailable.",
+            {
+              message: error instanceof Error ? error.message : String(error),
+            },
+          );
         }
         return null;
       });
@@ -62,18 +63,6 @@ export const initFrontendSentry = async (
 export const captureFrontendSentryException = async (error: unknown) => {
   const Sentry = await loadFrontendSentry();
   Sentry?.captureException(error);
-};
-
-export const captureFrontendRouterTransitionStart = async (
-  ...args: unknown[]
-) => {
-  const Sentry = await loadFrontendSentry();
-  Sentry?.captureRouterTransitionStart?.(...args);
-};
-
-export const captureFrontendRequestError = async (...args: unknown[]) => {
-  const Sentry = await loadFrontendSentry();
-  Sentry?.captureRequestError?.(...args);
 };
 
 export type { SeverityLevel, SentryModule, SentryScope };
