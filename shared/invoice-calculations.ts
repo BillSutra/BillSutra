@@ -110,7 +110,7 @@ export const getDiscountValidationMessage = ({
   return null;
 };
 
-export const calculateInvoiceTotals = ({
+const calculateInvoiceTotals = ({
   items,
   discountValue = 0,
   discountType = "FIXED",
@@ -191,4 +191,5 @@ export const calculateInvoiceTotals = ({
   };
 };
 
+export { calculateInvoiceTotals };
 export default calculateInvoiceTotals;
