@@ -3,7 +3,7 @@ const DEFAULT_BACKEND_URL = "http://localhost:7000";
 let validated = false;
 
 type ValidateFrontendEnvOptions = {
-  allowMissingNextAuthSecret?: boolean;
+  allowBuildTimeMissingEnv?: boolean;
 };
 
 const normalizeString = (value?: string | null) => {
@@ -72,7 +72,7 @@ const isNextProductionBuild = () =>
   process.env.NEXT_PHASE === "phase-production-build";
 
 export const validateFrontendEnv = ({
-  allowMissingNextAuthSecret = isNextProductionBuild(),
+  allowBuildTimeMissingEnv = isNextProductionBuild(),
 }: ValidateFrontendEnvOptions = {}) => {
   if (typeof window !== "undefined" || validated) {
     return;
@@ -89,29 +89,33 @@ export const validateFrontendEnv = ({
   const googleClientId = normalizeString(process.env.GOOGLE_CLIENT_ID);
   const googleClientSecret = normalizeString(process.env.GOOGLE_CLIENT_SECRET);
 
-  if (!nextAuthSecret && !allowMissingNextAuthSecret) {
+  if (!nextAuthSecret && !allowBuildTimeMissingEnv) {
     throw new Error("NEXTAUTH_SECRET is required.");
   }
 
-  if (nextAuthSecret && nextAuthSecret.length < 32) {
+  if (
+    nextAuthSecret &&
+    nextAuthSecret.length < 32 &&
+    !allowBuildTimeMissingEnv
+  ) {
     throw new Error("NEXTAUTH_SECRET must be at least 32 characters long.");
   }
 
-  if (isProd && !nextAuthUrl) {
+  if (isProd && !nextAuthUrl && !allowBuildTimeMissingEnv) {
     throw new Error("NEXTAUTH_URL is required in production.");
   }
 
-  if (nextAuthUrl && !isValidUrl(nextAuthUrl)) {
+  if (nextAuthUrl && !isValidUrl(nextAuthUrl) && !allowBuildTimeMissingEnv) {
     throw new Error("NEXTAUTH_URL must be a valid absolute URL.");
   }
 
-  if (isProd && !backendSource) {
+  if (isProd && !backendSource && !allowBuildTimeMissingEnv) {
     throw new Error(
       "NEXT_PUBLIC_BACKEND_URL or NEXT_PUBLIC_API_URL is required in production.",
     );
   }
 
-  if (backendSource && !isValidUrl(backendUrl)) {
+  if (backendSource && !isValidUrl(backendUrl) && !allowBuildTimeMissingEnv) {
     throw new Error(
       "NEXT_PUBLIC_BACKEND_URL/NEXT_PUBLIC_API_URL must resolve to a valid absolute URL.",
     );

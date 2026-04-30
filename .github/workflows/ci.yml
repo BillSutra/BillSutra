@@ -23,6 +23,8 @@ jobs:
 
     env:
       CI: "true"
+      NEXTAUTH_URL: "http://localhost:3000"
+      NEXTAUTH_SECRET: "test-secret"
       NEXT_TELEMETRY_DISABLED: "1"
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       PUPPETEER_SKIP_DOWNLOAD: "true"
