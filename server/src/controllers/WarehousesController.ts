@@ -6,6 +6,11 @@ import {
   warehouseCreateSchema,
   warehouseUpdateSchema,
 } from "../validations/apiValidations.js";
+import {
+  maintainProductCategoryReferences,
+  normalizeProductCategoryRecord,
+  productCategoryInclude,
+} from "../lib/productCategories.js";
 
 type WarehouseCreateInput = z.infer<typeof warehouseCreateSchema>;
 type WarehouseUpdateInput = z.infer<typeof warehouseUpdateSchema>;
@@ -51,16 +56,33 @@ class WarehousesController {
     }
 
     const id = Number(req.params.id);
+    void maintainProductCategoryReferences(userId);
     const warehouse = await prisma.warehouse.findFirst({
       where: { id, user_id: userId },
-      include: { inventories: { include: { product: true } } },
+      include: {
+        inventories: {
+          include: {
+            product: {
+              include: productCategoryInclude,
+            },
+          },
+        },
+      },
     });
 
     if (!warehouse) {
       return sendResponse(res, 404, { message: "Warehouse not found" });
     }
 
-    return sendResponse(res, 200, { data: warehouse });
+    return sendResponse(res, 200, {
+      data: {
+        ...warehouse,
+        inventories: warehouse.inventories.map((inventory) => ({
+          ...inventory,
+          product: normalizeProductCategoryRecord(inventory.product),
+        })),
+      },
+    });
   }
 
   static async update(req: Request, res: Response) {

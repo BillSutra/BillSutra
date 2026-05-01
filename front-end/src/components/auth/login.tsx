@@ -31,11 +31,26 @@ import {
 } from "@/lib/authClient";
 import {
   bootstrapSecureAuthSession,
+  getAuthTokenExpiry,
   isSecureAuthEnabled,
+  logClientAuthEvent,
+  setLegacyStoredToken,
+  setPendingRememberMePreference,
 } from "@/lib/secureAuth";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
 import { captureFrontendException } from "@/lib/observability/shared";
-import { Eye, EyeOff, LoaderCircle, Camera } from "lucide-react";
+import {
+  Camera,
+  Eye,
+  EyeOff,
+  KeyRound,
+  LoaderCircle,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+  Sparkles,
+  Smartphone,
+} from "lucide-react";
 
 type LoginProps = {
   mode?: "owner" | "worker";
@@ -114,6 +129,7 @@ export default function Login({
   );
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{
     identifier?: string;
@@ -146,13 +162,23 @@ export default function Login({
     [hydrated],
   );
 
-  const callbackUrl = isWorkerMode ? "/sales" : "/dashboard";
+  const callbackUrl = isWorkerMode ? "/worker-panel" : "/dashboard";
+  const verificationRedirectData =
+    state.data && typeof state.data === "object" && "code" in state.data
+      ? (state.data as {
+          code?: string | null;
+          email?: string | null;
+          retryAfter?: number | null;
+          expiresIn?: number | null;
+        })
+      : null;
 
   const completeTokenLogin = useCallback(
     async (
       rawToken: unknown,
       options?: {
         isEmailVerified?: boolean | null;
+        rememberMe?: boolean | null;
       },
     ) => {
       const token = normalizeToken(rawToken);
@@ -163,6 +189,32 @@ export default function Login({
 
       setIsSigningIn(true);
       try {
+        setLegacyStoredToken(token);
+        logClientAuthEvent("login_token_received", {
+          mode,
+          callbackUrl,
+          secureAuthEnabled: isSecureAuthEnabled(),
+          rememberMe: options?.rememberMe ?? null,
+          expiresAt: getAuthTokenExpiry(token),
+        });
+
+        if (isSecureAuthEnabled()) {
+          const bootstrapped = await bootstrapSecureAuthSession(token, {
+            rememberMe:
+              typeof options?.rememberMe === "boolean"
+                ? options.rememberMe
+                : undefined,
+          });
+          if (!bootstrapped) {
+            throw new Error("Unable to establish your secure session.");
+          }
+
+          logClientAuthEvent("secure_session_bootstrapped", {
+            mode,
+            callbackUrl,
+          });
+        }
+
         const result = await signIn("auth-token", {
           token,
           redirect: false,
@@ -172,15 +224,20 @@ export default function Login({
           throw new Error("Unable to create your session.");
         }
 
-        if (isSecureAuthEnabled()) {
-          await bootstrapSecureAuthSession(token);
-        }
+        logClientAuthEvent("nextauth_session_created", {
+          mode,
+          callbackUrl,
+        });
 
         const destination =
           !isWorkerMode && options?.isEmailVerified === false
             ? "/verify-email"
             : callbackUrl;
 
+        logClientAuthEvent("login_redirecting", {
+          destination,
+          mode,
+        });
         router.push(destination);
         router.refresh();
         return true;
@@ -270,7 +327,38 @@ export default function Login({
   };
 
   useEffect(() => {
-    if (state.status >= 400) {
+    if (
+      state.status === 403 &&
+      verificationRedirectData?.code === "EMAIL_VERIFICATION_REQUIRED"
+    ) {
+      setPendingRememberMePreference(rememberMe);
+      captureAnalyticsEvent("auth_login_verification_required", {
+        method: "password",
+        mode,
+      });
+      toast.error(state.message || "Please verify your email first");
+      const verificationEmail =
+        typeof verificationRedirectData?.email === "string" &&
+        verificationRedirectData.email.trim()
+          ? verificationRedirectData.email.trim()
+          : identifier.trim();
+      const nextSearchParams = new URLSearchParams({
+        email: verificationEmail,
+      });
+      if (typeof verificationRedirectData?.retryAfter === "number") {
+        nextSearchParams.set(
+          "retryAfter",
+          String(verificationRedirectData.retryAfter),
+        );
+      }
+      if (typeof verificationRedirectData?.expiresIn === "number") {
+        nextSearchParams.set(
+          "expiresIn",
+          String(verificationRedirectData.expiresIn),
+        );
+      }
+      router.push(`/verify-email?${nextSearchParams.toString()}`);
+    } else if (state.status >= 400) {
       captureAnalyticsEvent("auth_login_failed", {
         method: "password",
         mode,
@@ -288,9 +376,21 @@ export default function Login({
           typeof state.data?.user?.is_email_verified === "boolean"
             ? state.data.user.is_email_verified
             : null,
+        rememberMe:
+          typeof state.data?.rememberMe === "boolean"
+            ? state.data.rememberMe
+            : rememberMe,
       });
     }
-  }, [completeTokenLogin, mode, state]);
+  }, [
+    completeTokenLogin,
+    identifier,
+    mode,
+    rememberMe,
+    router,
+    state,
+    verificationRedirectData,
+  ]);
 
   useEffect(() => {
     if (otpCooldown <= 0) return;
@@ -313,6 +413,7 @@ export default function Login({
   }, [otpExpiresIn]);
 
   const handleGoogleLogin = () => {
+    setPendingRememberMePreference(rememberMe);
     captureAnalyticsEvent("auth_login_started", {
       method: "google",
       mode,
@@ -352,6 +453,7 @@ export default function Login({
         normalizeEmail(normalizedIdentifier),
         optionsResponse.challenge_id,
         browserResponse,
+        rememberMe,
       );
 
       toast.success("Passkey verified.");
@@ -364,6 +466,7 @@ export default function Login({
           typeof authPayload.user?.is_email_verified === "boolean"
             ? authPayload.user.is_email_verified
             : null,
+        rememberMe,
       });
     } catch (error) {
       captureAnalyticsEvent("auth_login_failed", {
@@ -476,7 +579,11 @@ export default function Login({
       lastSubmittedOtpRef.current = code;
       setIsOtpVerifying(true);
       try {
-        const authPayload = await verifyOtpLoginCode(normalizedEmail, code);
+        const authPayload = await verifyOtpLoginCode(
+          normalizedEmail,
+          code,
+          rememberMe,
+        );
         toast.success("OTP verified.");
         captureAnalyticsEvent("auth_login_succeeded", {
           method: "otp",
@@ -487,6 +594,7 @@ export default function Login({
             typeof authPayload.user?.is_email_verified === "boolean"
               ? authPayload.user.is_email_verified
               : null,
+          rememberMe,
         });
       } catch (error) {
         captureAnalyticsEvent("auth_login_failed", {
@@ -511,7 +619,7 @@ export default function Login({
         setIsOtpVerifying(false);
       }
     },
-    [completeTokenLogin, identifier, isOtpVerifying, mode, otpDigits],
+    [completeTokenLogin, identifier, isOtpVerifying, mode, otpDigits, rememberMe],
   );
 
   useEffect(() => {
@@ -564,10 +672,31 @@ export default function Login({
     <>
       <form
         action={formAction}
-        className="grid gap-4"
+        className="grid gap-4 rounded-[1.75rem] border border-white/65 bg-white/78 p-4 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.34)] backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:p-5"
         noValidate
         onSubmit={handlePasswordSubmit}
       >
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-primary/10 bg-primary/[0.04] px-4 py-3 dark:border-primary/15 dark:bg-primary/[0.08]">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary/80">
+              {isWorkerMode ? "Team access" : "Secure login"}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {isWorkerMode
+                ? "Use your assigned credentials to continue to the worker workspace."
+                : "Password, OTP, passkey, and face login all stay available."}
+            </p>
+          </div>
+          <div className="hidden h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary sm:flex">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+        </div>
+
+        <input
+          type="hidden"
+          name="rememberMe"
+          value={rememberMe ? "true" : "false"}
+        />
         <AuthFormField
           id="identifier"
           name="identifier"
@@ -580,6 +709,13 @@ export default function Login({
           autoFocus={autoFocusFirstField}
           error={identifierError}
           disabled={isCredentialSubmitting || isSigningIn}
+          leftAdornment={
+            identifier.includes("@") ? (
+              <Mail className="h-4 w-4" />
+            ) : (
+              <Smartphone className="h-4 w-4" />
+            )
+          }
         />
         <div className="flex items-center justify-end">
           {!isWorkerMode ? (
@@ -591,6 +727,19 @@ export default function Login({
             </Link>
           ) : null}
         </div>
+        <label className="flex items-center gap-3 rounded-2xl border border-white/60 bg-slate-950/[0.03] px-3.5 py-3 text-sm text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]">
+          <input
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(event) => setRememberMe(event.target.checked)}
+            className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+          />
+          <span>
+            {rememberMe
+              ? "Keep me logged in for 7 days"
+              : "Keep me logged in for 1 day"}
+          </span>
+        </label>
         <AuthFormField
           id="password"
           name="password"
@@ -603,12 +752,13 @@ export default function Login({
           autoComplete="current-password"
           error={passwordError}
           disabled={isCredentialSubmitting || isSigningIn}
+          leftAdornment={<LockKeyhole className="h-4 w-4" />}
           rightAdornment={
             <Button
               type="button"
               variant="ghost"
               size="icon-sm"
-              className="h-8 w-8"
+              className="h-8 w-8 rounded-full"
               onClick={() => setShowPassword((current) => !current)}
               aria-label={showPassword ? t("common.hide") : t("common.show")}
             >
@@ -622,7 +772,7 @@ export default function Login({
         />
         <Button
           type="submit"
-          className="mt-2 w-full"
+          className="mt-2 h-12 w-full rounded-2xl shadow-[0_24px_45px_-26px_rgba(2,132,199,0.58)] transition-transform duration-200 hover:scale-[1.01] active:scale-[0.99]"
           disabled={isCredentialSubmitting || isSigningIn}
         >
           {isCredentialSubmitting || isSigningIn ? (
@@ -634,6 +784,10 @@ export default function Login({
             t("auth.shared.loginTab")
           )}
         </Button>
+
+        <div aria-live="polite" className="min-h-5 text-xs text-muted-foreground">
+          {state.status >= 400 && state.message ? state.message : null}
+        </div>
       </form>
 
       <ErrorBoundary
@@ -659,12 +813,14 @@ export default function Login({
         <FaceLoginModal
           isOpen={isFaceLoginOpen}
           onClose={() => setIsFaceLoginOpen(false)}
+          rememberMe={rememberMe}
           onSuccess={async (auth) => {
             const completed = await completeTokenLogin(auth.token, {
               isEmailVerified:
                 typeof auth.user?.is_email_verified === "boolean"
                   ? auth.user.is_email_verified
                   : null,
+              rememberMe,
             });
             if (completed) {
               setIsFaceLoginOpen(false);
@@ -692,19 +848,21 @@ export default function Login({
             <Button
               type="button"
               variant="outline"
-              className="flex items-center justify-center gap-3 border-border bg-card hover:bg-accent"
+              className="h-12 justify-center gap-3 rounded-2xl border-white/70 bg-white/78 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/6 dark:hover:bg-white/10"
               onClick={handlePasskeyLogin}
               disabled={isPasskeyLoading || isSigningIn}
             >
+              <KeyRound className="h-4 w-4" />
               {isPasskeyLoading
                 ? "Checking passkey..."
                 : "Continue with passkey"}
             </Button>
 
-            <div className="rounded-2xl border border-border bg-muted/35 p-4">
+            <div className="rounded-[1.6rem] border border-white/70 bg-white/76 p-4 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.28)] dark:border-white/10 dark:bg-white/6">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
-                  <p className="text-sm font-semibold text-foreground">
+                  <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Sparkles className="h-4 w-4 text-primary" />
                     Login with email code
                   </p>
                   <p className="text-xs text-muted-foreground">
@@ -714,7 +872,7 @@ export default function Login({
                 <Button
                   type="button"
                   variant="outline"
-                  className="border-border bg-card hover:bg-accent"
+                  className="rounded-2xl border-white/70 bg-white/80 dark:border-white/10 dark:bg-white/8"
                   onClick={handleSendOtp}
                   disabled={
                     isOtpSending ||
@@ -750,7 +908,7 @@ export default function Login({
                         inputMode="numeric"
                         autoComplete={index === 0 ? "one-time-code" : "off"}
                         maxLength={1}
-                        className="h-12 w-11 text-center text-lg"
+                        className="h-12 w-11 rounded-2xl border-white/70 bg-white/80 text-center text-lg shadow-[0_16px_30px_-26px_rgba(15,23,42,0.22)] dark:border-white/10 dark:bg-white/8"
                         aria-label={`OTP digit ${index + 1}`}
                         disabled={isOtpVerifying || isSigningIn}
                       />
@@ -760,6 +918,7 @@ export default function Login({
                   <div className="flex flex-wrap items-center gap-3">
                     <Button
                       type="button"
+                      className="rounded-2xl"
                       onClick={() => void handleVerifyOtp()}
                       disabled={
                         isOtpVerifying ||
@@ -788,7 +947,7 @@ export default function Login({
             <Button
               type="button"
               variant="outline"
-              className="flex items-center justify-center gap-3 border-border bg-card hover:bg-accent"
+              className="h-12 justify-center gap-3 rounded-2xl border-white/70 bg-white/78 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/6 dark:hover:bg-white/10"
               onClick={handleGoogleLogin}
               disabled={isSigningIn}
             >
@@ -804,16 +963,16 @@ export default function Login({
             <Button
               type="button"
               variant="outline"
-              className="flex items-center justify-center gap-3 border-border bg-card hover:bg-accent"
+              className="h-12 justify-center gap-3 rounded-2xl border-white/70 bg-white/78 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/6 dark:hover:bg-white/10"
               onClick={() => setIsFaceLoginOpen(true)}
               disabled={isSigningIn}
             >
-              <Camera className="w-4 h-4" />
+              <Camera className="h-4 w-4" />
               Continue with Face
             </Button>
 
             {!supportsPasskeys ? (
-              <p className="text-xs text-muted-foreground">
+              <p className="rounded-2xl border border-dashed border-white/70 bg-white/60 px-3 py-2 text-xs text-muted-foreground dark:border-white/10 dark:bg-white/[0.04]">
                 This browser does not support passkeys, so OTP and password
                 login remain available.
               </p>

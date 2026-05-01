@@ -1,6 +1,10 @@
 import type { Request, Response } from "express";
 import { sendResponse } from "../../utils/sendResponse.js";
 import { executeExport, previewExport } from "./export.service.js";
+import { recordAuditLog } from "../../services/auditLog.service.js";
+
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
 
 class ExportController {
   static async preview(req: Request, res: Response) {
@@ -43,6 +47,8 @@ class ExportController {
           id: authUser.id,
           email: authUser.email,
           actorId: authUser.actorId,
+          businessId: authUser.businessId,
+          requestId: req.requestId,
         },
         {
           resource: req.params.resource as "products" | "customers" | "invoices",
@@ -55,15 +61,38 @@ class ExportController {
           filters: req.body.filters,
         },
       );
+      await recordAuditLog({
+        req,
+        userId: authUser.ownerUserId,
+        actorId: authUser.actorId,
+        actorType: authUser.accountType,
+        action: "export.run",
+        resourceType: "export",
+        resourceId: readRouteParam(req.params.resource),
+        status: "success",
+        metadata: {
+          format: req.body.format,
+          scope: req.body.scope,
+          delivery: req.body.delivery,
+          selectedCount: Array.isArray(req.body.selected_ids)
+            ? req.body.selected_ids.length
+            : 0,
+        },
+      });
 
       if (result.delivery === "email") {
         return sendResponse(res, 200, {
-          message: `Export sent to ${result.email}`,
+          message: result.queued
+            ? `Export queued for ${result.email}`
+            : `Export sent to ${result.email}`,
           data: {
             delivery: result.delivery,
             exportedCount: result.exportedCount,
             fileName: result.fileName,
             email: result.email,
+            queued: result.queued,
+            jobId: result.jobId,
+            trackingId: result.trackingId,
           },
         });
       }

@@ -12,6 +12,7 @@ import {
   enqueuePlanApprovedEmail,
   enqueueWelcomeEmail,
 } from "../queues/jobs/email.jobs.js";
+import type { AppQueueContextInput } from "../queues/types.js";
 import { computeInvoicePaymentSnapshotFromPayments } from "../utils/invoicePaymentSnapshot.js";
 import {
   buildSecureFileUrl,
@@ -287,7 +288,7 @@ export const sendPlanApprovedEmail = async ({
     user_name: payment.user.name,
     plan_name: planNameMap[payment.plan_id] ?? payment.plan_id,
     amount: Number(payment.amount),
-    status_page_url: `${getFrontendAppUrl()}/payments`,
+    status_page_url: `${getFrontendAppUrl()}/payments/access`,
   }, {
     audit: {
       userId: payment.user_id,
@@ -441,7 +442,15 @@ const dispatchWithFallback = async (
 export const dispatchWelcomeEmail = async (userId: number) =>
   dispatchWithFallback(
     "welcome",
-    enqueueWelcomeEmail({ userId }),
+    enqueueWelcomeEmail({
+      userId,
+      context: {
+        userId,
+        metadata: {
+          flow: "welcome",
+        },
+      },
+    }),
     () => sendWelcomeEmail({ userId }),
     { userId },
   );
@@ -449,7 +458,15 @@ export const dispatchWelcomeEmail = async (userId: number) =>
 export const dispatchPlanApprovedEmail = async (paymentId: string) =>
   dispatchWithFallback(
     "plan_approved",
-    enqueuePlanApprovedEmail({ paymentId }),
+    enqueuePlanApprovedEmail({
+      paymentId,
+      context: {
+        metadata: {
+          flow: "plan_approved",
+          paymentId,
+        },
+      },
+    }),
     () => sendPlanApprovedEmail({ paymentId }),
     { paymentId },
   );
@@ -457,6 +474,7 @@ export const dispatchPlanApprovedEmail = async (paymentId: string) =>
 export const dispatchMonthlySalesReportEmail = async (
   userId: number,
   monthKey?: string,
+  context?: AppQueueContextInput,
 ) => {
   const reportWindow = resolveMonthlyReportWindow(monthKey);
 
@@ -465,6 +483,15 @@ export const dispatchMonthlySalesReportEmail = async (
     enqueueMonthlySalesReportEmail({
       userId,
       monthKey: reportWindow.monthKey,
+      context: {
+        userId,
+        ...context,
+        metadata: {
+          ...(context?.metadata ?? {}),
+          flow: "monthly_sales_report",
+          monthKey: reportWindow.monthKey,
+        },
+      },
     }),
     () =>
       sendMonthlyReportEmail({

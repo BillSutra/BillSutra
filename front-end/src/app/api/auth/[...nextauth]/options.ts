@@ -10,11 +10,6 @@ import {
   check_credential,
 } from "@/lib/apiEndPoints";
 
-const exposeAccessTokenToClient =
-  (process.env.NEXT_PUBLIC_USE_COOKIE_AUTH ??
-    process.env.USE_COOKIE_AUTH ??
-    "false") !== "true";
-
 /* ================= TYPES ================= */
 
 export type CustomSession = {
@@ -59,6 +54,9 @@ type AuthPayload = {
 const mapAuthPayloadToUser = (
   authPayload: AuthPayload | undefined,
   fallbackProvider: string,
+  options?: {
+    includeBootstrapToken?: boolean;
+  },
 ): CustomUser | null => {
   const user = authPayload?.user;
   if (!user) return null;
@@ -75,7 +73,7 @@ const mapAuthPayloadToUser = (
     email: user.email ?? null,
     image: user.image ?? null,
     provider: user.provider ?? fallbackProvider,
-    token: exposeAccessTokenToClient ? authPayload?.token ?? null : null,
+    token: options?.includeBootstrapToken ? authPayload?.token ?? null : null,
     is_email_verified: user.is_email_verified ?? null,
     role: user.role ?? null,
     businessId: user.businessId ?? null,
@@ -89,6 +87,13 @@ const mapAuthPayloadToUser = (
           : null,
   };
 };
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const normalizeAuthIdentifier = (value: string | null | undefined) =>
+  typeof value === "string" ? value.trim() : "";
+
+const normalizeAuthPhone = (value: string) => value.replace(/[^\d+]/g, "");
 
 /* ================= AUTH OPTIONS ================= */
 
@@ -147,13 +152,21 @@ export const authOptions: AuthOptions = {
       id: "worker-credentials",
       name: "Worker Credentials",
       credentials: {
+        identifier: { label: "Email or phone", type: "text" },
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
         try {
+          const rawIdentifier = normalizeAuthIdentifier(
+            credentials?.identifier ?? credentials?.email,
+          );
+          const normalizedPhone = normalizeAuthPhone(rawIdentifier);
+          const isEmailIdentifier = EMAIL_REGEX.test(rawIdentifier.toLowerCase());
           const payload = {
-            email: credentials?.email,
+            identifier: rawIdentifier,
+            email: isEmailIdentifier ? rawIdentifier.toLowerCase() : undefined,
+            phone: !isEmailIdentifier ? normalizedPhone || undefined : undefined,
             password: credentials?.password,
           };
 
@@ -193,6 +206,9 @@ export const authOptions: AuthOptions = {
               token: bearerToken,
             },
             "token",
+            {
+              includeBootstrapToken: false,
+            },
           );
         } catch (error) {
           console.error("Token login error:", error);
@@ -228,6 +244,9 @@ export const authOptions: AuthOptions = {
           const mappedUser = mapAuthPayloadToUser(
             authPayload,
             account?.provider ?? "google",
+            {
+              includeBootstrapToken: true,
+            },
           );
 
           if (!mappedUser) {

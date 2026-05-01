@@ -65,8 +65,8 @@ test("auth middleware keeps session-version revocation check", () => {
 
   assertContains(
     content,
-    "session_version",
-    "session version read from database",
+    "getUserSessionVersionIfAvailable",
+    "session version read helper",
   );
   assertContains(
     content,

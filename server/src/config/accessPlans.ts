@@ -12,7 +12,8 @@ export const ACCESS_PLANS: Record<AccessPlanId, AccessPlanConfig> = {
   pro: {
     id: "pro",
     name: "Pro",
-    description: "Unlimited billing with smart suggestions and branded invoices.",
+    description:
+      "Unlimited billing, worker management, smart suggestions, and branded invoices.",
     amounts: {
       monthly: 499,
       yearly: 4790,
@@ -21,7 +22,7 @@ export const ACCESS_PLANS: Record<AccessPlanId, AccessPlanConfig> = {
   "pro-plus": {
     id: "pro-plus",
     name: "Pro Plus",
-    description: "Advanced analytics, staff access, and premium controls.",
+    description: "Advanced analytics, exports, and premium operational controls.",
     amounts: {
       monthly: 999,
       yearly: 9590,

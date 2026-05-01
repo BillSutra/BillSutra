@@ -7,11 +7,12 @@ import { calculateTotals } from "../../utils/calculateTotals.js";
 import type { InvoiceCalcItem } from "../../utils/calculateTotals.js";
 import { generateInvoiceNumber } from "../../utils/generateInvoiceNumber.js";
 import { normalizeTaxMode } from "../../utils/invoiceCalculations.js";
-import { launchPuppeteerBrowser } from "../../lib/launchPuppeteerBrowser.js";
+import { withPuppeteerPage } from "../../lib/launchPuppeteerBrowser.js";
 import {
   buildPublicInvoiceReference,
   buildPublicInvoiceUrl,
 } from "../../lib/appUrls.js";
+import { maybeDecryptSensitiveValue } from "../../lib/fieldEncryption.js";
 import { renderPublicInvoiceHtml } from "./publicInvoiceView.js";
 import {
   buildBusinessAddressLines,
@@ -50,11 +51,18 @@ const SALE_STATUS = {
   COMPLETED: "COMPLETED",
 } as const satisfies Record<string, SaleStatus>;
 
+const OVERDUE_SYNC_INTERVAL_MS = Number(
+  process.env.INVOICE_OVERDUE_SYNC_INTERVAL_MS ?? 60_000,
+);
+const overdueSyncByUser = new Map<number, number>();
+
 type ListInvoiceFilters = {
   status?: InvoiceStatus;
   clientId?: number;
   from?: Date;
   to?: Date;
+  page?: number;
+  limit?: number;
 };
 
 type InvoicePaymentStatusInput = "UNPAID" | "PARTIALLY_PAID" | "PAID";
@@ -142,6 +150,11 @@ const invoicePaymentSelect = {
   provider: true,
   transaction_id: true,
   reference: true,
+  notes: true,
+  cheque_number: true,
+  bank_name: true,
+  deposit_date: true,
+  verified_by: true,
   paid_at: true,
   created_at: true,
 } satisfies Prisma.PaymentSelect;
@@ -156,6 +169,10 @@ const invoiceInclude = {
 
 type PublicInvoiceRecord = Prisma.InvoiceGetPayload<{
   include: typeof publicInvoiceInclude;
+}>;
+
+type InvoicePaymentRecord = Prisma.PaymentGetPayload<{
+  select: typeof invoicePaymentSelect;
 }>;
 
 type CustomerInvoiceProfile = {
@@ -639,6 +656,22 @@ const formatDate = (value: Date | null | undefined) => {
   });
 };
 
+const serializeInvoicePaymentRecord = (payment: InvoicePaymentRecord) => ({
+  ...payment,
+  transaction_id: maybeDecryptSensitiveValue(payment.transaction_id),
+  utrNumber: maybeDecryptSensitiveValue(payment.transaction_id),
+  reference: maybeDecryptSensitiveValue(payment.reference),
+  notes: payment.notes ?? null,
+  chequeNumber: payment.cheque_number ?? null,
+  bankName: payment.bank_name ?? null,
+  depositDate: payment.deposit_date
+    ? new Date(payment.deposit_date).toISOString()
+    : null,
+  verifiedBy: payment.verified_by ?? null,
+  paid_at: payment.paid_at ? new Date(payment.paid_at).toISOString() : null,
+  created_at: new Date(payment.created_at).toISOString(),
+});
+
 const attachInvoiceGstMetadata = async <
   T extends
     | (Prisma.InvoiceGetPayload<{ include: typeof invoiceInclude }> & {
@@ -683,6 +716,7 @@ const attachInvoiceGstMetadata = async <
     grand_total: invoiceRow?.grand_total ?? null,
     totalPaid: paymentSnapshot.paidAmount,
     computedStatus: paymentSnapshot.dynamicPaymentStatus,
+    payments: invoice.payments.map(serializeInvoicePaymentRecord),
     items: invoice.items.map((item) => {
       const meta = itemMetaById.get(item.id);
       return {
@@ -696,6 +730,97 @@ const attachInvoiceGstMetadata = async <
       };
     }),
   } as T;
+};
+
+const attachInvoiceGstMetadataBatch = async <
+  T extends Array<
+    Prisma.InvoiceGetPayload<{ include: typeof invoiceInclude }> & {
+      [key: string]: unknown;
+    }
+  >,
+>(
+  invoices: T,
+) => {
+  if (invoices.length === 0) {
+    return invoices;
+  }
+
+  const invoiceIds = invoices.map((invoice) => invoice.id);
+  const [invoiceRows, itemRows] = await Promise.all([
+    prisma.$queryRaw<InvoiceGstMetadataRow[]>(Prisma.sql`
+      SELECT id, total_base, total_cgst, total_sgst, total_igst, grand_total
+      FROM "invoices"
+      WHERE id IN (${Prisma.join(invoiceIds)})
+    `),
+    prisma.$queryRaw<
+      Array<
+        InvoiceItemGstMetadataRow & {
+          invoice_id: number;
+        }
+      >
+    >(Prisma.sql`
+      SELECT
+        id,
+        invoice_id,
+        gst_type,
+        base_amount,
+        gst_amount,
+        cgst_amount,
+        sgst_amount,
+        igst_amount
+      FROM "invoice_items"
+      WHERE invoice_id IN (${Prisma.join(invoiceIds)})
+    `),
+  ]);
+
+  const invoiceMetaById = new Map(invoiceRows.map((row) => [row.id, row]));
+  const itemMetaByInvoiceId = new Map<
+    number,
+    Map<number, InvoiceItemGstMetadataRow>
+  >();
+
+  itemRows.forEach((row) => {
+    const perInvoice =
+      itemMetaByInvoiceId.get(row.invoice_id) ??
+      new Map<number, InvoiceItemGstMetadataRow>();
+    perInvoice.set(row.id, row);
+    itemMetaByInvoiceId.set(row.invoice_id, perInvoice);
+  });
+
+  return invoices.map((invoice) => {
+    const paymentSnapshot = computeInvoicePaymentSnapshotFromPayments({
+      total: invoice.total,
+      status: invoice.status,
+      dueDate: "due_date" in invoice ? invoice.due_date : null,
+      payments: invoice.payments,
+    });
+    const invoiceMeta = invoiceMetaById.get(invoice.id);
+    const itemMetaById = itemMetaByInvoiceId.get(invoice.id) ?? new Map();
+
+    return {
+      ...invoice,
+      total_base: invoiceMeta?.total_base ?? null,
+      total_cgst: invoiceMeta?.total_cgst ?? null,
+      total_sgst: invoiceMeta?.total_sgst ?? null,
+      total_igst: invoiceMeta?.total_igst ?? null,
+      grand_total: invoiceMeta?.grand_total ?? null,
+      totalPaid: paymentSnapshot.paidAmount,
+      computedStatus: paymentSnapshot.dynamicPaymentStatus,
+      payments: invoice.payments.map(serializeInvoicePaymentRecord),
+      items: invoice.items.map((item) => {
+        const meta = itemMetaById.get(item.id);
+        return {
+          ...item,
+          gst_type: meta?.gst_type ?? null,
+          base_amount: meta?.base_amount ?? null,
+          gst_amount: meta?.gst_amount ?? null,
+          cgst_amount: meta?.cgst_amount ?? null,
+          sgst_amount: meta?.sgst_amount ?? null,
+          igst_amount: meta?.igst_amount ?? null,
+        };
+      }),
+    };
+  }) as unknown as T;
 };
 
 const escapeHtml = (text: unknown) =>
@@ -1373,6 +1498,15 @@ const buildInvoicePdfHtml = (
 };
 
 const syncOverdueInvoices = async (userId: number) => {
+  const lastSyncedAt = overdueSyncByUser.get(userId) ?? 0;
+  if (
+    OVERDUE_SYNC_INTERVAL_MS > 0 &&
+    Date.now() - lastSyncedAt < OVERDUE_SYNC_INTERVAL_MS
+  ) {
+    return;
+  }
+
+  overdueSyncByUser.set(userId, Date.now());
   const now = new Date();
 
   await prisma.invoice.updateMany({
@@ -1564,13 +1698,39 @@ export const listInvoices = async (
     };
   }
 
+  const orderBy = { createdAt: "desc" } as const;
+
+  if (filters.page || filters.limit) {
+    const page = Math.max(1, Math.trunc(filters.page ?? 1));
+    const limit = Math.min(100, Math.max(1, Math.trunc(filters.limit ?? 20)));
+    const skip = (page - 1) * limit;
+    const [items, total] = await prisma.$transaction([
+      prisma.invoice.findMany({
+        where,
+        include: invoiceInclude,
+        orderBy,
+        skip,
+        take: limit,
+      }),
+      prisma.invoice.count({ where }),
+    ]);
+
+    return {
+      items: await attachInvoiceGstMetadataBatch(items),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
   const invoices = await prisma.invoice.findMany({
     where,
     include: invoiceInclude,
-    orderBy: { createdAt: "desc" },
+    orderBy,
   });
 
-  return Promise.all(invoices.map((invoice) => attachInvoiceGstMetadata(invoice)));
+  return attachInvoiceGstMetadataBatch(invoices);
 };
 
 export const getInvoiceBootstrap = async (userId: number) => {
@@ -1975,6 +2135,13 @@ export const createInvoice = async (
         warehouseId: item.warehouseId,
         triggeredBy: "invoice",
         referenceId: result.invoice.id,
+        context: {
+          userId,
+          metadata: {
+            invoiceId: result.invoice.id,
+            source: "invoice.create",
+          },
+        },
       });
 
       if (!queueResult.queued) {
@@ -2339,10 +2506,7 @@ export const generateInvoicePdf = async (userId: number, id: number) => {
 };
 
 const renderInvoicePdfBuffer = async (html: string) => {
-  const browser = await launchPuppeteerBrowser();
-
-  try {
-    const page = await browser.newPage();
+  return withPuppeteerPage(async (page) => {
     await page.setContent(html, { waitUntil: "networkidle0" });
 
     const pdfBuffer = await page.pdf({
@@ -2357,9 +2521,7 @@ const renderInvoicePdfBuffer = async (html: string) => {
     });
 
     return Buffer.from(pdfBuffer);
-  } finally {
-    await browser.close();
-  }
+  });
 };
 
 export const generatePublicInvoicePdf = async (reference: string) => {

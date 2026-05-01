@@ -1,4 +1,12 @@
-import prisma from "../config/db.config.js";
+import { Prisma } from "@prisma/client";
+import prismaClient from "../config/db.config.js";
+
+// These startup compatibility statements are static SQL only.
+// Route them through Prisma's safe raw executor so we avoid the real
+// $executeRawUnsafe path while keeping the existing call sites compact.
+const prisma = {
+  $executeRawUnsafe: (query: string) => prismaClient.$executeRaw(Prisma.raw(query)),
+};
 
 let extraEntriesTablePromise: Promise<void> | null = null;
 let faceDataTablePromise: Promise<void> | null = null;
@@ -6,6 +14,10 @@ let schemaCompatibilityPromise: Promise<void> | null = null;
 let userPreferenceCompatibilityPromise: Promise<void> | null = null;
 let emailLogCompatibilityPromise: Promise<void> | null = null;
 let invoiceTemplateCompatibilityPromise: Promise<void> | null = null;
+let modernAuthCompatibilityPromise: Promise<void> | null = null;
+let analyticsDailyStatsCompatibilityPromise: Promise<void> | null = null;
+let notificationSchemaCompatibilityPromise: Promise<void> | null = null;
+let paymentSchemaCompatibilityPromise: Promise<void> | null = null;
 
 const ensureInvoiceDiscountMetadataColumnsInternal = async () => {
   await prisma.$executeRawUnsafe(`
@@ -231,6 +243,63 @@ const ensureExtraEntriesTableInternal = async () => {
   `);
 };
 
+const ensurePaymentSchemaCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      BEGIN
+        ALTER TYPE "PaymentMethod" ADD VALUE IF NOT EXISTS 'NEFT';
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END;
+      BEGIN
+        ALTER TYPE "PaymentMethod" ADD VALUE IF NOT EXISTS 'RTGS';
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END;
+      BEGIN
+        ALTER TYPE "PaymentMethod" ADD VALUE IF NOT EXISTS 'IMPS';
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END;
+      BEGIN
+        ALTER TYPE "PaymentMethod" ADD VALUE IF NOT EXISTS 'WALLET';
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END;
+    END $$;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "payments"
+      ADD COLUMN IF NOT EXISTS "notes" VARCHAR(500),
+      ADD COLUMN IF NOT EXISTS "cheque_number" VARCHAR(64),
+      ADD COLUMN IF NOT EXISTS "bank_name" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "deposit_date" TIMESTAMP(3),
+      ADD COLUMN IF NOT EXISTS "proof_url" VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS "proof_file_name" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "proof_file_path" VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS "proof_file_id" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "proof_mime_type" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "proof_size" INTEGER,
+      ADD COLUMN IF NOT EXISTS "proof_uploaded_at" TIMESTAMP(3),
+      ADD COLUMN IF NOT EXISTS "proof_uploaded_by" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "verified_by" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE "payments"
+    SET "updated_at" = COALESCE("updated_at", "created_at", CURRENT_TIMESTAMP)
+    WHERE "updated_at" IS NULL;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "payments_invoice_id_paid_at_idx"
+    ON "payments"("invoice_id", "paid_at");
+  `);
+};
+
 const ensureFaceDataTableInternal = async () => {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "face_data" (
@@ -298,6 +367,119 @@ const ensureFaceDataTableInternal = async () => {
       ) THEN
         ALTER TABLE "face_data"
         ADD CONSTRAINT "face_data_user_id_fkey"
+        FOREIGN KEY ("user_id") REFERENCES "users"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+};
+
+const ensureNotificationSchemaCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type
+        WHERE typname = 'NotificationType'
+      ) THEN
+        CREATE TYPE "NotificationType" AS ENUM (
+          'PAYMENT',
+          'INVENTORY',
+          'CUSTOMER',
+          'SUBSCRIPTION',
+          'WORKER',
+          'SECURITY',
+          'SYSTEM'
+        );
+      ELSE
+        BEGIN
+          ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'SECURITY';
+        EXCEPTION
+          WHEN duplicate_object THEN NULL;
+        END;
+
+        BEGIN
+          ALTER TYPE "NotificationType" ADD VALUE IF NOT EXISTS 'SYSTEM';
+        EXCEPTION
+          WHEN duplicate_object THEN NULL;
+        END;
+      END IF;
+    END $$;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "notifications" (
+      "id" VARCHAR(191) NOT NULL,
+      "user_id" INTEGER NOT NULL,
+      "business_id" VARCHAR(191) NOT NULL,
+      "type" "NotificationType" NOT NULL,
+      "title" VARCHAR(191),
+      "message" VARCHAR(500) NOT NULL,
+      "action_url" VARCHAR(255),
+      "priority" VARCHAR(16) NOT NULL DEFAULT 'info',
+      "is_read" BOOLEAN NOT NULL DEFAULT false,
+      "reference_key" VARCHAR(191),
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+      CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "notifications"
+      ADD COLUMN IF NOT EXISTS "title" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "action_url" VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS "priority" VARCHAR(16) NOT NULL DEFAULT 'info';
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    UPDATE "notifications"
+    SET "priority" = COALESCE(NULLIF("priority", ''), 'info');
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "notifications_user_id_priority_created_at_idx"
+    ON "notifications"("user_id", "priority", "created_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "notifications_user_id_created_at_idx"
+    ON "notifications"("user_id", "created_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "notifications_user_id_is_read_created_at_idx"
+    ON "notifications"("user_id", "is_read", "created_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "notifications_user_id_type_created_at_idx"
+    ON "notifications"("user_id", "type", "created_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "notifications_business_id_created_at_idx"
+    ON "notifications"("business_id", "created_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "notifications_business_id_reference_key_key"
+    ON "notifications"("business_id", "reference_key");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'notifications_user_id_fkey'
+          AND table_name = 'notifications'
+      ) THEN
+        ALTER TABLE "notifications"
+        ADD CONSTRAINT "notifications_user_id_fkey"
         FOREIGN KEY ("user_id") REFERENCES "users"("id")
         ON DELETE CASCADE ON UPDATE CASCADE;
       END IF;
@@ -450,6 +632,75 @@ const ensureInvoiceTemplateCompatibilityInternal = async () => {
   `);
 };
 
+const ensureModernAuthCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "users"
+      ADD COLUMN IF NOT EXISTS "email_verified_at" TIMESTAMP(3);
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM pg_type
+        WHERE typname = 'OtpPurpose'
+      ) THEN
+        CREATE TYPE "OtpPurpose" AS ENUM ('LOGIN', 'EMAIL_VERIFICATION');
+      ELSE
+        ALTER TYPE "OtpPurpose" ADD VALUE IF NOT EXISTS 'EMAIL_VERIFICATION';
+      END IF;
+    END $$;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "email_verification_tokens" (
+      "id" VARCHAR(191) NOT NULL,
+      "user_id" INTEGER NOT NULL,
+      "token_hash" VARCHAR(191) NOT NULL,
+      "expires_at" TIMESTAMP(3) NOT NULL,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+      CONSTRAINT "email_verification_tokens_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "email_verification_tokens"
+      ADD COLUMN IF NOT EXISTS "user_id" INTEGER,
+      ADD COLUMN IF NOT EXISTS "token_hash" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "expires_at" TIMESTAMP(3),
+      ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "email_verification_tokens_token_hash_key"
+    ON "email_verification_tokens"("token_hash");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "email_verification_tokens_user_id_expires_at_idx"
+    ON "email_verification_tokens"("user_id", "expires_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'email_verification_tokens_user_id_fkey'
+          AND table_name = 'email_verification_tokens'
+      ) THEN
+        ALTER TABLE "email_verification_tokens"
+        ADD CONSTRAINT "email_verification_tokens_user_id_fkey"
+        FOREIGN KEY ("user_id") REFERENCES "users"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+};
+
 const ensureBillingInventoryCompatibilityInternal = async () => {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "user_preferences"
@@ -480,6 +731,98 @@ const ensureBillingInventoryCompatibilityInternal = async () => {
   await prisma.$executeRawUnsafe(`
     ALTER TABLE "products"
       ADD COLUMN IF NOT EXISTS "last_auto_corrected_at" TIMESTAMP(3);
+  `);
+};
+
+const ensureAnalyticsDailyStatsCompatibilityInternal = async () => {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "analytics_daily_stats" (
+      "id" SERIAL NOT NULL,
+      "user_id" INTEGER NOT NULL,
+      "date" DATE NOT NULL,
+      "booked_sales" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "collected_sales" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "pending_sales" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "sale_count" INTEGER NOT NULL DEFAULT 0,
+      "invoice_billed" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "invoice_count" INTEGER NOT NULL DEFAULT 0,
+      "invoice_collections" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "invoice_pending" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "booked_purchases" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "cash_out_purchases" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "pending_purchases" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "purchase_count" INTEGER NOT NULL DEFAULT 0,
+      "expenses" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "extra_income" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "extra_expense" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "extra_loss" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "extra_investment" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      "customers_created" INTEGER NOT NULL DEFAULT 0,
+      "suppliers_created" INTEGER NOT NULL DEFAULT 0,
+      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+      CONSTRAINT "analytics_daily_stats_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    ALTER TABLE "analytics_daily_stats"
+      ADD COLUMN IF NOT EXISTS "user_id" INTEGER,
+      ADD COLUMN IF NOT EXISTS "date" DATE,
+      ADD COLUMN IF NOT EXISTS "booked_sales" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "collected_sales" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "pending_sales" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "sale_count" INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "invoice_billed" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "invoice_count" INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "invoice_collections" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "invoice_pending" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "booked_purchases" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "cash_out_purchases" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "pending_purchases" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "purchase_count" INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "expenses" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "extra_income" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "extra_expense" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "extra_loss" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "extra_investment" DECIMAL(14,2) NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "customers_created" INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "suppliers_created" INTEGER NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "analytics_daily_stats_user_id_date_key"
+    ON "analytics_daily_stats"("user_id", "date");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "analytics_daily_stats_user_id_date_idx"
+    ON "analytics_daily_stats"("user_id", "date");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE INDEX IF NOT EXISTS "analytics_daily_stats_user_id_updated_at_idx"
+    ON "analytics_daily_stats"("user_id", "updated_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.table_constraints
+        WHERE constraint_name = 'analytics_daily_stats_user_id_fkey'
+          AND table_name = 'analytics_daily_stats'
+      ) THEN
+        ALTER TABLE "analytics_daily_stats"
+        ADD CONSTRAINT "analytics_daily_stats_user_id_fkey"
+        FOREIGN KEY ("user_id") REFERENCES "users"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
   `);
 };
 
@@ -613,15 +956,77 @@ export const ensureInvoiceTemplateCompatibility = async () => {
   await invoiceTemplateCompatibilityPromise;
 };
 
+export const ensureModernAuthCompatibility = async () => {
+  if (!modernAuthCompatibilityPromise) {
+    modernAuthCompatibilityPromise = ensureModernAuthCompatibilityInternal().catch(
+      (error) => {
+        modernAuthCompatibilityPromise = null;
+        throw error;
+      },
+    );
+  }
+
+  await modernAuthCompatibilityPromise;
+};
+
+export const ensureAnalyticsDailyStatsTable = async () => {
+  if (!analyticsDailyStatsCompatibilityPromise) {
+    analyticsDailyStatsCompatibilityPromise =
+      ensureAnalyticsDailyStatsCompatibilityInternal().catch((error) => {
+        analyticsDailyStatsCompatibilityPromise = null;
+        throw error;
+      });
+  }
+
+  await analyticsDailyStatsCompatibilityPromise;
+};
+
+export const ensureNotificationSchemaCompatibility = async () => {
+  if (!notificationSchemaCompatibilityPromise) {
+    notificationSchemaCompatibilityPromise =
+      ensureNotificationSchemaCompatibilityInternal().catch((error) => {
+        notificationSchemaCompatibilityPromise = null;
+        throw error;
+      });
+  }
+
+  await notificationSchemaCompatibilityPromise;
+};
+
+export const ensurePaymentSchemaCompatibility = async () => {
+  if (!paymentSchemaCompatibilityPromise) {
+    paymentSchemaCompatibilityPromise =
+      ensurePaymentSchemaCompatibilityInternal().catch((error) => {
+        paymentSchemaCompatibilityPromise = null;
+        throw error;
+      });
+  }
+
+  await paymentSchemaCompatibilityPromise;
+};
+
 export const ensureSchemaCompatibility = async () => {
   if (!schemaCompatibilityPromise) {
     schemaCompatibilityPromise = (async () => {
+      await ensureModernAuthCompatibility();
       await ensureInvoiceDiscountMetadataColumnsInternal();
+      await ensurePaymentSchemaCompatibility();
       await ensureBillingInventoryCompatibilityInternal();
       await ensureInventoryIssueCompatibilityInternal();
       await ensureExtraEntriesTable();
+      try {
+        await ensureAnalyticsDailyStatsTable();
+      } catch (error) {
+        console.warn(
+          "[schema.compatibility] analytics_daily_stats unavailable; dashboard analytics will use fallback mode",
+          {
+            message: error instanceof Error ? error.message : String(error),
+          },
+        );
+      }
       await ensureFaceDataTable();
       await ensureUserPreferenceCompatibility();
+      await ensureNotificationSchemaCompatibility();
       await ensureEmailLogCompatibility();
       await ensureInvoiceTemplateCompatibility();
     })().catch((error) => {

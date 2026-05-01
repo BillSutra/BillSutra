@@ -8,6 +8,10 @@ import {
   deleteExtraEntry,
 } from "../services/extraEntry.service.js";
 import type { EntryType } from "@prisma/client";
+import { emitDashboardUpdate } from "../services/dashboardRealtime.js";
+
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
 
 const parsePagination = (query: Record<string, unknown>) => {
   const page = Math.max(1, Number(query.page) || 1);
@@ -35,7 +39,7 @@ const index = async (req: Request, res: Response) => {
 
 const show = async (req: Request, res: Response) => {
   const userId = (req as Request & { userId?: number }).userId!;
-  const { id } = req.params;
+  const id = readRouteParam(req.params.id) ?? "";
 
   const entry = await getExtraEntryById({ id, userId });
   if (!entry) return sendResponse(res, 404, { message: "Entry not found" });
@@ -69,12 +73,14 @@ const store = async (req: Request, res: Response) => {
     notes: notes?.trim() || null,
   });
 
+  emitDashboardUpdate({ userId, source: "extra-entry:create" });
+
   return sendResponse(res, 201, { data: entry });
 };
 
 const update = async (req: Request, res: Response) => {
   const userId = (req as Request & { userId?: number }).userId!;
-  const { id } = req.params;
+  const id = readRouteParam(req.params.id) ?? "";
   const { title, amount, type, date, notes } = req.body;
 
   if (title !== undefined && (typeof title !== "string" || title.trim().length === 0)) {
@@ -102,15 +108,19 @@ const update = async (req: Request, res: Response) => {
 
   if (!entry) return sendResponse(res, 404, { message: "Entry not found" });
 
+  emitDashboardUpdate({ userId, source: "extra-entry:update" });
+
   return sendResponse(res, 200, { data: entry });
 };
 
 const destroy = async (req: Request, res: Response) => {
   const userId = (req as Request & { userId?: number }).userId!;
-  const { id } = req.params;
+  const id = readRouteParam(req.params.id) ?? "";
 
   const deleted = await deleteExtraEntry({ id, userId });
   if (!deleted) return sendResponse(res, 404, { message: "Entry not found" });
+
+  emitDashboardUpdate({ userId, source: "extra-entry:delete" });
 
   return sendResponse(res, 200, { data: { deleted: true } });
 };

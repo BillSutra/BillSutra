@@ -7,7 +7,7 @@ const Page = async () => {
   const session: CustomSession | null = await getServerSession(authOptions);
 
   if (!session?.user) {
-    redirect("/login");
+    redirect("/worker/login");
   }
 
   if (session.user.accountType !== "WORKER") {

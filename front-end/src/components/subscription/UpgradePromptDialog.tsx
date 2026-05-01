@@ -58,7 +58,7 @@ const UpgradePromptDialog = () => {
 
         <div className="mt-6 flex flex-col gap-3">
           <Button asChild className="gap-2">
-            <Link href={`/payments?plan=${data?.requiredPlan || "pro"}`}>
+            <Link href={`/payments/access?plan=${data?.requiredPlan || "pro"}`}>
               {data?.code === "PLAN_LIMIT_REACHED"
                 ? "Upgrade Now"
                 : "See plans"}

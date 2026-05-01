@@ -7,16 +7,16 @@ import {
   sendPlanApprovedEmail,
   sendWelcomeEmail,
 } from "../../services/email.service.js";
-import { sendVerificationEmail } from "../../services/emailVerification.service.js";
+import { sendFreshVerificationEmail } from "../../services/emailVerification.service.js";
 import {
   sendLowStockAlertEmail,
   sendPaymentReceivedEmail,
   sendWeeklyReportEmail,
 } from "../../services/notificationEmail.service.js";
-import type { DefaultQueueJobHandlerMap } from "../types.js";
+import type { AppQueueJobHandlerMap } from "../types.js";
 
 export const emailJobHandlers: Pick<
-  DefaultQueueJobHandlerMap,
+  AppQueueJobHandlerMap,
   | "sendInvoiceEmail"
   | "sendInvoiceReminderEmail"
   | "sendWelcomeEmail"
@@ -29,47 +29,47 @@ export const emailJobHandlers: Pick<
 > = {
   sendWelcomeEmail: async (job) =>
     sendWelcomeEmail({
-      userId: job.data.userId,
+      userId: job.data.context.userId as number,
     }),
   sendEmailVerificationEmail: async (job) =>
-    sendVerificationEmail({
-      userId: job.data.userId,
-      rawToken: job.data.rawToken,
+    sendFreshVerificationEmail({
+      userId: job.data.context.userId as number,
+      reason: job.data.payload.reason,
     }),
   sendPlanApprovedEmail: async (job) =>
     sendPlanApprovedEmail({
-      paymentId: job.data.paymentId,
+      paymentId: job.data.payload.paymentId,
     }),
   sendMonthlySalesReportEmail: async (job) =>
     sendMonthlyReportEmail({
-      userId: job.data.userId,
-      monthKey: job.data.monthKey,
+      userId: job.data.context.userId as number,
+      monthKey: job.data.payload.monthKey,
     }),
   sendPaymentReceivedEmail: async (job) =>
     sendPaymentReceivedEmail({
-      paymentId: job.data.paymentId,
+      paymentId: job.data.payload.paymentId,
     }),
   sendWeeklyReportEmail: async (job) =>
     sendWeeklyReportEmail({
-      userId: job.data.userId,
-      weekKey: job.data.weekKey,
+      userId: job.data.context.userId as number,
+      weekKey: job.data.payload.weekKey,
     }),
   sendLowStockAlertEmail: async (job) =>
     sendLowStockAlertEmail({
-      userId: job.data.userId,
+      userId: job.data.context.userId as number,
     }),
   sendInvoiceEmail: async (job) =>
     deliverInvoiceEmail({
-      userId: job.data.userId,
-      invoiceId: job.data.invoiceId,
-      requestedEmail: job.data.requestedEmail,
+      userId: job.data.context.userId as number,
+      invoiceId: job.data.payload.invoiceId,
+      requestedEmail: job.data.payload.requestedEmail,
     }),
   sendInvoiceReminderEmail: async (job) =>
     deliverInvoiceReminderEmail({
-      userId: job.data.userId,
-      invoiceId: job.data.invoiceId,
-      requestedEmail: job.data.requestedEmail,
-      reminderStage: job.data.reminderStage,
-      daysUntilDue: job.data.daysUntilDue,
+      userId: job.data.context.userId as number,
+      invoiceId: job.data.payload.invoiceId,
+      requestedEmail: job.data.payload.requestedEmail,
+      reminderStage: job.data.payload.reminderStage,
+      daysUntilDue: job.data.payload.daysUntilDue,
     }),
 };

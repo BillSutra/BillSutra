@@ -1,4 +1,4 @@
-import { Router, type Request } from "express";
+import { Router, type NextFunction, type Request, type Response } from "express";
 import AuthController from "../controllers/AuthController.js";
 import AdminController from "../controllers/AdminController.js";
 import CustomersController from "../controllers/CustomersController.js";
@@ -31,6 +31,7 @@ import NotificationsController from "../controllers/NotificationsController.js";
 import InventoryInsightsController from "../controllers/InventoryInsightsController.js";
 import ExtraEntryController from "../controllers/ExtraEntryController.js";
 import MailController from "../controllers/MailController.js";
+import QueueJobsController from "../controllers/QueueJobsController.js";
 import AuthMiddleware from "../middlewares/AuthMIddleware.js";
 import AdminAuthMiddleware from "../middlewares/AdminAuthMiddleware.js";
 import AuthSseMiddleware from "../middlewares/AuthSseMiddleware.js";
@@ -42,7 +43,11 @@ import { paymentProofUploadMiddleware } from "../middlewares/paymentProof.upload
 import {
   adminPaymentRateLimiter,
   authRateLimiter,
+  exportRateLimiter,
+  loginRateLimiter,
+  otpResendRateLimiter,
   paymentRateLimiter,
+  uploadRateLimiter,
 } from "../middlewares/rateLimit.middleware.js";
 import validate from "../middlewares/validate.js";
 import {
@@ -64,10 +69,13 @@ import {
   authLoginSchema,
   authOtpSendSchema,
   authOtpVerifySchema,
+  authResendVerificationOtpSchema,
   authRegisterSchema,
   authForgotSchema,
   authResetSchema,
+  authVerifyEmailOtpSchema,
   authVerifyEmailQuerySchema,
+  authSessionBootstrapSchema,
   passkeyAuthenticateOptionsSchema,
   passkeyAuthenticateVerifySchema,
   passkeyRegisterOptionsSchema,
@@ -89,6 +97,7 @@ import {
   productCreateSchema,
   productUpdateSchema,
   paymentCreateSchema,
+  paymentTransactionReferenceCheckSchema,
   paymentUpdateSchema,
   purchaseCreateSchema,
   purchaseUpdateSchema,
@@ -107,6 +116,8 @@ import {
   exportResourceParamSchema,
   sendTestEmailSchema,
   settingsPreferencesUpsertSchema,
+  notificationsQuerySchema,
+  notificationReadStateSchema,
 } from "../validations/apiValidations.js";
 import invoiceRoutes from "../modules/invoice/invoice.routes.js";
 import importRoutes from "../modules/import/import.routes.js";
@@ -121,6 +132,25 @@ import faceRecognitionRoutes from "./faceRecognition.js";
 import * as FaceRecognitionController from "../controllers/FaceRecognitionController.js";
 
 const router = Router();
+const authDiagnosticsEnabled =
+  process.env.AUTH_DIAGNOSTICS_ENABLED === "true" ||
+  (process.env.NODE_ENV !== "production" &&
+    process.env.AUTH_DIAGNOSTICS_ENABLED !== "false");
+
+const traceAuthRoute =
+  (label: string) =>
+  (req: Request, _res: Response, next: NextFunction) => {
+    if (authDiagnosticsEnabled) {
+      console.info("[auth.diagnostic] route_middleware", {
+        label,
+        method: req.method,
+        path: req.path,
+      });
+    }
+
+    next();
+  };
+
 const readRouteParam = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
 
@@ -164,7 +194,9 @@ router.post(
   validate({ body: adminLoginSchema }),
   AdminController.login,
 );
-router.post("/admin/logout", AdminAuthMiddleware, AdminController.logout);
+router.post("/admin/refresh", AdminController.refresh);
+router.get("/admin/session", AdminAuthMiddleware, AdminController.session);
+router.post("/admin/logout", AdminController.logout);
 router.get("/admin/summary", AdminAuthMiddleware, AdminController.summary);
 router.get(
   "/admin/businesses",
@@ -219,6 +251,12 @@ router.patch(
 
 // Auth routes
 router.post(
+  "/auth/signup",
+  authRateLimiter,
+  validate({ body: authRegisterSchema }),
+  AuthController.signup,
+);
+router.post(
   "/auth/login",
   authRateLimiter,
   validate({ body: authOauthSchema }),
@@ -226,7 +264,7 @@ router.post(
 );
 router.post(
   "/auth/logincheck",
-  authRateLimiter,
+  loginRateLimiter,
   validate({ body: authLoginSchema }),
   AuthController.loginCheck,
 );
@@ -236,6 +274,7 @@ router.post(
   validate({ body: authRegisterSchema }),
   AuthController.register,
 );
+router.get("/auth/csrf", authRateLimiter, AuthController.csrfToken);
 router.get(
   "/auth/verify-email",
   authRateLimiter,
@@ -243,18 +282,31 @@ router.get(
   AuthController.verifyEmail,
 );
 router.post(
+  "/auth/verify-email",
+  authRateLimiter,
+  validate({ body: authVerifyEmailOtpSchema }),
+  AuthController.verifyEmailOtp,
+);
+router.post(
   "/auth/resend-verification",
   authRateLimiter,
   AuthMiddleware,
   AuthController.resendVerification,
 );
+router.post(
+  "/auth/resend-otp",
+  otpResendRateLimiter,
+  validate({ body: authResendVerificationOtpSchema }),
+  AuthController.resendVerificationOtp,
+);
 router.post("/auth/refresh", authRateLimiter, AuthController.refresh);
 router.post(
   "/auth/session/bootstrap",
   authRateLimiter,
+  validate({ body: authSessionBootstrapSchema }),
   AuthController.bootstrapSecureSession,
 );
-router.post("/auth/logout", AuthController.logout);
+router.post("/auth/logout", authRateLimiter, AuthController.logout);
 router.post(
   "/auth/forgot-password",
   validate({ body: authForgotSchema }),
@@ -262,7 +314,7 @@ router.post(
 );
 router.post(
   "/auth/worker/login",
-  authRateLimiter,
+  loginRateLimiter,
   validate({ body: workerLoginSchema }),
   AuthController.workerLogin,
 );
@@ -281,12 +333,14 @@ router.post(
 router.post(
   "/auth/passkeys/authenticate/options",
   authRateLimiter,
+  traceAuthRoute("passkeys_authenticate_options"),
   validate({ body: passkeyAuthenticateOptionsSchema }),
   AuthController.passkeyAuthenticateOptions,
 );
 router.post(
   "/auth/passkeys/authenticate/verify",
   authRateLimiter,
+  traceAuthRoute("passkeys_authenticate_verify"),
   validate({ body: passkeyAuthenticateVerifySchema }),
   AuthController.passkeyAuthenticateVerify,
 );
@@ -417,6 +471,12 @@ router.delete(
 
 // Users
 router.get("/users/me", AuthMiddleware, UsersController.me);
+router.get(
+  "/jobs/:id",
+  AuthMiddleware,
+  validate({ params: stringIdParamSchema }),
+  QueueJobsController.show,
+);
 router.put(
   "/users/me",
   AuthMiddleware,
@@ -524,12 +584,14 @@ router.get("/logo", AuthMiddleware, LogoController.get);
 router.post(
   "/logo",
   AuthMiddleware,
+  uploadRateLimiter,
   logoUploadMiddleware,
   LogoController.upload,
 );
 router.put(
   "/logo",
   AuthMiddleware,
+  uploadRateLimiter,
   logoUploadMiddleware,
   LogoController.update,
 );
@@ -538,6 +600,7 @@ router.delete("/logo", AuthMiddleware, LogoController.remove);
 router.post(
   "/exports/:resource/preview",
   AuthMiddleware,
+  exportRateLimiter,
   RequireFeatureAccessMiddleware("DATA_EXPORT"),
   validate({
     params: exportResourceParamSchema,
@@ -549,6 +612,7 @@ router.post(
 router.post(
   "/exports/:resource",
   AuthMiddleware,
+  exportRateLimiter,
   RequireFeatureAccessMiddleware("DATA_EXPORT"),
   validate({ params: exportResourceParamSchema, body: exportRequestSchema }),
   ExportController.run,
@@ -803,6 +867,13 @@ router.get(
   AccessPaymentsController.status,
 );
 router.get(
+  "/payments/reference/check",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
+  validate({ query: paymentTransactionReferenceCheckSchema }),
+  PaymentsController.checkTransactionReference,
+);
+router.get(
   "/payments/:invoiceId",
   AuthMiddleware,
   RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
@@ -822,6 +893,30 @@ router.put(
   RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
   validate({ params: idParamSchema, body: paymentUpdateSchema }),
   PaymentsController.update,
+);
+router.delete(
+  "/payments/:id",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
+  validate({ params: idParamSchema }),
+  PaymentsController.destroy,
+);
+router.post(
+  "/payments/:id/proof",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
+  paymentRateLimiter,
+  uploadRateLimiter,
+  paymentProofUploadMiddleware,
+  validate({ params: idParamSchema }),
+  PaymentsController.uploadProof,
+);
+router.delete(
+  "/payments/:id/proof",
+  AuthMiddleware,
+  RequireFeatureAccessMiddleware("PAYMENT_TRACKING"),
+  validate({ params: idParamSchema }),
+  PaymentsController.deleteProof,
 );
 router.post(
   "/payments/access/razorpay/order",
@@ -845,6 +940,7 @@ router.post(
   "/payments/upload-proof",
   AuthMiddleware,
   paymentRateLimiter,
+  uploadRateLimiter,
   paymentProofUploadMiddleware,
   validate({ body: accessPaymentProofUploadSchema }),
   AccessPaymentsController.uploadProof,
@@ -853,6 +949,7 @@ router.post(
   "/submit-upi",
   AuthMiddleware,
   paymentRateLimiter,
+  uploadRateLimiter,
   paymentProofUploadMiddleware,
   validate({ body: accessUpiSubmitSchema }),
   AccessPaymentsController.submitUpi,
@@ -892,11 +989,30 @@ router.put(
   validate({ body: settingsPreferencesUpsertSchema }),
   SettingsController.savePreferences,
 );
-router.get("/notifications", AuthMiddleware, NotificationsController.index);
+router.get(
+  "/notifications",
+  AuthMiddleware,
+  validate({ query: notificationsQuerySchema }),
+  NotificationsController.index,
+);
+router.patch(
+  "/notifications/read-all",
+  AuthMiddleware,
+  NotificationsController.markAllRead,
+);
 router.post(
   "/notifications/read-all",
   AuthMiddleware,
   NotificationsController.markAllRead,
+);
+router.patch(
+  "/notifications/:id/read",
+  AuthMiddleware,
+  validate({
+    params: stringIdParamSchema,
+    body: notificationReadStateSchema,
+  }),
+  NotificationsController.markRead,
 );
 router.post(
   "/notifications/:id/read",
@@ -904,10 +1020,32 @@ router.post(
   validate({ params: stringIdParamSchema }),
   NotificationsController.markRead,
 );
+router.delete(
+  "/notifications/:id",
+  AuthMiddleware,
+  validate({ params: stringIdParamSchema }),
+  NotificationsController.destroy,
+);
 router.get(
   "/security/activity",
   AuthMiddleware,
   SettingsController.securityActivity,
+);
+router.get(
+  "/security/sessions",
+  AuthMiddleware,
+  SettingsController.securitySessions,
+);
+router.post(
+  "/security/logout-others",
+  AuthMiddleware,
+  SettingsController.logoutOthers,
+);
+router.delete(
+  "/security/sessions/:id",
+  AuthMiddleware,
+  validate({ params: stringIdParamSchema }),
+  SettingsController.revokeSession,
 );
 router.post(
   "/security/logout-all",
@@ -935,6 +1073,11 @@ router.get(
 router.get("/dashboard/stream", AuthSseMiddleware, DashboardController.stream);
 router.get("/dashboard/overview", AuthMiddleware, DashboardController.overview);
 router.get("/dashboard/metrics", AuthMiddleware, DashboardController.metrics);
+router.get(
+  "/dashboard/quick-insights",
+  AuthMiddleware,
+  DashboardController.quickInsights,
+);
 router.get("/dashboard/sales", AuthMiddleware, DashboardController.sales);
 router.get(
   "/dashboard/payment-methods",

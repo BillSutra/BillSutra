@@ -1,3 +1,9 @@
+import prisma from "../config/db.config.js";
+import {
+  getAnalyticsDailyStatsRange,
+  type AnalyticsDailyStatsRecord,
+} from "./analyticsDailyStats.service.js";
+
 const INVOICE_STATUS = {
   DRAFT: "DRAFT",
   SENT: "SENT",
@@ -10,8 +16,6 @@ const INVOICE_STATUS = {
 const SALE_STATUS = {
   COMPLETED: "COMPLETED",
 } as const;
-import prisma from "../config/db.config.js";
-import { fetchCashInflowSnapshot, getDailyExpenses } from "./dashboardAnalyticsService.js";
 
 type MonthPoint = {
   month: string;
@@ -253,50 +257,6 @@ const forecastMonthlyFromDailyAverage = (params: {
       value: roundMetric(value),
     };
   });
-};
-
-const mapPurchaseEntries = async (params: {
-  userId: number;
-  start: Date;
-  endExclusive: Date;
-}) => {
-  const purchases = await prisma.purchase.findMany({
-    where: {
-      user_id: params.userId,
-      paidAmount: { gt: 0 },
-      OR: [
-        { paymentDate: { gte: params.start, lt: params.endExclusive } },
-        { paymentDate: null, purchase_date: { gte: params.start, lt: params.endExclusive } },
-      ],
-    },
-    select: {
-      purchase_date: true,
-      paymentDate: true,
-      paidAmount: true,
-    },
-  });
-
-  return purchases
-    .map((purchase) => ({
-      date: purchase.paymentDate ?? purchase.purchase_date,
-      amount: roundMetric(toNumber(purchase.paidAmount)),
-    }))
-    .filter((entry) => entry.amount > 0);
-};
-
-const mapExpenseEntries = async (params: {
-  userId: number;
-  start: Date;
-  endExclusive: Date;
-}) => {
-  const expenseRows = await getDailyExpenses({ userId: params.userId, from: params.start });
-  return expenseRows
-    .filter((row) => row.day >= params.start && row.day < params.endExclusive)
-    .map((row) => ({
-      date: row.day,
-      amount: roundMetric(row.amount),
-    }))
-    .filter((entry) => entry.amount > 0);
 };
 
 const filterEntriesByRange = (entries: DailyAmount[], start: Date, endExclusive: Date) =>
@@ -674,20 +634,12 @@ export const buildDashboardForecast = async (params: { userId: number; now?: Dat
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (HISTORICAL_WINDOW_MONTHS - 1), 1),
   );
 
-  const [cashInflow, purchasePayments, expenseEntries, outstandingReceivables] =
+  const [dailyStatsRows, outstandingReceivables]: [
+    AnalyticsDailyStatsRecord[],
+    number,
+  ] =
     await Promise.all([
-      fetchCashInflowSnapshot({
-        userId: params.userId,
-        start: historyStart,
-        endExclusive: tomorrow,
-        debugLabel: "dashboard forecast",
-      }),
-      mapPurchaseEntries({
-        userId: params.userId,
-        start: historyStart,
-        endExclusive: tomorrow,
-      }),
-      mapExpenseEntries({
+      getAnalyticsDailyStatsRange({
         userId: params.userId,
         start: historyStart,
         endExclusive: tomorrow,
@@ -695,10 +647,26 @@ export const buildDashboardForecast = async (params: { userId: number; now?: Dat
       fetchOutstandingReceivables(params.userId),
     ]);
 
-  const cashReceipts = cashInflow.entries.map((entry) => ({
-    date: entry.date,
-    amount: entry.amount,
-  }));
+  const cashReceipts = dailyStatsRows
+    .map((row) => ({
+      date: row.date,
+      amount: roundMetric(row.collectedSales + row.invoiceCollections),
+    }))
+    .filter((entry) => entry.amount > 0);
+
+  const purchasePayments = dailyStatsRows
+    .map((row) => ({
+      date: row.date,
+      amount: roundMetric(row.cashOutPurchases),
+    }))
+    .filter((entry) => entry.amount > 0);
+
+  const expenseEntries = dailyStatsRows
+    .map((row) => ({
+      date: row.date,
+      amount: roundMetric(row.expenses),
+    }))
+    .filter((entry) => entry.amount > 0);
 
   const sales = forecastSales({ cashReceipts, now });
   const cashflow = forecastCashflow({

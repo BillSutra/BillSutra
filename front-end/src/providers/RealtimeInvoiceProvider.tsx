@@ -1,23 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { io, type Socket } from "socket.io-client";
 import { useSession } from "next-auth/react";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { BASE_URL } from "@/lib/apiEndPoints";
 import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
 import {
+  ensureFreshSecureAuthSessionDetailed,
   getLegacyStoredToken,
-  hasSecureAuthBootstrap,
-  isCookieOnlyAuthEnabled,
+  getSecureAuthAccessToken,
   isSecureAuthEnabled,
+  logClientAuthEvent,
+  logIgnoredNetworkFailure,
   normalizeAuthToken,
-  refreshSecureAuthSession,
+  requestClientLogout,
 } from "@/lib/secureAuth";
-
-type SessionUserWithToken = {
-  token?: string;
-};
 
 const normalizeSocketToken = (raw?: string | null) => {
   const token = normalizeAuthToken(raw ?? null);
@@ -28,25 +27,32 @@ const normalizeSocketToken = (raw?: string | null) => {
   return token.startsWith("Bearer ") ? token : `Bearer ${token}`;
 };
 
+type NotificationEventPayload = {
+  notification: {
+    id: string;
+    businessId: string;
+    type:
+      | "payment"
+      | "inventory"
+      | "customer"
+      | "subscription"
+      | "worker"
+      | "security"
+      | "system";
+    title: string;
+    message: string;
+    actionUrl: string;
+    priority: "critical" | "warning" | "info" | "success";
+    isRead: boolean;
+    createdAt: string;
+  };
+};
+
 const RealtimeInvoiceProvider = () => {
-  const { data, status } = useSession();
+  const { status } = useSession();
   const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
   const debounceRef = useRef<number | null>(null);
-  const refreshInFlightRef = useRef<Promise<boolean> | null>(null);
-  const [preferCookieAuth, setPreferCookieAuth] = useState(false);
-
-  const authToken = useMemo(() => {
-    const sessionToken = normalizeSocketToken(
-      (data?.user as SessionUserWithToken | undefined)?.token ?? null,
-    );
-
-    if (sessionToken) {
-      return sessionToken;
-    }
-
-    return normalizeSocketToken(getLegacyStoredToken());
-  }, [data?.user]);
 
   useEffect(() => {
     if (status !== "authenticated") {
@@ -55,20 +61,16 @@ const RealtimeInvoiceProvider = () => {
       return undefined;
     }
 
-    const secureCookieSocket =
-      preferCookieAuth ||
-      isCookieOnlyAuthEnabled() ||
-      (isSecureAuthEnabled() && hasSecureAuthBootstrap());
-
-    if (!secureCookieSocket && !authToken) {
+    const legacyToken = normalizeSocketToken(getLegacyStoredToken());
+    if (!isSecureAuthEnabled() && !legacyToken) {
       return undefined;
     }
 
     const socket = io(BASE_URL, {
       withCredentials: true,
       transports: ["websocket", "polling"],
-      auth: secureCookieSocket ? undefined : { token: authToken },
-      autoConnect: true,
+      auth: legacyToken ? { token: legacyToken } : {},
+      autoConnect: false,
       reconnection: true,
       timeout: 8000,
     });
@@ -104,24 +106,95 @@ const RealtimeInvoiceProvider = () => {
       }, 250);
     };
 
+    const invalidateNotifications = () =>
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+
+    const prepareSocketAuth = async (forceRefresh = false) => {
+      if (!isSecureAuthEnabled()) {
+        socket.auth = legacyToken ? { token: legacyToken } : {};
+        return true;
+      }
+
+      const refreshResult = await ensureFreshSecureAuthSessionDetailed({
+        force: forceRefresh,
+        minValidityMs: 60_000,
+      });
+
+      if (!refreshResult.ok) {
+        if (refreshResult.reason === "auth_invalid") {
+          logClientAuthEvent(
+            "socket_auth_retry_failed",
+            {
+              reason: refreshResult.reason,
+            },
+            "warn",
+          );
+          requestClientLogout("401_refresh_failed");
+        } else {
+          logIgnoredNetworkFailure("socket_auth_prepare", {
+            reason: refreshResult.reason,
+            status: refreshResult.status,
+          });
+        }
+
+        return false;
+      }
+
+      const accessToken = normalizeSocketToken(getSecureAuthAccessToken());
+      socket.auth = accessToken ? { token: accessToken } : {};
+      return true;
+    };
+
     socket.on("invoice_updated", invalidateInvoiceState);
     socket.on("payment_added", invalidateInvoiceState);
     socket.on("invoice_paid", invalidateInvoiceState);
     socket.on("dashboard_updated", invalidateDashboardOnly);
-    socket.on("connect_error", () => {
-      if (!secureCookieSocket && isSecureAuthEnabled()) {
-        if (!refreshInFlightRef.current) {
-          refreshInFlightRef.current = refreshSecureAuthSession()
-            .then((refreshed) => {
-              if (refreshed && !disposed) {
-                setPreferCookieAuth(true);
-              }
-              return refreshed;
-            })
-            .finally(() => {
-              refreshInFlightRef.current = null;
-            });
-        }
+    socket.on("notification_created", (payload: NotificationEventPayload) => {
+      void invalidateNotifications();
+      toast.success(payload.notification.title, {
+        description: payload.notification.message,
+      });
+    });
+    socket.on("notification_updated", () => {
+      void invalidateNotifications();
+    });
+    socket.on("notification_deleted", () => {
+      void invalidateNotifications();
+    });
+    socket.on("notifications_read_all", () => {
+      void invalidateNotifications();
+    });
+    socket.on("disconnect", (reason) => {
+      console.info("[socket] disconnected", { reason });
+    });
+    socket.io.on("reconnect_attempt", (attempt) => {
+      console.info("[socket] reconnecting", { attempt });
+      void prepareSocketAuth(false);
+    });
+    socket.io.on("reconnect_error", (error) => {
+      logIgnoredNetworkFailure("socket_reconnect", {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    });
+    socket.on("connect_error", (error) => {
+      console.info("[socket] reconnecting", {
+        reason: error instanceof Error ? error.message : "connect_error",
+      });
+
+      if (isSecureAuthEnabled()) {
+        void prepareSocketAuth(true).then((ready) => {
+          if (ready && !disposed && socket.disconnected) {
+            socket.connect();
+          }
+        });
+      }
+    });
+
+    void prepareSocketAuth(false).then((ready) => {
+      if (ready && !disposed) {
+        socket.connect();
+      } else if (!ready && !isSecureAuthEnabled()) {
+        socket.disconnect();
       }
     });
 
@@ -131,6 +204,14 @@ const RealtimeInvoiceProvider = () => {
       socket.off("payment_added", invalidateInvoiceState);
       socket.off("invoice_paid", invalidateInvoiceState);
       socket.off("dashboard_updated", invalidateDashboardOnly);
+      socket.off("notification_created");
+      socket.off("notification_updated");
+      socket.off("notification_deleted");
+      socket.off("notifications_read_all");
+      socket.off("disconnect");
+      socket.off("connect_error");
+      socket.io.off("reconnect_attempt");
+      socket.io.off("reconnect_error");
       socket.disconnect();
       socketRef.current = null;
       if (debounceRef.current) {
@@ -138,7 +219,7 @@ const RealtimeInvoiceProvider = () => {
         debounceRef.current = null;
       }
     };
-  }, [authToken, preferCookieAuth, queryClient, status]);
+  }, [queryClient, status]);
 
   return null;
 };

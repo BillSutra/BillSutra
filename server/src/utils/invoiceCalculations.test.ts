@@ -4,7 +4,7 @@ import {
   calculateInvoiceTotals,
   getAppliedDiscountAmount,
   getDiscountValidationMessage,
-} from "../../../shared/invoice-calculations.js";
+} from "../../../shared/invoice-calculations.ts";
 
 test("fixed discount is capped by subtotal and total stays rounded", () => {
   const totals = calculateInvoiceTotals({

@@ -59,6 +59,12 @@ export const dashboardNavItems: DashboardNavItem[] = [
     section: "main",
   },
   {
+    labelKey: "navigation.workers",
+    href: "/worker-panel",
+    icon: UserCog,
+    section: "main",
+  },
+  {
     labelKey: "navigation.simpleBill",
     href: "/simple-bill",
     icon: Zap,

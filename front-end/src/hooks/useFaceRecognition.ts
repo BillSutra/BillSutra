@@ -424,6 +424,7 @@ export const useFaceAuthentication = () => {
     async (
       email: string,
       imageBlob: Blob,
+      rememberMe = false,
     ): Promise<{
       success: boolean;
       user?: any;
@@ -440,12 +441,12 @@ export const useFaceAuthentication = () => {
 
       try {
         const formData = buildFaceUploadFormData(imageBlob, { email });
+        formData.append("rememberMe", rememberMe ? "true" : "false");
         const response = await apiClient.post("/face/authenticate", formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
 
         const data = response.data;
-        console.log("Face authentication API response:", data);
 
         if (!data?.success || !data?.data) {
           const normalizedError = normalizeFaceError({

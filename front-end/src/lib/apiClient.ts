@@ -1,5 +1,4 @@
 import axios from "axios";
-import { getSession } from "next-auth/react";
 import type {
   AssistantHistoryMessage as SharedAssistantHistoryMessage,
   AssistantReply as SharedAssistantReply,
@@ -28,19 +27,19 @@ import { captureApiFailure } from "./observability/shared";
 import { normalizeGstin } from "./gstin";
 import {
   bootstrapSecureAuthSession,
-  clearLegacyStoredToken,
-  clearSecureAuthBootstrapped,
+  ensureFreshSecureAuthSessionDetailed,
   getLegacyStoredToken,
   hasSecureAuthBootstrap,
   isAuthTokenExpired,
-  isSecureAuthSessionExpired,
-  isCookieOnlyAuthEnabled,
   isSecureAuthEnabled,
-  normalizeAuthToken,
-  refreshSecureAuthSessionDetailed,
+  logClientAuthEvent,
   requestClientLogout,
-  setLegacyStoredToken,
 } from "./secureAuth";
+import {
+  buildCsrfHeadersIfAvailable,
+  buildRequiredCsrfHeaders,
+  isSafeHttpMethod,
+} from "./csrfClient";
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -53,60 +52,77 @@ const isFaceAuthenticationRequest = (requestUrl: string) =>
 apiClient.interceptors.request.use(async (config) => {
   if (typeof window !== "undefined") {
     config.withCredentials = true;
-    const secureAuthEnabled = isSecureAuthEnabled();
-    const secureCookieReady = secureAuthEnabled && hasSecureAuthBootstrap();
-    const secureCookieExpired =
-      secureCookieReady && isSecureAuthSessionExpired();
-    const session = !isCookieOnlyAuthEnabled() ? await getSession() : null;
-    const sessionToken = normalizeAuthToken(
-      (session?.user as { token?: string } | undefined)?.token ?? null,
-    );
+    config.headers = config.headers ?? {};
+    const csrfHeaders = isSafeHttpMethod(config.method)
+      ? buildCsrfHeadersIfAvailable()
+      : await buildRequiredCsrfHeaders();
+    Object.assign(config.headers, csrfHeaders);
 
-    let token =
-      !secureCookieReady || !secureAuthEnabled
-        ? sessionToken ?? getLegacyStoredToken()
-        : null;
+    const requestUrl = typeof config.url === "string" ? config.url : "";
+    const isAuthLifecycleRequest =
+      requestUrl.includes("/auth/refresh") ||
+      requestUrl.includes("/auth/logout") ||
+      requestUrl.includes("/auth/session/bootstrap");
 
-    if (sessionToken) {
-      setLegacyStoredToken(sessionToken);
-    } else if (!token) {
-      clearLegacyStoredToken();
-    }
+    if (isSecureAuthEnabled() && !isAuthLifecycleRequest) {
+      if (!hasSecureAuthBootstrap()) {
+        const bootstrapToken = getLegacyStoredToken();
+        if (bootstrapToken) {
+          const bootstrapped = await bootstrapSecureAuthSession(bootstrapToken);
+          logClientAuthEvent("request_bootstrap_attempt", {
+            requestUrl,
+            bootstrapped,
+          });
+        }
+      }
 
-    if (secureCookieExpired) {
-      const refreshResult = await refreshSecureAuthSessionDetailed();
+      const refreshResult = await ensureFreshSecureAuthSessionDetailed();
       if (!refreshResult.ok) {
         if (refreshResult.reason === "auth_invalid") {
-          requestClientLogout("refresh_expired");
-        }
-        return Promise.reject(new axios.CanceledError("Session expired"));
-      }
-    } else if (!secureCookieReady && token && isAuthTokenExpired(token)) {
-      if (secureAuthEnabled) {
-        const refreshResult = await refreshSecureAuthSessionDetailed();
-        if (refreshResult.ok) {
-          if (config.headers?.Authorization) {
-            delete config.headers.Authorization;
-          }
-          return config;
+          requestClientLogout("401_refresh_failed");
         }
 
-        if (refreshResult.reason === "auth_invalid") {
-          requestClientLogout("refresh_expired");
-        }
-        return Promise.reject(new axios.CanceledError("Session expired"));
-      } else {
-        requestClientLogout("token_expired");
-        return Promise.reject(new axios.CanceledError("Session expired"));
+        return Promise.reject(
+          new axios.CanceledError(
+            refreshResult.reason === "auth_invalid"
+              ? "Session expired"
+              : "Authentication temporarily unavailable",
+          ),
+        );
       }
+
+      if (config.headers?.Authorization) {
+        delete config.headers.Authorization;
+      }
+      logClientAuthEvent("request_auth_context", {
+        requestUrl,
+        mode: "secure_cookie",
+        hasAuthorizationHeader: false,
+        withCredentials: config.withCredentials === true,
+      });
+      return config;
     }
 
-    if (!secureCookieReady && token && !isAuthTokenExpired(token)) {
-      const header = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
-      config.headers.Authorization = header;
+    const token = getLegacyStoredToken();
+    if (token && isAuthTokenExpired(token)) {
+      requestClientLogout("token_expired");
+      return Promise.reject(new axios.CanceledError("Session expired"));
+    }
+
+    if (token) {
+      config.headers.Authorization = token.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
     } else if (config.headers?.Authorization) {
       delete config.headers.Authorization;
     }
+
+    logClientAuthEvent("request_auth_context", {
+      requestUrl,
+      mode: token ? "bearer_token" : "anonymous",
+      hasAuthorizationHeader: Boolean(config.headers?.Authorization),
+      withCredentials: config.withCredentials === true,
+    });
   }
   return config;
 });
@@ -173,7 +189,10 @@ apiClient.interceptors.response.use(
         originalRequest._retry = true;
 
         try {
-          const refreshResult = await refreshSecureAuthSessionDetailed();
+          const refreshResult = await ensureFreshSecureAuthSessionDetailed({
+            force: true,
+            minValidityMs: 0,
+          });
           if (!refreshResult.ok) {
             if (refreshResult.reason !== "auth_invalid") {
               originalRequest._authRefreshTransientFailure = true;
@@ -193,58 +212,8 @@ apiClient.interceptors.response.use(
         } catch (refreshError) {
           captureApiFailure(refreshError);
 
-          clearSecureAuthBootstrapped();
-          const session = await getSession();
-          const sessionToken = normalizeAuthToken(
-            (session?.user as { token?: string } | undefined)?.token ?? null,
-          );
-
-          if (
-            originalRequest._authRefreshInvalid &&
-            sessionToken &&
-            !isAuthTokenExpired(sessionToken)
-          ) {
-            setLegacyStoredToken(sessionToken);
-
-            const bootstrapped = await bootstrapSecureAuthSession(sessionToken);
-            if (bootstrapped) {
-              if (originalRequest.headers?.Authorization) {
-                delete originalRequest.headers.Authorization;
-              }
-
-              originalRequest.withCredentials = true;
-              return apiClient(originalRequest);
-            }
-
-            originalRequest.headers = originalRequest.headers ?? {};
-            originalRequest.headers.Authorization = sessionToken.startsWith(
-              "Bearer ",
-            )
-              ? sessionToken
-              : `Bearer ${sessionToken}`;
-            originalRequest.withCredentials = true;
-            return apiClient(originalRequest);
-          }
-
-          const legacyToken = getLegacyStoredToken();
-          if (
-            originalRequest._authRefreshInvalid &&
-            legacyToken &&
-            !isAuthTokenExpired(legacyToken)
-          ) {
-            originalRequest.headers = originalRequest.headers ?? {};
-            originalRequest.headers.Authorization = legacyToken.startsWith(
-              "Bearer ",
-            )
-              ? legacyToken
-              : `Bearer ${legacyToken}`;
-            originalRequest.withCredentials = true;
-            return apiClient(originalRequest);
-          }
-
           if (originalRequest._authRefreshInvalid) {
-            clearLegacyStoredToken();
-            requestClientLogout("refresh_expired");
+            requestClientLogout("401_refresh_failed");
           }
         }
       }
@@ -369,6 +338,7 @@ export type ProductListParams = {
   limit?: number;
   category?: string | null;
   search?: string | null;
+  mode?: "options" | "full";
 };
 
 export type ProductListResponse = {
@@ -910,10 +880,23 @@ export type Invoice = {
       | "CARD"
       | "BANK_TRANSFER"
       | "UPI"
+      | "NEFT"
+      | "RTGS"
+      | "IMPS"
       | "CHEQUE"
+      | "WALLET"
       | "OTHER"
       | null;
+    provider?: string | null;
+    transaction_id?: string | null;
+    utrNumber?: string | null;
+    reference?: string | null;
+    notes?: string | null;
+    chequeNumber?: string | null;
+    bankName?: string | null;
+    depositDate?: string | null;
     paid_at?: string | null;
+    created_at?: string | null;
   }>;
   items: Array<{
     id: number;
@@ -1194,6 +1177,20 @@ export type DashboardOverview = {
     paymentStatus: "PAID" | "PARTIAL" | "PENDING";
     date: string;
   }>;
+  recentInvoices?: Array<{
+    id: number;
+    invoiceNumber: string;
+    customer: { name: string } | null;
+    total: number;
+    status: string;
+    date: string;
+  }>;
+  customerHighlights?: {
+    totalCustomers: number;
+  };
+  inventory?: {
+    totalProducts: number;
+  };
   activity: Array<{ time: string; label: string }>;
 };
 
@@ -1249,14 +1246,80 @@ const buildDashboardFilterParams = (filters?: DashboardOverviewFilters) => {
 export type PaymentInput = {
   invoice_id: number;
   amount: number;
-  method?: "CASH" | "CARD" | "BANK_TRANSFER" | "UPI" | "CHEQUE" | "OTHER";
+  status: "PAID" | "PARTIAL" | "PENDING" | "FAILED";
+  method:
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "NEFT"
+    | "RTGS"
+    | "IMPS"
+    | "CHEQUE"
+    | "WALLET"
+    | "OTHER";
   provider?: string;
   transaction_id?: string;
   reference?: string;
+  notes?: string;
+  cheque_number?: string;
+  bank_name?: string;
+  deposit_date?: string | Date;
+  failure_reason?: string;
   paid_at?: string | Date;
 };
 
 export type PaymentUpdateInput = Partial<Omit<PaymentInput, "invoice_id">>;
+
+export type PaymentRecord = {
+  id: number;
+  user_id: number;
+  invoice_id: number;
+  amount: number;
+  method:
+    | "CASH"
+    | "CARD"
+    | "BANK_TRANSFER"
+    | "UPI"
+    | "NEFT"
+    | "RTGS"
+    | "IMPS"
+    | "CHEQUE"
+    | "WALLET"
+    | "OTHER"
+    | null;
+  provider?: string | null;
+  utrNumber?: string | null;
+  transaction_id?: string | null;
+  reference?: string | null;
+  notes?: string | null;
+  chequeNumber?: string | null;
+  bankName?: string | null;
+  depositDate?: string | null;
+  proofUrl?: string | null;
+  proofFileName?: string | null;
+  proofMimeType?: string | null;
+  proofSize?: number | null;
+  uploadedAt?: string | null;
+  uploadedBy?: string | null;
+  verifiedBy?: string | null;
+  hasProof?: boolean;
+  paid_at?: string | null;
+  created_at: string;
+  updated_at: string;
+  invoice?: {
+    id: number;
+    invoice_number: string;
+    status: string;
+    total: number;
+    due_date?: string | null;
+    customer?: {
+      id: number;
+      name: string;
+      email?: string | null;
+    } | null;
+  };
+};
 
 export type AccessPaymentRecord = {
   id: string;
@@ -1373,20 +1436,42 @@ export type AppNotificationType =
   | "inventory"
   | "customer"
   | "subscription"
-  | "worker";
+  | "worker"
+  | "security"
+  | "system";
+
+export type AppNotificationPriority =
+  | "critical"
+  | "warning"
+  | "info"
+  | "success";
 
 export type AppNotification = {
   id: string;
   businessId: string;
   type: AppNotificationType;
+  title: string;
   message: string;
+  actionUrl: string;
+  priority: AppNotificationPriority;
   isRead: boolean;
   createdAt: string;
+};
+
+export type NotificationListParams = {
+  page?: number;
+  limit?: number;
+  type?: AppNotificationType | null;
+  isRead?: boolean | null;
+  unreadOnly?: boolean;
 };
 
 export type NotificationListResponse = {
   notifications: AppNotification[];
   unreadCount: number;
+  total: number;
+  page: number;
+  limit: number;
 };
 
 export type SecurityActivityEvent = {
@@ -1396,6 +1481,17 @@ export type SecurityActivityEvent = {
   ipAddress: string | null;
   userAgent: string | null;
   createdAt: string;
+};
+
+export type DeviceSessionRecord = {
+  id: string;
+  deviceName: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  lastUsedAt: string | null;
+  expiresAt: string;
+  isCurrent: boolean;
 };
 
 export type AccessPaymentStatusResponse = {
@@ -1713,108 +1809,19 @@ export type DashboardForecastResponse = {
 export type AssistantReply = SharedAssistantReply;
 export type AssistantHistoryMessage = SharedAssistantHistoryMessage;
 
-export type FinancialCopilotPayload = {
+export type DashboardQuickInsight = {
+  id: string;
+  tone: "positive" | "warning" | "critical" | "info";
+  title: string;
+  message: string;
+  actionUrl: string;
+};
+
+export type DashboardQuickInsightsResponse = {
   generatedAt: string;
-  language: "en" | "hi" | "hinglish";
-  overview: {
-    headline: string;
-    summary: string;
-    action: string;
-  };
-  budget: {
-    suggestedMonthlyBudget: number;
-    remainingSafeToSpend: number;
-    fixedExpensesEstimate: number;
-    spentThisMonth: number;
-    projectedMonthSpend: number;
-    dailySafeSpend: number;
-    status: "on_track" | "caution" | "over_budget";
-    summary: string;
-    action: string;
-  };
-  savings: {
-    summary: string;
-    monthlySavingsPotential: number;
-    opportunities: Array<{
-      id: string;
-      title: string;
-      description: string;
-      potentialMonthlySavings: number;
-      category: string;
-      priority: "high" | "medium" | "low";
-    }>;
-  };
-  reminders: {
-    summary: string;
-    items: Array<{
-      id: string;
-      title: string;
-      description: string;
-      dueDate: string | null;
-      daysUntilDue: number | null;
-      monthlyAmount: number;
-      priority: "high" | "medium" | "low";
-      suggestedAction: string;
-      behavior: "early" | "on_time" | "late";
-    }>;
-  };
-  healthScore: {
-    score: number;
-    band: "excellent" | "good" | "needs_improvement" | "poor";
-    summary: string;
-    nextBestAction: string;
-    breakdown: Array<{
-      label: string;
-      score: number;
-      outOf: number;
-    }>;
-  };
-  behaviorInsights: {
-    summary: string;
-    items: Array<{
-      id: string;
-      title: string;
-      description: string;
-      priority: "high" | "medium" | "low";
-    }>;
-  };
-  nudges: Array<{
-    id: string;
-    tone: "positive" | "warning" | "critical" | "info";
-    message: string;
-    action: string;
-  }>;
-  goals: {
-    projectedMonthlySavings: number;
-    summary: string;
-    items: Array<{
-      id: number;
-      title: string;
-      emoji: string | null;
-      targetAmount: number;
-      currentAmount: number;
-      monthlyContributionTarget: number | null;
-      targetDate: string | null;
-      progressPercent: number;
-      remainingAmount: number;
-      projectedCompletionDate: string | null;
-      monthsToGoal: number | null;
-      summary: string;
-    }>;
-  };
-  decision: {
-    amount: number;
-    verdict: "safe" | "warning" | "risky";
-    summary: string;
-    explanation: string;
-    suggestedDelayDays: number;
-    impactOnBudget: number;
-    safeRoomAfterPurchase: number;
-    reserveForUpcomingExpenses: number;
-    currentBalanceEstimate: number;
-    projectedClosingBalance: number;
-  } | null;
-  examples: string[];
+  headline: string;
+  summary: string;
+  items: DashboardQuickInsight[];
 };
 
 export type FinancialGoalRecord = {
@@ -1940,6 +1947,10 @@ export type BusinessProfileRecord = {
   updated_at: string;
 };
 
+type RequestOptions = {
+  signal?: AbortSignal;
+};
+
 export const fetchReportsSummary = async (): Promise<ReportsSummary> => {
   const response = await apiClient.get("/reports/summary");
   return response.data.data as ReportsSummary;
@@ -1947,6 +1958,7 @@ export const fetchReportsSummary = async (): Promise<ReportsSummary> => {
 
 export const fetchProducts = async (
   params?: ProductListParams,
+  options?: RequestOptions,
 ): Promise<ProductListResponse> => {
   const searchParams = new URLSearchParams();
 
@@ -1962,10 +1974,14 @@ export const fetchProducts = async (
   if (params?.search) {
     searchParams.set("search", params.search);
   }
+  if (params?.mode && params.mode !== "full") {
+    searchParams.set("mode", params.mode);
+  }
 
   const query = searchParams.toString();
   const response = await apiClient.get(
     query ? `/products?${query}` : "/products",
+    { signal: options?.signal },
   );
   const payload = response.data?.data;
   const products = normalizeListResponse<Product>(
@@ -1988,13 +2004,19 @@ export const fetchProducts = async (
 
 export const fetchProductOptions = async (
   params?: ProductListParams,
+  options?: RequestOptions,
 ): Promise<Product[]> => {
+  const requestedLimit =
+    typeof params?.limit === "number" && Number.isFinite(params.limit)
+      ? params.limit
+      : 200;
   const response = await fetchProducts({
     page: params?.page ?? 1,
-    limit: params?.limit ?? 1000,
+    limit: Math.min(Math.max(1, requestedLimit), 200),
     category: params?.category ?? null,
     search: params?.search ?? null,
-  });
+    mode: "options",
+  }, options);
 
   return response.products;
 };
@@ -2462,6 +2484,7 @@ const normalizeSupplierPayload = (
 
 export const fetchCustomers = async (
   params?: CustomerListParams,
+  options?: RequestOptions,
 ): Promise<Customer[]> => {
   const response = await apiClient.get("/customers", {
     params: {
@@ -2469,6 +2492,7 @@ export const fetchCustomers = async (
       limit: params?.limit,
       search: params?.search?.trim() || undefined,
     },
+    signal: options?.signal,
   });
   return normalizeListResponse<Customer>(response.data?.data).map(
     normalizeCustomerRecord,
@@ -2784,6 +2808,29 @@ export const deleteInvoice = async (invoiceId: number): Promise<void> => {
   await apiClient.delete(`/invoices/${invoiceId}`);
 };
 
+export const fetchPayments = async (
+  options?: { signal?: AbortSignal },
+): Promise<PaymentRecord[]> => {
+  const response = await apiClient.get("/payments", { signal: options?.signal });
+  return response.data.data as PaymentRecord[];
+};
+
+export const checkPaymentTransactionReference = async (params: {
+  transaction_id: string;
+  payment_id?: number;
+  signal?: AbortSignal;
+}): Promise<{ exists: boolean }> => {
+  const response = await apiClient.get("/payments/reference/check", {
+    params: {
+      transaction_id: params.transaction_id,
+      ...(params.payment_id ? { payment_id: params.payment_id } : {}),
+    },
+    signal: params.signal,
+  });
+
+  return response.data.data as { exists: boolean };
+};
+
 export const createPayment = async (payload: PaymentInput): Promise<void> => {
   await apiClient.post("/payments", payload);
 };
@@ -2793,6 +2840,42 @@ export const updatePayment = async (
   payload: PaymentUpdateInput,
 ): Promise<void> => {
   await apiClient.put(`/payments/${paymentId}`, payload);
+};
+
+export const deletePayment = async (paymentId: number): Promise<void> => {
+  await apiClient.delete(`/payments/${paymentId}`);
+};
+
+export const uploadPaymentProof = async (
+  paymentId: number,
+  file: File,
+  options?: {
+    onUploadProgress?: (progressPercent: number) => void;
+  },
+): Promise<PaymentRecord> => {
+  const formData = new FormData();
+  formData.append("paymentProof", file);
+
+  const response = await apiClient.post(`/payments/${paymentId}/proof`, formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+    onUploadProgress: (event) => {
+      if (!options?.onUploadProgress || !event.total || event.total <= 0) {
+        return;
+      }
+
+      const progressPercent = Math.round((event.loaded / event.total) * 100);
+      options.onUploadProgress(progressPercent);
+    },
+  });
+
+  return response.data.data as PaymentRecord;
+};
+
+export const deletePaymentProof = async (
+  paymentId: number,
+): Promise<PaymentRecord> => {
+  const response = await apiClient.delete(`/payments/${paymentId}/proof`);
+  return response.data.data as PaymentRecord;
 };
 
 export const fetchAccessPaymentStatus =
@@ -3294,12 +3377,15 @@ export const fetchDashboardForecast =
     return response.data.data as DashboardForecastResponse;
   };
 
-export const fetchFinancialCopilot = async (params?: {
+export const fetchDashboardQuickInsights = async (params?: {
   language?: "en" | "hi";
-  amount?: number;
-}): Promise<FinancialCopilotPayload> => {
-  const response = await apiClient.get("/copilot/summary", { params });
-  return response.data.data as FinancialCopilotPayload;
+  range?: "7d" | "30d" | "90d" | "ytd" | "custom";
+  startDate?: string;
+  endDate?: string;
+  granularity?: "day" | "week" | "month";
+}): Promise<DashboardQuickInsightsResponse> => {
+  const response = await apiClient.get("/dashboard/quick-insights", { params });
+  return response.data.data as DashboardQuickInsightsResponse;
 };
 
 export const fetchFinancialGoals = async (): Promise<FinancialGoalRecord[]> => {
@@ -3374,8 +3460,9 @@ export const updateUserProfile = async (
 
 export const updateUserPassword = async (
   payload: UpdatePasswordPayload,
-): Promise<void> => {
-  await apiClient.put("/users/password", payload);
+): Promise<{ reauthRequired?: boolean }> => {
+  const response = await apiClient.put("/users/password", payload);
+  return (response.data?.data as { reauthRequired?: boolean } | undefined) ?? {};
 };
 
 export const deleteUserData = async (): Promise<void> => {
@@ -3400,20 +3487,41 @@ export const saveUserSettingsPreferences = async (
 };
 
 export const fetchNotifications = async (
-  limit = 10,
+  params: NotificationListParams | number = 10,
 ): Promise<NotificationListResponse> => {
+  const resolvedParams =
+    typeof params === "number" ? { limit: params } : params;
   const response = await apiClient.get("/notifications", {
-    params: { limit },
+    params: {
+      limit: resolvedParams.limit,
+      page: resolvedParams.page,
+      type: resolvedParams.type ?? undefined,
+      isRead:
+        typeof resolvedParams.isRead === "boolean"
+          ? resolvedParams.isRead
+          : undefined,
+      unreadOnly: resolvedParams.unreadOnly,
+    },
   });
   return response.data.data as NotificationListResponse;
 };
 
-export const markNotificationAsRead = async (id: string): Promise<void> => {
-  await apiClient.post(`/notifications/${id}/read`);
+export const updateNotificationReadState = async (
+  id: string,
+  isRead: boolean,
+): Promise<AppNotification> => {
+  const response = await apiClient.patch(`/notifications/${id}/read`, {
+    isRead,
+  });
+  return response.data.data as AppNotification;
 };
 
 export const markAllNotificationsAsRead = async (): Promise<void> => {
-  await apiClient.post("/notifications/read-all");
+  await apiClient.patch("/notifications/read-all");
+};
+
+export const deleteNotification = async (id: string): Promise<void> => {
+  await apiClient.delete(`/notifications/${id}`);
 };
 
 export const fetchSecurityActivity = async (): Promise<
@@ -3421,6 +3529,22 @@ export const fetchSecurityActivity = async (): Promise<
 > => {
   const response = await apiClient.get("/security/activity");
   return response.data.data as SecurityActivityEvent[];
+};
+
+export const fetchSecuritySessions = async (): Promise<DeviceSessionRecord[]> => {
+  const response = await apiClient.get("/security/sessions");
+  return response.data.data as DeviceSessionRecord[];
+};
+
+export const logoutOtherDevices = async (): Promise<{ revokedCount: number }> => {
+  const response = await apiClient.post("/security/logout-others");
+  return (
+    response.data?.data as { revokedCount: number } | undefined
+  ) ?? { revokedCount: 0 };
+};
+
+export const revokeSecuritySession = async (sessionId: string): Promise<void> => {
+  await apiClient.delete(`/security/sessions/${encodeURIComponent(sessionId)}`);
 };
 
 export const logoutAllDevices = async (): Promise<void> => {

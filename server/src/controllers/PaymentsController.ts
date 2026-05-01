@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import path from "path";
 import type { Request, Response } from "express";
 import {
   InvoiceStatus,
@@ -26,13 +27,40 @@ import {
 } from "../lib/observability.js";
 import { dispatchPaymentReceivedEmail } from "../services/notificationEmail.service.js";
 import { computeInvoiceStatus } from "../utils/invoicePaymentSnapshot.js";
+import {
+  encryptSensitiveValue,
+  maybeDecryptSensitiveValue,
+} from "../lib/fieldEncryption.js";
+import { recordAuditLog } from "../services/auditLog.service.js";
+import { invalidateCustomerListCaches } from "../lib/cacheInvalidation.js";
+import { paymentProofStorage } from "../services/storage/paymentProofStorage.js";
+import { getBackendAppUrl } from "../lib/appUrls.js";
+import {
+  buildSecureFileUrl,
+  deleteUploadedFileById,
+  deleteUploadedFileByPath,
+  isUploadedFilesTableAvailable,
+  registerUploadedFile,
+} from "../services/uploadedFiles.service.js";
 
 type PaymentCreateInput = z.infer<typeof paymentCreateSchema>;
 type PaymentUpdateInput = z.infer<typeof paymentUpdateSchema>;
 type TransactionClient = Prisma.TransactionClient;
+type PaymentStatusInput = PaymentCreateInput["status"];
 
 const PAYMENT_IDEMPOTENCY_COLUMN_CHECK_TTL_MS = 60_000;
 const MAX_PAYMENT_TRANSACTION_RETRIES = 2;
+const PAYMENT_VALID_STATUSES = new Set<PaymentStatusInput>(["PAID", "PARTIAL"]);
+const DIGITAL_PAYMENT_METHODS = new Set<PaymentMethod>([
+  PaymentMethod.UPI,
+  PaymentMethod.BANK_TRANSFER,
+  PaymentMethod.NEFT,
+  PaymentMethod.RTGS,
+  PaymentMethod.IMPS,
+  PaymentMethod.CARD,
+  PaymentMethod.WALLET,
+]);
+const MIN_VALID_PAYMENT_DATE = new Date("2000-01-01T00:00:00.000Z");
 
 let paymentIdempotencyColumnAvailability:
   | { exists: boolean; checkedAt: number }
@@ -147,18 +175,227 @@ const resolvePaymentIdempotencyKey = (
   };
 };
 
-const serializePayment = (payment: Payment) => ({
+type PaymentWithOptionalInvoice = Payment & {
+  invoice?: {
+    id: number;
+    invoice_number: string;
+    status: InvoiceStatus;
+    total: Prisma.Decimal;
+    due_date: Date | null;
+    customer?: {
+      id: number;
+      name: string;
+      email: string | null;
+    } | null;
+  } | null;
+};
+
+const toAbsoluteUploadUrl = (value?: string | null) => {
+  if (!value) return null;
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${getBackendAppUrl()}${value.startsWith("/") ? value : `/${value}`}`;
+};
+
+const serializeProofUrl = (payment: Payment) => {
+  if (payment.proof_file_id) {
+    return buildSecureFileUrl(payment.proof_file_id);
+  }
+
+  if (!payment.proof_url || payment.proof_url.startsWith("/uploads/private/")) {
+    return null;
+  }
+
+  return toAbsoluteUploadUrl(payment.proof_url);
+};
+
+const serializePayment = (payment: PaymentWithOptionalInvoice) => ({
   id: payment.id,
   user_id: payment.user_id,
   invoice_id: payment.invoice_id,
-  amount: payment.amount,
+  amount: Number(payment.amount),
   method: payment.method,
   provider: payment.provider,
-  transaction_id: payment.transaction_id,
-  reference: payment.reference,
-  paid_at: payment.paid_at,
-  created_at: payment.created_at,
+  transaction_id: maybeDecryptSensitiveValue(payment.transaction_id),
+  utrNumber: maybeDecryptSensitiveValue(payment.transaction_id),
+  reference: maybeDecryptSensitiveValue(payment.reference),
+  notes: payment.notes,
+  chequeNumber: payment.cheque_number,
+  bankName: payment.bank_name,
+  depositDate: payment.deposit_date
+    ? new Date(payment.deposit_date).toISOString()
+    : null,
+  proofUrl: serializeProofUrl(payment),
+  proofFileName: payment.proof_file_name,
+  proofMimeType: payment.proof_mime_type,
+  proofSize: payment.proof_size,
+  uploadedAt: payment.proof_uploaded_at
+    ? new Date(payment.proof_uploaded_at).toISOString()
+    : null,
+  uploadedBy: payment.proof_uploaded_by,
+  verifiedBy: payment.verified_by,
+  hasProof: Boolean(payment.proof_url || payment.proof_file_id),
+  paid_at: payment.paid_at ? new Date(payment.paid_at).toISOString() : null,
+  created_at: new Date(payment.created_at).toISOString(),
+  updated_at: new Date(payment.updated_at).toISOString(),
+  invoice: payment.invoice
+    ? {
+        id: payment.invoice.id,
+        invoice_number: payment.invoice.invoice_number,
+        status: payment.invoice.status,
+        total: Number(payment.invoice.total),
+        due_date: payment.invoice.due_date
+          ? new Date(payment.invoice.due_date).toISOString()
+          : null,
+        customer: payment.invoice.customer
+          ? {
+              id: payment.invoice.customer.id,
+              name: payment.invoice.customer.name,
+              email: payment.invoice.customer.email,
+            }
+          : null,
+      }
+    : undefined,
 });
+
+const normalizeTransactionReference = (value?: string | null) => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.toUpperCase() : null;
+};
+
+const normalizeOptionalString = (value?: string | null) => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
+};
+
+const hasMoreThanTwoDecimals = (value: number) =>
+  Math.abs(value * 100 - Math.round(value * 100)) >= 1e-6;
+
+const findPaymentByTransactionReference = async (params: {
+  userId: number;
+  transactionId: string;
+  excludePaymentId?: number | null;
+}) => {
+  const { userId, transactionId, excludePaymentId } = params;
+  const candidates = await prisma.payment.findMany({
+    where: {
+      user_id: userId,
+      transaction_id: {
+        not: null,
+      },
+      ...(excludePaymentId ? { NOT: { id: excludePaymentId } } : {}),
+    },
+    select: {
+      id: true,
+      invoice_id: true,
+      transaction_id: true,
+    },
+  });
+
+  return (
+    candidates.find(
+      (candidate) =>
+        normalizeTransactionReference(
+          maybeDecryptSensitiveValue(candidate.transaction_id),
+        ) === transactionId,
+    ) ?? null
+  );
+};
+
+const validatePaymentDetails = async (params: {
+  userId: number;
+  paymentId?: number | null;
+  body: PaymentCreateInput | PaymentUpdateInput;
+  remainingBeforeWrite: number;
+}) => {
+  const { userId, paymentId, body, remainingBeforeWrite } = params;
+  const amount = Number(body.amount);
+  const method = body.method;
+  const status = body.status;
+  const paidAt = new Date(body.paid_at);
+  const depositDate = body.deposit_date ? new Date(body.deposit_date) : null;
+  const transactionId = normalizeTransactionReference(body.transaction_id);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new AppError("Payment amount must be greater than zero.", 422);
+  }
+
+  if (hasMoreThanTwoDecimals(amount)) {
+    throw new AppError("Payment amount can have at most 2 decimal places.", 422);
+  }
+
+  if (amount > remainingBeforeWrite + 0.009) {
+    throw new AppError("Payment amount exceeds the remaining invoice balance.", 422);
+  }
+
+  if (!PAYMENT_VALID_STATUSES.has(status)) {
+    throw new AppError(
+      "Only paid or partial payment records can be saved from this payment flow.",
+      422,
+    );
+  }
+
+  if (status === "PARTIAL" && amount >= remainingBeforeWrite - 0.009) {
+    throw new AppError("Partial payments must be less than the due balance.", 422);
+  }
+
+  if (status === "PAID" && amount < remainingBeforeWrite - 0.009) {
+    throw new AppError(
+      "Use Partial status when the payment amount is less than the due balance.",
+      422,
+    );
+  }
+
+  if (Number.isNaN(paidAt.getTime())) {
+    throw new AppError("Payment date is invalid.", 422);
+  }
+
+  if (paidAt.getTime() > Date.now()) {
+    throw new AppError("Payment date cannot be in the future.", 422);
+  }
+
+  if (paidAt.getTime() < MIN_VALID_PAYMENT_DATE.getTime()) {
+    throw new AppError("Payment date is too old to be valid.", 422);
+  }
+
+  if (method === PaymentMethod.CHEQUE) {
+    if (depositDate && Number.isNaN(depositDate.getTime())) {
+      throw new AppError("Deposit date is invalid.", 422);
+    }
+
+    if (depositDate && depositDate.getTime() > Date.now()) {
+      throw new AppError("Deposit date cannot be in the future.", 422);
+    }
+    if (depositDate && depositDate.getTime() < MIN_VALID_PAYMENT_DATE.getTime()) {
+      throw new AppError("Deposit date is too old to be valid.", 422);
+    }
+  }
+
+  if (transactionId) {
+    const duplicatePayment = await findPaymentByTransactionReference({
+      userId,
+      transactionId,
+      excludePaymentId: paymentId ?? null,
+    });
+
+    if (duplicatePayment) {
+      throw new AppError("This transaction reference already exists.", 409);
+    }
+  }
+
+  return {
+    amount,
+    paidAt,
+    depositDate,
+    method,
+    status,
+    transactionId,
+    provider: normalizeOptionalString(body.provider),
+    reference: normalizeOptionalString(body.reference),
+    notes: normalizeOptionalString(body.notes),
+    chequeNumber: normalizeOptionalString(body.cheque_number),
+    bankName: normalizeOptionalString(body.bank_name),
+  };
+};
 
 const logPaymentEvent = (
   event: "start" | "success" | "failure" | "duplicate" | "retry",
@@ -244,8 +481,22 @@ const findPaymentByIdempotencyKey = async (
       transaction_id,
       payment_idempotency_key,
       reference,
+      notes,
+      cheque_number,
+      bank_name,
+      deposit_date,
+      proof_url,
+      proof_file_name,
+      proof_file_path,
+      proof_file_id,
+      proof_mime_type,
+      proof_size,
+      proof_uploaded_at,
+      proof_uploaded_by,
+      verified_by,
       paid_at,
-      created_at
+      created_at,
+      updated_at
     FROM "payments"
     WHERE user_id = ${userId}
       AND payment_idempotency_key = ${paymentIdempotencyKey}
@@ -306,6 +557,21 @@ const runPaymentTransaction = async (params: {
             throw new AppError("Invoice not found", 404);
           }
 
+          const paidBeforeWriteAggregate = await tx.payment.aggregate({
+            where: { invoice_id: body.invoice_id },
+            _sum: { amount: true },
+          });
+          const paidBeforeWrite = Number(paidBeforeWriteAggregate._sum.amount ?? 0);
+          const remainingBeforeWrite = Math.max(
+            Number(invoice.total) - paidBeforeWrite,
+            0,
+          );
+          const validated = await validatePaymentDetails({
+            userId,
+            body,
+            remainingBeforeWrite,
+          });
+
           let payment: Payment | null = null;
           let createdNewPayment = false;
 
@@ -329,12 +595,25 @@ const runPaymentTransaction = async (params: {
               data: {
                 user_id: userId,
                 invoice_id: body.invoice_id,
-                amount: body.amount,
-                method: body.method ?? PaymentMethod.CASH,
-                provider: body.provider,
-                transaction_id: body.transaction_id,
-                reference: body.reference,
-                paid_at: body.paid_at ?? undefined,
+                amount: validated.amount,
+                method: validated.method,
+                provider: validated.provider,
+                transaction_id: encryptSensitiveValue(
+                  validated.transactionId,
+                ),
+                reference: encryptSensitiveValue(
+                  validated.reference,
+                ),
+                notes: validated.notes,
+                cheque_number: validated.chequeNumber,
+                bank_name: validated.bankName,
+                deposit_date: validated.depositDate ?? undefined,
+                verified_by:
+                  req.user?.name?.trim() ||
+                  req.user?.email?.trim() ||
+                  req.user?.actorId?.trim() ||
+                  null,
+                paid_at: validated.paidAt,
                 ...(idempotencyEnabled && paymentIdempotencyKey
                   ? { payment_idempotency_key: paymentIdempotencyKey }
                   : {}),
@@ -456,8 +735,9 @@ const runPaymentUpdateTransaction = async (params: {
   userId: number;
   paymentId: number;
   body: PaymentUpdateInput;
+  req: Request;
 }): Promise<PaymentUpdateTransactionResult> => {
-  const { userId, paymentId, body } = params;
+  const { userId, paymentId, body, req } = params;
 
   return prisma.$transaction(
     async (tx) => {
@@ -489,22 +769,34 @@ const runPaymentUpdateTransaction = async (params: {
 
       const otherPaidAmount = Number(otherPayments._sum.amount ?? 0);
       const invoiceTotal = Number(invoice.total);
-
-      if (otherPaidAmount + nextAmount > invoiceTotal + 0.009) {
-        throw new AppError("Payment amount exceeds the remaining invoice balance.", 422);
-      }
+      const remainingBeforeWrite = Math.max(invoiceTotal - otherPaidAmount, 0);
+      const validated = await validatePaymentDetails({
+        userId,
+        paymentId: existingPayment.id,
+        body,
+        remainingBeforeWrite,
+      });
 
       const updatedPayment = await tx.payment.update({
         where: { id: existingPayment.id },
         data: {
-          ...(body.amount !== undefined ? { amount: body.amount } : {}),
-          ...(body.method !== undefined ? { method: body.method } : {}),
-          ...(body.provider !== undefined ? { provider: body.provider } : {}),
-          ...(body.transaction_id !== undefined
-            ? { transaction_id: body.transaction_id }
-            : {}),
-          ...(body.reference !== undefined ? { reference: body.reference } : {}),
-          ...(body.paid_at !== undefined ? { paid_at: body.paid_at } : {}),
+          amount: validated.amount,
+          method: validated.method,
+          provider: validated.provider,
+          transaction_id: encryptSensitiveValue(validated.transactionId),
+          reference: encryptSensitiveValue(validated.reference),
+          notes: validated.notes,
+          cheque_number: validated.chequeNumber,
+          bank_name: validated.bankName,
+          deposit_date: validated.depositDate ?? null,
+          verified_by:
+            body.status === "PAID" || body.status === "PARTIAL"
+              ? req.user?.name?.trim() ||
+                req.user?.email?.trim() ||
+                req.user?.actorId?.trim() ||
+                null
+              : null,
+          paid_at: validated.paidAt,
         },
       });
 
@@ -537,6 +829,125 @@ const runPaymentUpdateTransaction = async (params: {
   );
 };
 
+type PaymentDeleteTransactionResult = {
+  deletedPayment: Payment;
+  invoiceId: number;
+  invoiceNumber: string;
+  invoiceStatus: InvoiceStatus;
+  paidAmount: number;
+  totalAmount: number;
+};
+
+const runPaymentDeleteTransaction = async (params: {
+  userId: number;
+  paymentId: number;
+}): Promise<PaymentDeleteTransactionResult> => {
+  const { userId, paymentId } = params;
+
+  return prisma.$transaction(
+    async (tx) => {
+      const existingPayment = await tx.payment.findFirst({
+        where: { id: paymentId, user_id: userId },
+      });
+
+      if (!existingPayment) {
+        throw new AppError("Payment not found", 404);
+      }
+
+      const invoice = await lockInvoiceRow(tx, existingPayment.invoice_id, userId);
+      if (!invoice) {
+        throw new AppError("Invoice not found", 404);
+      }
+
+      await tx.payment.delete({
+        where: { id: existingPayment.id },
+      });
+
+      const totals = await tx.payment.aggregate({
+        where: { invoice_id: existingPayment.invoice_id },
+        _sum: { amount: true },
+      });
+
+      const paidAmount = Number(totals._sum.amount ?? 0);
+      const totalAmount = Number(invoice.total);
+      const invoiceStatus = resolveInvoiceStatus(paidAmount, totalAmount);
+
+      await tx.invoice.update({
+        where: { id: invoice.id },
+        data: { status: invoiceStatus },
+      });
+
+      return {
+        deletedPayment: existingPayment,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoice_number,
+        invoiceStatus,
+        paidAmount,
+        totalAmount,
+      };
+    },
+    {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    },
+  );
+};
+
+const persistPaymentProof = async (params: {
+  userId: number;
+  paymentProof: Express.Multer.File;
+}) => {
+  const { userId, paymentProof } = params;
+  const secureProofStorageEnabled = await isUploadedFilesTableAvailable();
+  let proof = await paymentProofStorage.save(userId, paymentProof, {
+    secure: secureProofStorageEnabled,
+  });
+  let uploadedFileRecord: Awaited<ReturnType<typeof registerUploadedFile>> = null;
+
+  if (proof.secure) {
+    try {
+      uploadedFileRecord = await registerUploadedFile({
+        ownerUserId: userId,
+        fileName: path.basename(proof.filePath),
+        originalName: paymentProof.originalname,
+        filePath: proof.filePath,
+        type: "payment_proof",
+        mimeType: paymentProof.mimetype,
+      });
+    } catch (error) {
+      console.warn(
+        "[payments] secure proof registration failed; falling back to legacy proof access",
+        {
+          userId,
+          message: error instanceof Error ? error.message : error,
+        },
+      );
+
+      await paymentProofStorage.delete(proof.filePath);
+      proof = await paymentProofStorage.save(userId, paymentProof, {
+        secure: false,
+      });
+    }
+
+    if (!uploadedFileRecord && proof.secure) {
+      await paymentProofStorage.delete(proof.filePath);
+      proof = await paymentProofStorage.save(userId, paymentProof, {
+        secure: false,
+      });
+    }
+  }
+
+  return {
+    proof,
+    uploadedFileRecord,
+  };
+};
+
+const removeStoredPaymentProof = async (payment: Payment) => {
+  await paymentProofStorage.delete(payment.proof_file_path);
+  await deleteUploadedFileById(payment.proof_file_id);
+  await deleteUploadedFileByPath(payment.proof_file_path);
+};
+
 class PaymentsController {
   static async index(req: Request, res: Response) {
     const userId = req.user?.id;
@@ -546,15 +957,67 @@ class PaymentsController {
 
     const payments = await prisma.payment.findMany({
       where: { user_id: userId },
-      include: { invoice: true },
-      orderBy: { created_at: "desc" },
+      include: {
+        invoice: {
+          select: {
+            id: true,
+            invoice_number: true,
+            status: true,
+            total: true,
+            due_date: true,
+            customer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ paid_at: "desc" }, { created_at: "desc" }],
     });
 
     return sendResponse(res, 200, {
-      data: payments.map((payment) => ({
-        ...serializePayment(payment),
-        invoice: payment.invoice,
-      })),
+      data: payments.map(serializePayment),
+    });
+  }
+
+  static async checkTransactionReference(req: Request, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    const transactionId = normalizeTransactionReference(
+      typeof req.query.transaction_id === "string"
+        ? req.query.transaction_id
+        : null,
+    );
+    const paymentId =
+      typeof req.query.payment_id === "string"
+        ? Number(req.query.payment_id)
+        : undefined;
+
+    if (!transactionId) {
+      return sendResponse(res, 400, {
+        message: "Transaction reference is required.",
+      });
+    }
+
+    const existingPayment = await findPaymentByTransactionReference({
+      userId,
+      transactionId,
+      excludePaymentId:
+        typeof paymentId === "number" && Number.isFinite(paymentId)
+          ? paymentId
+          : null,
+    });
+
+    return sendResponse(res, 200, {
+      data: {
+        exists: Boolean(existingPayment),
+      },
     });
   }
 
@@ -592,11 +1055,18 @@ class PaymentsController {
       if (result.createdNewPayment) {
         if (businessId) {
           try {
+            const computedStatus = computeInvoiceStatus(
+              result.paidAmount,
+              result.totalAmount,
+            );
             await dispatchNotification({
               userId,
               businessId,
               type: "payment",
-              message: `Payment of Rs ${Number(body.amount).toFixed(2)} received for invoice ${result.invoiceNumber}.`,
+              message:
+                computedStatus === "PARTIAL"
+                  ? `Partial payment of Rs ${Number(body.amount).toFixed(2)} received for invoice ${result.invoiceNumber}.`
+                  : `Payment of Rs ${Number(body.amount).toFixed(2)} received for invoice ${result.invoiceNumber}.`,
               referenceKey: `payment-received:${result.payment.id}`,
             });
           } catch (error) {
@@ -620,6 +1090,7 @@ class PaymentsController {
           result.paidAmount,
           result.totalAmount,
         );
+        void invalidateCustomerListCaches(businessId, userId);
         emitDashboardUpdate({ userId, source: "payment.create" });
         emitRealtimeInvoiceUpdated({
           userId,
@@ -671,6 +1142,22 @@ class PaymentsController {
         paymentId: result.payment.id,
         idempotencyEnabled,
         idempotencySource: idempotencyEnabled ? resolvedIdempotency.source : "disabled",
+      });
+      await recordAuditLog({
+        req,
+        userId,
+        actorId: req.user?.actorId ?? String(userId),
+        actorType: req.user?.accountType ?? "OWNER",
+        action: "payment.create",
+        resourceType: "payment",
+        resourceId: String(result.payment.id),
+        status: "success",
+        metadata: {
+          invoiceId: result.invoiceId,
+          amount: Number(result.payment.amount),
+          method: result.payment.method,
+          createdNewPayment: result.createdNewPayment,
+        },
       });
 
       return sendResponse(res, 201, {
@@ -763,7 +1250,7 @@ class PaymentsController {
 
     const payments = await prisma.payment.findMany({
       where: { user_id: userId, invoice_id: invoiceId },
-      orderBy: { paid_at: "desc" },
+      orderBy: [{ paid_at: "desc" }, { created_at: "desc" }],
     });
 
     return sendResponse(res, 200, { data: payments.map(serializePayment) });
@@ -771,6 +1258,7 @@ class PaymentsController {
 
   static async update(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
@@ -807,6 +1295,7 @@ class PaymentsController {
         userId,
         paymentId,
         body,
+        req,
       });
 
       const computedStatus = computeInvoiceStatus(
@@ -814,6 +1303,7 @@ class PaymentsController {
         result.totalAmount,
       );
 
+      void invalidateCustomerListCaches(businessId, userId);
       emitDashboardUpdate({ userId, source: "payment.update" });
       emitRealtimeInvoiceUpdated({
         userId,
@@ -832,6 +1322,23 @@ class PaymentsController {
         nextAmount: Number(result.payment.amount),
         previousMethod: result.previousPayment.method,
         nextMethod: result.payment.method,
+      });
+      await recordAuditLog({
+        req,
+        userId,
+        actorId: req.user?.actorId ?? String(userId),
+        actorType: req.user?.accountType ?? "OWNER",
+        action: "payment.update",
+        resourceType: "payment",
+        resourceId: String(result.payment.id),
+        status: "success",
+        metadata: {
+          invoiceId: result.invoiceId,
+          previousAmount: Number(result.previousPayment.amount),
+          nextAmount: Number(result.payment.amount),
+          previousMethod: result.previousPayment.method,
+          nextMethod: result.payment.method,
+        },
       });
 
       return sendResponse(res, 200, {
@@ -875,6 +1382,238 @@ class PaymentsController {
         );
       }
 
+      throw error;
+    }
+  }
+
+  static async uploadProof(req: Request, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    const paymentId = Number(req.params.id);
+    if (!req.file) {
+      return sendResponse(res, 400, { message: "Payment proof is required." });
+    }
+
+    const existingPayment = await prisma.payment.findFirst({
+      where: { id: paymentId, user_id: userId },
+    });
+
+    if (!existingPayment) {
+      return sendResponse(res, 404, { message: "Payment not found" });
+    }
+
+    const uploadedBy =
+      req.user?.name?.trim() ||
+      req.user?.email?.trim() ||
+      req.user?.actorId?.trim() ||
+      `user:${userId}`;
+    const previousProofPath = existingPayment.proof_file_path;
+    const previousProofFileId = existingPayment.proof_file_id;
+    let nextProofPath: string | null = null;
+    let nextProofFileId: string | null = null;
+    let proofCommitted = false;
+
+    try {
+      const { proof, uploadedFileRecord } = await persistPaymentProof({
+        userId,
+        paymentProof: req.file,
+      });
+      nextProofPath = proof.filePath;
+      nextProofFileId = uploadedFileRecord?.id ?? null;
+
+      const updatedPayment = await prisma.payment.update({
+        where: { id: paymentId },
+        data: {
+          proof_url: proof.url,
+          proof_file_name: req.file.originalname,
+          proof_file_path: proof.filePath,
+          proof_file_id: uploadedFileRecord?.id ?? null,
+          proof_mime_type: req.file.mimetype,
+          proof_size: req.file.size,
+          proof_uploaded_at: new Date(),
+          proof_uploaded_by: uploadedBy,
+        },
+      });
+      proofCommitted = true;
+
+      if (previousProofPath || previousProofFileId) {
+        await paymentProofStorage.delete(previousProofPath);
+        await deleteUploadedFileById(previousProofFileId);
+        await deleteUploadedFileByPath(previousProofPath);
+      }
+
+      await recordAuditLog({
+        req,
+        userId,
+        actorId: req.user?.actorId ?? String(userId),
+        actorType: req.user?.accountType ?? "OWNER",
+        action: "payment.proof.upload",
+        resourceType: "payment",
+        resourceId: String(updatedPayment.id),
+        status: "success",
+        metadata: {
+          invoiceId: updatedPayment.invoice_id,
+          fileName: updatedPayment.proof_file_name,
+          mimeType: updatedPayment.proof_mime_type,
+          size: updatedPayment.proof_size,
+        },
+      });
+
+      nextProofPath = null;
+      nextProofFileId = null;
+
+      return sendResponse(res, 200, {
+        message: "Payment proof uploaded",
+        data: serializePayment(updatedPayment),
+      });
+    } catch (error) {
+      captureServerException(error, req, {
+        level: "error",
+        tags: {
+          flow: "payments.proof.upload",
+          payment_id: paymentId,
+          invoice_id: existingPayment.invoice_id,
+        },
+        extra: {
+          userId,
+          fileName: req.file.originalname,
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+        },
+      });
+      if (!proofCommitted) {
+        await paymentProofStorage.delete(nextProofPath);
+        await deleteUploadedFileById(nextProofFileId);
+        await deleteUploadedFileByPath(nextProofPath);
+      }
+      throw error;
+    }
+  }
+
+  static async deleteProof(req: Request, res: Response) {
+    const userId = req.user?.id;
+    if (!userId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    const paymentId = Number(req.params.id);
+    const existingPayment = await prisma.payment.findFirst({
+      where: { id: paymentId, user_id: userId },
+    });
+
+    if (!existingPayment) {
+      return sendResponse(res, 404, { message: "Payment not found" });
+    }
+
+    if (!existingPayment.proof_url && !existingPayment.proof_file_id) {
+      return sendResponse(res, 200, {
+        message: "Payment proof removed",
+        data: serializePayment(existingPayment),
+      });
+    }
+
+    await removeStoredPaymentProof(existingPayment);
+
+    const updatedPayment = await prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        proof_url: null,
+        proof_file_name: null,
+        proof_file_path: null,
+        proof_file_id: null,
+        proof_mime_type: null,
+        proof_size: null,
+        proof_uploaded_at: null,
+        proof_uploaded_by: null,
+      },
+    });
+
+    await recordAuditLog({
+      req,
+      userId,
+      actorId: req.user?.actorId ?? String(userId),
+      actorType: req.user?.accountType ?? "OWNER",
+      action: "payment.proof.delete",
+      resourceType: "payment",
+      resourceId: String(updatedPayment.id),
+      status: "success",
+      metadata: {
+        invoiceId: updatedPayment.invoice_id,
+      },
+    });
+
+    return sendResponse(res, 200, {
+      message: "Payment proof removed",
+      data: serializePayment(updatedPayment),
+    });
+  }
+
+  static async destroy(req: Request, res: Response) {
+    const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
+    if (!userId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    const paymentId = Number(req.params.id);
+
+    try {
+      const result = await runPaymentDeleteTransaction({ userId, paymentId });
+      await removeStoredPaymentProof(result.deletedPayment);
+
+      const computedStatus = computeInvoiceStatus(
+        result.paidAmount,
+        result.totalAmount,
+      );
+
+      void invalidateCustomerListCaches(businessId, userId);
+      emitDashboardUpdate({ userId, source: "payment.delete" });
+      emitRealtimeInvoiceUpdated({
+        userId,
+        invoiceId: result.invoiceId,
+        status: result.invoiceStatus,
+        totalPaid: result.paidAmount,
+        computedStatus,
+        source: "payment.delete",
+      });
+
+      await recordAuditLog({
+        req,
+        userId,
+        actorId: req.user?.actorId ?? String(userId),
+        actorType: req.user?.accountType ?? "OWNER",
+        action: "payment.delete",
+        resourceType: "payment",
+        resourceId: String(result.deletedPayment.id),
+        status: "success",
+        metadata: {
+          invoiceId: result.invoiceId,
+          amount: Number(result.deletedPayment.amount),
+          method: result.deletedPayment.method,
+        },
+      });
+
+      return sendResponse(res, 200, {
+        message: "Payment deleted",
+        data: {
+          id: result.deletedPayment.id,
+          invoiceId: result.invoiceId,
+        },
+      });
+    } catch (error) {
+      captureServerException(error, req, {
+        level: "error",
+        tags: {
+          flow: "payments.delete",
+          payment_id: paymentId,
+        },
+        extra: {
+          userId,
+        },
+      });
       throw error;
     }
   }

@@ -1,33 +1,43 @@
 import multer from "multer";
 import type { Request, Response, NextFunction } from "express";
+import path from "path";
 import { sendResponse } from "../utils/sendResponse.js";
+import { matchesAllowedUploadKinds } from "../lib/fileUploadSecurity.js";
 
 const ALLOWED_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/jpg",
-  "image/svg+xml",
+  "image/webp",
 ]);
+const ALLOWED_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
 const MAX_SIZE_BYTES = 2 * 1024 * 1024; // 2 MB
 
 /**
  * Multer instance configured with:
  *  - memory storage (buffer handed off to the storage provider)
- *  - MIME type whitelist (PNG, JPG, SVG only)
+ *  - MIME type whitelist (PNG, JPG, WEBP only)
  *  - 2 MB file size limit
  */
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_SIZE_BYTES },
   fileFilter(_req, file, cb) {
-    if (ALLOWED_MIME_TYPES.has(file.mimetype)) {
+    const extension = path.extname(file.originalname || "").toLowerCase();
+    if (
+      ALLOWED_MIME_TYPES.has(file.mimetype) &&
+      ALLOWED_EXTENSIONS.has(extension)
+    ) {
       cb(null, true);
     } else {
       cb(
-        Object.assign(new Error("Only PNG, JPG, and SVG files are allowed."), {
-          status: 400,
-        }),
+        Object.assign(
+          new Error("Only PNG, JPG, JPEG, and WEBP files are allowed."),
+          {
+            status: 400,
+          },
+        ),
       );
     }
   },
@@ -44,6 +54,15 @@ export const logoUploadMiddleware = (
 ) => {
   upload.single("logo")(req, res, (err: unknown) => {
     if (!err) {
+      if (
+        req.file &&
+        !matchesAllowedUploadKinds(req.file.buffer, ["png", "jpeg", "webp"])
+      ) {
+        return sendResponse(res, 400, {
+          message: "The uploaded logo content does not match a supported image format.",
+        });
+      }
+
       return next();
     }
 

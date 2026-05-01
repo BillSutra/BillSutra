@@ -27,8 +27,17 @@ export default function DashNavbar({
       dashboardNavItems
         .filter((item) => {
           const role = session?.user?.role;
-          if (role === "WORKER") {
-            return item.href === "/sales" || item.href === "/invoices";
+          const accountType = session?.user?.accountType;
+          const isWorkerAccount =
+            accountType === "WORKER" || (!accountType && role === "WORKER");
+
+          if (isWorkerAccount) {
+            return (
+              item.href === "/worker-panel" ||
+              item.href === "/sales" ||
+              item.href === "/invoices" ||
+              item.href === "/simple-bill"
+            );
           }
 
           return !item.adminOnly || role === "ADMIN";
@@ -37,7 +46,7 @@ export default function DashNavbar({
           ...item,
           label: t(item.labelKey),
         })),
-    [language, session?.user?.role, t],
+    [language, session?.user?.accountType, session?.user?.role, t],
   );
 
   return (

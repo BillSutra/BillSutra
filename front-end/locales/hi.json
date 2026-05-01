@@ -52,7 +52,8 @@
                    "action":  "कार्रवाई",
                    "productName":  "प्रोडक्ट नाम",
                    "sku":  "SKU",
-                   "skuLabel":  "SKU: {value}"
+                   "skuLabel":  "SKU: {value}",
+                   "noCategory":  "कोई कैटेगरी नहीं"
                },
     "productsPage":  {
                          "title":  "प्रोडक्ट्स",
@@ -1478,10 +1479,20 @@
                        "validGstin":  "मान्य GSTIN दर्ज करें",
                        "validPan":  "मान्य PAN दर्ज करें",
                        "gstinStateMismatch":  "GSTIN का राज्य कोड चुने गए राज्य से मेल नहीं खाता",
+                       "businessNameRequired":  "बिजनेस नाम आवश्यक है",
+                       "businessNameMin":  "बिजनेस नाम कम से कम 2 अक्षरों का होना चाहिए",
+                       "phoneRequired":  "फ़ोन नंबर आवश्यक है",
+                       "validPhoneShort":  "मान्य फ़ोन नंबर दर्ज करें",
                        "requiredAddressLine":  "पते की पहली पंक्ति आवश्यक है",
+                       "addressLine1Min":  "पते की पहली पंक्ति कम से कम 5 अक्षरों की होनी चाहिए",
                        "requiredCity":  "शहर आवश्यक है",
+                       "cityDistrictRequired":  "शहर / जिला आवश्यक है",
+                       "emailRequired":  "ईमेल आवश्यक है",
+                       "validEmailShort":  "मान्य ईमेल दर्ज करें",
                        "requiredState":  "राज्य आवश्यक है",
                        "requiredPincode":  "पिनकोड आवश्यक है",
+                       "pincodeSixDigits":  "पिनकोड 6 अंकों का होना चाहिए",
+                       "currencyRequired":  "मुद्रा आवश्यक है",
                        "nonNegative":  "ओपनिंग बैलेंस ऋणात्मक नहीं हो सकता",
                        "invoiceSelectCustomer":  "ग्राहक चुनें।",
                        "invoiceSelectWarehouse":  "इन्वेंटरी सिंक के लिए वेयरहाउस चुनें।",
@@ -1906,6 +1917,7 @@
                  "shared":  {
                                 "loginTab":  "लॉगिन",
                                 "signupTab":  "साइन अप",
+                                "authTabs":  "ऑथेंटिकेशन टैब",
                                 "workerPrompt":  "टीम सदस्य?",
                                 "workerAction":  "वर्कर लॉगिन",
                                 "emailOrPhoneLabel":  "ईमेल या फोन",
@@ -1915,7 +1927,38 @@
                                 "phoneHelper":  "अपना सक्रिय भारतीय मोबाइल नंबर दर्ज करें।",
                                 "signingIn":  "साइन इन हो रहा है...",
                                 "createAccount":  "अकाउंट बनाएं",
-                                "creatingAccount":  "अकाउंट बन रहा है..."
+                                "creatingAccount":  "अकाउंट बन रहा है...",
+                                "benefits":  {
+                                                 "gstReadyBilling":  "GST रेडी बिलिंग",
+                                                 "smartInventory":  "स्मार्ट इन्वेंटरी",
+                                                 "paymentReminders":  "पेमेंट रिमाइंडर",
+                                                 "aiInsights":  "AI इनसाइट्स",
+                                                 "multiUserAccess":  "मल्टी-यूज़र एक्सेस"
+                                             },
+                                "trust":  {
+                                              "businesses":  "10,000+ बिज़नेस BillSutra पर भरोसा करते हैं",
+                                              "secureLogin":  "सिक्योर लॉगिन",
+                                              "encryptedData":  "एन्क्रिप्टेड डेटा",
+                                              "fastSupport":  "फास्ट सपोर्ट"
+                                          },
+                                "stats":  {
+                                              "healthyGrowth":  "इस चक्र में स्वस्थ ग्रोथ",
+                                              "syncedLive":  "बिलिंग के साथ लाइव सिंक"
+                                          },
+                                "showcaseCards":  {
+                                                       "revenue":  {
+                                                                       "title":  "इस महीने की आय",
+                                                                       "value":  "Rs 4.8L"
+                                                                   },
+                                                       "pending":  {
+                                                                       "title":  "लंबित इनवॉइस",
+                                                                       "value":  "18 फॉलो-अप"
+                                                                   },
+                                                       "stock":  {
+                                                                     "title":  "लो स्टॉक अलर्ट",
+                                                                     "value":  "7 आइटम रीऑर्डर चाहिए"
+                                                                 }
+                                                   }
                             },
                  "forgotPage":  {
                                     "badge":  "एक्सेस रीसेट",
@@ -2080,13 +2123,14 @@
                                         "healthySummary":  "{count} आइटम ठीक हैं",
                                         "allInventoryTitle":  "पूरी इन्वेंटरी",
                                         "allInventoryDescription":  "प्रोडक्ट खोजें, स्टॉक देखें और जल्दी रीस्टॉक करें।",
-                                        "searchPlaceholder":  "प्रोडक्ट या SKU खोजें",
+                                        "searchPlaceholder":  "प्रोडक्ट, SKU या कैटेगरी खोजें",
                                         "allCategories":  "सभी श्रेणियाँ",
                                         "allWarehouses":  "सभी वेयरहाउस",
                                         "allStatus":  "सभी स्थिति",
                                         "sortStockLowHigh":  "स्टॉक: कम से ज़्यादा",
                                         "sortStockHighLow":  "स्टॉक: ज़्यादा से कम",
                                         "sortName":  "नाम: अ से ज्ञ",
+                                        "sortCategory":  "कैटेगरी: अ से ज्ञ",
                                         "selectVisible":  "दिख रहे प्रोडक्ट चुनें",
                                         "selectPage":  "यह पेज चुनें",
                                         "showing":  "{total} में से {from}-{to} दिख रहे हैं",

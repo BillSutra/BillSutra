@@ -10,6 +10,10 @@ const WorkersPage = async () => {
     redirect("/login");
   }
 
+  if (session.user.accountType === "WORKER") {
+    redirect("/worker-panel");
+  }
+
   if (session.user.role !== "ADMIN") {
     redirect("/dashboard");
   }

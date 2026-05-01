@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { isAxiosError } from "axios";
-import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   Building2,
@@ -38,7 +37,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { clearAdminToken } from "@/lib/adminAuth";
 import {
   AdminBusinessDetail,
   AdminBusinessSummary,
@@ -49,8 +47,10 @@ import {
   fetchAdminBusinesses,
   fetchAdminSummary,
   fetchAdminWorkers,
-  logoutSuperAdmin,
+  isAdminRequestCanceled,
+  isAdminUnauthorizedError,
 } from "@/lib/adminApiClient";
+import { useAdminAuth } from "@/providers/AdminAuthProvider";
 import { cn } from "@/lib/utils";
 
 type SectionKey = "dashboard" | "businesses" | "workers";
@@ -141,12 +141,8 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   return fallback;
 };
 
-const isUnauthorizedError = (error: unknown) =>
-  isAxiosError(error) &&
-  (error.response?.status === 401 || error.response?.status === 403);
-
 export default function AdminDashboardClient() {
-  const router = useRouter();
+  const { logout, status } = useAdminAuth();
   const [section, setSection] = useState<SectionKey>("dashboard");
   const [businesses, setBusinesses] = useState<AdminBusinessSummary[]>([]);
   const [workers, setWorkers] = useState<AdminWorkerRecord[]>([]);
@@ -176,29 +172,30 @@ export default function AdminDashboardClient() {
   );
   const deferredWorkerQuery = useDeferredValue(workerQuery.trim().toLowerCase());
 
-  const handleUnauthorized = () => {
-    clearAdminToken();
-    router.replace("/admin/login");
-  };
-
-  const loadBusinessDetail = async (businessId: string | null) => {
+  const loadBusinessDetail = async (
+    businessId: string | null,
+    signal?: AbortSignal,
+  ) => {
     if (!businessId) {
       setSelectedBusiness(null);
       return null;
     }
 
-    const detail = await fetchAdminBusinessDetail(businessId);
+    const detail = await fetchAdminBusinessDetail(businessId, { signal });
     setSelectedBusiness(detail);
     return detail;
   };
 
-  const loadPanel = async (requestedBusinessId?: string | null) => {
+  const loadPanel = async (
+    requestedBusinessId?: string | null,
+    signal?: AbortSignal,
+  ) => {
     try {
       setError(null);
       const [businessList, workerList, summaryResponse] = await Promise.all([
-        fetchAdminBusinesses(),
-        fetchAdminWorkers(),
-        fetchAdminSummary(),
+        fetchAdminBusinesses({ signal }),
+        fetchAdminWorkers({ signal }),
+        fetchAdminSummary({ signal }),
       ]);
 
       setBusinesses(businessList);
@@ -217,11 +214,10 @@ export default function AdminDashboardClient() {
           : businessList[0]?.id ?? null;
 
       setSelectedBusinessId(resolvedBusinessId);
-      await loadBusinessDetail(resolvedBusinessId);
+      await loadBusinessDetail(resolvedBusinessId, signal);
       setLastSyncedAt(new Date().toISOString());
     } catch (loadError) {
-      if (isUnauthorizedError(loadError)) {
-        handleUnauthorized();
+      if (isAdminRequestCanceled(loadError) || isAdminUnauthorizedError(loadError)) {
         return;
       }
 
@@ -230,14 +226,23 @@ export default function AdminDashboardClient() {
   };
 
   useEffect(() => {
-    const run = async () => {
-      setIsLoading(true);
-      await loadPanel();
-      setIsLoading(false);
-    };
+    if (status !== "authenticated") {
+      return;
+    }
 
-    void run();
-  }, []);
+    const controller = new AbortController();
+
+    setIsLoading(true);
+    void loadPanel(undefined, controller.signal).finally(() => {
+      if (!controller.signal.aborted) {
+        setIsLoading(false);
+      }
+    });
+
+    return () => {
+      controller.abort();
+    };
+  }, [status]);
 
   const filteredBusinesses = useMemo(() => {
     const now = Date.now();
@@ -310,8 +315,7 @@ export default function AdminDashboardClient() {
       setSection("businesses");
       await loadBusinessDetail(businessId);
     } catch (detailError) {
-      if (isUnauthorizedError(detailError)) {
-        handleUnauthorized();
+      if (isAdminRequestCanceled(detailError) || isAdminUnauthorizedError(detailError)) {
         return;
       }
 
@@ -333,8 +337,7 @@ export default function AdminDashboardClient() {
         selectedBusinessId === deleteTarget.id ? null : selectedBusinessId;
       await loadPanel(fallbackBusinessId);
     } catch (deleteError) {
-      if (isUnauthorizedError(deleteError)) {
-        handleUnauthorized();
+      if (isAdminRequestCanceled(deleteError) || isAdminUnauthorizedError(deleteError)) {
         return;
       }
 
@@ -347,13 +350,7 @@ export default function AdminDashboardClient() {
   };
 
   const handleLogout = async () => {
-    try {
-      await logoutSuperAdmin();
-    } catch {
-      // Best-effort: still clear legacy artifacts and navigate away.
-    }
-    clearAdminToken();
-    router.replace("/admin/login");
+    await logout();
   };
 
   const exportBusinesses = () => {
@@ -422,7 +419,7 @@ export default function AdminDashboardClient() {
       ]
     : [];
 
-  if (isLoading) {
+  if (status !== "authenticated" || isLoading) {
     return (
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(15,118,110,0.08),_transparent_42%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)] px-4 py-8 text-slate-900 sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-7xl items-center justify-center rounded-3xl border border-white/70 bg-white/80 p-16 shadow-xl backdrop-blur">

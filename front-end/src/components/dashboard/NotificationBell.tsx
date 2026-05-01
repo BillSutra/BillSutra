@@ -1,8 +1,18 @@
 "use client";
 
+import type { ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell } from "lucide-react";
+import {
+  Bell,
+  BellRing,
+  BriefcaseBusiness,
+  CreditCard,
+  Package,
+  Shield,
+  Sparkles,
+  Users,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,32 +28,53 @@ import type { AppNotification, AppNotificationType } from "@/lib/apiClient";
 
 const typeMeta: Record<
   AppNotificationType,
-  { icon: string; href: string; accent: string }
+  {
+    icon: ComponentType<{ className?: string }>;
+    href: string;
+    accent: string;
+  }
 > = {
   payment: {
-    icon: "💰",
+    icon: CreditCard,
     href: "/invoices/history",
-    accent: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
+    accent:
+      "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300",
   },
   inventory: {
-    icon: "📦",
+    icon: Package,
     href: "/inventory",
-    accent: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300",
+    accent:
+      "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300",
   },
   customer: {
-    icon: "👤",
+    icon: Users,
     href: "/customers",
-    accent: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300",
+    accent:
+      "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300",
   },
   subscription: {
-    icon: "💳",
+    icon: Sparkles,
     href: "/pricing",
-    accent: "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300",
+    accent:
+      "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-500/20 dark:bg-violet-500/10 dark:text-violet-300",
   },
   worker: {
-    icon: "👨‍💼",
+    icon: BriefcaseBusiness,
     href: "/workers",
-    accent: "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-300",
+    accent:
+      "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/20 dark:bg-orange-500/10 dark:text-orange-300",
+  },
+  security: {
+    icon: Shield,
+    href: "/settings?tab=security",
+    accent:
+      "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300",
+  },
+  system: {
+    icon: BellRing,
+    href: "/dashboard",
+    accent:
+      "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-500/20 dark:bg-slate-500/10 dark:text-slate-300",
   },
 };
 
@@ -77,6 +108,7 @@ const NotificationRow = ({
   onSelect: (notification: AppNotification) => void;
 }) => {
   const meta = typeMeta[notification.type];
+  const Icon = meta.icon;
 
   return (
     <DropdownMenuItem
@@ -92,13 +124,25 @@ const NotificationRow = ({
           meta.accent,
         )}
       >
-        <span aria-hidden="true">{meta.icon}</span>
+        <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
         <p
           className={cn(
-            "line-clamp-2 text-sm leading-5",
-            notification.isRead ? "text-muted-foreground" : "font-medium text-foreground",
+            "line-clamp-1 text-sm leading-5",
+            notification.isRead
+              ? "text-foreground/80"
+              : "font-semibold text-foreground",
+          )}
+        >
+          {notification.title}
+        </p>
+        <p
+          className={cn(
+            "mt-1 line-clamp-2 text-xs leading-5",
+            notification.isRead
+              ? "text-muted-foreground"
+              : "text-foreground/80",
           )}
         >
           {notification.message}
@@ -152,7 +196,7 @@ const NotificationBell = () => {
       await markRead(notification.id);
     }
 
-    router.push(typeMeta[notification.type].href);
+    router.push(notification.actionUrl || typeMeta[notification.type].href);
   };
 
   return (
@@ -173,7 +217,10 @@ const NotificationBell = () => {
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[22rem] rounded-3xl border-slate-200/90 bg-white/98 p-2 dark:border-zinc-800 dark:bg-zinc-950/98">
+      <DropdownMenuContent
+        align="end"
+        className="w-[22rem] rounded-3xl border-slate-200/90 bg-white/98 p-2 dark:border-zinc-800 dark:bg-zinc-950/98"
+      >
         <div className="flex items-center justify-between px-3 py-2">
           <div>
             <p className="text-sm font-semibold text-foreground">
@@ -205,21 +252,23 @@ const NotificationBell = () => {
               {copy.empty}
             </div>
           ) : (
-            notifications
-              .slice(0, 5)
-              .map((notification) => (
-                <NotificationRow
-                  key={notification.id}
-                  notification={notification}
-                  locale={locale}
-                  onSelect={(item) => void handleSelect(item)}
-                />
-              ))
+            notifications.slice(0, 5).map((notification) => (
+              <NotificationRow
+                key={notification.id}
+                notification={notification}
+                locale={locale}
+                onSelect={(item) => void handleSelect(item)}
+              />
+            ))
           )}
         </div>
         <DropdownMenuSeparator />
         <div className="px-2 pt-1">
-          <Button asChild variant="ghost" className="w-full justify-center rounded-2xl">
+          <Button
+            asChild
+            variant="ghost"
+            className="w-full justify-center rounded-2xl"
+          >
             <Link href="/notifications">{copy.viewAll}</Link>
           </Button>
         </div>

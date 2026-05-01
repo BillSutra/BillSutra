@@ -1,11 +1,13 @@
+import { Prisma } from "@prisma/client";
 import type { Request, Response } from "express";
 import prisma from "../config/db.config.js";
 import { sendResponse } from "../utils/sendResponse.js";
-import {
-  computeInvoicePaymentSnapshotFromPayments,
-} from "../utils/invoicePaymentSnapshot.js";
 import { getCache, setCache } from "../redis/cache.js";
-import { buildAnalyticsOverviewRedisKey } from "../redis/cacheKeys.js";
+import {
+  buildAnalyticsCachePrefix,
+  buildAnalyticsOverviewRedisKey,
+} from "../redis/cacheKeys.js";
+import { getAnalyticsDailyStatsRange } from "../services/analyticsDailyStats.service.js";
 
 const toNumber = (value: unknown) => Number(value ?? 0);
 
@@ -52,102 +54,98 @@ class AnalyticsController {
       months[0]?.start ??
       new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
-    const [
-      invoices,
-      paymentsInLast12Months,
-      purchasesInLast12Months,
-    ] = await Promise.all([
-      prisma.invoice.findMany({
-        where: { user_id: userId },
-        select: {
-          total: true,
-          status: true,
-          due_date: true,
-          payments: {
-            select: {
-              amount: true,
-            },
-          },
-        },
+    const [monthlyStats, invoiceTotalsRows] = await Promise.all([
+      getAnalyticsDailyStatsRange({
+        userId,
+        start: firstMonthStart,
+        endExclusive: new Date(
+          Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+        ),
       }),
-      prisma.payment.findMany({
-        where: {
-          user_id: userId,
-          paid_at: { gte: firstMonthStart },
-        },
-        select: {
-          paid_at: true,
-          amount: true,
-        },
-      }),
-      prisma.purchase.findMany({
-        where: {
-          user_id: userId,
-          purchase_date: { gte: firstMonthStart },
-        },
-        select: {
-          purchase_date: true,
-          totalAmount: true,
-          paymentStatus: true,
-          paidAmount: true,
-        },
-      }),
+      prisma.$queryRaw<
+        Array<{
+          total_revenue: Prisma.Decimal | number | null;
+          pending_receivables: Prisma.Decimal | number | null;
+          total_sales_transactions: bigint | number | null;
+          completed_sales: bigint | number | null;
+        }>
+      >`
+        WITH payment_totals AS (
+          SELECT
+            "invoice_id",
+            COALESCE(SUM("amount"), 0) AS paid_total
+          FROM "payments"
+          WHERE "user_id" = ${userId}
+          GROUP BY "invoice_id"
+        )
+        SELECT
+          COALESCE(SUM(
+            LEAST(
+              COALESCE(pt.paid_total, CASE WHEN i."status" = 'PAID'::"InvoiceStatus" THEN i."total" ELSE 0 END),
+              COALESCE(i."total", 0)
+            )
+          ), 0) AS total_revenue,
+          COALESCE(SUM(
+            CASE
+              WHEN i."status" IN ('DRAFT'::"InvoiceStatus", 'VOID'::"InvoiceStatus")
+                THEN 0
+              ELSE GREATEST(
+                COALESCE(i."total", 0) - LEAST(
+                  COALESCE(pt.paid_total, CASE WHEN i."status" = 'PAID'::"InvoiceStatus" THEN i."total" ELSE 0 END),
+                  COALESCE(i."total", 0)
+                ),
+                0
+              )
+            END
+          ), 0) AS pending_receivables,
+          COUNT(*) FILTER (
+            WHERE i."status" NOT IN ('DRAFT'::"InvoiceStatus", 'VOID'::"InvoiceStatus")
+          ) AS total_sales_transactions,
+          COUNT(*) FILTER (
+            WHERE LEAST(
+              COALESCE(pt.paid_total, CASE WHEN i."status" = 'PAID'::"InvoiceStatus" THEN i."total" ELSE 0 END),
+              COALESCE(i."total", 0)
+            ) > 0
+          ) AS completed_sales
+        FROM "invoices" AS i
+        LEFT JOIN payment_totals AS pt
+          ON pt."invoice_id" = i."id"
+        WHERE i."user_id" = ${userId}
+      `,
     ]);
 
-    const invoiceSnapshots = invoices.map((invoice) =>
-      computeInvoicePaymentSnapshotFromPayments({
-        total: invoice.total,
-        status: invoice.status,
-        dueDate: invoice.due_date,
-        payments: invoice.payments,
-      }),
+    const invoiceTotals = invoiceTotalsRows[0];
+    const allTimeRevenue = toNumber(invoiceTotals?.total_revenue ?? 0);
+    const pendingReceivables = toNumber(
+      invoiceTotals?.pending_receivables ?? 0,
     );
-
-    const allTimeRevenue = invoiceSnapshots.reduce(
-      (sum, invoice) => sum + invoice.paidAmount,
-      0,
+    const totalSalesTransactions = Number(
+      invoiceTotals?.total_sales_transactions ?? 0,
     );
-    const pendingReceivables = invoiceSnapshots.reduce(
-      (sum, invoice) => sum + invoice.pendingAmount,
-      0,
-    );
-
-    const totalSalesTransactions = invoiceSnapshots.filter(
-      (invoice) => invoice.isCollectible,
-    ).length;
-    const completedSales = invoiceSnapshots.filter(
-      (invoice) => invoice.paymentStatus !== "UNPAID",
-    ).length;
+    const completedSales = Number(invoiceTotals?.completed_sales ?? 0);
 
     const monthlyMap = new Map<string, number>(
       months.map((month) => [month.key, 0]),
     );
-
-    for (const payment of paymentsInLast12Months) {
-      const key = getMonthKey(payment.paid_at);
-      if (monthlyMap.has(key)) {
-        monthlyMap.set(
-          key,
-          (monthlyMap.get(key) ?? 0) + toNumber(payment.amount),
-        );
-      }
-    }
 
     // Calculate monthly expenses (PAID + PARTIALLY_PAID portions of purchases)
     const monthlyExpensesMap = new Map<string, number>(
       months.map((month) => [month.key, 0]),
     );
 
-    for (const purchase of purchasesInLast12Months) {
-      const key = getMonthKey(purchase.purchase_date);
+    for (const row of monthlyStats) {
+      const key = getMonthKey(row.date);
+      if (monthlyMap.has(key)) {
+        monthlyMap.set(
+          key,
+          (monthlyMap.get(key) ?? 0) + row.invoiceCollections,
+        );
+      }
       if (monthlyExpensesMap.has(key)) {
-        let expense = 0;
-        if (purchase.paymentStatus === "PAID") {
-          expense = toNumber(purchase.totalAmount);
-        } else if (purchase.paymentStatus === "PARTIALLY_PAID") {
-          expense = toNumber(purchase.paidAmount);
-        }
-        monthlyExpensesMap.set(key, (monthlyExpensesMap.get(key) ?? 0) + expense);
+        monthlyExpensesMap.set(
+          key,
+          (monthlyExpensesMap.get(key) ?? 0) + row.cashOutPurchases,
+        );
       }
     }
 
@@ -170,7 +168,9 @@ class AnalyticsController {
       monthlyRevenue,
     };
 
-    void setCache(cacheKey, data, 60);
+    void setCache(cacheKey, data, 60, {
+      invalidationPrefixes: [buildAnalyticsCachePrefix(userId)],
+    });
 
     return sendResponse(res, 200, { data });
   }

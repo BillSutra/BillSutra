@@ -1,11 +1,13 @@
+import { analyticsJobHandlers } from "./analytics.worker.js";
 import { emailJobHandlers } from "./email.worker.js";
 import { exportJobHandlers } from "./export.worker.js";
 import { inventoryJobHandlers } from "./inventory.worker.js";
 import { notificationJobHandlers } from "./notification.worker.js";
 import { pdfJobHandlers } from "./pdf.worker.js";
-import type { DefaultQueueJob, DefaultQueueJobHandlerMap } from "../types.js";
+import type { AppQueueJob, AppQueueJobHandlerMap } from "../types.js";
 
-const jobHandlers: DefaultQueueJobHandlerMap = {
+const jobHandlers: AppQueueJobHandlerMap = {
+  ...analyticsJobHandlers,
   ...pdfJobHandlers,
   ...emailJobHandlers,
   ...exportJobHandlers,
@@ -13,7 +15,7 @@ const jobHandlers: DefaultQueueJobHandlerMap = {
   ...notificationJobHandlers,
 };
 
-export const processDefaultQueueJob = async (job: DefaultQueueJob) => {
+export const processQueueJob = async (job: AppQueueJob) => {
   const handler = jobHandlers[job.name];
 
   if (!handler) {

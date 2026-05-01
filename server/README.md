@@ -255,33 +255,45 @@ Sales additionally: `DELETE /:id`
 ## ⚙️ Environment Variables (`server/.env`)
 
 ```env
-# Database
-DATABASE_URL=postgresql://user:password@localhost:5432/billsutra
+# Core
+NODE_ENV=production
+PORT=8000
+DATABASE_URL=postgresql://app_user:pa%24%24word@db.example.com:5432/billsutra?sslmode=require
+JWT_SECRET=replace-with-a-long-random-secret
+ACCESS_TOKEN_SECRET=replace-with-a-separate-long-random-secret
+REFRESH_TOKEN_SECRET=replace-with-another-long-random-secret
 
-# JWT
-JWT_SECRET=your-very-secret-jwt-key
+# Upstash Redis for cache/rate limits
+USE_REDIS_CACHE=true
+USE_REDIS_RATE_LIMIT=true
+UPSTASH_REDIS_REST_URL=https://your-cache-db.upstash.io
+UPSTASH_REDIS_REST_TOKEN=
 
-# Server
-PORT=5000
-
-# Email (Resend)
-RESEND_API_KEY=re_xxxxxxxxxxxxxxxxxxxxx
+# BullMQ requires TCP Redis (REST alone is not enough)
+USE_QUEUE=false
+REDIS_URL=rediss://default:password@your-queue-db.upstash.io:6379
 ```
 
 ### Required At Startup
 
-- `JWT_SECRET` (required): used for signing/verifying auth tokens. The server now fails fast on boot if missing.
-- `DATABASE_URL` (required): Prisma database connection.
+- `JWT_SECRET` (required): compatibility/base auth secret, and the fallback source for access-token signing when `ACCESS_TOKEN_SECRET` is omitted.
+- `ACCESS_TOKEN_SECRET` (recommended): separate secret for access tokens. If omitted, the backend falls back to `JWT_SECRET`.
+- `REFRESH_TOKEN_SECRET` (required in production): must be 32+ characters. Quote it in `.env` if it contains `#` or spaces.
+- `DATABASE_URL` (required): Prisma database connection. URL-encode reserved username/password characters such as `@`, `/`, `?`, and `#`.
 
 ### Optional / Feature-Specific
 
 - `PORT`: API port (defaults to `7000` if not provided).
-- `FRONTEND_URL`, `CORS_ORIGIN`, `CORS_ORIGINS`: CORS allowlist configuration.
-- `RESEND_API_KEY`: required only for email features (OTP, reset, transactional emails).
+- `FRONTEND_URL`, `APP_URL`, `BACKEND_URL`, `CORS_ORIGIN`, `CORS_ORIGINS`: public URL/CORS configuration.
+- `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`: preferred Redis transport for cache, realtime throttling, analytics cache, inventory insights cache, and API rate limiting.
+- `REDIS_URL`: required when `USE_QUEUE=true`, because BullMQ still needs a TCP/TLS Redis connection.
+- `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_HOST`, `EMAIL_PORT`, `EMAIL_SECURE`: SMTP configuration for OTP and transactional email.
 - `FACE_SERVICE_URL`: base URL for the Python face-recognition service. Defaults to `http://localhost:5001`.
 - `FACE_RECOGNITION_TIMEOUT_MS`: timeout for backend-to-face-service requests.
 - `FACE_SERVICE_API_KEY`: optional shared secret if the face service is configured to enforce API keys.
 - `FACE_ENCRYPTION_KEY`: required for face registration and for decrypting encrypted stored face encodings. Must resolve to exactly 32 bytes.
+- `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`: payment gateway credentials.
+- `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`: backend observability settings.
 
 ### Face Recognition Prerequisites
 

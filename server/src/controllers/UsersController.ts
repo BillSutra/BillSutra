@@ -21,6 +21,12 @@ import {
   PUBLIC_LOGOS_ROOT,
 } from "../lib/uploadPaths.js";
 import { deleteUploadedFilesByOwnerId } from "../services/uploadedFiles.service.js";
+import {
+  clearAuthCookies,
+  revokeAllRefreshTokensForUser,
+} from "../lib/authCookies.js";
+import { recordAuditLog } from "../services/auditLog.service.js";
+import { dispatchNotification } from "../services/notification.service.js";
 
 type UserProfileUpdateInput = z.infer<typeof userProfileUpdateSchema>;
 type UserPasswordUpdateInput = z.infer<typeof userPasswordUpdateSchema>;
@@ -233,6 +239,18 @@ class UsersController {
         data: { password: password_hash },
       });
 
+      if (req.user?.businessId) {
+        void dispatchNotification({
+          userId,
+          businessId: req.user.businessId,
+          type: "security",
+          title: "Worker password changed",
+          message: "A worker account password was updated.",
+          actionUrl: "/workers",
+          priority: "warning",
+        });
+      }
+
       return sendResponse(res, 200, { message: "Password updated" });
     }
 
@@ -268,10 +286,43 @@ class UsersController {
     const password_hash = await bcrypt.hash(password, 12);
     await prisma.user.update({
       where: { id: userId },
-      data: { password_hash },
+      data: {
+        password_hash,
+        session_version: {
+          increment: 1,
+        },
+      },
     });
+    await revokeAllRefreshTokensForUser(userId, "password_change");
+    clearAuthCookies(res);
+    await recordAuditLog({
+      req,
+      userId,
+      actorId: req.user?.actorId ?? String(userId),
+      actorType: req.user?.accountType ?? "OWNER",
+      action: "auth.password_change",
+      resourceType: "user",
+      resourceId: String(userId),
+      status: "success",
+    });
+    if (req.user?.businessId) {
+      void dispatchNotification({
+        userId,
+        businessId: req.user.businessId,
+        type: "security",
+        title: "Password changed",
+        message: "Your BillSutra account password was changed and other sessions were logged out.",
+        actionUrl: "/settings?tab=security",
+        priority: "critical",
+      });
+    }
 
-    return sendResponse(res, 200, { message: "Password updated" });
+    return sendResponse(res, 200, {
+      message: "Password updated",
+      data: {
+        reauthRequired: true,
+      },
+    });
   }
 
   static async deleteData(req: Request, res: Response) {

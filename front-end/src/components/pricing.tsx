@@ -27,10 +27,13 @@ import {
   pricingPlans,
 } from "@/lib/pricingPlans";
 import {
-  fetchSubscriptionStatus,
   switchToFreePlan,
   type SubscriptionSnapshot,
 } from "@/lib/apiClient";
+import {
+  useSubscriptionStatusQuery,
+  workspaceQueryKeys,
+} from "@/hooks/useWorkspaceQueries";
 
 type PricingProps = {
   isAuthenticated?: boolean;
@@ -119,7 +122,7 @@ const planAction = ({
   }
 
   return {
-    href: `/payments?plan=${planId}`,
+    href: `/payments/access?plan=${planId}`,
     label: planId === "pro" ? "Upgrade to Pro" : "Upgrade to Pro Plus",
   };
 };
@@ -128,18 +131,17 @@ const Pricing = ({ isAuthenticated = false }: PricingProps) => {
   const [billingCycle, setBillingCycle] = useState<BillingCycle>("monthly");
   const queryClient = useQueryClient();
 
-  const { data: subscription } = useQuery({
-    queryKey: ["subscription-status"],
-    queryFn: fetchSubscriptionStatus,
+  const { data: subscription } = useSubscriptionStatusQuery({
     enabled: isAuthenticated,
-    staleTime: 30_000,
   });
 
   const switchToFreeMutation = useMutation({
     mutationFn: switchToFreePlan,
     onSuccess: () => {
       toast.success("Switched to Free plan.");
-      void queryClient.invalidateQueries({ queryKey: ["subscription-status"] });
+      void queryClient.invalidateQueries({
+        queryKey: workspaceQueryKeys.subscriptionStatus,
+      });
       void queryClient.invalidateQueries({
         queryKey: ["payment-access-status"],
       });

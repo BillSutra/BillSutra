@@ -207,7 +207,7 @@ export default function ProductsClient({
       gst_rate: toNumber(form.gst_rate),
       stock_on_hand: toNumber(form.stock_on_hand),
       reorder_level: toNumber(form.reorder_level),
-      category_id: form.category_id ? Number(form.category_id) : undefined,
+      category_id: form.category_id ? Number(form.category_id) : null,
     });
     resetForm();
     setFormTouched(false);
@@ -254,7 +254,7 @@ export default function ProductsClient({
         reorder_level: toNumber(editingForm.reorder_level),
         category_id: editingForm.category_id
           ? Number(editingForm.category_id)
-          : undefined,
+          : null,
       },
     });
     setEditingId(null);
@@ -997,7 +997,7 @@ export default function ProductsClient({
                     }))
                   }
                 >
-                  <option value="">{t("productsPage.uncategorized")}</option>
+                  <option value="">{t("common.noCategory")}</option>
                   {categoryOptions.map((category) => (
                     <option key={category.id} value={category.id}>
                       {category.name}
@@ -1241,7 +1241,7 @@ export default function ProductsClient({
                                   }
                                 >
                                   <option value="">
-                                    {t("productsPage.uncategorized")}
+                                    {t("common.noCategory")}
                                   </option>
                                   {categoryOptions.map((category) => (
                                     <option
@@ -1295,7 +1295,7 @@ export default function ProductsClient({
                                     {t("productsPage.categoryLabel", {
                                       name:
                                         product.category?.name ??
-                                        t("productsPage.uncategorized"),
+                                        t("common.noCategory"),
                                     })}
                                   </span>
                                   <span className="app-chip">

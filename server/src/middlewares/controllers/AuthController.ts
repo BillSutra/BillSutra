@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import prisma from "../../config/db.config.js";
 import jwt from "jsonwebtoken";
+import { getAccessTokenSecret } from "../../lib/authSecrets.js";
 interface LoginPayloadType {
   name: string;
   email: string;
@@ -38,7 +39,7 @@ class AuthController {
         email: body.email,
         id: findUser.id,
       };
-      const token = jwt.sign(JWTPayload, process.env.JWT_SECRET as string, {
+      const token = jwt.sign(JWTPayload, getAccessTokenSecret(), {
         expiresIn: "15m",
       });
       res.status(200).json({

@@ -1,4 +1,5 @@
-export const ADMIN_TOKEN_COOKIE_KEY = "bill_sutra_super_admin_token";
+export const ADMIN_SESSION_COOKIE_KEY = "bill_sutra_admin_session";
+export const ADMIN_REFRESH_COOKIE_KEY = "bill_sutra_admin_refresh";
 export const ADMIN_TOKEN_STORAGE_KEY = "bill_sutra_super_admin_token";
 export const SUPER_ADMIN_ROLE = "SUPER_ADMIN";
 

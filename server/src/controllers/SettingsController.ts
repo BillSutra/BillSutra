@@ -5,9 +5,26 @@ import { sendResponse } from "../utils/sendResponse.js";
 import { recordAuthEvent } from "../lib/modernAuth.js";
 import { ensureUserPreferenceCompatibility } from "../lib/schemaCompatibility.js";
 import {
+  respondWithRedisCachedData,
+  setRedisResourceCache,
+} from "../lib/redisResourceCache.js";
+import { measureRequestPhase } from "../lib/requestPerformance.js";
+import {
   clearAuthCookies,
   revokeAllRefreshTokensForUser,
 } from "../lib/authCookies.js";
+import {
+  getCurrentRefreshSessionId,
+  listActiveDeviceSessions,
+  revokeOtherRefreshSessions,
+  revokeRefreshSessionById,
+} from "../services/deviceSessions.service.js";
+import { recordAuditLog } from "../services/auditLog.service.js";
+import { dispatchNotification } from "../services/notification.service.js";
+import {
+  buildSettingsPreferencesCachePrefix,
+  buildSettingsPreferencesRedisKey,
+} from "../redis/cacheKeys.js";
 
 type SettingsPayload = {
   appPreferences?: {
@@ -82,28 +99,80 @@ const mapPreferenceResponse = (pref: {
   },
 });
 
-const getOrCreatePreference = async (userId: number) =>
-  ensureUserPreferenceCompatibility().then(() =>
-    prisma.userPreference.upsert({
-      where: { user_id: userId },
-      update: {},
-      create: {
-        user_id: userId,
-      },
-    }),
-  );
+const SETTINGS_PREFERENCES_CACHE_TTL_SECONDS = Math.max(
+  Number(process.env.SETTINGS_PREFERENCES_CACHE_TTL_SECONDS ?? 900),
+  30,
+);
+const SETTINGS_PREFERENCES_CACHE_SWR_SECONDS = Math.max(
+  Number(process.env.SETTINGS_PREFERENCES_CACHE_SWR_SECONDS ?? 300),
+  0,
+);
+
+const readRouteParam = (value: string | string[] | undefined) =>
+  Array.isArray(value) ? value[0] : value;
+
+const getOrCreatePreference = async (userId: number) => {
+  await ensureUserPreferenceCompatibility();
+
+  const existing = await prisma.userPreference.findUnique({
+    where: { user_id: userId },
+  });
+
+  if (existing) {
+    return existing;
+  }
+
+  return prisma.userPreference.create({
+    data: {
+      user_id: userId,
+    },
+  });
+};
 
 class SettingsController {
+  private static ensureOwnerSecurityAccess(req: Request, res: Response) {
+    if (!req.user?.ownerUserId) {
+      sendResponse(res, 401, { message: "Unauthorized" });
+      return null;
+    }
+
+    if (req.user.accountType !== "OWNER") {
+      sendResponse(res, 403, {
+        message: "Security session controls are available only for owner accounts.",
+      });
+      return null;
+    }
+
+    return req.user.ownerUserId;
+  }
+
   static async preferences(req: Request, res: Response) {
     const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
     if (!userId) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
-    const preference = await getOrCreatePreference(userId);
-
-    return sendResponse(res, 200, {
-      data: mapPreferenceResponse(preference),
+    return respondWithRedisCachedData({
+      req,
+      res,
+      key: buildSettingsPreferencesRedisKey({ businessId, userId }),
+      label: "settings-preferences",
+      ttlSeconds: SETTINGS_PREFERENCES_CACHE_TTL_SECONDS,
+      staleWhileRevalidateSeconds: SETTINGS_PREFERENCES_CACHE_SWR_SECONDS,
+      invalidationPrefixes: [
+        buildSettingsPreferencesCachePrefix({ businessId, userId }),
+      ],
+      resolver: async () => {
+        const preference = await measureRequestPhase(
+          "settings.db.preferences",
+          () => getOrCreatePreference(userId),
+        );
+        return measureRequestPhase(
+          "settings.serialize.preferences",
+          async () => mapPreferenceResponse(preference),
+        );
+      },
     });
   }
 
@@ -152,17 +221,34 @@ class SettingsController {
       },
     });
 
+    const responseData = mapPreferenceResponse(updated);
+    void setRedisResourceCache(
+      buildSettingsPreferencesRedisKey({
+        businessId: req.user?.businessId?.trim(),
+        userId,
+      }),
+      {
+        value: responseData,
+        ttlSeconds: SETTINGS_PREFERENCES_CACHE_TTL_SECONDS,
+        staleWhileRevalidateSeconds: SETTINGS_PREFERENCES_CACHE_SWR_SECONDS,
+        invalidationPrefixes: [
+          buildSettingsPreferencesCachePrefix({
+            businessId: req.user?.businessId?.trim(),
+            userId,
+          }),
+        ],
+      },
+    );
+
     return sendResponse(res, 200, {
       message: "Settings saved",
-      data: mapPreferenceResponse(updated),
+      data: responseData,
     });
   }
 
   static async securityActivity(req: Request, res: Response) {
-    const userId = req.user?.ownerUserId;
-    if (!userId) {
-      return sendResponse(res, 401, { message: "Unauthorized" });
-    }
+    const userId = SettingsController.ensureOwnerSecurityAccess(req, res);
+    if (!userId) return;
 
     const events = await prisma.authEvent.findMany({
       where: { user_id: userId },
@@ -190,11 +276,144 @@ class SettingsController {
     });
   }
 
-  static async logoutAll(req: Request, res: Response) {
-    const userId = req.user?.ownerUserId;
-    if (!userId) {
-      return sendResponse(res, 401, { message: "Unauthorized" });
+  static async securitySessions(req: Request, res: Response) {
+    const userId = SettingsController.ensureOwnerSecurityAccess(req, res);
+    if (!userId) return;
+
+    const sessions = await listActiveDeviceSessions(userId, req);
+
+    return sendResponse(res, 200, {
+      data: sessions,
+    });
+  }
+
+  static async logoutOthers(req: Request, res: Response) {
+    const userId = SettingsController.ensureOwnerSecurityAccess(req, res);
+    if (!userId) return;
+
+    const currentSessionId = await getCurrentRefreshSessionId(req, userId);
+    const revokedCount = await revokeOtherRefreshSessions(
+      userId,
+      currentSessionId,
+      "logout_other_devices",
+    );
+
+    await recordAuthEvent({
+      req,
+      userId,
+      method: AuthMethod.PASSWORD,
+      success: true,
+      actorType: req.user?.accountType ?? "OWNER",
+      metadata: {
+        action: "LOGOUT_OTHER_DEVICES",
+        revokedCount,
+      },
+    });
+    await recordAuditLog({
+      req,
+      userId,
+      actorId: req.user?.actorId ?? String(userId),
+      actorType: req.user?.accountType ?? "OWNER",
+      action: "security.logout_other_devices",
+      resourceType: "session",
+      status: "success",
+      metadata: {
+        revokedCount,
+        currentSessionId,
+      },
+    });
+    if (req.user?.businessId && revokedCount > 0) {
+      void dispatchNotification({
+        userId,
+        businessId: req.user.businessId,
+        type: "security",
+        title: "Other devices logged out",
+        message: `${revokedCount} other active device session${revokedCount === 1 ? "" : "s"} ${revokedCount === 1 ? "was" : "were"} revoked.`,
+        actionUrl: "/settings?tab=security",
+        priority: "warning",
+      });
     }
+
+    return sendResponse(res, 200, {
+      message: revokedCount
+        ? "Other device sessions have been revoked."
+        : "No other active device sessions were found.",
+      data: {
+        revokedCount,
+      },
+    });
+  }
+
+  static async revokeSession(req: Request, res: Response) {
+    const userId = SettingsController.ensureOwnerSecurityAccess(req, res);
+    if (!userId) return;
+
+    const sessionId = readRouteParam(req.params.id)?.trim();
+    if (!sessionId) {
+      return sendResponse(res, 422, { message: "Session id is required" });
+    }
+
+    const currentSessionId = await getCurrentRefreshSessionId(req, userId);
+    const revoked = await revokeRefreshSessionById(
+      userId,
+      sessionId,
+      sessionId === currentSessionId
+        ? "manual_logout_current_session"
+        : "manual_logout_other_session",
+    );
+
+    if (!revoked) {
+      return sendResponse(res, 404, {
+        message: "Session not found",
+      });
+    }
+
+    if (sessionId === currentSessionId) {
+      clearAuthCookies(res);
+    }
+
+    await recordAuditLog({
+      req,
+      userId,
+      actorId: req.user?.actorId ?? String(userId),
+      actorType: req.user?.accountType ?? "OWNER",
+      action:
+        sessionId === currentSessionId
+          ? "security.logout_current_session"
+          : "security.logout_session",
+      resourceType: "session",
+      resourceId: sessionId,
+      status: "success",
+    });
+    if (req.user?.businessId) {
+      void dispatchNotification({
+        userId,
+        businessId: req.user.businessId,
+        type: "security",
+        title:
+          sessionId === currentSessionId
+            ? "Current device logged out"
+            : "Device session revoked",
+        message:
+          sessionId === currentSessionId
+            ? "You logged out the current device session."
+            : "A device session was revoked from your BillSutra account.",
+        actionUrl: "/settings?tab=security",
+        priority: "info",
+      });
+    }
+
+    return sendResponse(res, 200, {
+      message:
+        sessionId === currentSessionId
+          ? "Current session logged out."
+          : "Device session revoked.",
+    });
+  }
+
+  static async logoutAll(req: Request, res: Response) {
+    const userId = SettingsController.ensureOwnerSecurityAccess(req, res);
+    if (!userId) return;
 
     try {
       await prisma.user.update({
@@ -215,7 +434,7 @@ class SettingsController {
       }
     }
 
-    await revokeAllRefreshTokensForUser(userId);
+    await revokeAllRefreshTokensForUser(userId, "logout_all_devices");
     clearAuthCookies(res);
 
     await recordAuthEvent({
@@ -228,6 +447,26 @@ class SettingsController {
         action: "LOGOUT_ALL_DEVICES",
       },
     });
+    await recordAuditLog({
+      req,
+      userId,
+      actorId: req.user?.actorId ?? String(userId),
+      actorType: req.user?.accountType ?? "OWNER",
+      action: "security.logout_all_devices",
+      resourceType: "session",
+      status: "success",
+    });
+    if (req.user?.businessId) {
+      void dispatchNotification({
+        userId,
+        businessId: req.user.businessId,
+        type: "security",
+        title: "All devices logged out",
+        message: "All active BillSutra sessions were revoked for this account.",
+        actionUrl: "/settings?tab=security",
+        priority: "critical",
+      });
+    }
 
     return sendResponse(res, 200, {
       message: "All active sessions have been revoked.",

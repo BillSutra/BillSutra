@@ -59,7 +59,7 @@ const DashboardSalesAnalyticsPanel = ({
   const [window, setWindow] = useState<SalesWindow>("last30Days");
 
   const { data, isLoading, isFetching, isError, dataUpdatedAt } = useQuery({
-    queryKey: ["dashboard", "sales-analytics", filters],
+    queryKey: ["dashboard", "sales", filters],
     queryFn: () => fetchDashboardSales(filters),
     enabled: !previewData,
     initialData: previewData,

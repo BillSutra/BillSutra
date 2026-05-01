@@ -16,6 +16,8 @@ type CaptureContext = {
   level?: SeverityLevel;
   tags?: Record<string, string | number | boolean | null | undefined>;
   extra?: Record<string, unknown>;
+  user?: SentryUser | null;
+  contexts?: Record<string, Record<string, unknown>>;
 };
 
 type SentryUser = {
@@ -161,6 +163,9 @@ const sanitizeTelemetryValue = (
   return String(value);
 };
 
+const sanitizeEventPayload = (event: unknown) =>
+  sanitizeTelemetryValue(event) as Record<string, unknown>;
+
 const buildRequestContext = (req: Request) => ({
   requestId: req.requestId,
   method: req.method,
@@ -201,8 +206,64 @@ export const initServerObservability = async () => {
       Sentry.expressIntegration(),
     ],
     sendDefaultPii: false,
+    ignoreErrors: [
+      /Route not found/i,
+      /CORS origin not allowed/i,
+      /Authentication temporarily unavailable/i,
+    ],
+    beforeSend(event: unknown) {
+      const sanitized = sanitizeEventPayload(event);
+      return sanitized;
+    },
+    beforeBreadcrumb(breadcrumb: unknown) {
+      return sanitizeEventPayload(breadcrumb);
+    },
   });
   sentryInitialized = true;
+};
+
+const captureWithScope = (
+  capture: (Sentry: SentryModule) => void,
+) => {
+  if (!shouldInitializeObservability()) {
+    return;
+  }
+
+  void loadSentry().then((Sentry) => {
+    if (!Sentry) {
+      return;
+    }
+
+    capture(Sentry);
+  });
+};
+
+const applyCaptureContext = (scope: SentryScope, context?: CaptureContext) => {
+  scope.setLevel(context?.level ?? "error");
+
+  Object.entries(context?.tags ?? {}).forEach(([key, value]) => {
+    if (value !== null && value !== undefined) {
+      scope.setTag(key, String(value));
+    }
+  });
+
+  if (context?.user !== undefined) {
+    scope.setUser(context.user);
+  }
+
+  if (context?.extra) {
+    scope.setContext(
+      "extra",
+      sanitizeTelemetryValue(context.extra) as Record<string, unknown>,
+    );
+  }
+
+  Object.entries(context?.contexts ?? {}).forEach(([key, value]) => {
+    scope.setContext(
+      key,
+      sanitizeTelemetryValue(value) as Record<string, unknown>,
+    );
+  });
 };
 
 export const requestObservabilityMiddleware = (
@@ -282,28 +343,14 @@ export const captureServerException = (
   req: Request,
   context?: CaptureContext,
 ) => {
-  if (!shouldInitializeObservability()) {
-    return;
-  }
-
-  void loadSentry().then((Sentry) => {
-    if (!Sentry) {
-      return;
-    }
-
+  captureWithScope((Sentry) => {
     Sentry.withScope((scope) => {
-      scope.setLevel(context?.level ?? "error");
       scope.setUser(buildUserPayload(req));
       scope.setTag("environment", getObservabilityEnvironment());
       scope.setTag("endpoint", req.originalUrl || req.url);
       scope.setTag("method", req.method);
       scope.setTag("request_id", req.requestId ?? "unknown");
-
-      Object.entries(context?.tags ?? {}).forEach(([key, value]) => {
-        if (value !== null && value !== undefined) {
-          scope.setTag(key, String(value));
-        }
-      });
+      applyCaptureContext(scope, context);
 
       scope.setContext("request", buildRequestContext(req));
 
@@ -331,38 +378,49 @@ export const captureServerMessage = (
   req: Request,
   context?: CaptureContext,
 ) => {
-  if (!shouldInitializeObservability()) {
-    return;
-  }
-
-  void loadSentry().then((Sentry) => {
-    if (!Sentry) {
-      return;
-    }
-
+  captureWithScope((Sentry) => {
     Sentry.withScope((scope) => {
-      scope.setLevel(context?.level ?? "warning");
       scope.setUser(buildUserPayload(req));
       scope.setTag("environment", getObservabilityEnvironment());
       scope.setTag("endpoint", req.originalUrl || req.url);
       scope.setTag("method", req.method);
       scope.setTag("request_id", req.requestId ?? "unknown");
-
-      Object.entries(context?.tags ?? {}).forEach(([key, value]) => {
-        if (value !== null && value !== undefined) {
-          scope.setTag(key, String(value));
-        }
+      applyCaptureContext(scope, {
+        ...context,
+        level: context?.level ?? "warning",
       });
 
       scope.setContext("request", buildRequestContext(req));
 
-      if (context?.extra) {
-        scope.setContext(
-          "extra",
-          sanitizeTelemetryValue(context.extra) as Record<string, unknown>,
-        );
-      }
+      Sentry.captureMessage(message);
+    });
+  });
+};
 
+export const captureObservabilityException = (
+  error: unknown,
+  context?: CaptureContext,
+) => {
+  captureWithScope((Sentry) => {
+    Sentry.withScope((scope) => {
+      scope.setTag("environment", getObservabilityEnvironment());
+      applyCaptureContext(scope, context);
+      Sentry.captureException(error);
+    });
+  });
+};
+
+export const captureObservabilityMessage = (
+  message: string,
+  context?: CaptureContext,
+) => {
+  captureWithScope((Sentry) => {
+    Sentry.withScope((scope) => {
+      scope.setTag("environment", getObservabilityEnvironment());
+      applyCaptureContext(scope, {
+        ...context,
+        level: context?.level ?? "warning",
+      });
       Sentry.captureMessage(message);
     });
   });

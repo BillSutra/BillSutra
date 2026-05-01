@@ -54,6 +54,10 @@ import {
   UserRound,
   Wallet,
 } from "lucide-react";
+import {
+  workspaceQueryKeys,
+  workspaceQueryStaleTimes,
+} from "@/hooks/useWorkspaceQueries";
 
 type ProfileClientProps = {
   initialProfile: UserProfile;
@@ -92,29 +96,29 @@ const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
 
   const { data: businessProfileQuery, isLoading: isBusinessLoading } = useQuery(
     {
-      queryKey: ["profile", "business"],
+      queryKey: workspaceQueryKeys.businessProfile,
       queryFn: fetchBusinessProfile,
       initialData: previewData?.businessProfile,
       enabled: !previewData,
-      staleTime: queryStaleTime,
+      staleTime: workspaceQueryStaleTimes.businessProfile,
     },
   );
 
   const { data: subscriptionQuery, isLoading: isSubscriptionLoading } =
     useQuery({
-      queryKey: ["profile", "subscription"],
+      queryKey: workspaceQueryKeys.subscriptionStatus,
       queryFn: fetchSubscriptionStatus,
       initialData: previewData?.subscription,
       enabled: !previewData,
-      staleTime: queryStaleTime,
+      staleTime: workspaceQueryStaleTimes.subscriptionStatus,
     });
 
   const { data: permissionsQuery, isLoading: isPermissionsLoading } = useQuery({
-    queryKey: ["profile", "permissions"],
+    queryKey: workspaceQueryKeys.subscriptionPermissions,
     queryFn: fetchUserPermissions,
     initialData: previewData?.permissions,
     enabled: !previewData,
-    staleTime: queryStaleTime,
+    staleTime: workspaceQueryStaleTimes.subscriptionPermissions,
   });
 
   const { data: invoicesQuery, isLoading: isInvoicesLoading } = useQuery({
@@ -151,11 +155,11 @@ const ProfileClient = ({ initialProfile, previewData }: ProfileClientProps) => {
 
   const { data: securityActivityQuery, isLoading: isSecurityLoading } =
     useQuery({
-      queryKey: ["profile", "security-activity"],
+      queryKey: workspaceQueryKeys.securityActivity,
       queryFn: fetchSecurityActivity,
       initialData: previewData?.securityActivity,
       enabled: !previewData,
-      staleTime: queryStaleTime,
+      staleTime: workspaceQueryStaleTimes.securityActivity,
     });
 
   const profile = data ?? initialProfile;

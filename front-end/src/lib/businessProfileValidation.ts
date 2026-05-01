@@ -1,9 +1,6 @@
 import { isValidIndianState, normalizeIndianPincode } from "@/lib/indianAddress";
 import type { BusinessProfileInput } from "@/types/invoice-template";
 
-const BUSINESS_NAME_PATTERN = /^[\p{L}&.\-\s]+$/u;
-const CITY_PATTERN = /^[\p{L}\s]+$/u;
-const INDIAN_PHONE_PATTERN = /^[6-9]\d{9}$/;
 const PINCODE_PATTERN = /^\d{6}$/;
 const GSTIN_PATTERN =
   /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/;
@@ -63,10 +60,10 @@ const sanitizePlainTextDraft = (value: string | null | undefined) =>
     .replace(/[<>]/g, "");
 
 export const sanitizeBusinessNameDraft = (value: string | null | undefined) =>
-  sanitizePlainTextDraft(value).replace(/\d+/g, "");
+  sanitizePlainTextDraft(value);
 
 export const sanitizeBusinessName = (value: string | null | undefined) =>
-  sanitizePlainText(value).replace(/\d+/g, "");
+  sanitizePlainText(value);
 
 export const sanitizeBusinessPhone = (value: string | null | undefined) =>
   String(value ?? "")
@@ -109,27 +106,24 @@ export const sanitizeBusinessCurrency = (value: string | null | undefined) =>
 
 export const validateBusinessName = (value: string) => {
   const sanitized = sanitizeBusinessName(value);
-  if (!sanitized) return "This field is required";
+  if (!sanitized) return "Business name is required";
   if (sanitized.length < 2) return "Business name must be at least 2 characters";
   if (sanitized.length > 100) return "Business name must be at most 100 characters";
-  if (!BUSINESS_NAME_PATTERN.test(sanitized)) {
-    return "Use letters, spaces, &, ., or - only";
-  }
   return "";
 };
 
 export const validateBusinessPhone = (value: string) => {
   const sanitized = sanitizeBusinessPhone(value);
-  if (!sanitized) return "This field is required";
-  if (!INDIAN_PHONE_PATTERN.test(sanitized)) {
-    return "Enter a valid Indian phone number";
+  if (!sanitized) return "Phone number is required";
+  if (!/^\d{10}$/.test(sanitized)) {
+    return "Enter valid phone number";
   }
   return "";
 };
 
 export const validateBusinessAddressLine = (value: string) => {
   const sanitized = sanitizeBusinessAddressLine(value);
-  if (!sanitized) return "This field is required";
+  if (!sanitized) return "Address line 1 is required";
   if (sanitized.length < 5) return "Address line 1 must be at least 5 characters";
   if (sanitized.length > 200) return "Address line 1 must be at most 200 characters";
   return "";
@@ -137,35 +131,31 @@ export const validateBusinessAddressLine = (value: string) => {
 
 export const validateBusinessCity = (value: string) => {
   const sanitized = sanitizeBusinessCity(value);
-  if (!sanitized) return "This field is required";
-  if (sanitized.length < 2) return "City or district must be at least 2 characters";
+  if (!sanitized) return "City / District is required";
   if (sanitized.length > 100) return "City or district must be at most 100 characters";
-  if (!CITY_PATTERN.test(sanitized)) {
-    return "City or district can contain letters and spaces only";
-  }
   return "";
 };
 
 export const validateBusinessState = (value: string) => {
   const sanitized = sanitizeBusinessState(value);
-  if (!sanitized) return "This field is required";
+  if (!sanitized) return "State is required";
   if (!isValidIndianState(sanitized)) return "Select a valid Indian state";
   return "";
 };
 
 export const validateBusinessPincode = (value: string) => {
   const sanitized = sanitizeBusinessPincode(value);
-  if (!sanitized) return "This field is required";
-  if (!PINCODE_PATTERN.test(sanitized)) return "Enter a valid 6-digit pincode";
+  if (!sanitized) return "Pincode is required";
+  if (!PINCODE_PATTERN.test(sanitized)) return "Pincode must be 6 digits";
   return "";
 };
 
 export const validateBusinessEmail = (value: string) => {
   const sanitized = sanitizeBusinessEmail(value);
-  if (!sanitized) return "This field is required";
+  if (!sanitized) return "Email is required";
   if (sanitized.length > 254) return "Email must be at most 254 characters";
   if (!/^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(sanitized)) {
-    return "Enter a valid email address";
+    return "Enter valid email";
   }
   return "";
 };
@@ -194,8 +184,8 @@ export const validateBusinessTaxId = (value: string) => {
 
 export const validateBusinessCurrency = (value: string) => {
   const sanitized = sanitizeBusinessCurrency(value);
-  if (!sanitized) return "This field is required";
-  if (!CURRENCY_PATTERN.test(sanitized)) return "Enter a valid 3-letter currency code";
+  if (!sanitized) return "Currency is required";
+  if (!CURRENCY_PATTERN.test(sanitized)) return "Please select a currency";
   return "";
 };
 

@@ -14,6 +14,7 @@ import prisma from "../config/db.config.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import type { z } from "zod";
+import { getAccessTokenSecret } from "../lib/authSecrets.js";
 import {
   authForgotSchema,
   authLoginSchema,
@@ -21,7 +22,9 @@ import {
   authOtpSendSchema,
   authOtpVerifySchema,
   authRegisterSchema,
+  authResendVerificationOtpSchema,
   authResetSchema,
+  authVerifyEmailOtpSchema,
   passkeyAuthenticateOptionsSchema,
   passkeyAuthenticateVerifySchema,
   passkeyRegisterOptionsSchema,
@@ -30,6 +33,7 @@ import {
 } from "../validations/apiValidations.js";
 import {
   buildOwnerAuthUser,
+  hasSupportedAccessTokenType,
   buildWorkerAuthUser,
   ensureBusinessForUser,
   getAccessTokenExpiresAt,
@@ -42,6 +46,7 @@ import {
   logResolvedTokenSource,
   refreshAuthCookies,
   resolveAccessTokenFromRequest,
+  revokeAllRefreshTokensForUser,
   revokeRefreshTokenFromRequest,
 } from "../lib/authCookies.js";
 import {
@@ -59,14 +64,21 @@ import {
   toPublicKeyBytes,
   toStoredPublicKey,
 } from "../lib/modernAuth.js";
+import { resolveOrSetCsrfToken } from "../lib/csrf.js";
 import { sendEmail } from "../emails/index.js";
 import { buildResetPasswordUrl } from "../lib/appUrls.js";
 import { dispatchWelcomeEmail } from "../services/email.service.js";
+import { dispatchNotification } from "../services/notification.service.js";
 import {
   consumeEmailVerificationToken,
   dispatchFreshVerificationEmail,
   getEmailVerificationResendState,
+  issueEmailVerificationOtp,
+  resendEmailVerificationOtpForEmail,
+  verifyEmailVerificationOtp,
 } from "../services/emailVerification.service.js";
+import { recordAuditLog } from "../services/auditLog.service.js";
+import { maybeHandleSuspiciousLogin } from "../services/authSecurity.service.js";
 
 type SerializableOwnerUser = Pick<
   User,
@@ -76,6 +88,8 @@ type SerializableOwnerUser = Pick<
 type OAuthLoginPayload = z.infer<typeof authOauthSchema>;
 type CredentialsLoginPayload = z.infer<typeof authLoginSchema>;
 type CredentialsRegisterPayload = z.infer<typeof authRegisterSchema>;
+type VerifyEmailOtpPayload = z.infer<typeof authVerifyEmailOtpSchema>;
+type ResendVerificationOtpPayload = z.infer<typeof authResendVerificationOtpSchema>;
 type ForgotPasswordPayload = z.infer<typeof authForgotSchema>;
 type ResetPasswordPayload = z.infer<typeof authResetSchema>;
 type WorkerLoginPayload = z.infer<typeof workerLoginSchema>;
@@ -94,6 +108,23 @@ type PasskeyRegisterVerifyPayload = z.infer<typeof passkeyRegisterVerifySchema>;
 
 const PASSKEY_CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const PASSKEY_TIMEOUT_MS = 60 * 1000;
+const authDiagnosticsEnabled =
+  process.env.AUTH_DIAGNOSTICS_ENABLED === "true" ||
+  (process.env.NODE_ENV !== "production" &&
+    process.env.AUTH_DIAGNOSTICS_ENABLED !== "false");
+
+const logAuthDiagnostic = (
+  event: string,
+  detail?: Record<string, unknown>,
+  level: "info" | "warn" = "info",
+) => {
+  if (!authDiagnosticsEnabled) {
+    return;
+  }
+
+  const logger = level === "warn" ? console.warn : console.info;
+  logger(`[auth.diagnostic] ${event}`, detail ?? {});
+};
 
 const serializeOwnerUser = (
   user: SerializableOwnerUser,
@@ -111,19 +142,45 @@ const serializeOwnerUser = (
 });
 
 const buildOwnerAuthResponse = async (
+  req: Request,
   res: Response,
   user: SerializableOwnerUser,
   message: string,
+  preferences?: {
+    rememberMe?: boolean;
+    reason?: string;
+  },
 ) => {
   const authUser = await buildOwnerAuthUser(user);
-  const { accessToken } = await issueAuthCookies(res, authUser);
-  const expiresAt = getAccessTokenExpiresAt();
+  await maybeHandleSuspiciousLogin({
+    req,
+    userId: user.id,
+    email: user.email,
+    actorId: authUser.actorId,
+    actorType: authUser.accountType,
+  });
+  const { accessToken, accessTokenExpiresAt } = await issueAuthCookies(
+    req,
+    res,
+    authUser,
+    preferences,
+  );
+
+  void dispatchNotification({
+    userId: user.id,
+    businessId: authUser.businessId,
+    type: "security",
+    title: "New login detected",
+    message: `${user.name || user.email} signed in to BillSutra.`,
+    actionUrl: "/settings?tab=security",
+    priority: "info",
+  });
 
   return {
     message,
     user: serializeOwnerUser(user, authUser),
     token: `Bearer ${accessToken}`,
-    expiresAt,
+    expiresAt: accessTokenExpiresAt,
   };
 };
 
@@ -133,7 +190,10 @@ const resolveAuthUserFromAccessToken = async (token: string | null) => {
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    const decoded = jwt.verify(token, getAccessTokenSecret());
+    if (!hasSupportedAccessTokenType(decoded)) {
+      return null;
+    }
     const authUser = await resolveAuthUserFromDecoded(decoded);
 
     if (!authUser) {
@@ -152,8 +212,16 @@ const resolveAuthUserFromAccessToken = async (token: string | null) => {
     }
 
     return authUser;
-  } catch {
-    return null;
+  } catch (error) {
+    if (
+      error instanceof jwt.TokenExpiredError ||
+      error instanceof jwt.JsonWebTokenError ||
+      error instanceof jwt.NotBeforeError
+    ) {
+      return null;
+    }
+
+    throw error;
   }
 };
 
@@ -177,7 +245,103 @@ const authUserWithPasswordSelect = {
   password_hash: true,
 } as const;
 
+const WORKER_LOGIN_DENIED_STATES = new Set([
+  "INACTIVE",
+  "SUSPENDED",
+  "DELETED",
+  "DISABLED",
+  "LEFT_COMPANY",
+  "TERMINATED",
+]);
+
+const WORKER_LOGIN_SETUP_REQUIRED_STATES = new Set([
+  "INVITED",
+  "PENDING",
+  "PENDING_INVITE",
+  "PASSWORD_RESET_REQUIRED",
+  "RESET_REQUIRED",
+]);
+
+const normalizeWorkerIdentifier = (value: unknown) =>
+  typeof value === "string" ? value.trim() : "";
+
+const normalizeWorkerPhone = (value: string) => value.replace(/\D/g, "");
+
+const resolveWorkerLoginLookup = (payload: WorkerLoginPayload) => {
+  const identifier = normalizeWorkerIdentifier(
+    payload.identifier ?? payload.email ?? payload.phone,
+  );
+  const normalizedEmail = payload.email
+    ? normalizeEmailAddress(payload.email)
+    : identifier.includes("@")
+      ? normalizeEmailAddress(identifier)
+      : "";
+  const normalizedPhone = payload.phone
+    ? normalizeWorkerPhone(payload.phone)
+    : normalizedEmail
+      ? ""
+      : normalizeWorkerPhone(identifier);
+
+  return {
+    identifier,
+    email: normalizedEmail || null,
+    phone: normalizedPhone || null,
+  };
+};
+
+const maskWorkerIdentifier = (identifier: string) => {
+  const trimmed = identifier.trim();
+  if (!trimmed) {
+    return "unknown";
+  }
+
+  if (trimmed.includes("@")) {
+    return maskEmail(trimmed);
+  }
+
+  const digits = normalizeWorkerPhone(trimmed);
+  if (digits.length >= 4) {
+    return `${"*".repeat(Math.max(0, digits.length - 4))}${digits.slice(-4)}`;
+  }
+
+  return "***";
+};
+
+const getWorkerAccountStateDenial = (status: string | null | undefined) => {
+  const normalizedStatus = typeof status === "string" ? status.trim().toUpperCase() : "";
+
+  if (!normalizedStatus || normalizedStatus === "ACTIVE") {
+    return null;
+  }
+
+  if (WORKER_LOGIN_DENIED_STATES.has(normalizedStatus)) {
+    return "Worker account is inactive. Contact your business admin.";
+  }
+
+  if (WORKER_LOGIN_SETUP_REQUIRED_STATES.has(normalizedStatus)) {
+    return "Worker account setup is incomplete. Contact your business admin.";
+  }
+
+  return "Worker account access is unavailable. Contact your business admin.";
+};
+
 class AuthController {
+  static csrfToken(req: Request, res: Response) {
+    const csrfToken = resolveOrSetCsrfToken(req, res);
+
+    logAuthDiagnostic("csrf_token_issued", {
+      method: req.method,
+      path: req.path,
+      hasAuthorization: Boolean(req.headers.authorization),
+    });
+
+    return sendResponse(res, 200, {
+      data: {
+        csrfToken,
+      },
+    });
+  }
+
   static async oauthLogin(req: Request, res: Response) {
     try {
       const body: OAuthLoginPayload = req.body;
@@ -197,6 +361,7 @@ class AuthController {
               oauth_id: body.oauth_id,
               image: body.image,
               is_email_verified: true,
+              email_verified_at: new Date(),
             },
             select: authUserSelect,
           })
@@ -208,6 +373,7 @@ class AuthController {
               oauth_id: body.oauth_id,
               image: body.image,
               is_email_verified: true,
+              email_verified_at: new Date(),
             },
             select: authUserSelect,
           });
@@ -223,7 +389,9 @@ class AuthController {
       return sendResponse(
         res,
         200,
-        await buildOwnerAuthResponse(res, findUser, "Login successful"),
+        await buildOwnerAuthResponse(req, res, findUser, "Login successful", {
+          rememberMe: body.rememberMe,
+        }),
       );
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -252,31 +420,55 @@ class AuthController {
           email: body.email,
           password_hash,
           provider: "credentials",
+          is_email_verified: false,
+          email_verified_at: null,
         },
         select: authUserSelect,
-        });
+      });
 
       await ensureBusinessForUser(user.id, body.name);
-      void dispatchWelcomeEmail(user.id);
-      void dispatchFreshVerificationEmail(user.id).catch((error) => {
-        console.warn("[auth] verification email dispatch failed", {
+      let otpDeliveryFailed = false;
+      try {
+        await issueEmailVerificationOtp(user.id, { force: true });
+      } catch (error) {
+        otpDeliveryFailed = true;
+        console.warn("[auth] verification_otp_send_failed", {
           userId: user.id,
           message: error instanceof Error ? error.message : String(error),
         });
-      });
+      }
 
       return sendResponse(
         res,
-        200,
-        await buildOwnerAuthResponse(
-          res,
-          user,
-          "Registration successful",
-        ),
+        201,
+        {
+          message: otpDeliveryFailed
+            ? "Account created. Request a verification code to continue."
+            : "Account created. Verify your email to continue.",
+          data: {
+            user: {
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              is_email_verified: false,
+            },
+            verification: {
+              required: true,
+              email: user.email,
+              retryAfter: Math.ceil(OTP_RESEND_COOLDOWN_MS / 1000),
+              expiresIn: 10 * 60,
+              otpDeliveryFailed,
+            },
+          },
+        },
       );
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
     }
+  }
+
+  static async signup(req: Request, res: Response) {
+    return AuthController.register(req, res);
   }
 
   static async verifyEmail(req: Request, res: Response) {
@@ -306,10 +498,13 @@ class AuthController {
         });
       }
 
+      void dispatchWelcomeEmail(result.user.id);
+
       return sendResponse(
         res,
         200,
         await buildOwnerAuthResponse(
+          req,
           res,
           result.user,
           "Email verified successfully",
@@ -373,6 +568,100 @@ class AuthController {
     }
   }
 
+  static async resendVerificationOtp(req: Request, res: Response) {
+    try {
+      const body: ResendVerificationOtpPayload = req.body;
+      const result = await resendEmailVerificationOtpForEmail(body.email);
+
+      return sendResponse(res, 200, {
+        message: result.message,
+        data: {
+          email: normalizeEmailAddress(body.email),
+          retryAfter: result.retryAfter,
+          expiresIn: result.expiresIn,
+        },
+      });
+    } catch {
+      return sendResponse(res, 500, {
+        message: "Unable to resend verification code right now.",
+      });
+    }
+  }
+
+  static async verifyEmailOtp(req: Request, res: Response) {
+    try {
+      const body: VerifyEmailOtpPayload = req.body;
+      const result = await verifyEmailVerificationOtp({
+        email: body.email,
+        otp: body.otp,
+      });
+
+      if (result.status === "invalid") {
+        return sendResponse(res, 422, {
+          message: "Invalid OTP",
+          errors: { otp: "Invalid OTP" },
+        });
+      }
+
+      if (result.status === "expired") {
+        return sendResponse(res, 410, {
+          message: "OTP expired. Please request a new one.",
+          errors: { otp: "OTP expired" },
+        });
+      }
+
+      if (result.status === "locked") {
+        return sendResponse(res, 429, {
+          message: "Too many incorrect attempts. Please request a new OTP.",
+          errors: { otp: "Too many incorrect attempts" },
+        });
+      }
+
+      if (result.status !== "verified" && result.status !== "already_verified") {
+        return sendResponse(res, 422, {
+          message: "Invalid OTP",
+          errors: { otp: "Invalid OTP" },
+        });
+      }
+
+      const verifiedUser = result.user;
+
+      if (result.status === "verified") {
+        void dispatchWelcomeEmail(verifiedUser.id);
+      }
+
+      await recordAuthEvent({
+        req,
+        userId: verifiedUser.id,
+        method: AuthMethod.OTP,
+        success: true,
+        actorType: "OWNER",
+        metadata: {
+          action: "email_verification_otp",
+        },
+      });
+
+      return sendResponse(
+        res,
+        200,
+        await buildOwnerAuthResponse(
+          req,
+          res,
+          { ...verifiedUser, is_email_verified: true },
+          "Email verified successfully",
+          {
+            rememberMe: body.rememberMe,
+            reason: "otp",
+          },
+        ),
+      );
+    } catch {
+      return sendResponse(res, 500, {
+        message: "Unable to verify email right now.",
+      });
+    }
+  }
+
   static async refresh(req: Request, res: Response) {
     try {
       const refreshed = await refreshAuthCookies(req, res);
@@ -388,13 +677,17 @@ class AuthController {
         data: {
           token: `Bearer ${refreshed.accessToken}`,
           source: "cookie",
-          expiresAt: getAccessTokenExpiresAt(),
+          expiresAt: refreshed.accessTokenExpiresAt,
         },
       });
-    } catch {
-      clearAuthCookies(res);
-      return sendResponse(res, 500, {
-        message: "Unable to refresh session",
+    } catch (error) {
+      console.warn("[auth] refresh_failed", {
+        reason: "service_unavailable",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return sendResponse(res, 503, {
+        message: "Authentication service temporarily unavailable",
+        code: "AUTH_SERVICE_UNAVAILABLE",
       });
     }
   }
@@ -412,40 +705,73 @@ class AuthController {
       );
 
       if (!authUser) {
-        clearAuthCookies(res);
+        clearAuthCookies(res, req);
         return sendResponse(res, 401, {
           message: "Unauthorized",
         });
       }
 
-      const issued = await issueAuthCookies(res, authUser);
+      const issued = await issueAuthCookies(req, res, authUser, {
+        rememberMe:
+          typeof req.body?.rememberMe === "boolean"
+            ? req.body.rememberMe
+            : authUser.rememberMe,
+        reason: "bootstrap",
+      });
 
       return sendResponse(res, 200, {
         message:
           "Secure cookie session bootstrapped. Legacy bearer tokens remain supported during the transition.",
         data: {
           token: `Bearer ${issued.accessToken}`,
-          expiresAt: getAccessTokenExpiresAt(),
+          expiresAt: issued.accessTokenExpiresAt,
+          rememberMe: issued.rememberMe,
         },
       });
-    } catch {
-      clearAuthCookies(res);
-      return sendResponse(res, 500, {
-        message: "Unable to bootstrap secure session",
+    } catch (error) {
+      console.warn("[auth] bootstrap_failed", {
+        reason: "service_unavailable",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return sendResponse(res, 503, {
+        message: "Authentication service temporarily unavailable",
+        code: "AUTH_SERVICE_UNAVAILABLE",
       });
     }
   }
 
   static async logout(req: Request, res: Response) {
     try {
+      console.info("[auth] logout_reason=manual", {
+        ownerUserId: req.user?.ownerUserId ?? null,
+        accountType: req.user?.accountType ?? null,
+      });
       await revokeRefreshTokenFromRequest(req);
-      clearAuthCookies(res);
+      clearAuthCookies(res, req);
+      if (req.user?.ownerUserId) {
+        await recordAuthEvent({
+          req,
+          userId: req.user.ownerUserId,
+          method: AuthMethod.PASSWORD,
+          success: true,
+          actorType: req.user.accountType,
+          metadata: {
+            action: "manual_logout",
+            workerId: req.user.workerId ?? null,
+          },
+        });
+      }
 
       return sendResponse(res, 200, {
         message: "Logged out successfully",
       });
-    } catch {
-      clearAuthCookies(res);
+    } catch (error) {
+      console.warn("[auth] logout_reason=manual", {
+        ownerUserId: req.user?.ownerUserId ?? null,
+        accountType: req.user?.accountType ?? null,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      clearAuthCookies(res, req);
       return sendResponse(res, 200, {
         message: "Logged out successfully",
       });
@@ -500,10 +826,26 @@ class AuthController {
         actorType: "OWNER",
       });
 
+      if (!user.is_email_verified) {
+        const otpResendState = await issueEmailVerificationOtp(user.id);
+
+        return sendResponse(res, 403, {
+          message: "Please verify your email first",
+          code: "EMAIL_VERIFICATION_REQUIRED",
+          data: {
+            email: user.email,
+            retryAfter: otpResendState.retryAfter,
+            expiresIn: otpResendState.expiresIn,
+          },
+        });
+      }
+
       return sendResponse(
         res,
         200,
-        await buildOwnerAuthResponse(res, user, "Login successful"),
+        await buildOwnerAuthResponse(req, res, user, "Login successful", {
+          rememberMe: body.rememberMe,
+        }),
       );
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -513,9 +855,28 @@ class AuthController {
   static async workerLogin(req: Request, res: Response) {
     try {
       const body: WorkerLoginPayload = req.body;
+      const loginLookup = resolveWorkerLoginLookup(body);
+      const loginIdentifierMasked = maskWorkerIdentifier(
+        loginLookup.identifier || body.email || body.phone || "",
+      );
+      const workerLookupConditions = [
+        loginLookup.email ? { email: loginLookup.email } : null,
+        loginLookup.phone ? { phone: loginLookup.phone } : null,
+      ].filter((condition): condition is { email: string } | { phone: string } =>
+        Boolean(condition),
+      );
 
-      const worker = await prisma.worker.findUnique({
-        where: { email: body.email },
+      if (workerLookupConditions.length === 0) {
+        return sendResponse(res, 422, {
+          message: "Enter a valid worker email or phone number",
+          errors: { identifier: "Enter a valid worker email or phone number" },
+        });
+      }
+
+      const worker = await prisma.worker.findFirst({
+        where: {
+          OR: workerLookupConditions,
+        },
       });
 
       if (!worker) {
@@ -524,11 +885,18 @@ class AuthController {
           method: AuthMethod.WORKER_PASSWORD,
           success: false,
           actorType: "WORKER",
+          metadata: {
+            reason: "worker_not_found",
+          },
+        });
+        console.warn("[auth] worker_login_failed", {
+          reason: "worker_not_found",
+          identifier: loginIdentifierMasked,
         });
 
-        return sendResponse(res, 422, {
+        return sendResponse(res, 401, {
           message: "Invalid worker credentials",
-          errors: { email: "Invalid worker credentials" },
+          errors: { identifier: "Invalid worker credentials" },
         });
       }
 
@@ -543,11 +911,20 @@ class AuthController {
           method: AuthMethod.WORKER_PASSWORD,
           success: false,
           actorType: "WORKER",
+          metadata: {
+            reason: "invalid_password",
+            workerId: worker.id,
+          },
+        });
+        console.warn("[auth] worker_login_failed", {
+          reason: "invalid_password",
+          workerId: worker.id,
+          businessId: worker.businessId,
         });
 
-        return sendResponse(res, 422, {
+        return sendResponse(res, 401, {
           message: "Invalid worker credentials",
-          errors: { email: "Invalid worker credentials" },
+          errors: { identifier: "Invalid worker credentials" },
         });
       }
 
@@ -559,17 +936,83 @@ class AuthController {
           LIMIT 1
         `;
 
-        if (profileRows[0]?.status === "INACTIVE") {
+        const deniedStateMessage = getWorkerAccountStateDenial(
+          profileRows[0]?.status,
+        );
+        if (deniedStateMessage) {
+          await recordAuthEvent({
+            req,
+            method: AuthMethod.WORKER_PASSWORD,
+            success: false,
+            actorType: "WORKER",
+            metadata: {
+              reason: "worker_status_blocked",
+              workerId: worker.id,
+              status: profileRows[0]?.status ?? null,
+            },
+          });
+          console.warn("[auth] worker_login_denied", {
+            reason: "worker_status_blocked",
+            workerId: worker.id,
+            status: profileRows[0]?.status ?? null,
+          });
           return sendResponse(res, 403, {
-            message: "Worker account is inactive",
+            message: deniedStateMessage,
           });
         }
       } catch {
         // Migration-safe fallback: continue authentication for older schemas.
       }
 
-      const authUser = await buildWorkerAuthUser(worker);
-      const { accessToken } = await issueAuthCookies(res, authUser);
+      let authUser: AuthUser;
+      try {
+        authUser = await buildWorkerAuthUser(worker);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Worker authentication failed";
+        const isBusinessMissing =
+          message.includes("Business not found") ||
+          message.includes("active business");
+        const isMigrationIssue = message.includes("migration");
+
+        console.warn("[auth] worker_login_denied", {
+          reason: isMigrationIssue
+            ? "worker_auth_migration_missing"
+            : "worker_business_missing",
+          workerId: worker.id,
+          businessId: worker.businessId,
+          message,
+        });
+
+        if (isMigrationIssue) {
+          return sendResponse(res, 503, {
+            message:
+              "Worker authentication is temporarily unavailable. Contact your administrator.",
+            code: "AUTH_SERVICE_UNAVAILABLE",
+          });
+        }
+
+        return sendResponse(res, 403, {
+          message: "Worker account is not linked to an active business.",
+        });
+      }
+
+      await maybeHandleSuspiciousLogin({
+        req,
+        userId: authUser.ownerUserId,
+        email: worker.email,
+        actorId: authUser.actorId,
+        actorType: authUser.accountType,
+      });
+
+      const { accessToken, accessTokenExpiresAt } = await issueAuthCookies(
+        req,
+        res,
+        authUser,
+        {
+          rememberMe: body.rememberMe,
+        },
+      );
 
       try {
         await prisma.$executeRaw`
@@ -590,6 +1033,21 @@ class AuthController {
         actorType: "WORKER",
         metadata: { workerId: worker.id },
       });
+      console.info("[auth] worker_login_success", {
+        workerId: worker.id,
+        ownerUserId: authUser.ownerUserId,
+        businessId: authUser.businessId,
+      });
+
+      void dispatchNotification({
+        userId: authUser.ownerUserId,
+        businessId: authUser.businessId,
+        type: "security",
+        title: "Worker login detected",
+        message: `${worker.name} signed in to BillSutra.`,
+        actionUrl: "/workers",
+        priority: "info",
+      });
 
       return sendResponse(res, 200, {
         message: "Worker login successful",
@@ -603,7 +1061,7 @@ class AuthController {
           workerId: worker.id,
         },
         token: `Bearer ${accessToken}`,
-        expiresAt: getAccessTokenExpiresAt(),
+        expiresAt: accessTokenExpiresAt,
       });
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -613,7 +1071,7 @@ class AuthController {
   static async forgotPassword(req: Request, res: Response) {
     try {
       const body: ForgotPasswordPayload = req.body;
-      const { email } = body;
+      const email = normalizeEmailAddress(body.email);
 
       const user = await prisma.user.findUnique({
         where: { email },
@@ -624,22 +1082,30 @@ class AuthController {
         },
       });
       if (!user) {
-        return sendResponse(res, 422, {
-          message: "No account found for this email",
-          errors: { email: "No account found" },
+        return sendResponse(res, 200, {
+          message: "If an account exists for this email, a password reset link has been sent.",
         });
       }
 
       const token = crypto.randomBytes(24).toString("hex");
+      const tokenHash = hashSecretValue(token);
       const expires = new Date(Date.now() + 1000 * 60 * 30);
 
-      await prisma.passwordResetToken.create({
-        data: {
-          user_id: user.id,
-          token,
-          expires_at: expires,
-        },
-      });
+      await prisma.$transaction([
+        prisma.passwordResetToken.deleteMany({
+          where: {
+            user_id: user.id,
+            used_at: null,
+          },
+        }),
+        prisma.passwordResetToken.create({
+          data: {
+            user_id: user.id,
+            token: tokenHash,
+            expires_at: expires,
+          },
+        }),
+      ]);
 
       try {
         await sendEmail("password_reset", {
@@ -658,7 +1124,7 @@ class AuthController {
         await prisma.passwordResetToken.deleteMany({
           where: {
             user_id: user.id,
-            token,
+            token: tokenHash,
             used_at: null,
           },
         });
@@ -668,8 +1134,21 @@ class AuthController {
         });
       }
 
+      await recordAuditLog({
+        req,
+        userId: user.id,
+        actorId: String(user.id),
+        actorType: "OWNER",
+        action: "auth.password_reset.requested",
+        resourceType: "user",
+        resourceId: String(user.id),
+        metadata: {
+          email,
+        },
+      });
+
       return sendResponse(res, 200, {
-        message: "Password reset email sent",
+        message: "If an account exists for this email, a password reset link has been sent.",
       });
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -678,7 +1157,8 @@ class AuthController {
 
   static async resetPassword(req: Request, res: Response) {
     try {
-      const { email, password, token } = req.body as ResetPasswordPayload;
+      const email = normalizeEmailAddress(req.body.email);
+      const { password, token } = req.body as ResetPasswordPayload;
 
       const user = await prisma.user.findUnique({
         where: { email },
@@ -696,7 +1176,7 @@ class AuthController {
       const reset = await prisma.passwordResetToken.findFirst({
         where: {
           user_id: user.id,
-          token,
+          token: hashSecretValue(token),
           used_at: null,
           expires_at: { gt: new Date() },
         },
@@ -710,14 +1190,52 @@ class AuthController {
       }
 
       const password_hash = await bcrypt.hash(password, 12);
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { password_hash },
-        select: { id: true },
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: user.id },
+          data: {
+            password_hash,
+            session_version: {
+              increment: 1,
+            },
+          },
+          select: { id: true },
+        }),
+        prisma.passwordResetToken.update({
+          where: { id: reset.id },
+          data: { used_at: new Date() },
+        }),
+        prisma.passwordResetToken.deleteMany({
+          where: {
+            user_id: user.id,
+            used_at: null,
+            NOT: { id: reset.id },
+          },
+        }),
+      ]);
+      await revokeAllRefreshTokensForUser(user.id, "password_reset");
+
+      await recordAuthEvent({
+        req,
+        userId: user.id,
+        method: AuthMethod.PASSWORD,
+        success: true,
+        actorType: "OWNER",
+        metadata: {
+          action: "password_reset_completed",
+        },
       });
-      await prisma.passwordResetToken.update({
-        where: { id: reset.id },
-        data: { used_at: new Date() },
+      await recordAuditLog({
+        req,
+        userId: user.id,
+        actorId: String(user.id),
+        actorType: "OWNER",
+        action: "auth.password_reset.completed",
+        resourceType: "user",
+        resourceId: String(user.id),
+        metadata: {
+          email,
+        },
       });
 
       return sendResponse(res, 200, { message: "Password reset successful" });
@@ -928,10 +1446,17 @@ class AuthController {
         }),
         prisma.user.update({
           where: { id: user.id },
-          data: { is_email_verified: true },
+          data: {
+            is_email_verified: true,
+            email_verified_at: user.is_email_verified ? undefined : new Date(),
+          },
           select: { id: true },
         }),
       ]);
+
+      if (!user.is_email_verified) {
+        void dispatchWelcomeEmail(user.id);
+      }
 
       await recordAuthEvent({
         req,
@@ -945,9 +1470,14 @@ class AuthController {
         res,
         200,
         await buildOwnerAuthResponse(
+          req,
           res,
           { ...user, is_email_verified: true },
           "OTP verified. Login successful",
+          {
+            rememberMe: body.rememberMe,
+            reason: "otp",
+          },
         ),
       );
     } catch {
@@ -958,6 +1488,13 @@ class AuthController {
   static async passkeyAuthenticateOptions(req: Request, res: Response) {
     try {
       const body: PasskeyAuthenticateOptionsPayload = req.body;
+      logAuthDiagnostic("passkey_authenticate_options_route_hit", {
+        method: req.method,
+        path: req.path,
+        email: normalizeEmailAddress(body.email),
+        hasAuthorization: Boolean(req.headers.authorization),
+      });
+
       const user = await prisma.user.findUnique({
         where: { email: body.email },
         select: {
@@ -972,6 +1509,15 @@ class AuthController {
       });
 
       if (!user || user.passkey_credentials.length === 0) {
+        logAuthDiagnostic(
+          "passkey_authenticate_options_rejected",
+          {
+            reason: "no_registered_passkey",
+            path: req.path,
+            email: normalizeEmailAddress(body.email),
+          },
+          "warn",
+        );
         return sendResponse(res, 404, {
           message: getCredentialNotFoundMessage(),
         });
@@ -1016,13 +1562,28 @@ class AuthController {
         },
       });
 
+      logAuthDiagnostic("passkey_authenticate_options_challenge_created", {
+        path: req.path,
+        userId: user.id,
+        challengeId: challenge.id,
+        credentialCount: user.passkey_credentials.length,
+      });
+
       return sendResponse(res, 200, {
         data: {
           challenge_id: challenge.id,
           options,
         },
       });
-    } catch {
+    } catch (error) {
+      logAuthDiagnostic(
+        "passkey_authenticate_options_failed",
+        {
+          path: req.path,
+          message: error instanceof Error ? error.message : String(error),
+        },
+        "warn",
+      );
       return sendResponse(res, 500, {
         message: "Unable to start passkey login",
       });
@@ -1032,6 +1593,12 @@ class AuthController {
   static async passkeyAuthenticateVerify(req: Request, res: Response) {
     try {
       const body: PasskeyAuthenticateVerifyPayload = req.body;
+      logAuthDiagnostic("passkey_authenticate_verify_route_hit", {
+        method: req.method,
+        path: req.path,
+        email: normalizeEmailAddress(body.email),
+        challengeId: body.challenge_id,
+      });
       const user = await prisma.user.findUnique({
         where: { email: body.email },
         select: {
@@ -1045,6 +1612,15 @@ class AuthController {
       });
 
       if (!user) {
+        logAuthDiagnostic(
+          "passkey_authenticate_verify_rejected",
+          {
+            reason: "user_not_found",
+            path: req.path,
+            email: normalizeEmailAddress(body.email),
+          },
+          "warn",
+        );
         await recordAuthEvent({
           req,
           method: AuthMethod.PASSKEY,
@@ -1077,6 +1653,18 @@ class AuthController {
         !credentialRecord ||
         credentialRecord.user_id !== user.id
       ) {
+        logAuthDiagnostic(
+          "passkey_authenticate_verify_rejected",
+          {
+            reason: "challenge_or_credential_invalid",
+            path: req.path,
+            userId: user.id,
+            challengeId: body.challenge_id,
+            hasChallenge: Boolean(challenge),
+            hasCredentialRecord: Boolean(credentialRecord),
+          },
+          "warn",
+        );
         await recordAuthEvent({
           req,
           userId: user.id,
@@ -1154,11 +1742,21 @@ class AuthController {
       return sendResponse(
         res,
         200,
-        await buildOwnerAuthResponse(res, user, "Passkey login successful"),
+        await buildOwnerAuthResponse(req, res, user, "Passkey login successful", {
+          rememberMe: body.rememberMe,
+        }),
       );
-    } catch {
-      return sendResponse(res, 422, {
-        message: "Passkey verification failed",
+    } catch (error) {
+      logAuthDiagnostic(
+        "passkey_authenticate_verify_failed",
+        {
+          path: req.path,
+          message: error instanceof Error ? error.message : String(error),
+        },
+        "warn",
+      );
+      return sendResponse(res, 500, {
+        message: "Unable to verify passkey login",
       });
     }
   }
@@ -1393,6 +1991,18 @@ class AuthController {
         return credential;
       });
 
+      await recordAuthEvent({
+        req,
+        userId: user.id,
+        method: AuthMethod.PASSWORD,
+        success: true,
+        actorType: "OWNER",
+        metadata: {
+          action: "passkey_registered",
+          credentialId: created.id,
+        },
+      });
+
       return sendResponse(res, 200, {
         message: "Passkey added successfully.",
         data: created,
@@ -1435,6 +2045,18 @@ class AuthController {
 
       await prisma.passkeyCredential.delete({
         where: { id: credential.id },
+      });
+
+      await recordAuthEvent({
+        req,
+        userId: req.user.id,
+        method: AuthMethod.PASSWORD,
+        success: true,
+        actorType: "OWNER",
+        metadata: {
+          action: "passkey_removed",
+          credentialId: credential.id,
+        },
       });
 
       return sendResponse(res, 200, { message: "Passkey removed" });
