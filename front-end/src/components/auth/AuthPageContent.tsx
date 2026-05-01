@@ -82,37 +82,31 @@ const AuthPageContent = ({ initialView = "login" }: AuthPageContentProps) => {
     [t],
   );
 
-  const floatingCards = useMemo(
+  const kpiCards = useMemo(
     () => [
       {
         icon: TrendingUp,
-        title: t("auth.shared.showcaseCards.revenue.title"),
-        value: t("auth.shared.showcaseCards.revenue.value"),
-        accent:
-          "from-emerald-500/18 via-emerald-400/10 to-transparent text-emerald-950 dark:text-emerald-100",
-        position: "lg:absolute lg:right-6 lg:top-24",
-        animationDelay: "0s",
+        title: "Monthly Revenue",
+        value: heroContent.firstMetricValue,
+        detail: t("auth.shared.stats.healthyGrowth"),
+        tone: "bg-emerald-50 text-emerald-700 ring-emerald-100",
       },
       {
         icon: ShieldCheck,
-        title: t("auth.shared.showcaseCards.pending.title"),
+        title: "Pending Invoices",
         value: t("auth.shared.showcaseCards.pending.value"),
-        accent:
-          "from-amber-500/18 via-amber-400/12 to-transparent text-amber-950 dark:text-amber-100",
-        position: "lg:absolute lg:left-8 lg:bottom-34",
-        animationDelay: "1.2s",
+        detail: t("auth.shared.stats.syncedLive"),
+        tone: "bg-amber-50 text-amber-700 ring-amber-100",
       },
       {
         icon: TriangleAlert,
-        title: t("auth.shared.showcaseCards.stock.title"),
+        title: "Low Stock Alerts",
         value: t("auth.shared.showcaseCards.stock.value"),
-        accent:
-          "from-sky-500/18 via-sky-400/12 to-transparent text-sky-950 dark:text-sky-100",
-        position: "lg:absolute lg:right-14 lg:bottom-12",
-        animationDelay: "2.4s",
+        detail: "Needs attention today",
+        tone: "bg-sky-50 text-sky-700 ring-sky-100",
       },
     ],
-    [t],
+    [heroContent.firstMetricValue, t],
   );
 
   const trustPills = useMemo(
@@ -146,18 +140,20 @@ const AuthPageContent = ({ initialView = "login" }: AuthPageContentProps) => {
         <div className="absolute bottom-[-4rem] left-1/3 h-64 w-64 rounded-full bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.13),transparent_68%)] blur-2xl" />
       </div>
 
-      <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-4 py-5 sm:px-6 sm:py-8 lg:px-8 lg:py-10">
+      <div className="relative mx-auto flex min-h-screen max-w-7xl flex-col px-6 py-5 sm:py-8 lg:py-10">
         <div className="mb-4 flex justify-end gap-3">
           <LanguageToggle />
           <ThemeToggle />
         </div>
 
-        <div className="grid flex-1 gap-6 lg:grid-cols-[1.08fr_0.92fr] xl:gap-8">
-          <section className="relative overflow-hidden rounded-[2rem] border border-white/60 bg-white/70 p-6 shadow-[0_32px_90px_-50px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:border-white/10 dark:bg-white/5 dark:shadow-[0_34px_100px_-60px_rgba(0,0,0,0.72)] sm:p-8 lg:p-10">
-            <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(14,165,233,0.08),transparent_42%,rgba(251,191,36,0.12))] dark:bg-[linear-gradient(135deg,rgba(56,189,248,0.12),transparent_42%,rgba(251,191,36,0.08))]" />
+        <div className="grid flex-1 items-center gap-10 lg:grid-cols-[minmax(0,1.04fr)_minmax(360px,0.96fr)]">
+          <section
+            className="relative order-2 overflow-hidden rounded-3xl border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.86),rgba(239,246,255,0.72)_48%,rgba(255,247,237,0.8))] p-5 shadow-[0_28px_70px_-46px_rgba(15,23,42,0.36)] dark:border-white/10 dark:bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(12,74,110,0.34)_52%,rgba(120,53,15,0.22))] sm:p-7 lg:order-1 lg:p-8"
+            style={{ animation: "authFadeUp 520ms ease-out both" }}
+          >
             <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-primary/25 to-transparent" />
 
-            <div className="relative flex h-full flex-col justify-between gap-8">
+            <div className="relative flex h-full flex-col justify-between gap-7">
               <div className="space-y-6">
                 <div className="inline-flex items-center gap-2 rounded-full border border-white/70 bg-white/80 px-3.5 py-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-slate-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-slate-200">
                   <Sparkles className="h-3.5 w-3.5 text-amber-500" />
@@ -202,73 +198,60 @@ const AuthPageContent = ({ initialView = "login" }: AuthPageContentProps) => {
                 </div>
               </div>
 
-              <div className="relative min-h-[20rem] rounded-[1.75rem] border border-white/70 bg-slate-950/[0.035] p-5 dark:border-white/10 dark:bg-white/[0.035]">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="rounded-[1.5rem] border border-white/70 bg-white/80 p-5 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-white/6">
+              <div className="overflow-hidden rounded-3xl border border-white/75 bg-white/50 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.72)] dark:border-white/10 dark:bg-white/[0.04] sm:p-5">
+                <div className="mb-5 flex items-center justify-between gap-4">
+                  <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-                      {heroContent.firstMetricLabel}
+                      Business dashboard
                     </p>
-                    <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">
-                      {heroContent.firstMetricValue}
-                    </p>
-                    <p className="mt-2 flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-300">
-                      <TrendingUp className="h-4 w-4" />
-                      {t("auth.shared.stats.healthyGrowth")}
+                    <p className="mt-1 text-lg font-semibold tracking-tight text-slate-950 dark:text-white">
+                      Live billing overview
                     </p>
                   </div>
-
-                  <div className="rounded-[1.5rem] border border-white/70 bg-white/80 p-5 shadow-[0_18px_50px_-40px_rgba(15,23,42,0.35)] dark:border-white/10 dark:bg-white/6">
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500 dark:text-slate-400">
-                      {heroContent.secondMetricLabel}
-                    </p>
-                    <p className="mt-3 text-3xl font-semibold tracking-tight text-slate-950 dark:text-white">
-                      {heroContent.secondMetricValue}
-                    </p>
-                    <p className="mt-2 flex items-center gap-2 text-sm text-sky-700 dark:text-sky-300">
-                      <ShieldCheck className="h-4 w-4" />
-                      {t("auth.shared.stats.syncedLive")}
-                    </p>
+                  <div className="hidden rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100 dark:bg-emerald-400/10 dark:text-emerald-200 dark:ring-emerald-300/15 sm:block">
+                    Online
                   </div>
                 </div>
 
-                {floatingCards.map(
-                  ({ icon: Icon, title, value, accent, position, animationDelay }) => (
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {kpiCards.map(({ icon: Icon, title, value, detail, tone }, index) => (
                     <div
                       key={title}
                       className={cn(
-                        "rounded-[1.35rem] border border-white/75 bg-gradient-to-br px-4 py-3 shadow-[0_20px_50px_-36px_rgba(15,23,42,0.38)] backdrop-blur-xl dark:border-white/10 dark:bg-white/8",
-                        accent,
-                        position,
+                        "group flex items-start gap-4 rounded-2xl border border-white/80 bg-white/90 p-5 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.34)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_26px_54px_-38px_rgba(15,23,42,0.38)] dark:border-white/10 dark:bg-white/[0.07]",
+                        index === 2 ? "sm:col-span-2 xl:col-span-1" : "",
                       )}
-                      style={{
-                        animation: "authFloat 6.8s ease-in-out infinite",
-                        animationDelay,
-                      }}
                     >
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/80 text-slate-900 shadow-sm dark:bg-white/15 dark:text-white">
-                          <Icon className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
-                            {title}
-                          </p>
-                          <p className="mt-1 text-lg font-semibold tracking-tight text-current">
-                            {value}
-                          </p>
-                        </div>
+                      <div
+                        className={cn(
+                          "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 transition-transform duration-300 group-hover:scale-105 dark:bg-white/10 dark:text-white dark:ring-white/10",
+                          tone,
+                        )}
+                      >
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-300">
+                          {title}
+                        </p>
+                        <p className="mt-2 text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
+                          {value}
+                        </p>
+                        <p className="mt-1 text-sm leading-5 text-slate-600 dark:text-slate-300">
+                          {detail}
+                        </p>
                       </div>
                     </div>
-                  ),
-                )}
+                  ))}
+                </div>
               </div>
             </div>
           </section>
 
-          <section className="flex items-center">
+          <section className="order-1 flex items-center lg:order-2">
             <div
-              className="w-full rounded-[2rem] border border-white/60 bg-white/72 p-5 shadow-[0_34px_100px_-56px_rgba(15,23,42,0.4)] backdrop-blur-2xl dark:border-white/10 dark:bg-white/6 sm:p-6 lg:p-8"
-              style={{ animation: "authReveal 520ms ease-out" }}
+              className="w-full rounded-[2rem] border border-white/70 bg-white/86 p-5 shadow-[0_26px_76px_-52px_rgba(15,23,42,0.36)] dark:border-white/10 dark:bg-white/[0.07] sm:p-6 lg:p-7"
+              style={{ animation: "authFadeUp 620ms ease-out 80ms both" }}
             >
               <div className="mb-6 flex flex-col gap-5">
                 <div className="space-y-2">
@@ -279,12 +262,12 @@ const AuthPageContent = ({ initialView = "login" }: AuthPageContentProps) => {
                   </p>
                   <h2 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-white sm:text-[2rem]">
                     {view === "login"
-                      ? t("auth.loginPage.formTitle")
+                      ? "Welcome to BillSutra"
                       : t("auth.registerPage.formTitle")}
                   </h2>
                   <p className="max-w-xl text-sm leading-6 text-slate-600 dark:text-slate-300">
                     {view === "login"
-                      ? t("auth.loginPage.formDescription")
+                      ? "India's smart billing & GST platform for growing businesses."
                       : t("auth.registerPage.formDescription")}
                   </p>
                 </div>
@@ -331,7 +314,7 @@ const AuthPageContent = ({ initialView = "login" }: AuthPageContentProps) => {
                 </div>
               </div>
 
-              <div className="relative min-h-[50rem] sm:min-h-[54rem]">
+              <div className="relative min-h-[49rem] sm:min-h-[52rem]">
                 <div
                   id="auth-panel-login"
                   role="tabpanel"
@@ -409,17 +392,7 @@ const AuthPageContent = ({ initialView = "login" }: AuthPageContentProps) => {
       </div>
 
       <style>{`
-        @keyframes authFloat {
-          0%,
-          100% {
-            transform: translateY(0px);
-          }
-          50% {
-            transform: translateY(-8px);
-          }
-        }
-
-        @keyframes authReveal {
+        @keyframes authFadeUp {
           0% {
             opacity: 0;
             transform: translateY(16px);

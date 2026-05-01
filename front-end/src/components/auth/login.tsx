@@ -672,7 +672,7 @@ export default function Login({
     <>
       <form
         action={formAction}
-        className="grid gap-4 rounded-[1.75rem] border border-white/65 bg-white/78 p-4 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.34)] backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:p-5"
+        className="grid gap-4 rounded-[1.75rem] border border-white/75 bg-white/90 p-4 shadow-[0_20px_52px_-42px_rgba(15,23,42,0.3)] dark:border-white/10 dark:bg-white/[0.07] sm:p-5"
         noValidate
         onSubmit={handlePasswordSubmit}
       >
@@ -848,7 +848,7 @@ export default function Login({
             <Button
               type="button"
               variant="outline"
-              className="h-12 justify-center gap-3 rounded-2xl border-white/70 bg-white/78 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/6 dark:hover:bg-white/10"
+              className="h-12 justify-center gap-3 rounded-2xl border-white/75 bg-white/90 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/[0.07] dark:hover:bg-white/10"
               onClick={handlePasskeyLogin}
               disabled={isPasskeyLoading || isSigningIn}
             >
@@ -858,7 +858,7 @@ export default function Login({
                 : "Continue with passkey"}
             </Button>
 
-            <div className="rounded-[1.6rem] border border-white/70 bg-white/76 p-4 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.28)] dark:border-white/10 dark:bg-white/6">
+            <div className="rounded-[1.6rem] border border-white/75 bg-white/95 p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.26)] dark:border-white/10 dark:bg-white/[0.07]">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
                   <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -872,7 +872,7 @@ export default function Login({
                 <Button
                   type="button"
                   variant="outline"
-                  className="rounded-2xl border-white/70 bg-white/80 dark:border-white/10 dark:bg-white/8"
+                  className="rounded-2xl border-white/75 bg-white/90 font-semibold shadow-[0_12px_24px_-22px_rgba(15,23,42,0.26)] dark:border-white/10 dark:bg-white/10"
                   onClick={handleSendOtp}
                   disabled={
                     isOtpSending ||
@@ -908,7 +908,7 @@ export default function Login({
                         inputMode="numeric"
                         autoComplete={index === 0 ? "one-time-code" : "off"}
                         maxLength={1}
-                        className="h-12 w-11 rounded-2xl border-white/70 bg-white/80 text-center text-lg shadow-[0_16px_30px_-26px_rgba(15,23,42,0.22)] dark:border-white/10 dark:bg-white/8"
+                        className="h-12 w-11 rounded-2xl border-white/75 bg-white/95 text-center text-lg font-semibold text-slate-950 shadow-[0_12px_26px_-24px_rgba(15,23,42,0.22)] dark:border-white/10 dark:bg-white/10 dark:text-white"
                         aria-label={`OTP digit ${index + 1}`}
                         disabled={isOtpVerifying || isSigningIn}
                       />
@@ -947,7 +947,7 @@ export default function Login({
             <Button
               type="button"
               variant="outline"
-              className="h-12 justify-center gap-3 rounded-2xl border-white/70 bg-white/78 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/6 dark:hover:bg-white/10"
+              className="h-12 justify-center gap-3 rounded-2xl border-white/75 bg-white/90 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/[0.07] dark:hover:bg-white/10"
               onClick={handleGoogleLogin}
               disabled={isSigningIn}
             >
@@ -963,7 +963,7 @@ export default function Login({
             <Button
               type="button"
               variant="outline"
-              className="h-12 justify-center gap-3 rounded-2xl border-white/70 bg-white/78 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/6 dark:hover:bg-white/10"
+              className="h-12 justify-center gap-3 rounded-2xl border-white/75 bg-white/90 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/[0.07] dark:hover:bg-white/10"
               onClick={() => setIsFaceLoginOpen(true)}
               disabled={isSigningIn}
             >
