@@ -244,7 +244,8 @@
                        "invoices":  "इनवॉइस",
                        "invoiceRecords":  "पुराने बिल",
                        "clients":  "ग्राहक",
-                       "workers":  "वर्कर पैनल",
+                       "workerPanel":  "वर्कर पैनल",
+                       "workers":  "टीम मैनेजमेंट",
                        "suppliers":  "सप्लायर्स",
                        "purchases":  "खरीद",
                        "sales":  "बिक्री",
@@ -255,6 +256,8 @@
     "profileMenu":  {
                         "myAccount":  "मेरा अकाउंट",
                         "profile":  "प्रोफाइल",
+                        "preferences":  "पसंद",
+                        "helpCenter":  "हेल्प सेंटर",
                         "logout":  "लॉगआउट",
                         "languageSection":  "भाषा",
                         "languageEnglish":  "EN",

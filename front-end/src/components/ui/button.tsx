@@ -10,15 +10,15 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary:
-          "bg-primary text-primary-foreground shadow-[0_14px_28px_-18px_rgba(37,99,235,0.38)] hover:bg-primary/92 hover:shadow-[0_18px_34px_-18px_rgba(37,99,235,0.44)] dark:bg-blue-600 dark:text-white dark:hover:bg-blue-500 dark:shadow-[0_16px_30px_-18px_rgba(37,99,235,0.45)]",
+          "bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-[0_14px_28px_-18px_rgba(37,99,235,0.44)] hover:from-blue-700 hover:to-sky-600 hover:shadow-[0_18px_34px_-18px_rgba(37,99,235,0.5)] dark:from-blue-600 dark:to-sky-500 dark:text-white dark:hover:from-blue-500 dark:hover:to-sky-400",
         default:
-          "bg-primary text-primary-foreground shadow-[0_14px_28px_-18px_rgba(37,99,235,0.38)] hover:bg-primary/92 hover:shadow-[0_18px_34px_-18px_rgba(37,99,235,0.44)] dark:bg-blue-600 dark:text-white dark:hover:bg-blue-500 dark:shadow-[0_16px_30px_-18px_rgba(37,99,235,0.45)]",
+          "bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-[0_14px_28px_-18px_rgba(37,99,235,0.44)] hover:from-blue-700 hover:to-sky-600 hover:shadow-[0_18px_34px_-18px_rgba(37,99,235,0.5)] dark:from-blue-600 dark:to-sky-500 dark:text-white dark:hover:from-blue-500 dark:hover:to-sky-400",
         danger:
-          "bg-red-600 text-white shadow-sm hover:bg-red-700 hover:shadow-md focus-visible:ring-red-500/30",
+          "border border-red-200 bg-red-50 text-red-700 shadow-sm hover:border-red-300 hover:bg-red-100 hover:shadow-md focus-visible:ring-red-500/30 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300 dark:hover:bg-red-500/15",
         destructive:
           "bg-destructive text-white shadow-sm hover:bg-destructive/90 hover:shadow-md focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
         outline:
-          "border border-border/80 bg-card text-foreground shadow-sm hover:border-primary/25 hover:bg-accent/70 hover:text-foreground hover:shadow-[0_12px_24px_-20px_rgba(15,23,42,0.12)] dark:border-zinc-700 dark:bg-zinc-800 dark:text-white dark:hover:border-zinc-600 dark:hover:bg-zinc-700 dark:hover:text-white",
+          "border border-slate-200 bg-white text-slate-800 shadow-sm hover:border-blue-200 hover:bg-blue-50/70 hover:text-slate-950 hover:shadow-[0_12px_24px_-20px_rgba(15,23,42,0.14)] dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:hover:border-zinc-600 dark:hover:bg-zinc-800 dark:hover:text-white",
         secondary:
           "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/88 hover:shadow-[0_12px_24px_-20px_rgba(37,99,235,0.18)] dark:bg-zinc-800 dark:text-white dark:hover:bg-zinc-700",
         ghost:

@@ -40,13 +40,13 @@ const SidebarNavItem = ({
       onMouseEnter={handlePrefetch}
       onFocus={handlePrefetch}
       className={cn(
-        "group relative flex h-10 items-center rounded-xl border border-transparent px-3 py-2 text-sm transition-all duration-200",
+        "group relative flex h-11 items-center rounded-xl border border-transparent px-3 py-2 text-sm transition-all duration-200",
         collapsed ? "justify-center" : "gap-3",
         active
-          ? "border-blue-200 bg-blue-50 text-blue-700 shadow-[0_12px_24px_-20px_rgba(37,99,235,0.28)] ring-1 ring-blue-100 dark:border-blue-500/60 dark:bg-blue-600/20 dark:text-blue-400 dark:shadow-[0_10px_24px_-18px_rgba(37,99,235,0.55)] dark:ring-blue-500/20"
+          ? "border-blue-200 bg-blue-50 text-blue-700 shadow-[0_12px_24px_-20px_rgba(37,99,235,0.28)] ring-1 ring-blue-100 dark:border-blue-500/60 dark:bg-blue-600/20 dark:text-blue-300 dark:shadow-[0_10px_24px_-18px_rgba(37,99,235,0.55)] dark:ring-blue-500/20"
           : highlighted
             ? "border border-amber-200 bg-amber-50 text-amber-800 shadow-[0_14px_28px_-24px_rgba(217,119,6,0.18)] hover:bg-amber-100 dark:border-amber-400/20 dark:bg-amber-400/[0.08] dark:text-amber-100 dark:shadow-[0_14px_28px_-24px_rgba(217,119,6,0.4)] dark:hover:bg-amber-400/[0.12]"
-          : "text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-900 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-white",
+          : "text-slate-600 hover:border-slate-200 hover:bg-white hover:text-slate-950 dark:text-zinc-400 dark:hover:border-zinc-700 dark:hover:bg-zinc-900 dark:hover:text-white",
       )}
     >
       <span
@@ -69,7 +69,12 @@ const SidebarNavItem = ({
       </span>
       {!collapsed ? (
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className={cn("truncate", active ? "font-semibold" : "font-medium")}>
+          <span
+            className={cn(
+              "truncate",
+              active ? "font-semibold" : "font-medium",
+            )}
+          >
             {label}
           </span>
           {badge ? (

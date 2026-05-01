@@ -2225,8 +2225,7 @@ const normalizeCustomerPayload = (
   payload: Partial<CustomerInput>,
   includeDefaults = false,
 ) => {
-  const normalizedAddress = toCustomerAddress({
-    customerAddress: payload.customerAddress ?? null,
+  const normalizedAddress = toBusinessAddressInput({
     addressLine1:
       payload.customerAddress?.addressLine1 ??
       payload.address_line1 ??
@@ -2234,7 +2233,6 @@ const normalizeCustomerPayload = (
     city: payload.customerAddress?.city ?? payload.city ?? undefined,
     state: payload.customerAddress?.state ?? payload.state ?? undefined,
     pincode: payload.customerAddress?.pincode ?? payload.pincode ?? undefined,
-    address: payload.address,
   });
 
   const hasStructuredAddress = Boolean(

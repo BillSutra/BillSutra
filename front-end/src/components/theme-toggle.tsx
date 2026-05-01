@@ -34,6 +34,7 @@ const ThemeToggle = () => {
       <Button
         variant="outline"
         size="icon"
+        className="rounded-xl border-slate-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
         aria-label={t("themeToggle.toggleTheme")}
         disabled
       >
@@ -48,6 +49,7 @@ const ThemeToggle = () => {
         <Button
           variant="outline"
           size="icon"
+          className="rounded-xl border-slate-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
           aria-label={t("themeToggle.toggleTheme")}
         >
           {icon}

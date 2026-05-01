@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronRight, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { useSession } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import BrandLogo from "@/components/branding/BrandLogo";
+import UserAvtar from "@/components/common/UserAvtar";
 import {
   dashboardNavItems,
   dashboardNavSections,
@@ -29,12 +31,11 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
   const [collapsedSections, setCollapsedSections] = useState<
     Partial<Record<DashboardNavSection, boolean>>
   >({
-    salesBilling: true,
-    productsInventory: true,
-    contacts: true,
-    purchases: true,
-    customization: true,
-    system: true,
+    operations: false,
+    salesBilling: false,
+    inventory: false,
+    contacts: false,
+    settings: false,
   });
 
   const translatedNavItems = useMemo(
@@ -53,6 +54,10 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
               item.href === "/invoices" ||
               item.href === "/simple-bill"
             );
+          }
+
+          if (item.workerOnly) {
+            return false;
           }
 
           return !item.adminOnly || role === "ADMIN";
@@ -100,17 +105,26 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
     }
   }, [language, translatedNavItems]);
 
+  const userName = session?.user?.name || "BillSutra User";
+  const userEmail = session?.user?.email || "Workspace account";
+  const roleLabel =
+    session?.user?.accountType === "WORKER" || session?.user?.role === "WORKER"
+      ? "Worker"
+      : session?.user?.role === "ADMIN"
+        ? "Admin"
+        : "Owner";
+
   return (
-    <div className="flex h-full flex-col gap-5 p-3">
+    <div className="flex h-full min-h-0 flex-col p-3">
       <div
         className={cn(
-          "app-panel rounded-[1.5rem] p-4",
-          collapsed ? "px-2.5" : "px-3.5",
+          "rounded-2xl border border-transparent p-2.5",
+          collapsed ? "px-2" : "px-3",
         )}
       >
         <div
           className={cn(
-            "flex items-center gap-3",
+            "flex items-center gap-3 rounded-2xl px-1 py-1",
             collapsed ? "justify-center" : "justify-start",
           )}
         >
@@ -118,17 +132,17 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
             variant={collapsed ? "icon" : "header"}
             showTagline={false}
             className={collapsed ? "" : "gap-2.5"}
-            iconClassName={collapsed ? "h-11 w-11 p-1.5" : "h-9 w-9 p-1.5"}
+            iconClassName={collapsed ? "h-11 w-11 p-1.5" : "h-10 w-10 p-1.5"}
           />
         </div>
         {!collapsed ? (
-          <p className="mt-3 text-xs leading-5 text-muted-foreground">
-            Premium billing, inventory, and operations for modern teams.
+          <p className="ml-[3.35rem] mt-1 text-xs font-medium leading-5 text-slate-500 dark:text-zinc-400">
+            Smart Billing OS
           </p>
         ) : null}
       </div>
 
-      <nav className="space-y-4">
+      <nav className="app-scrollbar mt-3 min-h-0 flex-1 space-y-5 overflow-y-auto pr-1">
         {groupedNavItems.map((section) => {
           const hasActiveItem = section.items.some(
             (item) =>
@@ -143,12 +157,12 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
             collapsed || section.id === "main" || !sectionCollapsed;
 
           return (
-            <div key={section.id} className="space-y-1.5">
+            <div key={section.id} className="space-y-2">
               {!collapsed ? (
                 canCollapseSection ? (
                   <button
                     type="button"
-                    className="flex w-full items-center gap-2 rounded-lg px-3 py-1 text-left text-[0.68rem] font-semibold uppercase tracking-[0.24em] text-slate-400 transition-all duration-200 hover:bg-white hover:text-slate-700 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-1.5 text-left text-[0.68rem] font-semibold uppercase tracking-[0.22em] text-slate-400 transition-all duration-200 hover:bg-white/80 hover:text-slate-700 dark:text-zinc-500 dark:hover:bg-zinc-900 dark:hover:text-zinc-200"
                     aria-expanded={isExpanded}
                     onClick={() =>
                       setCollapsedSections((current) => ({
@@ -172,7 +186,7 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
                 )
               ) : null}
               {isExpanded ? (
-                <div className="grid gap-1">
+                <div className="grid gap-1.5">
                   {section.items.map((item) => {
                     const active =
                       pathname === item.href ||
@@ -197,6 +211,45 @@ const SidebarContent = ({ collapsed }: { collapsed: boolean }) => {
           );
         })}
       </nav>
+
+      <div
+        className={cn(
+          "mt-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-[0_16px_32px_-26px_rgba(15,23,42,0.16)] dark:border-zinc-800 dark:bg-zinc-900",
+          collapsed && "flex justify-center p-2",
+        )}
+      >
+        {collapsed ? (
+          <Link
+            href="/settings"
+            title="Settings"
+            className="flex h-11 w-11 items-center justify-center rounded-2xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
+          >
+            <Settings className="h-4 w-4" />
+          </Link>
+        ) : (
+          <div className="flex items-center gap-3">
+            <UserAvtar name={userName} image={session?.user?.image ?? undefined} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-950 dark:text-white">
+                {userName}
+              </p>
+              <p className="truncate text-xs text-slate-500 dark:text-zinc-400">
+                {userEmail}
+              </p>
+              <span className="mt-1 inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-blue-700 dark:bg-blue-500/10 dark:text-blue-300">
+                {roleLabel}
+              </span>
+            </div>
+            <Link
+              href="/settings"
+              title="Settings"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-950 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white"
+            >
+              <Settings className="h-4 w-4" />
+            </Link>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
@@ -213,17 +266,17 @@ const AppSidebar = ({
     <>
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 hidden border-r border-slate-200 bg-slate-100/95 text-sidebar-foreground shadow-[0_18px_40px_-34px_rgba(15,23,42,0.12)] backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-[0_18px_45px_-38px_rgba(1,4,9,0.82)] lg:block",
-          collapsed ? "w-20" : "w-60",
+          "fixed inset-y-0 left-0 z-40 hidden border-r border-slate-200 bg-slate-50/96 text-sidebar-foreground shadow-[0_18px_40px_-34px_rgba(15,23,42,0.12)] backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-950/96 dark:shadow-[0_18px_45px_-38px_rgba(1,4,9,0.82)] lg:block",
+          collapsed ? "w-20" : "w-[270px]",
         )}
       >
         <div className="flex h-full flex-col">
-          <div className="flex items-center justify-end px-3 pt-3">
+          <div className="flex items-center justify-end px-4 pt-4">
             <Button
               type="button"
               size="icon-sm"
               variant="outline"
-              className="rounded-2xl"
+              className="rounded-xl border-slate-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
               onClick={onToggleCollapsed}
               aria-label={
                 collapsed ? t("sidebar.expand") : t("sidebar.collapse")
@@ -237,7 +290,7 @@ const AppSidebar = ({
             </Button>
           </div>
 
-          <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1">
             <SidebarContent collapsed={collapsed} />
           </div>
         </div>
@@ -253,7 +306,7 @@ const AppSidebar = ({
 
       <aside
         className={cn(
-          "app-scrollbar fixed top-0 left-0 z-50 h-full w-72 overflow-y-auto border-r border-slate-200 bg-slate-100 text-sidebar-foreground shadow-[0_20px_44px_-32px_rgba(15,23,42,0.16)] transition-transform duration-200 dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-[0_20px_48px_-32px_rgba(1,4,9,0.78)] lg:hidden",
+          "fixed top-0 left-0 z-50 h-full w-[290px] border-r border-slate-200 bg-slate-50 text-sidebar-foreground shadow-[0_20px_44px_-32px_rgba(15,23,42,0.16)] transition-transform duration-200 dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-[0_20px_48px_-32px_rgba(1,4,9,0.78)] lg:hidden",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >

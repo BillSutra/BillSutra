@@ -128,8 +128,8 @@ const DashboardLayout = ({
   };
 
   return (
-    <div className="dashboard-root min-h-screen text-foreground">
-      <div className="flex min-h-screen">
+    <div className="dashboard-root h-screen overflow-hidden bg-slate-50 text-foreground dark:bg-zinc-950">
+      <div className="flex h-screen overflow-hidden">
         <AppSidebar
           collapsed={collapsed}
           onToggleCollapsed={() => setCollapsed((prev) => !prev)}
@@ -139,8 +139,8 @@ const DashboardLayout = ({
 
         <div
           className={cn(
-            "flex min-h-screen min-w-0 flex-1 flex-col transition-[margin] duration-200",
-            collapsed ? "lg:ml-20" : "lg:ml-60",
+            "flex min-h-0 min-w-0 flex-1 flex-col transition-[margin] duration-200",
+            collapsed ? "lg:ml-20" : "lg:ml-[270px]",
           )}
         >
           <TopNavbar
@@ -150,10 +150,10 @@ const DashboardLayout = ({
             onOpenHelp={() => setHelpOpen(true)}
           />
 
-          <main className="page-fade-in dashboard-grid flex-1 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <section className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <main className="app-scrollbar page-fade-in dashboard-grid min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:p-6 xl:p-8">
+            <section className="mx-auto mb-6 flex w-full max-w-[1600px] flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="max-w-4xl">
-                <h1 className="text-3xl font-semibold tracking-tight sm:text-[2.35rem]">
+                <h1 className="text-2xl font-semibold tracking-tight text-slate-950 dark:text-white">
                   {title}
                 </h1>
                 {subtitle ? (
@@ -167,7 +167,7 @@ const DashboardLayout = ({
               ) : null}
             </section>
 
-            {children}
+            <div className="mx-auto w-full max-w-[1600px]">{children}</div>
           </main>
         </div>
       </div>

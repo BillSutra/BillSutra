@@ -770,7 +770,8 @@
                        "invoices":  "Invoices",
                        "invoiceRecords":  "Past Bills",
                        "clients":  "Customers",
-                       "workers":  "Worker Panel",
+                       "workerPanel":  "Worker Panel",
+                       "workers":  "Team Management",
                        "suppliers":  "Suppliers",
                        "purchases":  "Purchases",
                        "sales":  "Sales",
@@ -781,6 +782,8 @@
     "profileMenu":  {
                         "myAccount":  "My Account",
                         "profile":  "Profile",
+                        "preferences":  "Preferences",
+                        "helpCenter":  "Help Center",
                         "logout":  "Logout",
                         "languageSection":  "Language",
                         "languageEnglish":  "EN",

@@ -206,7 +206,7 @@ const NotificationBell = () => {
           type="button"
           variant="outline"
           size="icon"
-          className="relative rounded-2xl"
+          className="relative rounded-xl border-slate-200 bg-white dark:border-zinc-800 dark:bg-zinc-900"
           aria-label={t("topNavbar.notifications")}
         >
           <Bell className="h-4 w-4" />

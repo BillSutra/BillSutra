@@ -638,11 +638,15 @@
   .app-panel {
     border: 1px solid var(--app-surface-border);
     background: var(--app-surface-strong);
-    box-shadow: var(--app-shadow-soft);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
     transition:
       background-color 200ms ease,
       border-color 200ms ease,
       box-shadow 200ms ease;
+  }
+
+  .app-panel:hover {
+    box-shadow: 0 14px 30px -24px rgba(15, 23, 42, 0.18);
   }
 
   .app-panel-muted {
@@ -760,6 +764,10 @@
     border-color: #3f3f46;
     background: #18181b;
     box-shadow: 0 22px 44px -32px rgba(0, 0, 0, 0.62);
+  }
+
+  .dark .app-panel:hover {
+    box-shadow: 0 26px 54px -34px rgba(0, 0, 0, 0.7);
   }
 
   .dark .app-panel-muted,
