@@ -17,6 +17,9 @@ type AuthFormFieldProps = {
   onBlur?: () => void;
   autoComplete?: string;
   inputMode?: InputHTMLAttributes<HTMLInputElement>["inputMode"];
+  maxLength?: number;
+  pattern?: string;
+  autoCapitalize?: InputHTMLAttributes<HTMLInputElement>["autoCapitalize"];
   autoFocus?: boolean;
   disabled?: boolean;
   error?: string;
@@ -39,6 +42,9 @@ const AuthFormField = ({
   onBlur,
   autoComplete,
   inputMode,
+  maxLength,
+  pattern,
+  autoCapitalize,
   autoFocus,
   disabled,
   error,
@@ -73,6 +79,9 @@ const AuthFormField = ({
           onBlur={onBlur}
           autoComplete={autoComplete}
           inputMode={inputMode}
+          maxLength={maxLength}
+          pattern={pattern}
+          autoCapitalize={autoCapitalize}
           autoFocus={autoFocus}
           disabled={disabled}
           aria-invalid={Boolean(error)}

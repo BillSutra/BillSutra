@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { AuthMethod, type User } from "@prisma/client";
+import { AuthMethod, Prisma, type User } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import {
   generateAuthenticationOptions,
@@ -597,7 +597,17 @@ class AuthController {
           },
         },
       );
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return sendResponse(res, 409, {
+          message: "Email already registered",
+          errors: { email: "Email already registered" },
+        });
+      }
+
       return sendResponse(res, 500, { message: "Internal Server Error" });
     }
   }

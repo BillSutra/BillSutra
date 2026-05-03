@@ -1,4 +1,5 @@
 import type { Request, Response } from "express";
+import { Prisma } from "@prisma/client";
 import { sendResponse } from "../utils/sendResponse.js";
 import prisma from "../config/db.config.js";
 import type { z } from "zod";
@@ -16,6 +17,7 @@ import {
   buildCategoriesCachePrefix,
   buildCategoriesRedisKey,
 } from "../redis/cacheKeys.js";
+import { invalidateProductOptionCaches } from "../lib/cacheInvalidation.js";
 
 type CategoryCreateInput = z.infer<typeof categoryCreateSchema>;
 type CategoryUpdateInput = z.infer<typeof categoryUpdateSchema>;
@@ -33,6 +35,21 @@ const invalidateCategoryCache = (businessId: string | undefined, userId: number)
   invalidateRedisResourceCacheByPrefix(
     buildCategoriesCachePrefix({ businessId, userId }),
   );
+
+const normalizeCategoryName = (value: string) =>
+  value.trim().replace(/\s+/g, " ");
+
+const isUniqueConstraintError = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+
+const invalidateCategoryAndProductCaches = (
+  businessId: string | undefined,
+  userId: number,
+) =>
+  Promise.all([
+    invalidateCategoryCache(businessId, userId),
+    invalidateProductOptionCaches(businessId, userId),
+  ]);
 
 class CategoriesController {
   static async index(req: Request, res: Response) {
@@ -73,11 +90,40 @@ class CategoriesController {
     }
 
     const body: CategoryCreateInput = req.body;
-    const { name } = body;
+    const name = normalizeCategoryName(body.name);
 
-    const category = await prisma.category.create({
-      data: { user_id: userId, name },
+    const duplicate = await prisma.category.findFirst({
+      where: {
+        user_id: userId,
+        name: {
+          equals: name,
+          mode: "insensitive",
+        },
+      },
+      select: { id: true },
     });
+
+    if (duplicate) {
+      return sendResponse(res, 409, {
+        message: "Category already exists",
+        errors: { name: "Category already exists" },
+      });
+    }
+
+    let category;
+    try {
+      category = await prisma.category.create({
+        data: { user_id: userId, name },
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        return sendResponse(res, 409, {
+          message: "Category already exists",
+          errors: { name: "Category already exists" },
+        });
+      }
+      throw error;
+    }
 
     void invalidateCategoryCache(req.user?.businessId?.trim(), userId);
 
@@ -113,20 +159,60 @@ class CategoriesController {
 
     const id = Number(req.params.id);
     const body: CategoryUpdateInput = req.body;
-    const { name } = body;
+    const name =
+      typeof body.name === "string" ? normalizeCategoryName(body.name) : undefined;
 
-    const updated = await prisma.category.updateMany({
+    const existing = await prisma.category.findFirst({
       where: { id, user_id: userId },
-      data: { name },
     });
 
-    if (!updated.count) {
+    if (!existing) {
       return sendResponse(res, 404, { message: "Category not found" });
     }
 
-    void invalidateCategoryCache(req.user?.businessId?.trim(), userId);
+    if (name) {
+      const duplicate = await prisma.category.findFirst({
+        where: {
+          user_id: userId,
+          NOT: { id },
+          name: {
+            equals: name,
+            mode: "insensitive",
+          },
+        },
+        select: { id: true },
+      });
 
-    return sendResponse(res, 200, { message: "Category updated" });
+      if (duplicate) {
+        return sendResponse(res, 409, {
+          message: "Category already exists",
+          errors: { name: "Category already exists" },
+        });
+      }
+    }
+
+    let category;
+    try {
+      category = await prisma.category.update({
+        where: { id },
+        data: name ? { name } : {},
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        return sendResponse(res, 409, {
+          message: "Category already exists",
+          errors: { name: "Category already exists" },
+        });
+      }
+      throw error;
+    }
+
+    void invalidateCategoryAndProductCaches(req.user?.businessId?.trim(), userId);
+
+    return sendResponse(res, 200, {
+      message: "Category updated",
+      data: category,
+    });
   }
 
   static async destroy(req: Request, res: Response) {
@@ -144,7 +230,7 @@ class CategoriesController {
       return sendResponse(res, 404, { message: "Category not found" });
     }
 
-    void invalidateCategoryCache(req.user?.businessId?.trim(), userId);
+    void invalidateCategoryAndProductCaches(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, { message: "Category removed" });
   }

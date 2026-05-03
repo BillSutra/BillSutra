@@ -35,9 +35,10 @@ type RegisterProps = {
   autoFocusFirstField?: boolean;
 };
 
-const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
-const FULL_NAME_REGEX = /^[\p{L}\p{M} .'-]+$/u;
-const ALPHABET_REGEX = /\p{L}/u;
+const EMAIL_REGEX =
+  /^[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}$/;
+const FULL_NAME_REGEX = /^[A-Za-z ]{2,50}$/;
+const NAME_HAS_NUMBER_REGEX = /\d/;
 const INDIAN_PHONE_REGEX = /^[6-9]\d{9}$/;
 const SPECIAL_CHARACTER_REGEX = /[^A-Za-z0-9\s]/;
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
@@ -46,6 +47,28 @@ const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "mailinator.com",
   "tempmail.com",
   "yopmail.com",
+]);
+const ALLOWED_SIGNUP_TLDS = new Set([
+  "com",
+  "in",
+  "co",
+  "org",
+  "net",
+  "io",
+  "ai",
+  "app",
+  "dev",
+  "info",
+  "biz",
+  "me",
+  "edu",
+  "gov",
+  "us",
+  "uk",
+  "ca",
+  "au",
+  "sg",
+  "ae",
 ]);
 const COMMON_BREACHED_PASSWORDS = new Set([
   "123456",
@@ -70,7 +93,7 @@ const COMMON_BREACHED_PASSWORDS = new Set([
   "000000",
 ]);
 
-const sanitizeName = (value: string) => value.trim();
+const sanitizeName = (value: string) => value.trim().replace(/\s+/g, " ");
 const sanitizeEmail = (value: string) => value.trim().toLowerCase();
 const normalizePhone = (value: string) => {
   const digits = value.replace(/\D/g, "");
@@ -84,6 +107,12 @@ const isCommonBreachedPassword = (value: string) =>
 const getEmailDomain = (value: string) => {
   const [, domain = ""] = sanitizeEmail(value).split("@");
   return domain;
+};
+
+const getEmailTld = (value: string) => {
+  const domain = getEmailDomain(value);
+  const parts = domain.split(".");
+  return parts[parts.length - 1] ?? "";
 };
 
 const asErrorText = (value: unknown) => {
@@ -193,15 +222,16 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
   const validateName = (value: string) => {
     const trimmed = sanitizeName(value);
 
-    if (
-      !trimmed ||
-      trimmed.length < 2 ||
-      trimmed.length > 50 ||
-      /\s{2,}/.test(trimmed) ||
-      !FULL_NAME_REGEX.test(trimmed) ||
-      !ALPHABET_REGEX.test(trimmed)
-    ) {
-      return "Enter a valid full name.";
+    if (!trimmed) {
+      return "Name is required";
+    }
+
+    if (NAME_HAS_NUMBER_REGEX.test(trimmed)) {
+      return "Name cannot contain numbers";
+    }
+
+    if (!FULL_NAME_REGEX.test(trimmed) || !/[A-Za-z]/.test(trimmed)) {
+      return "Enter valid full name";
     }
 
     return "";
@@ -210,12 +240,14 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
   const validateEmail = (value: string) => {
     const normalized = sanitizeEmail(value);
     const domain = getEmailDomain(normalized);
+    const tld = getEmailTld(normalized);
 
     if (
       !normalized ||
       normalized.length > 100 ||
       !EMAIL_REGEX.test(normalized) ||
-      DISPOSABLE_EMAIL_DOMAINS.has(domain)
+      DISPOSABLE_EMAIL_DOMAINS.has(domain) ||
+      !ALLOWED_SIGNUP_TLDS.has(tld)
     ) {
       return "Enter a valid email address.";
     }
@@ -508,6 +540,10 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
             setTouched((current) => ({ ...current, name: true }));
           }}
           autoComplete="name"
+          inputMode="text"
+          maxLength={50}
+          pattern="[A-Za-z ]{2,50}"
+          autoCapitalize="words"
           autoFocus={autoFocusFirstField}
           error={clientErrors.name || serverErrors.name}
           valid={!validateName(name)}
@@ -523,7 +559,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           type="email"
           value={email}
           onChange={(value) => {
-            setEmail(value);
+            setEmail(value.toLowerCase());
             setTouched((current) => ({ ...current, email: true }));
           }}
           onBlur={() => {
@@ -531,6 +567,8 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
             setTouched((current) => ({ ...current, email: true }));
           }}
           autoComplete="email"
+          inputMode="email"
+          maxLength={100}
           error={clientErrors.email || serverErrors.email}
           valid={!validateEmail(email)}
           disabled={isRegisterSubmitting}
@@ -545,7 +583,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           type="tel"
           value={phone}
           onChange={(value) => {
-            setPhone(value);
+            setPhone(normalizePhone(value).slice(0, 10));
             setTouched((current) => ({ ...current, phone: true }));
           }}
           onBlur={() => {
@@ -553,7 +591,9 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
             setTouched((current) => ({ ...current, phone: true }));
           }}
           autoComplete="tel-national"
-          inputMode="tel"
+          inputMode="numeric"
+          maxLength={10}
+          pattern="[6-9][0-9]{9}"
           error={clientErrors.phone || serverErrors.phone}
           valid={!validatePhone(phone)}
           disabled={isRegisterSubmitting}
@@ -574,6 +614,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           }}
           onBlur={() => setTouched((current) => ({ ...current, password: true }))}
           autoComplete="new-password"
+          maxLength={64}
           error={clientErrors.password || serverErrors.password}
           valid={!validatePassword(password)}
           disabled={isRegisterSubmitting || isCompletingSignup}
@@ -649,6 +690,7 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
             setTouched((current) => ({ ...current, confirmPassword: true }))
           }
           autoComplete="new-password"
+          maxLength={64}
           error={clientErrors.confirm_password || serverErrors.confirm_password}
           valid={!validateConfirmPassword(confirmPassword, password)}
           disabled={isRegisterSubmitting || isCompletingSignup}

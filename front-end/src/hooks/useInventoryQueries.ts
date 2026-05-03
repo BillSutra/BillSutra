@@ -36,6 +36,7 @@ import {
   deletePayment,
   updatePayment,
   createCategory,
+  deleteCategory,
   fetchSuppliers,
   fetchWorkers,
   fetchWorkersOverview,
@@ -50,13 +51,17 @@ import {
   deleteSale,
   updateSupplier,
   updateProduct,
+  updateCategory,
   updateCustomer,
   createWorker,
   deleteWorker,
+  type Category,
   type CustomerListParams,
   type Invoice,
   type PurchaseListParams,
+  type Product,
   type ProductListParams,
+  type ProductListResponse,
   type Worker,
   type WorkerInput,
   type WorkerOverviewResponse,
@@ -99,6 +104,179 @@ const normalizeCustomerListParams = (params?: CustomerListParams) => ({
   limit: params?.limit,
   search: normalizeSearchTerm(params?.search),
 });
+
+type ProductCollectionCache =
+  | Product[]
+  | (ProductListResponse & { items?: Product[] });
+
+const isProductListResponse = (
+  value: ProductCollectionCache,
+): value is ProductListResponse & { items?: Product[] } =>
+  !Array.isArray(value) && Array.isArray(value.products);
+
+const updateProductCollection = (
+  current: ProductCollectionCache | undefined,
+  updater: (products: Product[]) => Product[],
+) => {
+  if (!current) return current;
+
+  if (Array.isArray(current)) {
+    return updater(current);
+  }
+
+  if (isProductListResponse(current)) {
+    const products = updater(current.products);
+    return {
+      ...current,
+      products,
+      ...(Array.isArray(current.items)
+        ? { items: updater(current.items) }
+        : {}),
+    };
+  }
+
+  return current;
+};
+
+const patchProductCaches = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  updater: (products: Product[]) => Product[],
+) => {
+  queryClient.setQueriesData<ProductCollectionCache>(
+    { queryKey: ["products"] },
+    (current) => updateProductCollection(current, updater),
+  );
+};
+
+const replaceProductInCaches = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  product: Product,
+) => {
+  patchProductCaches(queryClient, (products) =>
+    products.map((entry) => (entry.id === product.id ? product : entry)),
+  );
+};
+
+const productMatchesSearch = (
+  product: Product,
+  search: string | null | undefined,
+) => {
+  const normalizedSearch = normalizeSearchTerm(search)?.toLowerCase();
+  if (!normalizedSearch) return true;
+
+  return [
+    product.name,
+    product.sku,
+    product.barcode ?? "",
+    product.category?.name ?? "",
+  ].some((value) => value.toLowerCase().includes(normalizedSearch));
+};
+
+const productMatchesCategory = (
+  product: Product,
+  category: string | null | undefined,
+) => {
+  if (!category) return true;
+  return (
+    String(product.category?.id ?? "") === category ||
+    (product.category?.name ?? "").toLowerCase() === category.toLowerCase()
+  );
+};
+
+const upsertProduct = (products: Product[], product: Product) => {
+  const existingIndex = products.findIndex((entry) => entry.id === product.id);
+  if (existingIndex >= 0) {
+    return products.map((entry) => (entry.id === product.id ? product : entry));
+  }
+  return [product, ...products];
+};
+
+const upsertCreatedProductInMatchingCaches = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  product: Product,
+) => {
+  queryClient
+    .getQueriesData<ProductCollectionCache>({ queryKey: ["products"] })
+    .forEach(([queryKey, current]) => {
+      if (!current) return;
+
+      const scope = queryKey[1];
+      const params =
+        typeof queryKey[2] === "object" && queryKey[2] !== null
+          ? (queryKey[2] as ProductListParams)
+          : undefined;
+      const search =
+        scope === "search" && typeof queryKey[2] === "string"
+          ? queryKey[2]
+          : params?.search;
+      const searchOptions =
+        scope === "search" &&
+        typeof queryKey[3] === "object" &&
+        queryKey[3] !== null
+          ? (queryKey[3] as { category?: string | null; limit?: number })
+          : undefined;
+      const category = searchOptions?.category ?? params?.category;
+
+      if (
+        !productMatchesCategory(product, category) ||
+        !productMatchesSearch(product, search)
+      ) {
+        return;
+      }
+
+      const isLaterPage =
+        isProductListResponse(current) && (params?.page ?? 1) > 1;
+      const alreadyCached = Array.isArray(current)
+        ? current.some((entry) => entry.id === product.id)
+        : current.products.some((entry) => entry.id === product.id);
+      if (isLaterPage && !alreadyCached) {
+        return;
+      }
+
+      queryClient.setQueryData<ProductCollectionCache>(queryKey, (cached) =>
+        updateProductCollection(cached, (products) =>
+          upsertProduct(products, product).slice(
+            0,
+            params?.limit ?? searchOptions?.limit ?? products.length + 1,
+          ),
+        ),
+      );
+    });
+};
+
+const patchCategoryInProductCaches = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  categoryId: number,
+  category: Category | null,
+) => {
+  patchProductCaches(queryClient, (products) =>
+    products.map((product) =>
+      product.category?.id === categoryId
+        ? { ...product, category }
+        : product,
+    ),
+  );
+};
+
+const syncCategoryCache = (
+  queryClient: ReturnType<typeof useQueryClient>,
+  updater: (categories: Category[]) => Category[],
+) => {
+  queryClient.setQueryData<Category[]>(["categories"], (current) =>
+    updater(current ?? []),
+  );
+};
+
+const upsertCategory = (
+  categories: Category[],
+  category: Category,
+  fallbackId?: number,
+) => {
+  const withoutDuplicate = categories.filter(
+    (entry) => entry.id !== category.id && entry.id !== fallbackId,
+  );
+  return [category, ...withoutDuplicate];
+};
 
 const updateWorkersCache = (
   queryClient: ReturnType<typeof useQueryClient>,
@@ -238,8 +416,128 @@ export const useCreateCategoryMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createCategory,
-    onSuccess: () =>
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: ["categories"] });
+      const previousCategories =
+        queryClient.getQueryData<Category[]>(["categories"]);
+      const optimisticCategory: Category = {
+        id: -Date.now(),
+        name: payload.name.trim(),
+      };
+
+      syncCategoryCache(queryClient, (categories) =>
+        upsertCategory(categories, optimisticCategory),
+      );
+
+      return { previousCategories, optimisticCategoryId: optimisticCategory.id };
+    },
+    onSuccess: (category, _payload, context) => {
+      syncCategoryCache(queryClient, (categories) =>
+        upsertCategory(categories, category, context?.optimisticCategoryId),
+      );
+    },
+    onError: (_error, _payload, context) => {
+      if (context?.previousCategories) {
+        queryClient.setQueryData(["categories"], context.previousCategories);
+      }
+    },
+    onSettled: () =>
       queryClient.invalidateQueries({ queryKey: ["categories"] }),
+  });
+};
+
+export const useUpdateCategoryMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: number;
+      payload: Parameters<typeof updateCategory>[1];
+    }) => updateCategory(id, payload),
+    onMutate: async ({ id, payload }) => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: ["categories"] }),
+        queryClient.cancelQueries({ queryKey: ["products"] }),
+      ]);
+
+      const previousCategories =
+        queryClient.getQueryData<Category[]>(["categories"]);
+      const previousProducts =
+        queryClient.getQueriesData<ProductCollectionCache>({
+          queryKey: ["products"],
+        });
+      const optimisticCategory = { id, name: payload.name.trim() };
+
+      syncCategoryCache(queryClient, (categories) =>
+        categories.map((category) =>
+          category.id === id ? optimisticCategory : category,
+        ),
+      );
+      patchCategoryInProductCaches(queryClient, id, optimisticCategory);
+
+      return { previousCategories, previousProducts };
+    },
+    onSuccess: (category) => {
+      syncCategoryCache(queryClient, (categories) =>
+        categories.map((entry) => (entry.id === category.id ? category : entry)),
+      );
+      patchCategoryInProductCaches(queryClient, category.id, category);
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previousCategories) {
+        queryClient.setQueryData(["categories"], context.previousCategories);
+      }
+      context?.previousProducts?.forEach(([key, value]) => {
+        queryClient.setQueryData(key, value);
+      });
+    },
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["categories"] }),
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+      ]),
+  });
+};
+
+export const useDeleteCategoryMutation = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteCategory,
+    onMutate: async (id) => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: ["categories"] }),
+        queryClient.cancelQueries({ queryKey: ["products"] }),
+      ]);
+
+      const previousCategories =
+        queryClient.getQueryData<Category[]>(["categories"]);
+      const previousProducts =
+        queryClient.getQueriesData<ProductCollectionCache>({
+          queryKey: ["products"],
+        });
+
+      syncCategoryCache(queryClient, (categories) =>
+        categories.filter((category) => category.id !== id),
+      );
+      patchCategoryInProductCaches(queryClient, id, null);
+
+      return { previousCategories, previousProducts };
+    },
+    onError: (_error, _id, context) => {
+      if (context?.previousCategories) {
+        queryClient.setQueryData(["categories"], context.previousCategories);
+      }
+      context?.previousProducts?.forEach(([key, value]) => {
+        queryClient.setQueryData(key, value);
+      });
+    },
+    onSettled: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["categories"] }),
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+      ]),
   });
 };
 
@@ -289,7 +587,10 @@ export const useCreateProductMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createProduct,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["products"] }),
+    onSuccess: (product) => {
+      upsertCreatedProductInMatchingCaches(queryClient, product);
+      return queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 };
 
@@ -303,7 +604,10 @@ export const useUpdateProductMutation = () => {
       id: number;
       payload: Record<string, unknown>;
     }) => updateProduct(id, payload),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["products"] }),
+    onSuccess: (product) => {
+      replaceProductInCaches(queryClient, product);
+      return queryClient.invalidateQueries({ queryKey: ["products"] });
+    },
   });
 };
 

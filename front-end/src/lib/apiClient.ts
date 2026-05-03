@@ -2113,8 +2113,9 @@ export const createProduct = async (
 export const updateProduct = async (
   id: number,
   payload: Partial<ProductInput>,
-): Promise<void> => {
-  await apiClient.put(`/products/${id}`, payload);
+): Promise<Product> => {
+  const response = await apiClient.put(`/products/${id}`, payload);
+  return response.data.data as Product;
 };
 
 export const deleteProduct = async (id: number): Promise<void> => {
@@ -2618,6 +2619,18 @@ export const createCategory = async (payload: {
 }): Promise<Category> => {
   const response = await apiClient.post("/categories", payload);
   return response.data.data as Category;
+};
+
+export const updateCategory = async (
+  id: number,
+  payload: { name: string },
+): Promise<Category> => {
+  const response = await apiClient.put(`/categories/${id}`, payload);
+  return response.data.data as Category;
+};
+
+export const deleteCategory = async (id: number): Promise<void> => {
+  await apiClient.delete(`/categories/${id}`);
 };
 
 export const createCustomer = async (

@@ -65,6 +65,9 @@ const normalizeBarcodeValue = (value: string) =>
 const sanitizeBarcodeInput = (value: string) =>
   normalizeBarcodeValue(value).replace(/[^A-Z0-9]/g, "").slice(0, 32);
 
+const normalizeCategoryName = (value: string) =>
+  value.trim().replace(/\s+/g, " ");
+
 export default function ProductsClient({
   name,
   image,
@@ -275,11 +278,40 @@ export default function ProductsClient({
   };
 
   const handleCreateCategory = async () => {
-    const trimmed = newCategoryName.trim();
-    if (!trimmed) return;
-    const created = await createCategory.mutateAsync({ name: trimmed });
-    setNewCategoryName("");
-    setForm((prev) => ({ ...prev, category_id: created.id.toString() }));
+    const trimmed = normalizeCategoryName(newCategoryName);
+    if (!trimmed) {
+      toast.error(t("validation.required"));
+      return;
+    }
+
+    const duplicateCategory = categoryOptions.find(
+      (category) => category.name.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (duplicateCategory) {
+      setForm((prev) => ({
+        ...prev,
+        category_id: duplicateCategory.id.toString(),
+      }));
+      setNewCategoryName("");
+      toast.success("Category selected.");
+      return;
+    }
+
+    try {
+      const created = await createCategory.mutateAsync({ name: trimmed });
+      setNewCategoryName("");
+      setForm((prev) => ({ ...prev, category_id: created.id.toString() }));
+      toast.success("Category added.");
+    } catch (error) {
+      const isDuplicate =
+        isAxiosError<{ message?: string }>(error) &&
+        error.response?.status === 409;
+      toast.error(
+        isDuplicate
+          ? "Category already exists."
+          : t("productsPage.createCategoryError"),
+      );
+    }
   };
 
   const beginEditingProduct = (current: Product) => {

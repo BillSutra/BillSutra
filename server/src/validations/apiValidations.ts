@@ -40,15 +40,37 @@ const STRONG_PASSWORD_RULES = [
     message: "Use a stronger password.",
   },
 ] as const;
-const FULL_NAME_PATTERN = /^[\p{L}\p{M} .'-]+$/u;
-const FULL_NAME_ALPHA_PATTERN = /\p{L}/u;
-const SIGNUP_EMAIL_PATTERN = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+const FULL_NAME_PATTERN = /^[A-Za-z ]{2,50}$/;
+const SIGNUP_EMAIL_PATTERN =
+  /^[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}$/;
 const DISPOSABLE_EMAIL_DOMAINS = new Set([
   "10minutemail.com",
   "guerrillamail.com",
   "mailinator.com",
   "tempmail.com",
   "yopmail.com",
+]);
+const ALLOWED_SIGNUP_TLDS = new Set([
+  "com",
+  "in",
+  "co",
+  "org",
+  "net",
+  "io",
+  "ai",
+  "app",
+  "dev",
+  "info",
+  "biz",
+  "me",
+  "edu",
+  "gov",
+  "us",
+  "uk",
+  "ca",
+  "au",
+  "sg",
+  "ae",
 ]);
 const COMMON_BREACHED_PASSWORDS = new Set([
   "123456",
@@ -91,7 +113,7 @@ const strongPasswordSchema = z
   });
 
 const sanitizeTextInput = (value: unknown) =>
-  typeof value === "string" ? value.trim() : value;
+  typeof value === "string" ? value.trim().replace(/\s+/g, " ") : value;
 
 const normalizeSignupEmail = (value: unknown) =>
   typeof value === "string" ? value.trim().toLowerCase() : value;
@@ -111,17 +133,27 @@ const fullNameSchema = z.preprocess(
   sanitizeTextInput,
   z
     .string({ required_error: "Enter a valid full name." })
-    .min(2, "Enter a valid full name.")
-    .max(50, "Enter a valid full name.")
     .superRefine((value, ctx) => {
-      if (
-        !FULL_NAME_PATTERN.test(value) ||
-        !FULL_NAME_ALPHA_PATTERN.test(value) ||
-        /\s{2,}/.test(value)
-      ) {
+      if (!value) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Enter a valid full name.",
+          message: "Name is required",
+        });
+        return;
+      }
+
+      if (/\d/.test(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Name cannot contain numbers",
+        });
+        return;
+      }
+
+      if (!FULL_NAME_PATTERN.test(value) || !/[A-Za-z]/.test(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Enter valid full name",
         });
       }
     }),
@@ -133,10 +165,14 @@ const signupEmailSchema = z.preprocess(
     .string({ required_error: "Enter a valid email address." })
     .min(1, "Enter a valid email address.")
     .max(100, "Enter a valid email address.")
-    .regex(SIGNUP_EMAIL_PATTERN, "Enter a valid email address.")
     .superRefine((value, ctx) => {
       const domain = value.split("@")[1] ?? "";
-      if (DISPOSABLE_EMAIL_DOMAINS.has(domain)) {
+      const tld = domain.split(".").pop() ?? "";
+      if (
+        !SIGNUP_EMAIL_PATTERN.test(value) ||
+        DISPOSABLE_EMAIL_DOMAINS.has(domain) ||
+        !ALLOWED_SIGNUP_TLDS.has(tld)
+      ) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: "Enter a valid email address.",
@@ -179,8 +215,14 @@ export const invoiceIdParamSchema = z.object({
   invoiceId: z.coerce.number().int().positive(),
 });
 
+const normalizeCategoryNameInput = (value: unknown) =>
+  typeof value === "string" ? value.trim().replace(/\s+/g, " ") : value;
+
 export const categoryCreateSchema = z.object({
-  name: z.string().min(2),
+  name: z.preprocess(
+    normalizeCategoryNameInput,
+    z.string().min(2).max(80),
+  ),
 });
 
 export const categoryUpdateSchema = categoryCreateSchema.partial();
@@ -321,7 +363,7 @@ export const authResetSchema = z
     confirm_password: z.string().trim().min(PASSWORD_MIN_LENGTH),
   })
   .refine((data) => data.password === data.confirm_password, {
-    message: "Passwords do not match",
+    message: "Passwords do not match.",
     path: ["confirm_password"],
   });
 

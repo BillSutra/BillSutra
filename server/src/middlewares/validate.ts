@@ -5,6 +5,18 @@ type ValidationSchemas = {
   body?: ZodSchema;
   params?: ZodSchema;
   query?: ZodSchema;
+  statusCode?: number;
+};
+
+type ValidationErrorWithStatus = Error & {
+  statusCode?: number;
+};
+
+const attachStatusCode = (error: Error, statusCode?: number) => {
+  if (statusCode) {
+    (error as ValidationErrorWithStatus).statusCode = statusCode;
+  }
+  return error;
 };
 
 const validate = (schemas: ValidationSchemas) => {
@@ -12,7 +24,7 @@ const validate = (schemas: ValidationSchemas) => {
     if (schemas.body) {
       const result = schemas.body.safeParse(req.body);
       if (!result.success) {
-        return next(result.error);
+        return next(attachStatusCode(result.error, schemas.statusCode));
       }
       req.body = result.data;
     }
@@ -20,7 +32,7 @@ const validate = (schemas: ValidationSchemas) => {
     if (schemas.params) {
       const result = schemas.params.safeParse(req.params);
       if (!result.success) {
-        return next(result.error);
+        return next(attachStatusCode(result.error, schemas.statusCode));
       }
       req.params = result.data;
     }
@@ -28,7 +40,7 @@ const validate = (schemas: ValidationSchemas) => {
     if (schemas.query) {
       const result = schemas.query.safeParse(req.query);
       if (!result.success) {
-        return next(result.error);
+        return next(attachStatusCode(result.error, schemas.statusCode));
       }
       Object.assign(req.query, result.data);
     }

@@ -258,7 +258,7 @@ router.patch(
 router.post(
   "/auth/signup",
   signupRateLimiter,
-  validate({ body: authRegisterSchema }),
+  validate({ body: authRegisterSchema, statusCode: 400 }),
   AuthController.signup,
 );
 router.post(
@@ -276,7 +276,7 @@ router.post(
 router.post(
   "/auth/register",
   signupRateLimiter,
-  validate({ body: authRegisterSchema }),
+  validate({ body: authRegisterSchema, statusCode: 400 }),
   AuthController.register,
 );
 router.get("/auth/csrf", authRateLimiter, AuthController.csrfToken);
