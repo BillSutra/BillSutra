@@ -265,7 +265,7 @@ class UsersController {
       return sendResponse(res, 404, { message: "User not found" });
     }
 
-    if (user.provider === "google") {
+    if (user.provider === "google" && !user.password_hash) {
       return sendResponse(res, 400, {
         message: "Password updates are managed by Google for this account",
       });
@@ -290,6 +290,7 @@ class UsersController {
       where: { id: userId },
       data: {
         password_hash,
+        password_changed_at: new Date(),
         session_version: {
           increment: 1,
         },

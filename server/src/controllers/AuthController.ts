@@ -86,6 +86,14 @@ type SerializableOwnerUser = Pick<
   "id" | "name" | "email" | "provider" | "image" | "is_email_verified"
 >;
 
+type PasswordResetUserState = {
+  id: number;
+  provider: string | null;
+  oauth_id: string | null;
+  password_hash: string | null;
+  session_version: number | null;
+};
+
 type OAuthLoginPayload = z.infer<typeof authOauthSchema>;
 type CredentialsLoginPayload = z.infer<typeof authLoginSchema>;
 type CredentialsRegisterPayload = z.infer<typeof authRegisterSchema>;
@@ -168,6 +176,15 @@ const buildOwnerAuthResponse = async (
     preferences,
   );
 
+  if (preferences?.reason === "google_login") {
+    logAuthDiagnostic("google_login.issue_token", {
+      userId: user.id,
+      dbSessionVersion: authUser.latestSessionVersion,
+      tokenSessionVersion: authUser.sessionVersion,
+      provider: user.provider,
+    });
+  }
+
   void dispatchNotification({
     userId: user.id,
     businessId: authUser.businessId,
@@ -210,6 +227,17 @@ const resolveAuthUserFromAccessToken = async (token: string | null) => {
       latestSessionVersion !== null &&
       latestSessionVersion !== authUser.sessionVersion
     ) {
+      logAuthDiagnostic(
+        "auth.reject",
+        {
+          reason: "session_version_mismatch",
+          userId: authUser.ownerUserId,
+          tokenVersion: authUser.sessionVersion,
+          dbVersion: latestSessionVersion,
+          flow: "resolve_access_token",
+        },
+        "warn",
+      );
       return null;
     }
 
@@ -353,6 +381,10 @@ const resolvePasswordResetTokenState = async (
     where: { email },
     select: {
       id: true,
+      provider: true,
+      oauth_id: true,
+      password_hash: true,
+      session_version: true,
     },
   });
 
@@ -471,14 +503,32 @@ class AuthController {
         actorType: "OWNER",
       });
 
+      logAuthDiagnostic("google.auth.callback_success", {
+        userId: findUser.id,
+        provider,
+        origin: req.headers.origin ?? null,
+        host: req.get("host") ?? null,
+        userAgent: req.headers["user-agent"] ?? null,
+      });
+
       return sendResponse(
         res,
         200,
         await buildOwnerAuthResponse(req, res, findUser, "Login successful", {
           rememberMe: body.rememberMe,
+          reason: "google_login",
         }),
       );
-    } catch {
+    } catch (error) {
+      logAuthDiagnostic(
+        "google.auth.callback_failed",
+        {
+          message: error instanceof Error ? error.message : String(error),
+          origin: req.headers.origin ?? null,
+          host: req.get("host") ?? null,
+        },
+        "warn",
+      );
       return sendResponse(res, 500, { message: "Internal Server Error" });
     }
   }
@@ -1297,6 +1347,10 @@ class AuthController {
           id: true,
           name: true,
           email: true,
+          provider: true,
+          oauth_id: true,
+          password_hash: true,
+          session_version: true,
         },
       });
       if (!user) {
@@ -1308,6 +1362,19 @@ class AuthController {
       const token = crypto.randomBytes(32).toString("hex");
       const tokenHash = hashSecretValue(token);
       const expires = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
+      const hasGoogle =
+        user.provider === "google" || Boolean(user.oauth_id?.trim());
+
+      if (hasGoogle) {
+        logAuthDiagnostic("forgot_password.oauth_user", {
+          userId: user.id,
+          hadPassword: Boolean(user.password_hash),
+          hasGoogle,
+          sessionVersionBefore: user.session_version ?? 0,
+          sessionVersionAfter: user.session_version ?? 0,
+          stage: "requested",
+        });
+      }
 
       await prisma.$transaction([
         prisma.passwordResetToken.deleteMany({
@@ -1392,6 +1459,14 @@ class AuthController {
 
       return sendResponse(res, 200, {
         message: "Reset link is valid",
+        data: {
+          accountMode:
+            tokenState.user.provider === "google" && !tokenState.user.password_hash
+              ? "google_password_setup"
+              : tokenState.user.provider === "google"
+                ? "google_hybrid"
+                : "password",
+        },
       });
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -1414,6 +1489,12 @@ class AuthController {
 
       const password_hash = await bcrypt.hash(password, 12);
       const changedAt = new Date();
+      const resetUserBefore = tokenState.user as PasswordResetUserState;
+      const hadPassword = Boolean(resetUserBefore.password_hash);
+      const hasGoogle =
+        resetUserBefore.provider === "google" ||
+        Boolean(resetUserBefore.oauth_id?.trim());
+      let sessionVersionAfter = resetUserBefore.session_version ?? 0;
 
       await prisma.$transaction(async (tx) => {
         const consumed = await tx.passwordResetToken.updateMany({
@@ -1429,17 +1510,20 @@ class AuthController {
           throw new Error("PASSWORD_RESET_TOKEN_CONSUMED");
         }
 
-        await tx.user.update({
+        const updatedUser = await tx.user.update({
           where: { id: tokenState.user.id },
           data: {
             password_hash,
             password_changed_at: changedAt,
+            is_email_verified: hasGoogle ? true : undefined,
+            email_verified_at: hasGoogle ? (changedAt) : undefined,
             session_version: {
               increment: 1,
             },
           },
-          select: { id: true },
+          select: { id: true, session_version: true },
         });
+        sessionVersionAfter = updatedUser.session_version ?? sessionVersionAfter + 1;
 
         await tx.passwordResetToken.deleteMany({
           where: {
@@ -1449,6 +1533,19 @@ class AuthController {
           },
         });
       });
+
+      if (hasGoogle) {
+        logAuthDiagnostic("forgot_password.oauth_user", {
+          userId: tokenState.user.id,
+          hadPassword,
+          hasGoogle,
+          provider: resetUserBefore.provider,
+          preservedGoogleId: Boolean(resetUserBefore.oauth_id?.trim()),
+          sessionVersionBefore: resetUserBefore.session_version ?? 0,
+          sessionVersionAfter,
+          stage: "completed",
+        });
+      }
       await revokeAllRefreshTokensForUser(tokenState.user.id, "password_reset");
 
       await recordAuthEvent({

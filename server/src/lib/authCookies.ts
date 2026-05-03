@@ -884,6 +884,17 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
     });
     clearAuthCookies(res, req);
     res.locals.authRefreshFailureReason = "session_version_mismatch";
+    logAuth(
+      "auth.reject",
+      {
+        reason: "session_version_mismatch",
+        userId: authUser.ownerUserId,
+        tokenVersion: authUser.sessionVersion,
+        dbVersion: latestSessionVersion,
+        flow: "refresh",
+      },
+      "warn",
+    );
     logAuth("refresh_failed", { reason: "session_version_mismatch", ownerUserId: authUser.ownerUserId }, "warn");
     return null;
   }

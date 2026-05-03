@@ -16,6 +16,7 @@ import Image from "next/image";
 import { useI18n } from "@/providers/LanguageProvider";
 import { captureAnalyticsEvent } from "@/lib/observability/client";
 import { useRouter } from "next/navigation";
+import { markAuthLoginInProgress } from "@/lib/secureAuth";
 import {
   Check,
   Eye,
@@ -37,8 +38,28 @@ type RegisterProps = {
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const INDIAN_PHONE_REGEX = /^(?:\+91|91)?[6-9]\d{9}$/;
 const SPECIAL_CHARACTER_REGEX = /[@$!%*?&]/;
+const COMMON_BREACHED_PASSWORDS = new Set([
+  "123456",
+  "1234567",
+  "12345678",
+  "123456789",
+  "1234567890",
+  "password",
+  "password1",
+  "password123",
+  "qwerty",
+  "qwerty123",
+  "admin",
+  "admin123",
+  "letmein",
+  "welcome",
+  "welcome123",
+  "iloveyou",
+]);
 
 const normalizePhone = (value: string) => value.replace(/[^\d+]/g, "");
+const isCommonBreachedPassword = (value: string) =>
+  COMMON_BREACHED_PASSWORDS.has(value.toLowerCase().replace(/\s+/g, ""));
 
 const asErrorText = (value: unknown) => {
   if (Array.isArray(value)) {
@@ -99,6 +120,10 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
       {
         label: "At least 1 special character",
         met: SPECIAL_CHARACTER_REGEX.test(password),
+      },
+      {
+        label: "Not a common breached password",
+        met: !isCommonBreachedPassword(password),
       },
     ],
     [password],
@@ -193,6 +218,10 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
       {
         test: SPECIAL_CHARACTER_REGEX.test(value),
         message: "Must include special character",
+      },
+      {
+        test: !isCommonBreachedPassword(value),
+        message: "Use a unique password not found in common breaches",
       },
     ].find((rule) => !rule.test);
 
@@ -327,10 +356,14 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
   }, [email, router, state, t]);
 
   const handleGoogleSignup = () => {
+    markAuthLoginInProgress();
     captureAnalyticsEvent("auth_signup_started", {
       method: "google",
     });
-    signIn("google", { callbackUrl: "/dashboard", redirect: true });
+    void signIn("google", {
+      callbackUrl: "/auth/google-complete?next=/dashboard",
+      redirect: true,
+    });
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -520,6 +553,9 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
               </div>
             ))}
           </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Use a unique password not used elsewhere.
+          </p>
         </div>
 
         <AuthFormField

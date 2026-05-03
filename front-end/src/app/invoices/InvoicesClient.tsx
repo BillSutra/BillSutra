@@ -1760,7 +1760,9 @@ const InvoiceClient = ({ name, image }: InvoiceClientProps) => {
 
       resetInvoiceComposer();
     } catch (error) {
-      setServerError(parseServerErrors(error, t("invoice.createError")));
+      const message = parseServerErrors(error, t("invoice.createError"));
+      setServerError(message);
+      toast.error(message);
     } finally {
       setCheckoutAutomationPending(false);
     }

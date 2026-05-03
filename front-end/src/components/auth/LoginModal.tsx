@@ -10,9 +10,15 @@ import {
 import { Button } from "../ui/button";
 import Image from "next/image";
 import { signIn } from "next-auth/react";
+import { markAuthLoginInProgress } from "@/lib/secureAuth";
+
 const LoginModel = () => {
   const handleLogin = () => {
-    signIn("google", { callbackUrl: "/dashboard", redirect: true });
+    markAuthLoginInProgress();
+    void signIn("google", {
+      callbackUrl: "/auth/google-complete?next=/dashboard",
+      redirect: true,
+    });
   };
   return (
     <div>

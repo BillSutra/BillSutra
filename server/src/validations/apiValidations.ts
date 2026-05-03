@@ -35,6 +35,26 @@ const STRONG_PASSWORD_RULES = [
     message: "Password must include at least 1 special character",
   },
 ] as const;
+const COMMON_BREACHED_PASSWORDS = new Set([
+  "123456",
+  "1234567",
+  "12345678",
+  "123456789",
+  "1234567890",
+  "password",
+  "password1",
+  "password123",
+  "qwerty",
+  "qwerty123",
+  "admin",
+  "admin123",
+  "letmein",
+  "welcome",
+  "welcome123",
+  "iloveyou",
+  "111111",
+  "000000",
+]);
 
 const strongPasswordSchema = z
   .string()
@@ -52,6 +72,14 @@ const strongPasswordSchema = z
         });
       }
     });
+
+    const normalizedPassword = value.toLowerCase().replace(/\s+/g, "");
+    if (COMMON_BREACHED_PASSWORDS.has(normalizedPassword)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Use a unique password not found in common breaches",
+      });
+    }
   });
 
 export const idParamSchema = z.object({

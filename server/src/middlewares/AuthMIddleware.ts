@@ -45,6 +45,30 @@ const isWorkerRequestAllowed = (path: string, method: string) =>
     return route.methods.includes(method.toUpperCase());
   });
 
+const getWorkerAccessPathCandidates = (req: Request) => {
+  const candidates = [
+    req.path,
+    req.baseUrl,
+    req.originalUrl?.split("?")[0],
+  ].filter((value): value is string => Boolean(value));
+
+  return Array.from(
+    new Set(
+      candidates.flatMap((value) => {
+        const normalized = value.startsWith("/api/")
+          ? value.slice("/api".length)
+          : value;
+        return [value, normalized];
+      }),
+    ),
+  );
+};
+
+const isWorkerRequestAllowedForRequest = (req: Request) =>
+  getWorkerAccessPathCandidates(req).some((path) =>
+    isWorkerRequestAllowed(path, req.method),
+  );
+
 const isUnverifiedRequestAllowed = (path: string, method: string) =>
   unverifiedAllowedRoutes.some((route) => {
     if (!(path === route.prefix || path.startsWith(`${route.prefix}/`))) {
@@ -128,6 +152,14 @@ const verifyResolvedToken = async (
       latestSessionVersion !== null &&
       latestSessionVersion !== authUser.sessionVersion
     ) {
+      console.warn("[auth.reject]", {
+        reason: "session_version_mismatch",
+        userId: authUser.ownerUserId,
+        tokenVersion: authUser.sessionVersion,
+        dbVersion: latestSessionVersion,
+        path: req.path,
+        source,
+      });
       res.status(401).json({
         status: 401,
         message: "Session expired. Please login again.",
@@ -187,8 +219,16 @@ const verifyResolvedToken = async (
 
     if (
       authUser.accountType === "WORKER" &&
-      !isWorkerRequestAllowed(req.path, req.method)
+      !isWorkerRequestAllowedForRequest(req)
     ) {
+      console.warn("[auth] worker_route_denied", {
+        path: req.path,
+        baseUrl: req.baseUrl,
+        originalUrl: req.originalUrl,
+        method: req.method,
+        workerId: authUser.workerId ?? null,
+        businessId: authUser.businessId,
+      });
       res.status(403).json({
         status: 403,
         message: "Worker access is limited to assigned tools.",

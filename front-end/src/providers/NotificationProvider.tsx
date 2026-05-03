@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import {
   deleteNotification as deleteNotificationRequest,
   fetchNotifications,
@@ -16,6 +17,7 @@ import {
   type AppNotification,
   type NotificationListResponse,
 } from "@/lib/apiClient";
+import { isAuthLoginInProgress } from "@/lib/secureAuth";
 
 type NotificationContextValue = {
   notifications: AppNotification[];
@@ -46,12 +48,18 @@ const updateNotificationQueryCaches = (
 export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
   const { data: session, status } = useSession();
+  const pathname = usePathname();
   const workerMode = session?.user?.accountType === "WORKER";
+  const isCompletingGoogleAuth =
+    pathname?.startsWith("/auth/google-complete") ?? false;
 
   const query = useQuery({
     queryKey: [...NOTIFICATION_QUERY_KEY, workerMode ? "worker" : "owner"],
     queryFn: () => fetchNotifications({ limit: 5 }, { workerMode }),
-    enabled: status === "authenticated",
+    enabled:
+      status === "authenticated" &&
+      !isCompletingGoogleAuth &&
+      !isAuthLoginInProgress(),
     refetchInterval: () =>
       typeof document !== "undefined" && document.hidden ? false : 60_000,
     refetchIntervalInBackground: false,

@@ -90,6 +90,14 @@ const AuthSseMiddleware = (
         latestSessionVersion !== null &&
         latestSessionVersion !== authUser.sessionVersion
       ) {
+        console.warn("[auth.reject]", {
+          reason: "session_version_mismatch",
+          userId: authUser.ownerUserId,
+          tokenVersion: authUser.sessionVersion,
+          dbVersion: latestSessionVersion,
+          path: req.path,
+          source: headerToken ? "header" : queryToken ? "query" : "cookie",
+        });
         recordRequestAuthSummary({
           source: headerToken ? "header" : queryToken ? "query" : "cookie",
           durationMs: performance.now() - startedAt,

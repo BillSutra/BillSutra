@@ -229,7 +229,10 @@ export const store = async (req: Request, res: Response) => {
 
   try {
     const body = req.body as InvoiceCreateInput;
-    const invoice = await createInvoice(userId, body);
+    const invoice = await createInvoice(userId, body, {
+      workerId:
+        req.user?.accountType === "WORKER" ? req.user.workerId ?? null : null,
+    });
     invalidateInventoryInsightsCacheByUser(userId);
     void invalidateCustomerListCaches(businessId, userId);
     void invalidateProductOptionCaches(businessId, userId);

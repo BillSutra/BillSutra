@@ -457,11 +457,15 @@ export default function Login({
 
   const handleGoogleLogin = () => {
     setPendingRememberMePreference(rememberMe);
+    markAuthLoginInProgress();
     captureAnalyticsEvent("auth_login_started", {
       method: "google",
       mode,
     });
-    signIn("google", { callbackUrl: "/dashboard", redirect: true });
+    void signIn("google", {
+      callbackUrl: "/auth/google-complete?next=/dashboard",
+      redirect: true,
+    });
   };
 
   const handlePasskeyLogin = async () => {
@@ -742,7 +746,7 @@ export default function Login({
         />
         <AuthFormField
           id="identifier"
-          name="identifier"
+          name={isWorkerMode ? "identifier" : "email"}
           label={t("auth.shared.emailOrPhoneLabel")}
           placeholder={t("auth.shared.emailOrPhonePlaceholder")}
           value={identifier}

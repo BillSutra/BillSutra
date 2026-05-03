@@ -472,6 +472,7 @@ class DashboardController {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
 
+    try {
     const cacheKey = buildDashboardEndpointCacheKey("sales", userId, req.query);
     const cached = await getDashboardEndpointCache<{
       last7Days: Array<{ date: string; sales: number; purchases: number }>;
@@ -591,6 +592,39 @@ class DashboardController {
     await setDashboardEndpointCache(cacheKey, data);
 
     return sendResponse(res, 200, { data });
+    } catch (error) {
+      const statusCode =
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+          ? 409
+          : error instanceof Error &&
+              "statusCode" in error &&
+              typeof error.statusCode === "number"
+            ? error.statusCode
+            : error instanceof Error &&
+                "status" in error &&
+                typeof error.status === "number"
+              ? error.status
+              : null;
+
+      if (statusCode === 409) {
+        console.warn("[sales.dashboard.conflict]", {
+          userId,
+          ownerUserId: req.user?.ownerUserId ?? null,
+          businessId: req.user?.businessId ?? null,
+          range: req.query.range ?? null,
+          granularity: req.query.granularity ?? null,
+          reason:
+            error instanceof Prisma.PrismaClientKnownRequestError
+              ? error.code
+              : error instanceof Error
+                ? error.message
+                : "unknown_conflict",
+        });
+      }
+
+      throw error;
+    }
   }
 
   static async paymentMethods(req: Request, res: Response) {

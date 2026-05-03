@@ -24,6 +24,24 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TOKEN_REGEX = /^[a-f0-9]{48,128}$/i;
 const SUCCESS_MESSAGE =
   "Password changed successfully. Redirecting to login...";
+const COMMON_BREACHED_PASSWORDS = new Set([
+  "123456",
+  "1234567",
+  "12345678",
+  "123456789",
+  "1234567890",
+  "password",
+  "password1",
+  "password123",
+  "qwerty",
+  "qwerty123",
+  "admin",
+  "admin123",
+  "letmein",
+  "welcome",
+  "welcome123",
+  "iloveyou",
+]);
 
 type FormState = {
   status: number;
@@ -32,6 +50,7 @@ type FormState = {
 };
 
 type TokenStatus = "idle" | "checking" | "valid" | "invalid" | "expired" | "used";
+type ResetAccountMode = "password" | "google_hybrid" | "google_password_setup" | null;
 
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
 const normalizePassword = (value: string) => value.trim();
@@ -74,6 +93,13 @@ const passwordRules = [
     labelKey: "auth.resetForm.ruleSpecial",
     fallback: "1 special character",
     test: (value: string) => /[^A-Za-z0-9\s]/.test(value),
+  },
+  {
+    key: "unique",
+    labelKey: "auth.resetForm.ruleUnique",
+    fallback: "Not a common breached password",
+    test: (value: string) =>
+      !COMMON_BREACHED_PASSWORDS.has(value.toLowerCase().replace(/\s+/g, "")),
   },
 ] as const;
 
@@ -125,6 +151,7 @@ const ResetPass = () => {
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [tokenStatus, setTokenStatus] = useState<TokenStatus>("idle");
   const [tokenMessage, setTokenMessage] = useState("");
+  const [accountMode, setAccountMode] = useState<ResetAccountMode>(null);
 
   const normalizedEmail = useMemo(() => normalizeEmail(email), [email]);
   const trimmedPassword = useMemo(() => normalizePassword(password), [password]);
@@ -222,10 +249,18 @@ const ResetPass = () => {
           token,
         },
       })
-      .then(() => {
+      .then((response) => {
         if (!cancelled) {
           setTokenStatus("valid");
           setTokenMessage("");
+          const nextAccountMode = response.data?.data?.accountMode;
+          setAccountMode(
+            nextAccountMode === "google_password_setup" ||
+              nextAccountMode === "google_hybrid" ||
+              nextAccountMode === "password"
+              ? nextAccountMode
+              : null,
+          );
         }
       })
       .catch((error: unknown) => {
@@ -245,6 +280,7 @@ const ResetPass = () => {
 
         setTokenStatus(nextStatus);
         setTokenMessage(getTokenMessage(nextStatus, message));
+        setAccountMode(null);
       });
 
     return () => {
@@ -312,14 +348,21 @@ const ResetPass = () => {
   return (
     <form action={formAction} className="space-y-5" onSubmit={handleSubmit}>
       <input name="email" type="hidden" value={normalizedEmail} />
-      <input name="password" type="hidden" value={trimmedPassword} />
-      <input name="confirm_password" type="hidden" value={trimmedConfirmPassword} />
       <input name="token" type="hidden" value={token} />
 
       {tokenStatus === "checking" && (
         <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
           <LoaderCircle className="h-4 w-4 animate-spin" />
           Checking reset link
+        </div>
+      )}
+
+      {tokenStatus === "valid" && accountMode === "google_password_setup" && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-100">
+          {safeT(
+            "auth.resetForm.googlePasswordSetupNotice",
+            "You're adding a password to your Google account.",
+          )}
         </div>
       )}
 
@@ -373,6 +416,7 @@ const ResetPass = () => {
             autoComplete="new-password"
             disabled={!canEditForm}
             id="reset-password"
+            name="password"
             onBlur={() =>
               setTouched((current) => ({ ...current, password: true }))
             }
@@ -418,6 +462,12 @@ const ResetPass = () => {
             );
           })}
         </div>
+        <p className="text-xs text-muted-foreground">
+          {safeT(
+            "auth.resetForm.uniquePasswordHint",
+            "Use a unique password not used elsewhere.",
+          )}
+        </p>
         {(clientErrors.password || getFieldError(typedState.errors, "password")) && (
           <p className="text-sm text-destructive">
             {clientErrors.password || getFieldError(typedState.errors, "password")}
@@ -434,6 +484,7 @@ const ResetPass = () => {
             autoComplete="new-password"
             disabled={!canEditForm}
             id="reset-confirm-password"
+            name="confirm_password"
             onBlur={() =>
               setTouched((current) => ({ ...current, confirmPassword: true }))
             }

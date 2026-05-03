@@ -456,9 +456,12 @@
                                    "ruleLowercase":  "1 lowercase letter",
                                    "ruleNumber":  "1 number",
                                    "ruleSpecial":  "1 special character",
+                                   "ruleUnique":  "Not a common breached password",
+                                   "uniquePasswordHint":  "Use a unique password not used elsewhere.",
                                    "requestNewLink":  "Request a new link",
                                    "updatingPassword":  "Updating password",
-                                   "changePassword":  "Change password"
+                                   "changePassword":  "Change password",
+                                   "googlePasswordSetupNotice":  "You're adding a password to your Google account."
                                }
              },
     "customers":  {
