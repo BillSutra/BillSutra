@@ -31,9 +31,11 @@ import {
 } from "@/lib/authClient";
 import {
   bootstrapSecureAuthSession,
+  clearAuthLoginInProgress,
   getAuthTokenExpiry,
   isSecureAuthEnabled,
   logClientAuthEvent,
+  markAuthLoginInProgress,
   setLegacyStoredToken,
   setPendingRememberMePreference,
 } from "@/lib/secureAuth";
@@ -155,6 +157,8 @@ export default function Login({
   );
   const otpInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const lastSubmittedOtpRef = useRef<string | null>(null);
+  const loginCompletionRef = useRef<Promise<boolean> | null>(null);
+  const handledLoginTokenRef = useRef<string | null>(null);
   const hydrated = useHydrated();
 
   const supportsPasskeys = useMemo(
@@ -187,8 +191,13 @@ export default function Login({
         return false;
       }
 
-      setIsSigningIn(true);
-      try {
+      if (loginCompletionRef.current) {
+        return loginCompletionRef.current;
+      }
+
+      loginCompletionRef.current = (async () => {
+        setIsSigningIn(true);
+        markAuthLoginInProgress();
         setLegacyStoredToken(token);
         logClientAuthEvent("login_token_received", {
           mode,
@@ -198,13 +207,16 @@ export default function Login({
           expiresAt: getAuthTokenExpiry(token),
         });
 
-        if (isSecureAuthEnabled()) {
-          const bootstrapped = await bootstrapSecureAuthSession(token, {
-            rememberMe:
-              typeof options?.rememberMe === "boolean"
-                ? options.rememberMe
-                : undefined,
-          });
+        const secureAuthEnabled = isSecureAuthEnabled();
+        const bootstrapped = await bootstrapSecureAuthSession(token, {
+          rememberMe:
+            typeof options?.rememberMe === "boolean"
+              ? options.rememberMe
+              : undefined,
+          allowWhenSecureAuthDisabled: true,
+        });
+
+        if (secureAuthEnabled) {
           if (!bootstrapped) {
             throw new Error("Unable to establish your secure session.");
           }
@@ -212,6 +224,12 @@ export default function Login({
           logClientAuthEvent("secure_session_bootstrapped", {
             mode,
             callbackUrl,
+          });
+        } else {
+          logClientAuthEvent("refresh_session_bootstrap_completed", {
+            mode,
+            callbackUrl,
+            bootstrapped,
           });
         }
 
@@ -228,6 +246,7 @@ export default function Login({
           mode,
           callbackUrl,
         });
+        clearAuthLoginInProgress();
 
         const destination =
           !isWorkerMode && options?.isEmailVerified === false
@@ -238,10 +257,19 @@ export default function Login({
           destination,
           mode,
         });
-        router.push(destination);
-        router.refresh();
+        router.replace(destination);
         return true;
+      })();
+
+      try {
+        const completed = await loginCompletionRef.current;
+        if (!completed) {
+          loginCompletionRef.current = null;
+        }
+        return completed;
       } catch (error) {
+        loginCompletionRef.current = null;
+        clearAuthLoginInProgress();
         captureFrontendException(error, {
           tags: {
             flow: "auth.complete_token_login",
@@ -255,7 +283,9 @@ export default function Login({
         toast.error(message);
         return false;
       } finally {
-        setIsSigningIn(false);
+        if (!loginCompletionRef.current) {
+          setIsSigningIn(false);
+        }
       }
     },
     [callbackUrl, isWorkerMode, mode, router],
@@ -366,12 +396,21 @@ export default function Login({
       });
       toast.error(state.message);
     } else if (state.status === 200) {
+      const loginToken = normalizeToken(state.data?.token);
+      if (loginToken && handledLoginTokenRef.current === loginToken) {
+        return;
+      }
+
+      if (loginToken) {
+        handledLoginTokenRef.current = loginToken;
+      }
+
       captureAnalyticsEvent("auth_login_succeeded", {
         method: "password",
         mode,
       });
       toast.success(state.message);
-      void completeTokenLogin(state.data?.token, {
+      void completeTokenLogin(loginToken, {
         isEmailVerified:
           typeof state.data?.user?.is_email_verified === "boolean"
             ? state.data.user.is_email_verified
@@ -380,6 +419,10 @@ export default function Login({
           typeof state.data?.rememberMe === "boolean"
             ? state.data.rememberMe
             : rememberMe,
+      }).then((completed) => {
+        if (!completed && loginToken && handledLoginTokenRef.current === loginToken) {
+          handledLoginTokenRef.current = null;
+        }
       });
     }
   }, [
@@ -414,11 +457,15 @@ export default function Login({
 
   const handleGoogleLogin = () => {
     setPendingRememberMePreference(rememberMe);
+    markAuthLoginInProgress();
     captureAnalyticsEvent("auth_login_started", {
       method: "google",
       mode,
     });
-    signIn("google", { callbackUrl: "/dashboard", redirect: true });
+    void signIn("google", {
+      callbackUrl: "/auth/google-complete?next=/dashboard",
+      redirect: true,
+    });
   };
 
   const handlePasskeyLogin = async () => {
@@ -672,7 +719,7 @@ export default function Login({
     <>
       <form
         action={formAction}
-        className="grid gap-4 rounded-[1.75rem] border border-white/65 bg-white/78 p-4 shadow-[0_24px_60px_-44px_rgba(15,23,42,0.34)] backdrop-blur-sm dark:border-white/10 dark:bg-white/5 sm:p-5"
+        className="grid gap-4 rounded-[1.75rem] border border-white/75 bg-white/90 p-4 shadow-[0_20px_52px_-42px_rgba(15,23,42,0.3)] dark:border-white/10 dark:bg-white/[0.07] sm:p-5"
         noValidate
         onSubmit={handlePasswordSubmit}
       >
@@ -699,7 +746,7 @@ export default function Login({
         />
         <AuthFormField
           id="identifier"
-          name="identifier"
+          name={isWorkerMode ? "identifier" : "email"}
           label={t("auth.shared.emailOrPhoneLabel")}
           placeholder={t("auth.shared.emailOrPhonePlaceholder")}
           value={identifier}
@@ -848,7 +895,7 @@ export default function Login({
             <Button
               type="button"
               variant="outline"
-              className="h-12 justify-center gap-3 rounded-2xl border-white/70 bg-white/78 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/6 dark:hover:bg-white/10"
+              className="h-12 justify-center gap-3 rounded-2xl border-white/75 bg-white/90 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/[0.07] dark:hover:bg-white/10"
               onClick={handlePasskeyLogin}
               disabled={isPasskeyLoading || isSigningIn}
             >
@@ -858,7 +905,7 @@ export default function Login({
                 : "Continue with passkey"}
             </Button>
 
-            <div className="rounded-[1.6rem] border border-white/70 bg-white/76 p-4 shadow-[0_20px_50px_-40px_rgba(15,23,42,0.28)] dark:border-white/10 dark:bg-white/6">
+            <div className="rounded-[1.6rem] border border-white/75 bg-white/95 p-4 shadow-[0_18px_42px_-34px_rgba(15,23,42,0.26)] dark:border-white/10 dark:bg-white/[0.07]">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="space-y-1">
                   <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
@@ -872,7 +919,7 @@ export default function Login({
                 <Button
                   type="button"
                   variant="outline"
-                  className="rounded-2xl border-white/70 bg-white/80 dark:border-white/10 dark:bg-white/8"
+                  className="rounded-2xl border-white/75 bg-white/90 font-semibold shadow-[0_12px_24px_-22px_rgba(15,23,42,0.26)] dark:border-white/10 dark:bg-white/10"
                   onClick={handleSendOtp}
                   disabled={
                     isOtpSending ||
@@ -908,7 +955,7 @@ export default function Login({
                         inputMode="numeric"
                         autoComplete={index === 0 ? "one-time-code" : "off"}
                         maxLength={1}
-                        className="h-12 w-11 rounded-2xl border-white/70 bg-white/80 text-center text-lg shadow-[0_16px_30px_-26px_rgba(15,23,42,0.22)] dark:border-white/10 dark:bg-white/8"
+                        className="h-12 w-11 rounded-2xl border-white/75 bg-white/95 text-center text-lg font-semibold text-slate-950 shadow-[0_12px_26px_-24px_rgba(15,23,42,0.22)] dark:border-white/10 dark:bg-white/10 dark:text-white"
                         aria-label={`OTP digit ${index + 1}`}
                         disabled={isOtpVerifying || isSigningIn}
                       />
@@ -947,7 +994,7 @@ export default function Login({
             <Button
               type="button"
               variant="outline"
-              className="h-12 justify-center gap-3 rounded-2xl border-white/70 bg-white/78 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/6 dark:hover:bg-white/10"
+              className="h-12 justify-center gap-3 rounded-2xl border-white/75 bg-white/90 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/[0.07] dark:hover:bg-white/10"
               onClick={handleGoogleLogin}
               disabled={isSigningIn}
             >
@@ -963,7 +1010,7 @@ export default function Login({
             <Button
               type="button"
               variant="outline"
-              className="h-12 justify-center gap-3 rounded-2xl border-white/70 bg-white/78 shadow-[0_18px_40px_-34px_rgba(15,23,42,0.28)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/6 dark:hover:bg-white/10"
+              className="h-12 justify-center gap-3 rounded-2xl border-white/75 bg-white/90 shadow-[0_16px_34px_-30px_rgba(15,23,42,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/[0.07] dark:hover:bg-white/10"
               onClick={() => setIsFaceLoginOpen(true)}
               disabled={isSigningIn}
             >

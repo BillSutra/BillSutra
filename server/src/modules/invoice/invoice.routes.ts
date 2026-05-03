@@ -1,6 +1,7 @@
 import { Router } from "express";
 import AuthMiddleware from "../../middlewares/AuthMIddleware.js";
 import RequireFeatureAccessMiddleware from "../../middlewares/RequireFeatureAccessMiddleware.js";
+import RequirePermissionMiddleware from "../../middlewares/RequirePermissionMiddleware.js";
 import validate from "../../middlewares/validate.js";
 import {
   idParamSchema,
@@ -36,6 +37,10 @@ router.post(
 router.post(
   "/",
   AuthMiddleware,
+  RequirePermissionMiddleware("invoice:create", {
+    logEvent: "[invoice.create.auth]",
+    message: "You don't have permission to create invoices.",
+  }),
   RequireFeatureAccessMiddleware("INVOICE_CREATE"),
   validate({ body: invoiceCreateSchema }),
   store,

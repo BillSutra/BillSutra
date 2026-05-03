@@ -39,6 +39,7 @@ import RequireAdminMiddleware from "../middlewares/RequireAdminMiddleware.js";
 import RequirePaymentAccessMiddleware from "../middlewares/RequirePaymentAccessMiddleware.js";
 import RequireFeatureAccessMiddleware from "../middlewares/RequireFeatureAccessMiddleware.js";
 import { logoUploadMiddleware } from "../middlewares/logo.upload.js";
+import { workerPhotoUploadMiddleware } from "../middlewares/workerPhoto.upload.js";
 import { paymentProofUploadMiddleware } from "../middlewares/paymentProof.upload.js";
 import {
   adminPaymentRateLimiter,
@@ -46,7 +47,10 @@ import {
   exportRateLimiter,
   loginRateLimiter,
   otpResendRateLimiter,
+  passwordResetAttemptRateLimiter,
+  passwordResetRequestRateLimiter,
   paymentRateLimiter,
+  signupRateLimiter,
   uploadRateLimiter,
 } from "../middlewares/rateLimit.middleware.js";
 import validate from "../middlewares/validate.js";
@@ -73,6 +77,7 @@ import {
   authRegisterSchema,
   authForgotSchema,
   authResetSchema,
+  authResetValidateQuerySchema,
   authVerifyEmailOtpSchema,
   authVerifyEmailQuerySchema,
   authSessionBootstrapSchema,
@@ -252,8 +257,8 @@ router.patch(
 // Auth routes
 router.post(
   "/auth/signup",
-  authRateLimiter,
-  validate({ body: authRegisterSchema }),
+  signupRateLimiter,
+  validate({ body: authRegisterSchema, statusCode: 400 }),
   AuthController.signup,
 );
 router.post(
@@ -270,8 +275,8 @@ router.post(
 );
 router.post(
   "/auth/register",
-  authRateLimiter,
-  validate({ body: authRegisterSchema }),
+  signupRateLimiter,
+  validate({ body: authRegisterSchema, statusCode: 400 }),
   AuthController.register,
 );
 router.get("/auth/csrf", authRateLimiter, AuthController.csrfToken);
@@ -300,6 +305,7 @@ router.post(
   AuthController.resendVerificationOtp,
 );
 router.post("/auth/refresh", authRateLimiter, AuthController.refresh);
+router.get("/auth/session", authRateLimiter, AuthController.session);
 router.post(
   "/auth/session/bootstrap",
   authRateLimiter,
@@ -309,6 +315,7 @@ router.post(
 router.post("/auth/logout", authRateLimiter, AuthController.logout);
 router.post(
   "/auth/forgot-password",
+  passwordResetRequestRateLimiter,
   validate({ body: authForgotSchema }),
   AuthController.forgotPassword,
 );
@@ -365,8 +372,15 @@ router.delete(
 );
 router.post(
   "/auth/reset-password",
+  passwordResetAttemptRateLimiter,
   validate({ body: authResetSchema }),
   AuthController.resetPassword,
+);
+router.get(
+  "/auth/reset-password/validate",
+  passwordResetAttemptRateLimiter,
+  validate({ query: authResetValidateQuerySchema }),
+  AuthController.validateResetPasswordToken,
 );
 router.post(
   "/send-test-email",
@@ -558,6 +572,12 @@ router.put(
   WorkerPanelController.updateProfile,
 );
 router.put(
+  "/worker/profile/photo",
+  AuthMiddleware,
+  workerPhotoUploadMiddleware,
+  WorkerPanelController.uploadPhoto,
+);
+router.put(
   "/worker/password",
   AuthMiddleware,
   validate({ body: workerPasswordChangeSchema }),
@@ -577,6 +597,43 @@ router.get(
   "/worker/dashboard/history",
   AuthMiddleware,
   WorkerPanelController.getWorkHistory,
+);
+router.get(
+  "/worker/notifications",
+  AuthMiddleware,
+  validate({ query: notificationsQuerySchema }),
+  NotificationsController.workerIndex,
+);
+router.patch(
+  "/worker/notifications/read-all",
+  AuthMiddleware,
+  NotificationsController.workerMarkAllRead,
+);
+router.post(
+  "/worker/notifications/read-all",
+  AuthMiddleware,
+  NotificationsController.workerMarkAllRead,
+);
+router.patch(
+  "/worker/notifications/:id/read",
+  AuthMiddleware,
+  validate({
+    params: stringIdParamSchema,
+    body: notificationReadStateSchema,
+  }),
+  NotificationsController.workerMarkRead,
+);
+router.post(
+  "/worker/notifications/:id/read",
+  AuthMiddleware,
+  validate({ params: stringIdParamSchema }),
+  NotificationsController.workerMarkRead,
+);
+router.delete(
+  "/worker/notifications/:id",
+  AuthMiddleware,
+  validate({ params: stringIdParamSchema }),
+  NotificationsController.workerDestroy,
 );
 
 // Logo management

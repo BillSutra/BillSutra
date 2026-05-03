@@ -12,9 +12,10 @@
 - Business analytics for cashflow, receivables, payables, and trends
 - Production-ready setup with clear environment and deployment docs
 
-## Updated Features (April 2026)
+## Updated Features (May 2026)
 
 - Facial recognition login and face registration flow has been added (see facial recognition docs)
+- Production frontend startup now uses the generated Next.js standalone server
 - Dashboard analytics has improved KPI separation for pending sales vs pending purchases
 - Inventory risk presentation now clearly separates low-stock and out-of-stock states
 - Feature-specific documentation has been aligned across root, frontend, and server README files
@@ -27,7 +28,9 @@
 billsutra/
 ├── front-end/          # Next.js 16 web application (App Router)
 ├── server/             # Express.js REST API with Prisma + PostgreSQL
-├── feature_summary.txt # Complete feature list (detailed)
+├── face_recognition_service/ # Python face-recognition sidecar
+├── shared/             # Shared TypeScript utilities
+├── docs/               # Deployment and observability guides
 └── README.md           # This file
 ```
 
@@ -52,7 +55,7 @@ Each sub-project has its own `README.md` with full setup instructions:
 | 🏢 Business Profile | Company logo, tax ID, currency, invoice display settings |
 | 🎨 Invoice Templates | Customizable layouts with per-user saved templates |
 
-> See [`feature_summary.txt`](./feature_summary.txt) for the full detailed breakdown of every feature.
+> See [`PROJECT_REPORT.md`](./PROJECT_REPORT.md) for the current detailed feature and architecture report.
 
 ---
 
@@ -82,23 +85,27 @@ Each sub-project has its own `README.md` with full setup instructions:
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js ≥ 18
+- Node.js >= 20.19.0
+- npm >= 10
 - PostgreSQL database
 
-### 1. Start the Server
+### 1. Install Dependencies
+```bash
+npm ci
+```
+
+### 2. Start the Server
 ```bash
 cd server
 cp .env.example .env   # fill in DATABASE_URL, JWT_SECRET, etc.
-npm install
 npx prisma migrate dev
-npm run dev            # runs on http://localhost:5000
+npm run dev            # defaults to http://localhost:7000 unless PORT is set
 ```
 
-### 2. Start the Front-End
+### 3. Start the Front-End
 ```bash
 cd front-end
-cp .env.local.example .env.local   # set NEXTAUTH_SECRET, NEXT_PUBLIC_API_URL, etc.
-npm install
+cp .env.example .env.local   # set NEXTAUTH_SECRET, NEXT_PUBLIC_BACKEND_URL, etc.
 npm run dev                        # runs on http://localhost:3000
 ```
 
@@ -131,6 +138,7 @@ npm run dev                        # runs on http://localhost:3000
 
 ## 📖 More Documentation
 
-- **All features in detail** → [`feature_summary.txt`](./feature_summary.txt)
-- **Front-end setup & pages** → [`front-end/README.md`](./front-end/README.md)
-- **Server API & architecture** → [`server/README.md`](./server/README.md)
+- **Feature and architecture report** -> [`PROJECT_REPORT.md`](./PROJECT_REPORT.md)
+- **Front-end setup & pages** -> [`front-end/README.md`](./front-end/README.md)
+- **Server API & architecture** -> [`server/README.md`](./server/README.md)
+- **Deployment guide** -> [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md)

@@ -29,6 +29,7 @@ import {
   bootstrapSecureAuthSession,
   ensureFreshSecureAuthSessionDetailed,
   getLegacyStoredToken,
+  getSecureAuthAccessToken,
   hasSecureAuthBootstrap,
   isAuthTokenExpired,
   isSecureAuthEnabled,
@@ -40,6 +41,8 @@ import {
   buildRequiredCsrfHeaders,
   isSafeHttpMethod,
 } from "./csrfClient";
+
+axios.defaults.withCredentials = true;
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -78,6 +81,24 @@ apiClient.interceptors.request.use(async (config) => {
 
       const refreshResult = await ensureFreshSecureAuthSessionDetailed();
       if (!refreshResult.ok) {
+        const bootstrapToken = getSecureAuthAccessToken();
+        if (refreshResult.reason === "missing_cookie" && bootstrapToken) {
+          const bootstrapped = await bootstrapSecureAuthSession(bootstrapToken, {
+            allowWhenSecureAuthDisabled: true,
+          });
+          logClientAuthEvent("request_refresh_missing_cookie_bootstrap_attempt", {
+            requestUrl,
+            bootstrapped,
+          });
+
+          if (bootstrapped) {
+            if (config.headers?.Authorization) {
+              delete config.headers.Authorization;
+            }
+            return config;
+          }
+        }
+
         if (refreshResult.reason === "auth_invalid") {
           requestClientLogout("401_refresh_failed");
         }
@@ -103,10 +124,33 @@ apiClient.interceptors.request.use(async (config) => {
       return config;
     }
 
-    const token = getLegacyStoredToken();
+    let token = getSecureAuthAccessToken();
     if (token && isAuthTokenExpired(token)) {
-      requestClientLogout("token_expired");
-      return Promise.reject(new axios.CanceledError("Session expired"));
+      logClientAuthEvent("legacy_token_expired_refresh_started", {
+        requestUrl,
+      });
+      const refreshResult = await ensureFreshSecureAuthSessionDetailed({
+        force: true,
+        minValidityMs: 0,
+        allowWhenSecureAuthDisabled: true,
+      });
+
+      if (refreshResult.ok) {
+        token = refreshResult.token ?? getLegacyStoredToken();
+        logClientAuthEvent("legacy_token_expired_refresh_success", {
+          requestUrl,
+          expiresAt: refreshResult.expiresAt,
+        });
+      } else {
+        if (refreshResult.reason === "auth_invalid") {
+          requestClientLogout("token_expired_refresh_failed");
+          return Promise.reject(new axios.CanceledError("Session expired"));
+        }
+
+        return Promise.reject(
+          new axios.CanceledError("Authentication temporarily unavailable"),
+        );
+      }
     }
 
     if (token) {
@@ -179,7 +223,6 @@ apiClient.interceptors.response.use(
       const isFaceAuthRequest = isFaceAuthenticationRequest(requestUrl);
 
       if (
-        isSecureAuthEnabled() &&
         status === 401 &&
         !isRefreshRequest &&
         !isFaceAuthRequest &&
@@ -192,8 +235,23 @@ apiClient.interceptors.response.use(
           const refreshResult = await ensureFreshSecureAuthSessionDetailed({
             force: true,
             minValidityMs: 0,
+            allowWhenSecureAuthDisabled: true,
           });
           if (!refreshResult.ok) {
+            const bootstrapToken = getSecureAuthAccessToken();
+            if (refreshResult.reason === "missing_cookie" && bootstrapToken) {
+              const bootstrapped = await bootstrapSecureAuthSession(bootstrapToken, {
+                allowWhenSecureAuthDisabled: true,
+              });
+              if (bootstrapped) {
+                originalRequest.withCredentials = true;
+                if (originalRequest.headers?.Authorization) {
+                  delete originalRequest.headers.Authorization;
+                }
+                return apiClient(originalRequest);
+              }
+            }
+
             if (refreshResult.reason !== "auth_invalid") {
               originalRequest._authRefreshTransientFailure = true;
               return Promise.reject(error);
@@ -203,8 +261,18 @@ apiClient.interceptors.response.use(
             throw new Error("Unable to refresh session");
           }
 
-          if (originalRequest.headers?.Authorization) {
+          if (isSecureAuthEnabled() && originalRequest.headers?.Authorization) {
             delete originalRequest.headers.Authorization;
+          } else if (!isSecureAuthEnabled()) {
+            const refreshedToken = refreshResult.token ?? getLegacyStoredToken();
+            originalRequest.headers = originalRequest.headers ?? {};
+            if (refreshedToken) {
+              originalRequest.headers.Authorization = refreshedToken.startsWith("Bearer ")
+                ? refreshedToken
+                : `Bearer ${refreshedToken}`;
+            } else if (originalRequest.headers.Authorization) {
+              delete originalRequest.headers.Authorization;
+            }
           }
 
           originalRequest.withCredentials = true;
@@ -222,7 +290,8 @@ apiClient.interceptors.response.use(
         status === 401 &&
         !isRefreshRequest &&
         !isFaceAuthRequest &&
-        (!isSecureAuthEnabled() || originalRequest?._authRefreshInvalid)
+        originalRequest?._authRefreshInvalid &&
+        !originalRequest._retry
       ) {
         requestClientLogout("unauthorized");
       }
@@ -657,6 +726,7 @@ export type WorkerProfileResponse = {
   name: string;
   email: string;
   phone: string | null;
+  imageUrl: string | null;
   role: string;
   accessRole: string;
   status: string;
@@ -672,7 +742,11 @@ export type WorkerDashboardOverviewResponse = {
     averageOrderValue: number;
     thisMonthSales: number;
     incentiveEarned: number;
+    pendingPayments: number;
+    customersServed: number;
   };
+  monthlySales: Array<{ month: string; sales: number }>;
+  weeklyPerformance: Array<{ day: string; sales: number; orders: number }>;
 };
 
 export type WorkerIncentiveResponse = {
@@ -1056,6 +1130,8 @@ export type InventoryDemandPredictionFilters = {
   limit?: number;
 };
 
+const INVENTORY_DEMAND_PREDICTION_LIMIT_MAX = 200;
+
 export type InventoryInsightType =
   | "low_stock"
   | "out_of_stock"
@@ -1429,6 +1505,11 @@ export type UserSettingsPreferences = {
     terms: string;
     signature: string;
   };
+  accountType?: "OWNER" | "WORKER";
+  role?: "ADMIN" | "WORKER";
+  actorId?: string;
+  workerId?: string | null;
+  canManageBusinessSettings?: boolean;
 };
 
 export type AppNotificationType =
@@ -1474,6 +1555,10 @@ export type NotificationListResponse = {
   limit: number;
 };
 
+type NotificationRequestOptions = {
+  workerMode?: boolean;
+};
+
 export type SecurityActivityEvent = {
   id: number;
   method: string;
@@ -1497,6 +1582,7 @@ export type DeviceSessionRecord = {
 export type AccessPaymentStatusResponse = {
   hasAccess: boolean;
   activePayment: AccessPaymentRecord | null;
+  businessProfileCompleted: boolean;
   subscription: SubscriptionSnapshot;
   payments: AccessPaymentRecord[];
   upi: {
@@ -1519,6 +1605,7 @@ export type UploadAccessPaymentProofInput = {
   planId: "pro" | "pro-plus";
   billingCycle: "monthly" | "yearly";
   name?: string;
+  mobileNumber?: string;
   utr?: string;
   paymentProof: File;
 };
@@ -2031,8 +2118,9 @@ export const createProduct = async (
 export const updateProduct = async (
   id: number,
   payload: Partial<ProductInput>,
-): Promise<void> => {
-  await apiClient.put(`/products/${id}`, payload);
+): Promise<Product> => {
+  const response = await apiClient.put(`/products/${id}`, payload);
+  return response.data.data as Product;
 };
 
 export const deleteProduct = async (id: number): Promise<void> => {
@@ -2225,8 +2313,7 @@ const normalizeCustomerPayload = (
   payload: Partial<CustomerInput>,
   includeDefaults = false,
 ) => {
-  const normalizedAddress = toCustomerAddress({
-    customerAddress: payload.customerAddress ?? null,
+  const normalizedAddress = toBusinessAddressInput({
     addressLine1:
       payload.customerAddress?.addressLine1 ??
       payload.address_line1 ??
@@ -2234,7 +2321,6 @@ const normalizeCustomerPayload = (
     city: payload.customerAddress?.city ?? payload.city ?? undefined,
     state: payload.customerAddress?.state ?? payload.state ?? undefined,
     pincode: payload.customerAddress?.pincode ?? payload.pincode ?? undefined,
-    address: payload.address,
   });
 
   const hasStructuredAddress = Boolean(
@@ -2540,6 +2626,18 @@ export const createCategory = async (payload: {
   return response.data.data as Category;
 };
 
+export const updateCategory = async (
+  id: number,
+  payload: { name: string },
+): Promise<Category> => {
+  const response = await apiClient.put(`/categories/${id}`, payload);
+  return response.data.data as Category;
+};
+
+export const deleteCategory = async (id: number): Promise<void> => {
+  await apiClient.delete(`/categories/${id}`);
+};
+
 export const createCustomer = async (
   payload: CustomerInput,
 ): Promise<Customer> => {
@@ -2641,6 +2739,21 @@ export const changeWorkerPassword = async (payload: {
   confirm_password: string;
 }): Promise<void> => {
   await apiClient.put("/worker/password", payload);
+};
+
+export const uploadWorkerProfilePhoto = async (
+  file: File,
+): Promise<{ imageUrl: string; photoUrl?: string }> => {
+  const formData = new FormData();
+  formData.append("profilePhoto", file);
+  const response = await apiClient.put("/worker/profile/photo", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  const data = response.data.data as { imageUrl?: string; photoUrl?: string };
+  return {
+    imageUrl: data.imageUrl ?? data.photoUrl ?? "",
+    photoUrl: data.photoUrl ?? data.imageUrl,
+  };
 };
 
 export const fetchWorkerDashboardOverview =
@@ -2924,6 +3037,9 @@ export const uploadAccessPaymentProof = async (
   formData.append("billing_cycle", payload.billingCycle);
   if (payload.name?.trim()) {
     formData.append("name", payload.name.trim());
+  }
+  if (payload.mobileNumber?.trim()) {
+    formData.append("mobileNumber", payload.mobileNumber.replace(/\D/g, ""));
   }
   if (payload.utr?.trim()) {
     formData.append("utr", payload.utr.trim().toUpperCase());
@@ -3263,7 +3379,11 @@ const buildInventoryPredictionParams = (
     params.set("alertLevel", filters.alertLevel);
   }
   if (filters.limit) {
-    params.set("limit", String(filters.limit));
+    const limit = Math.min(
+      INVENTORY_DEMAND_PREDICTION_LIMIT_MAX,
+      Math.max(1, Math.trunc(filters.limit)),
+    );
+    params.set("limit", String(limit));
   }
   filters.productIds?.forEach((productId) => {
     params.append("productIds", String(productId));
@@ -3488,10 +3608,12 @@ export const saveUserSettingsPreferences = async (
 
 export const fetchNotifications = async (
   params: NotificationListParams | number = 10,
+  options?: NotificationRequestOptions,
 ): Promise<NotificationListResponse> => {
   const resolvedParams =
     typeof params === "number" ? { limit: params } : params;
-  const response = await apiClient.get("/notifications", {
+  const basePath = options?.workerMode ? "/worker/notifications" : "/notifications";
+  const response = await apiClient.get(basePath, {
     params: {
       limit: resolvedParams.limit,
       page: resolvedParams.page,
@@ -3509,19 +3631,28 @@ export const fetchNotifications = async (
 export const updateNotificationReadState = async (
   id: string,
   isRead: boolean,
+  options?: NotificationRequestOptions,
 ): Promise<AppNotification> => {
-  const response = await apiClient.patch(`/notifications/${id}/read`, {
+  const basePath = options?.workerMode ? "/worker/notifications" : "/notifications";
+  const response = await apiClient.patch(`${basePath}/${id}/read`, {
     isRead,
   });
   return response.data.data as AppNotification;
 };
 
-export const markAllNotificationsAsRead = async (): Promise<void> => {
-  await apiClient.patch("/notifications/read-all");
+export const markAllNotificationsAsRead = async (
+  options?: NotificationRequestOptions,
+): Promise<void> => {
+  const basePath = options?.workerMode ? "/worker/notifications" : "/notifications";
+  await apiClient.patch(`${basePath}/read-all`);
 };
 
-export const deleteNotification = async (id: string): Promise<void> => {
-  await apiClient.delete(`/notifications/${id}`);
+export const deleteNotification = async (
+  id: string,
+  options?: NotificationRequestOptions,
+): Promise<void> => {
+  const basePath = options?.workerMode ? "/worker/notifications" : "/notifications";
+  await apiClient.delete(`${basePath}/${id}`);
 };
 
 export const fetchSecurityActivity = async (): Promise<

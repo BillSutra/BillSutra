@@ -11,6 +11,7 @@ import {
 import { measureRequestPhase } from "../lib/requestPerformance.js";
 import { dispatchNotification } from "../services/notification.service.js";
 import { recordAuditLog } from "../services/auditLog.service.js";
+import { ensureWorkerPerformanceSchema } from "../lib/workerPerformanceSchema.js";
 
 const WORKER_MIGRATION_MESSAGE =
   "Worker management requires the latest database migration. Run Prisma migrations and restart the server.";
@@ -89,27 +90,11 @@ const missingWorkerExtensionError = (error: unknown) => {
   );
 };
 
-const ensureWorkerProfilesTable = async () => {
-  await prisma.$executeRaw`
-    CREATE TABLE IF NOT EXISTS "worker_profiles" (
-      "worker_id" VARCHAR(191) PRIMARY KEY,
-      "access_role" VARCHAR(32) NOT NULL DEFAULT 'STAFF',
-      "status" VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
-      "joining_date" TIMESTAMP(3),
-      "incentive_type" VARCHAR(32) NOT NULL DEFAULT 'NONE',
-      "incentive_value" NUMERIC(12,2) NOT NULL DEFAULT 0,
-      "last_active_at" TIMESTAMP(3),
-      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `;
-};
-
 const upsertWorkerProfile = async (
   workerId: string,
   payload: Partial<Omit<WorkerProfileRow, "workerId">>,
 ) => {
-  await ensureWorkerProfilesTable();
+  await ensureWorkerPerformanceSchema();
 
   const accessRole = payload.accessRole ?? DEFAULT_WORKER_PROFILE.accessRole;
   const status = payload.status ?? DEFAULT_WORKER_PROFILE.status;
@@ -156,7 +141,7 @@ const loadWorkerProfiles = async (workerIds: string[]) => {
   }
 
   try {
-    await ensureWorkerProfilesTable();
+    await ensureWorkerPerformanceSchema();
     const rows = await prisma.$queryRaw<
       Array<{
         worker_id: string;
@@ -315,6 +300,8 @@ const buildWorkerPerformance = async (
   const thisMonthStart = getFilterStartDate("this_month");
 
   try {
+    await ensureWorkerPerformanceSchema();
+
     const [profiles, salesMap, invoicesMap, monthlySalesMap] =
       await Promise.all([
         loadWorkerProfiles(workerIds),
@@ -411,6 +398,8 @@ const loadRecentWorkerActivity = async (workerIds: string[]) => {
   if (!workerIds.length) return [];
 
   try {
+    await ensureWorkerPerformanceSchema();
+
     const rows = await prisma.$queryRaw<
       Array<{
         worker_id: string;

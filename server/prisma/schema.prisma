@@ -58,6 +58,7 @@ model User {
   email_logs                  EmailLog[]
 
   session_version Int @default(0)
+  password_changed_at DateTime?
 
   @@map("users")
 }
@@ -147,6 +148,7 @@ model Worker {
   email      String     @unique @db.VarChar(191)
   name       String     @db.VarChar(191)
   phone      String?    @unique @db.VarChar(191)
+  imageUrl   String?    @map("image_url") @db.VarChar(255)
   password   String     @db.VarChar(191)
   role       WorkerRole @default(WORKER)
   businessId String     @map("business_id") @db.VarChar(191)
@@ -154,6 +156,8 @@ model Worker {
   updatedAt  DateTime   @updatedAt @map("updated_at")
 
   business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  sales    Sale[]
+  invoices Invoice[]
 
   @@index([businessId])
   @@index([businessId, createdAt])
@@ -580,6 +584,8 @@ model Sale {
   paymentStatus PaymentStatus  @default(UNPAID) @map("payment_status")
   paymentDate   DateTime?      @map("payment_date")
   paymentMethod PaymentMethod? @map("payment_method")
+  worker         Worker?        @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  workerId       String?        @map("worker_id") @db.VarChar(191)
 
   notes String?
 
@@ -593,6 +599,7 @@ model Sale {
   @@index([user_id, sale_date])
   @@index([user_id, sale_date, customer_id])
   @@index([user_id, paymentDate])
+  @@index([workerId])
   @@map("sales")
 }
 
@@ -659,6 +666,8 @@ model Invoice {
   items    InvoiceItem[]
   payments Payment[]
   email_logs EmailLog[]
+  worker     Worker? @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  workerId   String? @map("worker_id") @db.VarChar(191)
 
   @@unique([user_id, invoice_number])
   @@index([user_id])
@@ -669,6 +678,7 @@ model Invoice {
   @@index([user_id, createdAt])
   @@index([user_id, date])
   @@index([user_id, status, createdAt])
+  @@index([workerId])
   @@map("invoices")
 }
 

@@ -58,7 +58,8 @@ const errorMiddleware: ErrorRequestHandler = (err, req, res, _next) => {
     message = "Database connection failed";
     code = "DATABASE_CONNECTION_FAILED";
   } else if (err instanceof ZodError) {
-    statusCode = 422;
+    const appLikeError = err as ErrorWithStatus;
+    statusCode = appLikeError.statusCode ?? appLikeError.status ?? 422;
     message = "Validation failed";
     code = "VALIDATION_ERROR";
     data = { errors: err.flatten().fieldErrors };

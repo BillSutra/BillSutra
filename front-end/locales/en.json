@@ -1,4 +1,4 @@
-﻿{
+{
     "common":  {
                    "appName":  "BillSutra",
                    "loading":  "Loading...",
@@ -429,7 +429,14 @@
                                     "emailLabel":  "Email",
                                     "emailPlaceholder":  "Type your email",
                                     "emailSent":  "Email sent successfully",
-                                    "emailFailed":  "Failed to send email"
+                                    "emailFailed":  "Failed to send email",
+                                    "emailRequired":  "Email is required",
+                                    "emailInvalid":  "Enter a valid email address",
+                                    "tooManyRequests":  "Too many requests. Please wait before trying again.",
+                                    "waitToResend":  "Please wait before requesting another reset link.",
+                                    "sending":  "Sending",
+                                    "sendResetLink":  "Send reset link",
+                                    "resendIn":  "Resend in {seconds}s"
                                 },
                  "resetForm":  {
                                    "emailLabel":  "Email",
@@ -437,7 +444,24 @@
                                    "passwordLabel":  "Password",
                                    "passwordPlaceholder":  "Enter your password",
                                    "confirmPasswordLabel":  "Confirm password",
-                                   "confirmPasswordPlaceholder":  "Confirm your password"
+                                   "confirmPasswordPlaceholder":  "Confirm your password",
+                                   "emailRequired":  "Email is required",
+                                   "emailInvalid":  "Enter a valid email address",
+                                   "passwordRequired":  "Password is required",
+                                   "confirmPasswordRequired":  "Confirm password is required",
+                                   "passwordMismatch":  "Passwords do not match",
+                                   "strengthLabel":  "Strength",
+                                   "ruleLength":  "At least 8 characters",
+                                   "ruleUppercase":  "1 uppercase letter",
+                                   "ruleLowercase":  "1 lowercase letter",
+                                   "ruleNumber":  "1 number",
+                                   "ruleSpecial":  "1 special character",
+                                   "ruleUnique":  "Not a common breached password",
+                                   "uniquePasswordHint":  "Use a unique password not used elsewhere.",
+                                   "requestNewLink":  "Request a new link",
+                                   "updatingPassword":  "Updating password",
+                                   "changePassword":  "Change password",
+                                   "googlePasswordSetupNotice":  "You're adding a password to your Google account."
                                }
              },
     "customers":  {
@@ -672,6 +696,13 @@
                                          "delete":  "Delete",
                                          "cancel":  "Cancel"
                                      },
+                         "barcode":  {
+                                         "scanButton":  "Scan Barcode",
+                                         "checking":  "Checking barcode availability...",
+                                         "existingFound":  "Existing product found",
+                                         "updateStock":  "Update stock",
+                                         "scanSuccess":  "Barcode scanned successfully"
+                                     },
                          "fields":  {
                                         "name":  "Product name",
                                         "sku":  "SKU",
@@ -690,10 +721,14 @@
                                               "barcode":  "Barcode",
                                               "zero":  "0",
                                               "gstRate":  "18",
-                                              "categoryName":  "e.g. Electronics"
-                                          },
+                                          "categoryName":  "e.g. Electronics"
+                                      },
                          "validation":  {
-                                            "invalidName":  "Please enter a valid product name"
+                                            "invalidName":  "Please enter a valid product name",
+                                            "invalidBarcode":  "Barcode must contain only letters and numbers",
+                                            "barcodeMin":  "Barcode must be at least 6 characters",
+                                            "barcodeMax":  "Barcode cannot exceed 32 characters",
+                                            "barcodeDuplicate":  "Barcode already exists"
                                         }
                      },
     "warehousesPage":  {
@@ -770,7 +805,8 @@
                        "invoices":  "Invoices",
                        "invoiceRecords":  "Past Bills",
                        "clients":  "Customers",
-                       "workers":  "Worker Panel",
+                       "workerPanel":  "Worker Panel",
+                       "workers":  "Team Management",
                        "suppliers":  "Suppliers",
                        "purchases":  "Purchases",
                        "sales":  "Sales",
@@ -778,9 +814,15 @@
                        "businessProfile":  "Business Profile",
                        "settings":  "Settings"
                    },
+    "workerPanel":  {
+                        "title":  "Worker Dashboard",
+                        "subtitle":  "Manage your tasks, invoices and attendance"
+                    },
     "profileMenu":  {
                         "myAccount":  "My Account",
                         "profile":  "Profile",
+                        "preferences":  "Preferences",
+                        "helpCenter":  "Help Center",
                         "logout":  "Logout",
                         "languageSection":  "Language",
                         "languageEnglish":  "EN",
@@ -2431,9 +2473,9 @@
                         "placeholders":  {
                                              "name":  "Riya Sharma",
                                              "email":  "riya@company.com",
-                                             "phone":  "9876543210",
-                                             "password":  "Minimum 6 characters",
-                                             "keepPassword":  "Leave blank to keep current password",
+                         "phone":  "9876543210",
+                         "password":  "8+ chars, Aa, 1, special",
+                         "keepPassword":  "Leave blank to keep current password",
                                              "incentivePercent":  "e.g. 2.5",
                                              "incentiveAmount":  "e.g. 50"
                                          },
@@ -2465,19 +2507,33 @@
                                         "disable":  "Disable",
                                         "enable":  "Enable"
                                     },
-                        "messages":  {
-                                         "createError":  "Unable to create the worker right now.",
+    "messages":  {
+                     "createError":  "Unable to create the worker right now.",
                                          "updateError":  "Unable to update the worker right now.",
                                          "noPhone":  "No phone number",
                                          "addedMeta":  "{role} - Added {date}",
-                                         "neverActive":  "Never"
-                                     },
-                        "validation":  {
-                                           "passwordRequired":  "This field is required",
-                                           "passwordMin":  "Password must be at least 6 characters",
-                                           "incentiveInvalid":  "Enter a valid incentive value",
-                                           "incentivePercentMax":  "Percentage cannot exceed 100"
-                                       }
+                     "neverActive":  "Never"
+                 },
+    "passwordStrength":  {
+                             "label":  "Password strength",
+                             "weak":  "Weak",
+                             "medium":  "Medium",
+                             "strong":  "Strong"
+                         },
+    "passwordRules":  {
+                          "length":  "8+ characters",
+                          "uppercase":  "Uppercase",
+                          "lowercase":  "Lowercase",
+                          "number":  "Number",
+                          "special":  "Special character"
+                      },
+    "validation":  {
+                       "passwordRequired":  "This field is required",
+                       "passwordMin":  "Password must be at least 8 characters",
+                       "passwordStrong":  "Use 8+ chars with upper, lower, number, and special character",
+                       "incentiveInvalid":  "Enter a valid incentive value",
+                       "incentivePercentMax":  "Percentage cannot exceed 100"
+                   }
                     },
     "profilePage":  {
                         "kicker":  "Profile",

@@ -73,6 +73,7 @@ class AccessPaymentsController {
       planId: req.body.plan_id,
       billingCycle: req.body.billing_cycle,
       name: req.body.name,
+      mobileNumber: req.body.mobileNumber,
       utr: req.body.utr,
       paymentProof: req.file,
     });
@@ -94,6 +95,7 @@ class AccessPaymentsController {
       planId: req.body.plan_id,
       billingCycle: req.body.billing_cycle,
       name: req.body.name,
+      mobileNumber: req.body.mobileNumber,
       utr: req.body.utr,
       paymentProof: req.file,
     });

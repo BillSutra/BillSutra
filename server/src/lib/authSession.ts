@@ -24,6 +24,24 @@ const normalizeNumber = (value: unknown) => {
   return null;
 };
 
+const resolveWorkerIdFromClaims = (decodedRecord: Record<string, unknown>) => {
+  const directWorkerId =
+    normalizeString(decodedRecord.workerId) ??
+    normalizeString(decodedRecord.worker_id);
+
+  if (directWorkerId) {
+    return directWorkerId;
+  }
+
+  const actorId = normalizeString(decodedRecord.actorId);
+  if (!actorId?.startsWith("worker:")) {
+    return null;
+  }
+
+  const parsedWorkerId = actorId.slice("worker:".length).trim();
+  return parsedWorkerId.length > 0 ? parsedWorkerId : null;
+};
+
 const normalizeBusinessName = (value?: string | null) =>
   normalizeString(value) ?? DEFAULT_BUSINESS_NAME;
 
@@ -284,7 +302,7 @@ export const buildWorkerAuthUser = async (
     businessId: worker.businessId,
     sessionVersion: ownerSessionVersion ?? 0,
     isEmailVerified: true,
-    role: worker.role === "ADMIN" ? "ADMIN" : "WORKER",
+    role: "WORKER",
     accountType: "WORKER",
     name: worker.name,
     email: worker.email,
@@ -405,10 +423,16 @@ export const resolveAuthSessionPreferences = (
 export const signAuthToken = (
   authUser: AuthUser,
   preferences?: AuthSessionPreferences,
-) =>
-  jwt.sign(
+) => {
+  const unifiedRole = authUser.accountType === "WORKER" ? "worker" : "user";
+
+  return jwt.sign(
     {
       ...authUser,
+      id: authUser.id,
+      email: authUser.email,
+      role: unifiedRole,
+      legacyRole: authUser.role,
       token_type: "access_v2",
       remember_me: normalizeRememberMe(preferences?.rememberMe),
     },
@@ -417,6 +441,7 @@ export const signAuthToken = (
       expiresIn: getAccessTokenTtl() as jwt.SignOptions["expiresIn"],
     },
   );
+};
 
 export const createAuthBearerToken = (authUser: AuthUser) =>
   `Bearer ${signAuthToken(authUser)}`;
@@ -481,10 +506,18 @@ export const resolveAuthUserFromDecoded = async (
       : typeof decodedRecord.is_email_verified === "boolean"
         ? decodedRecord.is_email_verified
         : null;
-  const workerId = normalizeString(decodedRecord.workerId);
-  const role = normalizeString(decodedRecord.role) === "WORKER" ? "WORKER" : "ADMIN";
   const accountType =
     normalizeString(decodedRecord.accountType) === "WORKER" ? "WORKER" : "OWNER";
+  const workerId = resolveWorkerIdFromClaims(decodedRecord);
+  const tokenRole =
+    normalizeString(decodedRecord.legacyRole) ??
+    normalizeString(decodedRecord.role);
+  const role =
+    accountType === "WORKER"
+      ? "WORKER"
+      : tokenRole === "WORKER"
+        ? "WORKER"
+        : "ADMIN";
 
   if (
     !businessId ||

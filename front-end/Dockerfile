@@ -15,12 +15,10 @@ RUN npm run build
 FROM node:20-bookworm-slim AS runner
 
 ENV NODE_ENV=production
-WORKDIR /app/front-end
+WORKDIR /app
 
-COPY --from=builder /app/front-end/public ./public
 COPY --from=builder /app/front-end/.next/standalone ./
-COPY --from=builder /app/front-end/.next/static ./.next/static
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+CMD ["node", "front-end/server.js"]

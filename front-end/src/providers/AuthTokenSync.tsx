@@ -10,6 +10,7 @@ import {
   ensureFreshSecureAuthSessionDetailed,
   getPendingRememberMePreference,
   hasSecureAuthBootstrap,
+  isAuthLoginInProgress,
   isSecureAuthSessionExpired,
   isSecureAuthEnabled,
   normalizeAuthToken,
@@ -28,20 +29,24 @@ const AuthTokenSync = () => {
     if (status === "loading") return;
 
     if (status === "unauthenticated") {
+      if (isAuthLoginInProgress()) {
+        return;
+      }
+
       clearLegacyStoredToken();
       clearSecureAuthBootstrapped();
       return;
     }
 
-    if (!isSecureAuthEnabled()) {
-      return;
-    }
-
+    const secureAuthEnabled = isSecureAuthEnabled();
     const token = normalizeAuthToken(
       (data?.user as SessionUserWithToken | undefined)?.token ?? null,
     );
     const requiresBootstrap =
-      !hasSecureAuthBootstrap() || isSecureAuthSessionExpired(Date.now() + 60_000);
+      secureAuthEnabled
+        ? !hasSecureAuthBootstrap() ||
+          isSecureAuthSessionExpired(Date.now() + 60_000)
+        : Boolean(token);
 
     if (!requiresBootstrap) {
       return;
@@ -50,15 +55,16 @@ const AuthTokenSync = () => {
     let cancelled = false;
 
     const syncAuthSession = async () => {
-      if (token && !hasSecureAuthBootstrap()) {
+      if (token && (!secureAuthEnabled || !hasSecureAuthBootstrap())) {
         if (bootstrappingTokenRef.current !== token) {
           bootstrappingTokenRef.current = token;
 
           try {
             const bootstrapped = await bootstrapSecureAuthSession(token, {
               rememberMe: getPendingRememberMePreference(),
+              allowWhenSecureAuthDisabled: true,
             });
-            if (bootstrapped || cancelled) {
+            if (bootstrapped || cancelled || !secureAuthEnabled) {
               return;
             }
 
@@ -78,7 +84,12 @@ const AuthTokenSync = () => {
         minValidityMs: 0,
       });
 
-      if (!cancelled && !refreshResult.ok && refreshResult.reason === "auth_invalid") {
+      if (
+        !cancelled &&
+        !isAuthLoginInProgress() &&
+        !refreshResult.ok &&
+        refreshResult.reason === "auth_invalid"
+      ) {
         clearPendingRememberMePreference();
         requestClientLogout("401_refresh_failed");
       }

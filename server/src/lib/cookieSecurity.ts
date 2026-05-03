@@ -84,7 +84,12 @@ export const resolveCookieSameSite = (req?: Request): CookieSameSite => {
     return "lax";
   }
 
-  return "lax";
+  const requestHost = normalizeHost(req?.get("host") ?? req?.hostname);
+  if (requestHost && isLoopbackHost(requestHost)) {
+    return "lax";
+  }
+
+  return resolveCookieSecure(req) ? "none" : "lax";
 };
 
 export const buildHttpOnlyCookieOptions = (

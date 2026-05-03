@@ -12,10 +12,12 @@ This is the **Express.js REST API** that powers BillSutra. It handles all busine
 - Analytics endpoints that provide actionable and consistent business KPIs
 - Production-safe observability, error handling, and environment-driven configuration
 
-## Updated Features (April 2026)
+## Updated Features (May 2026)
 
 - Added facial recognition API support through dedicated controller and routes
+- Added encrypted face encoding storage and migration/audit scripts
 - Improved analytics consistency using payment-status-focused query logic
+- Private uploads and exports are served through secure controllers, while public assets live under `/uploads/public`
 - Updated dashboard data model behavior for clearer pending financial obligations
 - Documentation now reflects required startup variables vs optional feature-specific ones
 
@@ -86,7 +88,7 @@ server/
 │   │   ├── invoice/            # Invoice service, controller, routes, notifications
 │   │   └── import/             # Bulk CSV/XLSX import service, controller, routes
 │   ├── middlewares/
-│   │   ├── AuthMiddleware.ts   # JWT Bearer token verification
+│   │   ├── AuthMIddleware.ts   # JWT Bearer token verification
 │   │   ├── rateLimit.middleware.ts  # Auth rate limiter
 │   │   ├── validate.ts         # Zod request validation middleware
 │   │   └── error.middleware.ts # Global error handler
@@ -314,16 +316,18 @@ The service should respond on `http://localhost:5001/health` before `/api/face/a
 
 ### Requirements
 
-- Node.js 18+
+- Node.js 20.19.0+
+- npm 10+
 - PostgreSQL 14+
 
 ### Installation
 
 ```bash
-# 1. Install dependencies
-npm install
+# 1. Install dependencies from the monorepo root
+npm ci
 
 # 2. Configure environment
+cd server
 cp .env.example .env
 # Edit .env with your DATABASE_URL, JWT_SECRET, etc.
 
@@ -337,10 +341,10 @@ npm run seed
 npm run dev
 
 # (Alternative) If running from monorepo root
-npm run dev --prefix server
+npm run dev --workspace server
 ```
 
-The server starts at **http://localhost:5000**.
+The server defaults to **http://localhost:7000** unless `PORT` is set. Production examples commonly use `PORT=8000`.
 
 ---
 
@@ -351,6 +355,9 @@ The server starts at **http://localhost:5000**.
 | `npm run dev`   | Start with hot reload via `tsx watch`     |
 | `npm run build` | Compile TypeScript to `dist/`             |
 | `npm run start` | Run compiled build (`node dist/index.js`) |
+| `npm run worker:dev` | Start the queue worker in watch mode |
+| `npm run worker:start` | Run the compiled queue worker |
+| `npm test` | Run configured backend CI tests |
 | `npm run watch` | Watch TypeScript files (`tsc -w`)         |
 | `npm run seed`  | Run Prisma seed script                    |
 
@@ -381,8 +388,9 @@ Invoice PDFs are generated server-side using **Puppeteer** (headless Chromium):
 
 ## 🔒 Security Notes
 
-- All private routes require a valid `Bearer` JWT token via `AuthMiddleware`
+- All private routes require a valid `Bearer` JWT token via `AuthMIddleware`
 - Auth endpoints (`/auth/login`, `/auth/register`) are rate-limited via `express-rate-limit`
 - Passwords are hashed with `bcryptjs` (cost factor 12) before storage
 - Password reset tokens expire after 30 minutes and can only be used once
 - All request bodies are validated with **Zod** schemas before reaching controllers
+- Face encodings are encrypted before storage when `FACE_ENCRYPTION_KEY` is configured

@@ -21,12 +21,11 @@ import {
 
 export type DashboardNavSection =
   | "main"
+  | "operations"
   | "salesBilling"
-  | "productsInventory"
+  | "inventory"
   | "contacts"
-  | "purchases"
-  | "customization"
-  | "system";
+  | "settings";
 
 type DashboardNavItem = {
   labelKey: string;
@@ -34,6 +33,7 @@ type DashboardNavItem = {
   icon: LucideIcon;
   section: DashboardNavSection;
   adminOnly?: boolean;
+  workerOnly?: boolean;
   badgeKey?: string;
   highlighted?: boolean;
 };
@@ -42,13 +42,12 @@ export const dashboardNavSections: Array<{
   id: DashboardNavSection;
   title: string;
 }> = [
-  { id: "main", title: "Main" },
+  { id: "main", title: "Dashboard" },
+  { id: "operations", title: "Operations" },
   { id: "salesBilling", title: "Sales & Billing" },
-  { id: "productsInventory", title: "Products & Inventory" },
+  { id: "inventory", title: "Inventory" },
   { id: "contacts", title: "Contacts" },
-  { id: "purchases", title: "Purchases" },
-  { id: "customization", title: "Customization" },
-  { id: "system", title: "System" },
+  { id: "settings", title: "Settings" },
 ];
 
 export const dashboardNavItems: DashboardNavItem[] = [
@@ -59,16 +58,17 @@ export const dashboardNavItems: DashboardNavItem[] = [
     section: "main",
   },
   {
-    labelKey: "navigation.workers",
+    labelKey: "navigation.workerPanel",
     href: "/worker-panel",
     icon: UserCog,
-    section: "main",
+    section: "operations",
+    workerOnly: true,
   },
   {
     labelKey: "navigation.simpleBill",
     href: "/simple-bill",
     icon: Zap,
-    section: "main",
+    section: "operations",
     badgeKey: "navigation.simpleBillBadge",
     highlighted: true,
   },
@@ -106,19 +106,19 @@ export const dashboardNavItems: DashboardNavItem[] = [
     labelKey: "navigation.products",
     href: "/products",
     icon: Package,
-    section: "productsInventory",
+    section: "inventory",
   },
   {
     labelKey: "navigation.inventory",
     href: "/inventory",
     icon: Boxes,
-    section: "productsInventory",
+    section: "inventory",
   },
   {
     labelKey: "navigation.warehouses",
     href: "/warehouses",
     icon: Warehouse,
-    section: "productsInventory",
+    section: "inventory",
   },
   {
     labelKey: "navigation.clients",
@@ -136,37 +136,37 @@ export const dashboardNavItems: DashboardNavItem[] = [
     labelKey: "navigation.workers",
     href: "/workers",
     icon: UserCog,
-    section: "system",
+    section: "settings",
     adminOnly: true,
   },
   {
     labelKey: "navigation.purchases",
     href: "/purchases",
     icon: ShoppingCart,
-    section: "purchases",
+    section: "operations",
   },
   {
     labelKey: "navigation.templates",
     href: "/templates",
     icon: Shapes,
-    section: "customization",
+    section: "settings",
   },
   {
     labelKey: "navigation.businessProfile",
     href: "/business-profile",
     icon: Building2,
-    section: "customization",
+    section: "settings",
   },
   {
     labelKey: "landing.nav.pricing",
     href: "/pricing",
     icon: CircleDollarSign,
-    section: "system",
+    section: "settings",
   },
   {
     labelKey: "navigation.settings",
     href: "/settings",
     icon: Settings,
-    section: "system",
+    section: "settings",
   },
 ];

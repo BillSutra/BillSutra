@@ -99,26 +99,24 @@ You already have the SDKs installed in this repo.
 If you ever need to install again:
 
 ```powershell
-cd front-end
-npm install @sentry/nextjs
+npm install @sentry/nextjs --workspace front-end
 ```
 
 ```powershell
-cd server
-npm install @sentry/node
+npm install @sentry/node --workspace server
 ```
 
 Build checks:
 
 ```powershell
-cd server
-npm run build
+npm run build --workspace server
 ```
 
 ```powershell
-cd front-end
-npm run build
+npm run build --workspace front-end
 ```
+
+The frontend build produces standalone output and runs `front-end/scripts/prepare-standalone.mjs` as part of `npm run build --workspace front-end`.
 
 ## 6. Files already wired in BillSutra
 

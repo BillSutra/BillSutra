@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { isAxiosError } from "axios";
+import { CheckCircle2, Eye, EyeOff, LockKeyhole, XCircle } from "lucide-react";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { ValidationField } from "@/components/ui/ValidationField";
@@ -50,6 +51,180 @@ const DEFAULT_FORM: WorkerFormState = {
   incentiveValue: "",
 };
 
+const WORKER_PASSWORD_RULES = [
+  {
+    id: "length",
+    labelKey: "workersPage.passwordRules.length",
+    test: (value: string) => value.length >= 8,
+  },
+  {
+    id: "uppercase",
+    labelKey: "workersPage.passwordRules.uppercase",
+    test: (value: string) => /[A-Z]/.test(value),
+  },
+  {
+    id: "lowercase",
+    labelKey: "workersPage.passwordRules.lowercase",
+    test: (value: string) => /[a-z]/.test(value),
+  },
+  {
+    id: "number",
+    labelKey: "workersPage.passwordRules.number",
+    test: (value: string) => /\d/.test(value),
+  },
+  {
+    id: "special",
+    labelKey: "workersPage.passwordRules.special",
+    test: (value: string) => /[^A-Za-z0-9\s]/.test(value),
+  },
+] as const;
+
+const workerPasswordStrength = (value: string) => {
+  const passed = WORKER_PASSWORD_RULES.filter((rule) => rule.test(value)).length;
+
+  if (passed <= 2) {
+    return {
+      labelKey: "workersPage.passwordStrength.weak",
+      className: "bg-red-500",
+      textClassName: "text-red-600",
+      width: "33%",
+    };
+  }
+
+  if (passed <= 4) {
+    return {
+      labelKey: "workersPage.passwordStrength.medium",
+      className: "bg-amber-500",
+      textClassName: "text-amber-600",
+      width: "66%",
+    };
+  }
+
+  return {
+    labelKey: "workersPage.passwordStrength.strong",
+    className: "bg-emerald-500",
+    textClassName: "text-emerald-600",
+    width: "100%",
+  };
+};
+
+const isWorkerPasswordStrong = (value: string) =>
+  WORKER_PASSWORD_RULES.every((rule) => rule.test(value));
+
+type WorkerPasswordFieldProps = {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  error: string;
+  required?: boolean;
+  showGuidance?: boolean;
+  t: (key: string, params?: Record<string, string | number>) => string;
+};
+
+const WorkerPasswordField = ({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+  error,
+  required = false,
+  showGuidance = true,
+  t,
+}: WorkerPasswordFieldProps) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const strength = workerPasswordStrength(value);
+  const shouldShowError = Boolean(value && error);
+  const shouldShowChecklist = showGuidance && Boolean(value);
+
+  return (
+    <div className="grid gap-2">
+      <label htmlFor={id} className="text-sm font-medium text-[#1f1b16]">
+        {label}
+        {required ? <span className="ml-1 text-red-500">*</span> : null}
+      </label>
+      <div className="relative">
+        <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8a6d56]" />
+        <input
+          id={id}
+          type={showPassword ? "text" : "password"}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          autoComplete="new-password"
+          aria-invalid={shouldShowError}
+          aria-describedby={shouldShowError ? `${id}-error` : undefined}
+          className={[
+            "h-10 w-full rounded-md border bg-white py-2 pl-10 pr-11 text-sm outline-none transition-all focus:ring-2",
+            shouldShowError
+              ? "border-red-500/85 focus:ring-red-500/25"
+              : value && !error
+                ? "border-emerald-500/80 focus:ring-emerald-500/25"
+                : "border-[#e6d5c6] focus:ring-[#8a6d56]/20",
+          ].join(" ")}
+        />
+        <button
+          type="button"
+          className="absolute right-2 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-[#5c4b3b] transition-colors hover:bg-[#f2e6dc]"
+          onClick={() => setShowPassword((current) => !current)}
+          aria-label={showPassword ? "Hide password" : "Show password"}
+        >
+          {showPassword ? (
+            <EyeOff className="h-4 w-4" />
+          ) : (
+            <Eye className="h-4 w-4" />
+          )}
+        </button>
+      </div>
+
+      {shouldShowError ? (
+        <p id={`${id}-error`} className="text-xs text-red-600" role="alert">
+          {error}
+        </p>
+      ) : null}
+
+      {shouldShowChecklist ? (
+        <div className="rounded-xl border border-[#f2e6dc] bg-[#fff9f2] p-3">
+          <div className="mb-2 flex items-center justify-between gap-3 text-xs">
+            <span className="font-medium text-[#1f1b16]">
+              {t("workersPage.passwordStrength.label")}
+            </span>
+            <span className={strength.textClassName}>
+              {t(strength.labelKey)}
+            </span>
+          </div>
+          <div className="mb-3 h-2 rounded-full bg-[#f2e6dc]">
+            <div
+              className={`h-2 rounded-full transition-all ${strength.className}`}
+              style={{ width: strength.width }}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            {WORKER_PASSWORD_RULES.map((rule) => {
+              const passed = rule.test(value);
+              return (
+                <div
+                  key={rule.id}
+                  className="flex items-center gap-2 text-xs text-[#5c4b3b]"
+                >
+                  {passed ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 text-red-500" />
+                  )}
+                  <span>{t(rule.labelKey)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+};
+
 const WorkersClient = ({ name, image }: WorkersClientProps) => {
   const { language, t } = useI18n();
   const [period, setPeriod] = useState<"today" | "this_week" | "this_month">(
@@ -87,9 +262,13 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
     return translateValidationMessage(t, message);
   };
 
-  const validatePassword = (value: string) => {
-    if (!value.trim()) return t("workersPage.validation.passwordRequired");
-    if (value.trim().length < 6) return t("workersPage.validation.passwordMin");
+  const validatePassword = (value: string, required = true) => {
+    if (!value) {
+      return required ? t("workersPage.validation.passwordRequired") : "";
+    }
+    if (!isWorkerPasswordStrong(value)) {
+      return t("workersPage.validation.passwordStrong");
+    }
     return "";
   };
 
@@ -114,6 +293,16 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
     !validatePhone(form.phone) &&
     !validatePassword(form.password) &&
     !validateIncentiveValue(form.incentiveType, form.incentiveValue);
+
+  const isUpdateFormValid =
+    !validateName(editingForm.name) &&
+    !validateEmail(editingForm.email) &&
+    !validatePhone(editingForm.phone) &&
+    !validatePassword(editingForm.password, false) &&
+    !validateIncentiveValue(
+      editingForm.incentiveType,
+      editingForm.incentiveValue,
+    );
 
   const formatCreatedAt = (value: string) =>
     new Intl.DateTimeFormat(language === "hi" ? "hi-IN" : "en-IN", {
@@ -190,7 +379,7 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
           name: editingForm.name.trim(),
           email: editingForm.email.trim(),
           phone: editingForm.phone.trim(),
-          password: editingForm.password.trim() || undefined,
+          password: editingForm.password || undefined,
           accessRole: editingForm.accessRole,
           status: editingForm.status,
           joiningDate: editingForm.joiningDate || undefined,
@@ -456,20 +645,17 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                   ) : null}
                 </div>
                 <div className="grid gap-2">
-                  <ValidationField
+                  <WorkerPasswordField
                     id="worker-password"
                     label={t("workersPage.fields.password")}
-                    type="password"
                     value={form.password}
                     onChange={(value) =>
                       setForm((prev) => ({ ...prev, password: value }))
                     }
-                    validate={(value) =>
-                      localizeValidation(validatePassword(value))
-                    }
+                    error={validatePassword(form.password)}
                     required
                     placeholder={t("workersPage.placeholders.password")}
-                    success
+                    t={t}
                   />
                 </div>
                 <Button
@@ -843,10 +1029,9 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                               />
                             ) : null}
                           </div>
-                          <ValidationField
+                          <WorkerPasswordField
                             id={`edit-worker-password-${worker.id}`}
                             label={t("workersPage.fields.newPassword")}
-                            type="password"
                             value={editingForm.password}
                             onChange={(value) =>
                               setEditingForm((prev) => ({
@@ -854,20 +1039,22 @@ const WorkersClient = ({ name, image }: WorkersClientProps) => {
                                 password: value,
                               }))
                             }
-                            validate={(value) =>
-                              value
-                                ? localizeValidation(validatePassword(value))
-                                : ""
-                            }
+                            error={validatePassword(
+                              editingForm.password,
+                              false,
+                            )}
                             placeholder={t(
                               "workersPage.placeholders.keepPassword",
                             )}
-                            success
+                            showGuidance={Boolean(editingForm.password)}
+                            t={t}
                           />
                           <div className="flex flex-wrap gap-2">
                             <Button
                               type="submit"
-                              disabled={updateWorker.isPending}
+                              disabled={
+                                updateWorker.isPending || !isUpdateFormValid
+                              }
                             >
                               {updateWorker.isPending
                                 ? t("workersPage.actions.saving")

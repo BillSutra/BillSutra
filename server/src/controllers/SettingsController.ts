@@ -99,6 +99,18 @@ const mapPreferenceResponse = (pref: {
   },
 });
 
+const mapRoleSpecificPreferenceResponse = (
+  pref: Parameters<typeof mapPreferenceResponse>[0],
+  authUser: AuthUser,
+) => ({
+  ...mapPreferenceResponse(pref),
+  accountType: authUser.accountType,
+  role: authUser.role,
+  actorId: authUser.actorId,
+  workerId: authUser.accountType === "WORKER" ? authUser.workerId ?? null : null,
+  canManageBusinessSettings: authUser.accountType === "OWNER",
+});
+
 const SETTINGS_PREFERENCES_CACHE_TTL_SECONDS = Math.max(
   Number(process.env.SETTINGS_PREFERENCES_CACHE_TTL_SECONDS ?? 900),
   30,
@@ -129,6 +141,11 @@ const getOrCreatePreference = async (userId: number) => {
   });
 };
 
+const resolvePreferenceOwnerId = (authUser: AuthUser | undefined) => {
+  if (!authUser) return null;
+  return authUser.ownerUserId ?? authUser.id ?? null;
+};
+
 class SettingsController {
   private static ensureOwnerSecurityAccess(req: Request, res: Response) {
     if (!req.user?.ownerUserId) {
@@ -147,16 +164,21 @@ class SettingsController {
   }
 
   static async preferences(req: Request, res: Response) {
-    const userId = req.user?.id;
+    const userId = resolvePreferenceOwnerId(req.user);
     const businessId = req.user?.businessId?.trim();
-    if (!userId) {
+    if (!userId || !req.user) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
+    const authUser = req.user;
 
     return respondWithRedisCachedData({
       req,
       res,
-      key: buildSettingsPreferencesRedisKey({ businessId, userId }),
+      key: buildSettingsPreferencesRedisKey({
+        businessId,
+        userId,
+        actorId: authUser.actorId,
+      }),
       label: "settings-preferences",
       ttlSeconds: SETTINGS_PREFERENCES_CACHE_TTL_SECONDS,
       staleWhileRevalidateSeconds: SETTINGS_PREFERENCES_CACHE_SWR_SECONDS,
@@ -170,17 +192,24 @@ class SettingsController {
         );
         return measureRequestPhase(
           "settings.serialize.preferences",
-          async () => mapPreferenceResponse(preference),
+          async () => mapRoleSpecificPreferenceResponse(preference, authUser),
         );
       },
     });
   }
 
   static async savePreferences(req: Request, res: Response) {
-    const userId = req.user?.id;
-    if (!userId) {
+    if (req.user?.accountType === "WORKER") {
+      return sendResponse(res, 403, {
+        message: "Business settings can only be changed by an owner account.",
+      });
+    }
+
+    const userId = resolvePreferenceOwnerId(req.user);
+    if (!userId || !req.user) {
       return sendResponse(res, 401, { message: "Unauthorized" });
     }
+    const authUser = req.user;
 
     const body = (req.body ?? {}) as SettingsPayload;
     await ensureUserPreferenceCompatibility();
@@ -221,11 +250,12 @@ class SettingsController {
       },
     });
 
-    const responseData = mapPreferenceResponse(updated);
+    const responseData = mapRoleSpecificPreferenceResponse(updated, authUser);
     void setRedisResourceCache(
       buildSettingsPreferencesRedisKey({
-        businessId: req.user?.businessId?.trim(),
+        businessId: authUser.businessId?.trim(),
         userId,
+        actorId: authUser.actorId,
       }),
       {
         value: responseData,
@@ -233,7 +263,7 @@ class SettingsController {
         staleWhileRevalidateSeconds: SETTINGS_PREFERENCES_CACHE_SWR_SECONDS,
         invalidationPrefixes: [
           buildSettingsPreferencesCachePrefix({
-            businessId: req.user?.businessId?.trim(),
+            businessId: authUser.businessId?.trim(),
             userId,
           }),
         ],

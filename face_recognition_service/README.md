@@ -10,9 +10,10 @@ A Python-based facial recognition service that provides face registration and au
 - Operational stability on standard low-resolution webcam captures
 - Configurable thresholds and debug controls for environment-specific tuning
 
-## Updated Features (April 2026)
+## Updated Features (May 2026)
 
 - Added stronger low-quality webcam guidance and practical tuning defaults
+- Added configurable allowed origins and optional API-key/internal-client enforcement
 - Improved error-handling documentation across registration and authentication paths
 - Clarified integration contract with Node.js backend for payload formats
 - Documented service behavior and safety expectations for production hardening
@@ -65,6 +66,10 @@ Edit `.env` file to configure:
 - `FACE_SERVICE_PORT`: Service port (default: 5001)
 - `FACE_SERVICE_HOST`: Service host (default: localhost)
 - `DEBUG_MODE`: Enable debug logging (default: True)
+- `FACE_SERVICE_ALLOWED_ORIGINS`: comma-separated browser origins allowed for `/api/*` CORS
+- `FACE_SERVICE_API_KEY`: optional shared secret expected in `X-API-KEY`
+- `FACE_SERVICE_ENFORCE_API_KEY`: set to `true` to require `X-API-KEY`
+- `FACE_SERVICE_ENFORCE_INTERNAL_CLIENT`: set to `true` to require the configured backend client header
 
 ## API Endpoints
 
@@ -213,11 +218,11 @@ const authenticateFace = async (imageBuffer, encoding) => {
 
 ## Security Notes
 
-- Face encodings are encrypted before storage in the database
+- Face encodings are encrypted by the Node.js backend before storage when `FACE_ENCRYPTION_KEY` is configured
 - Never transmit face encodings over unencrypted channels
 - Use HTTPS in production
 - Implement rate limiting for authentication attempts
-- Store encodings securely with database encryption
+- Keep `FACE_SERVICE_ALLOWED_ORIGINS` restricted to trusted app origins in staging and production
 
 ## Future Enhancements
 

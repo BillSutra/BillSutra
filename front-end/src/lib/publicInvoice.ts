@@ -26,8 +26,8 @@ export const DEFAULT_INVOICE_TEMPLATE_NAME = "Indian GST Invoice Template";
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, "");
 
-const formatInvoiceDate = (value?: string | null) => {
-  if (!value) return "-";
+const formatInvoiceDate = (value?: string | null): string => {
+  if (!value) return "";
 
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) {

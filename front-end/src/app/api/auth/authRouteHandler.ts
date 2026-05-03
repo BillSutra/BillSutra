@@ -3,6 +3,20 @@ import { authOptions } from "./[...nextauth]/options";
 
 const nextAuth = NextAuth(authOptions);
 
+const getConfiguredAuthUrl = () => {
+  const configuredUrl = process.env.NEXTAUTH_URL?.trim();
+
+  if (!configuredUrl) {
+    return null;
+  }
+
+  try {
+    return new URL(configuredUrl);
+  } catch {
+    return null;
+  }
+};
+
 const alignNextAuthOriginForDev = (request: Request) => {
   if (process.env.NODE_ENV === "production") {
     return;
@@ -18,6 +32,34 @@ const alignNextAuthOriginForDev = (request: Request) => {
   }
 };
 
+const redirectToConfiguredOriginForProd = (request: Request) => {
+  if (process.env.NODE_ENV !== "production") {
+    return null;
+  }
+
+  const configuredUrl = getConfiguredAuthUrl();
+
+  if (!configuredUrl) {
+    return null;
+  }
+
+  try {
+    const requestUrl = new URL(request.url);
+
+    if (requestUrl.origin === configuredUrl.origin) {
+      return null;
+    }
+
+    requestUrl.protocol = configuredUrl.protocol;
+    requestUrl.hostname = configuredUrl.hostname;
+    requestUrl.port = configuredUrl.port;
+
+    return Response.redirect(requestUrl, 307);
+  } catch {
+    return null;
+  }
+};
+
 type NextAuthRouteContext = {
   params: Promise<{
     nextauth: string[];
@@ -29,5 +71,11 @@ export const handleNextAuthRequest = (
   context: NextAuthRouteContext,
 ) => {
   alignNextAuthOriginForDev(request);
+  const canonicalOriginRedirect = redirectToConfiguredOriginForProd(request);
+
+  if (canonicalOriginRedirect) {
+    return canonicalOriginRedirect;
+  }
+
   return nextAuth(request, context);
 };

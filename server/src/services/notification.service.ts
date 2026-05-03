@@ -259,6 +259,11 @@ type ListNotificationsParams = {
   isRead?: boolean | null;
 };
 
+type WorkerNotificationParams = ListNotificationsParams & {
+  businessId: string;
+  workerId: string;
+};
+
 const serializeAndEmitCreated = (
   notification: Pick<
     Notification,
@@ -507,6 +512,123 @@ export const listNotifications = async ({
   }
 };
 
+const buildWorkerNotificationWhere = ({
+  userId,
+  businessId,
+  workerId,
+  type = null,
+  isRead = null,
+}: WorkerNotificationParams): Prisma.NotificationWhereInput => {
+  const scopedWorkerPrefixes = [
+    `worker:${workerId}:`,
+    `worker-notification:${workerId}:`,
+    `worker-security:${workerId}:`,
+    `worker-profile:${workerId}:`,
+    `worker-task:${workerId}:`,
+    `worker-invoice:${workerId}:`,
+    `worker-sale:${workerId}:`,
+    `business:${businessId}:worker:${workerId}:`,
+  ];
+  const workerAudiencePrefixes = [
+    "all-workers:",
+    "worker-announcement:",
+    "announcement:workers:",
+    `business:${businessId}:all-workers:`,
+    `business:${businessId}:workers:`,
+  ];
+  const safeActionPrefixes = [
+    "/worker-panel",
+    "/sales",
+    "/invoices",
+    "/simple-bill",
+  ];
+
+  return {
+    user_id: userId,
+    business_id: businessId,
+    ...(type ? { type: notificationTypeMap[type] } : {}),
+    ...(typeof isRead === "boolean" ? { is_read: isRead } : {}),
+    OR: [
+      ...scopedWorkerPrefixes.map((prefix) => ({
+        reference_key: { startsWith: prefix },
+      })),
+      ...workerAudiencePrefixes.map((prefix) => ({
+        reference_key: { startsWith: prefix },
+      })),
+      ...safeActionPrefixes.map((prefix) => ({
+        AND: [
+          { type: { in: [NotificationType.WORKER, NotificationType.SECURITY, NotificationType.SYSTEM] } },
+          { action_url: { startsWith: prefix } },
+        ],
+      })),
+    ],
+  };
+};
+
+export const listWorkerNotifications = async (params: WorkerNotificationParams) => {
+  const safePage = Math.max(1, Math.trunc(params.page ?? 1));
+  const safeLimit = Math.max(1, Math.min(Math.trunc(params.limit ?? 10), 50));
+  const skip = (safePage - 1) * safeLimit;
+  const where = buildWorkerNotificationWhere({
+    ...params,
+    page: safePage,
+    limit: safeLimit,
+  });
+
+  if (!(await hasNotificationTable())) {
+    return { notifications: [], total: 0, page: safePage, limit: safeLimit };
+  }
+
+  try {
+    const [notifications, total] = await prisma.$transaction([
+      prisma.notification.findMany({
+        where,
+        orderBy: { created_at: "desc" },
+        skip,
+        take: safeLimit,
+      }),
+      prisma.notification.count({ where }),
+    ]);
+
+    return { notifications, total, page: safePage, limit: safeLimit };
+  } catch (error) {
+    if (isNotificationTableMissingError(error)) {
+      notificationTableAvailability = {
+        exists: false,
+        checkedAt: Date.now(),
+      };
+      return { notifications: [], total: 0, page: safePage, limit: safeLimit };
+    }
+    throw error;
+  }
+};
+
+export const countUnreadWorkerNotifications = async (
+  params: Omit<WorkerNotificationParams, "page" | "limit" | "type" | "isRead">,
+) => {
+  if (!(await hasNotificationTable())) {
+    return 0;
+  }
+
+  try {
+    return await prisma.notification.count({
+      where: buildWorkerNotificationWhere({
+        ...params,
+        isRead: false,
+      }),
+    });
+  } catch (error) {
+    if (isNotificationTableMissingError(error)) {
+      notificationTableAvailability = {
+        exists: false,
+        checkedAt: Date.now(),
+      };
+      return 0;
+    }
+    throw error;
+  }
+};
+
 export const countUnreadNotifications = async (userId: number) =>
   {
     if (!(await hasNotificationTable())) {
@@ -567,6 +689,52 @@ export const updateNotificationReadState = async (
     }
   };
 
+export const updateWorkerNotificationReadState = async (
+  params: Omit<WorkerNotificationParams, "page" | "limit" | "type" | "isRead"> & {
+    id: string;
+    isRead: boolean;
+  },
+) =>
+  {
+    if (!(await hasNotificationTable())) {
+      return null;
+    }
+
+    try {
+      const notification = await prisma.notification.findFirst({
+        where: {
+          id: params.id,
+          ...buildWorkerNotificationWhere({
+            userId: params.userId,
+            businessId: params.businessId,
+            workerId: params.workerId,
+          }),
+        },
+      });
+
+      if (!notification) {
+        return null;
+      }
+
+      const updated = await prisma.notification.update({
+        where: { id: notification.id },
+        data: { is_read: params.isRead },
+      });
+      void invalidateNotificationCaches(notification.business_id, params.userId);
+      serializeAndEmitUpdated(updated, params.userId);
+      return updated;
+    } catch (error) {
+      if (isNotificationTableMissingError(error)) {
+        notificationTableAvailability = {
+          exists: false,
+          checkedAt: Date.now(),
+        };
+        return null;
+      }
+      throw error;
+    }
+  };
+
 export const markAllNotificationsAsRead = async (userId: number) =>
   {
     if (!(await hasNotificationTable())) {
@@ -588,6 +756,39 @@ export const markAllNotificationsAsRead = async (userId: number) =>
           void invalidateNotificationCaches(business.business_id, userId);
         }
         emitRealtimeNotificationsReadAll({ userId });
+      }
+      return result;
+    } catch (error) {
+      if (isNotificationTableMissingError(error)) {
+        notificationTableAvailability = {
+          exists: false,
+          checkedAt: Date.now(),
+        };
+        return { count: 0 };
+      }
+      throw error;
+    }
+  };
+
+export const markAllWorkerNotificationsAsRead = async (
+  params: Omit<WorkerNotificationParams, "page" | "limit" | "type" | "isRead">,
+) =>
+  {
+    if (!(await hasNotificationTable())) {
+      return { count: 0 };
+    }
+
+    try {
+      const result = await prisma.notification.updateMany({
+        where: buildWorkerNotificationWhere({
+          ...params,
+          isRead: false,
+        }),
+        data: { is_read: true },
+      });
+      if (result.count > 0) {
+        void invalidateNotificationCaches(params.businessId, params.userId);
+        emitRealtimeNotificationsReadAll({ userId: params.userId });
       }
       return result;
     } catch (error) {
@@ -626,6 +827,57 @@ export const deleteNotification = async (userId: number, id: string) => {
       emitRealtimeNotificationDeleted({
         userId,
         notificationId: id,
+      });
+    }
+
+    return deleted;
+  } catch (error) {
+    if (isNotificationTableMissingError(error)) {
+      notificationTableAvailability = {
+        exists: false,
+        checkedAt: Date.now(),
+      };
+      return { count: 0 };
+    }
+    throw error;
+  }
+};
+
+export const deleteWorkerNotification = async (
+  params: Omit<WorkerNotificationParams, "page" | "limit" | "type" | "isRead"> & {
+    id: string;
+  },
+) => {
+  if (!(await hasNotificationTable())) {
+    return { count: 0 };
+  }
+
+  try {
+    const notification = await prisma.notification.findFirst({
+      where: {
+        id: params.id,
+        ...buildWorkerNotificationWhere({
+          userId: params.userId,
+          businessId: params.businessId,
+          workerId: params.workerId,
+        }),
+      },
+      select: { id: true, business_id: true },
+    });
+
+    if (!notification) {
+      return { count: 0 };
+    }
+
+    const deleted = await prisma.notification.deleteMany({
+      where: { id: notification.id },
+    });
+
+    if (deleted.count > 0) {
+      void invalidateNotificationCaches(notification.business_id, params.userId);
+      emitRealtimeNotificationDeleted({
+        userId: params.userId,
+        notificationId: params.id,
       });
     }
 

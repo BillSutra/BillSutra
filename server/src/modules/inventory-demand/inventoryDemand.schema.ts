@@ -21,7 +21,7 @@ export const inventoryDemandQuerySchema = z.object({
     categoryId: z.coerce.number().int().positive().optional(),
     supplierId: z.coerce.number().int().positive().optional(),
     alertLevel: z.enum(["critical", "warning", "normal"]).optional(),
-    limit: z.coerce.number().int().positive().max(100).optional(),
+    limit: z.coerce.number().int().positive().max(200).optional(),
 });
 
 export type InventoryDemandQuery = z.infer<typeof inventoryDemandQuerySchema>;

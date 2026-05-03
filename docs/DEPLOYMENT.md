@@ -68,6 +68,8 @@ Next.js standard env loading still works. The extra loader is there to support `
 npm ci
 ```
 
+The repo requires Node.js `>=20.19.0` and npm `>=10`.
+
 ### 2. Create env files
 
 - Copy `server/.env.example` to `server/.env`
@@ -107,6 +109,7 @@ npm run worker:dev
 
 Notes:
 
+- The backend defaults to port `7000` unless `PORT` is set; production examples use `8000`.
 - Local Redis is optional when `USE_REDIS_CACHE=false`, `USE_REDIS_RATE_LIMIT=false`, and `USE_QUEUE=false`
 - Local uploads default to `server/uploads`
 - Local passkeys should use `WEBAUTHN_ORIGIN=http://localhost:3000` and `WEBAUTHN_RP_ID=localhost`
@@ -242,6 +245,13 @@ cd front-end
 npm run build
 npm start
 ```
+
+With `output: "standalone"`, production startup runs the generated server at
+`.next/standalone/front-end/server.js`; do not use `next start` for this app.
+For Google OAuth, `NEXTAUTH_URL`, `NEXT_PUBLIC_APP_URL`, and the Google
+authorized redirect URI must use the exact browser origin you will open, such
+as `http://localhost:3000/api/auth/callback/google` for a local production
+smoke test or `https://billsutra.com/api/auth/callback/google` in production.
 
 Backend:
 

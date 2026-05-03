@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { AuthMethod, type User } from "@prisma/client";
+import { AuthMethod, Prisma, type User } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import {
   generateAuthenticationOptions,
@@ -24,6 +24,7 @@ import {
   authRegisterSchema,
   authResendVerificationOtpSchema,
   authResetSchema,
+  authResetValidateQuerySchema,
   authVerifyEmailOtpSchema,
   passkeyAuthenticateOptionsSchema,
   passkeyAuthenticateVerifySchema,
@@ -85,6 +86,14 @@ type SerializableOwnerUser = Pick<
   "id" | "name" | "email" | "provider" | "image" | "is_email_verified"
 >;
 
+type PasswordResetUserState = {
+  id: number;
+  provider: string | null;
+  oauth_id: string | null;
+  password_hash: string | null;
+  session_version: number | null;
+};
+
 type OAuthLoginPayload = z.infer<typeof authOauthSchema>;
 type CredentialsLoginPayload = z.infer<typeof authLoginSchema>;
 type CredentialsRegisterPayload = z.infer<typeof authRegisterSchema>;
@@ -92,6 +101,7 @@ type VerifyEmailOtpPayload = z.infer<typeof authVerifyEmailOtpSchema>;
 type ResendVerificationOtpPayload = z.infer<typeof authResendVerificationOtpSchema>;
 type ForgotPasswordPayload = z.infer<typeof authForgotSchema>;
 type ResetPasswordPayload = z.infer<typeof authResetSchema>;
+type ResetPasswordValidateQuery = z.infer<typeof authResetValidateQuerySchema>;
 type WorkerLoginPayload = z.infer<typeof workerLoginSchema>;
 type OtpSendPayload = z.infer<typeof authOtpSendSchema>;
 type OtpVerifyPayload = z.infer<typeof authOtpVerifySchema>;
@@ -166,6 +176,15 @@ const buildOwnerAuthResponse = async (
     preferences,
   );
 
+  if (preferences?.reason === "google_login") {
+    logAuthDiagnostic("google_login.issue_token", {
+      userId: user.id,
+      dbSessionVersion: authUser.latestSessionVersion,
+      tokenSessionVersion: authUser.sessionVersion,
+      provider: user.provider,
+    });
+  }
+
   void dispatchNotification({
     userId: user.id,
     businessId: authUser.businessId,
@@ -208,6 +227,17 @@ const resolveAuthUserFromAccessToken = async (token: string | null) => {
       latestSessionVersion !== null &&
       latestSessionVersion !== authUser.sessionVersion
     ) {
+      logAuthDiagnostic(
+        "auth.reject",
+        {
+          reason: "session_version_mismatch",
+          userId: authUser.ownerUserId,
+          tokenVersion: authUser.sessionVersion,
+          dbVersion: latestSessionVersion,
+          flow: "resolve_access_token",
+        },
+        "warn",
+      );
       return null;
     }
 
@@ -325,6 +355,93 @@ const getWorkerAccountStateDenial = (status: string | null | undefined) => {
   return "Worker account access is unavailable. Contact your business admin.";
 };
 
+const normalizeUnifiedSessionRole = (value: unknown) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === "user" ||
+    normalized === "worker" ||
+    normalized === "admin" ||
+    normalized === "super_admin"
+    ? normalized
+    : null;
+};
+
+const PASSWORD_RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
+const PASSWORD_RESET_GENERIC_MESSAGE =
+  "If an account exists, a reset link has been sent.";
+
+const resolvePasswordResetTokenState = async (
+  email: string,
+  token: string,
+) => {
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      provider: true,
+      oauth_id: true,
+      password_hash: true,
+      session_version: true,
+    },
+  });
+
+  if (!user) {
+    return {
+      status: "invalid" as const,
+      user: null,
+      reset: null,
+      message: "Invalid reset link",
+    };
+  }
+
+  const reset = await prisma.passwordResetToken.findFirst({
+    where: {
+      user_id: user.id,
+      token: hashSecretValue(token),
+    },
+    orderBy: {
+      created_at: "desc",
+    },
+  });
+
+  if (!reset) {
+    return {
+      status: "invalid" as const,
+      user,
+      reset: null,
+      message: "Invalid reset link",
+    };
+  }
+
+  if (reset.used_at) {
+    return {
+      status: "used" as const,
+      user,
+      reset,
+      message: "This link has already been used",
+    };
+  }
+
+  if (reset.expires_at.getTime() <= Date.now()) {
+    return {
+      status: "expired" as const,
+      user,
+      reset,
+      message: "Reset link expired",
+    };
+  }
+
+  return {
+    status: "valid" as const,
+    user,
+    reset,
+    message: "Reset link is valid",
+  };
+};
+
 class AuthController {
   static csrfToken(req: Request, res: Response) {
     const csrfToken = resolveOrSetCsrfToken(req, res);
@@ -386,14 +503,32 @@ class AuthController {
         actorType: "OWNER",
       });
 
+      logAuthDiagnostic("google.auth.callback_success", {
+        userId: findUser.id,
+        provider,
+        origin: req.headers.origin ?? null,
+        host: req.get("host") ?? null,
+        userAgent: req.headers["user-agent"] ?? null,
+      });
+
       return sendResponse(
         res,
         200,
         await buildOwnerAuthResponse(req, res, findUser, "Login successful", {
           rememberMe: body.rememberMe,
+          reason: "google_login",
         }),
       );
-    } catch {
+    } catch (error) {
+      logAuthDiagnostic(
+        "google.auth.callback_failed",
+        {
+          message: error instanceof Error ? error.message : String(error),
+          origin: req.headers.origin ?? null,
+          host: req.get("host") ?? null,
+        },
+        "warn",
+      );
       return sendResponse(res, 500, { message: "Internal Server Error" });
     }
   }
@@ -462,7 +597,17 @@ class AuthController {
           },
         },
       );
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        return sendResponse(res, 409, {
+          message: "Email already registered",
+          errors: { email: "Email already registered" },
+        });
+      }
+
       return sendResponse(res, 500, { message: "Internal Server Error" });
     }
   }
@@ -667,8 +812,19 @@ class AuthController {
       const refreshed = await refreshAuthCookies(req, res);
 
       if (!refreshed) {
+        const reason =
+          typeof res.locals.authRefreshFailureReason === "string"
+            ? res.locals.authRefreshFailureReason
+            : "unknown";
         return sendResponse(res, 401, {
           message: "Unable to refresh session",
+          code:
+            reason === "missing_cookie"
+              ? "AUTH_REFRESH_COOKIE_MISSING"
+              : "AUTH_REFRESH_FAILED",
+          data: {
+            reason,
+          },
         });
       }
 
@@ -678,11 +834,132 @@ class AuthController {
           token: `Bearer ${refreshed.accessToken}`,
           source: "cookie",
           expiresAt: refreshed.accessTokenExpiresAt,
+          user: {
+            id: refreshed.authUser.actorId.startsWith("super_admin:")
+              ? refreshed.authUser.actorId.slice("super_admin:".length)
+              : refreshed.authUser.id,
+            adminId: refreshed.authUser.actorId.startsWith("super_admin:")
+              ? refreshed.authUser.actorId.slice("super_admin:".length)
+              : undefined,
+            email: refreshed.authUser.email,
+            role: refreshed.authUser.actorId.startsWith("super_admin:")
+              ? "super_admin"
+              : refreshed.authUser.accountType === "WORKER"
+                ? "worker"
+                : "user",
+          },
         },
       });
     } catch (error) {
       console.warn("[auth] refresh_failed", {
         reason: "service_unavailable",
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return sendResponse(res, 503, {
+        message: "Authentication service temporarily unavailable",
+        code: "AUTH_SERVICE_UNAVAILABLE",
+      });
+    }
+  }
+
+  static async session(req: Request, res: Response) {
+    try {
+      const { headerToken, cookieToken } = resolveAccessTokenFromRequest(req);
+      const rawToken = headerToken ?? cookieToken;
+
+      if (!rawToken) {
+        clearAuthCookies(res, req);
+        return sendResponse(res, 401, {
+          message: "Unauthorized",
+        });
+      }
+
+      const decoded = jwt.verify(rawToken, getAccessTokenSecret());
+      if (!decoded || typeof decoded === "string") {
+        clearAuthCookies(res, req);
+        return sendResponse(res, 401, {
+          message: "Unauthorized",
+        });
+      }
+
+      const decodedRecord = decoded as Record<string, unknown>;
+      const unifiedRole = normalizeUnifiedSessionRole(decodedRecord.role);
+
+      if (unifiedRole === "admin" || unifiedRole === "super_admin") {
+        const adminIdValue = decodedRecord.adminId ?? decodedRecord.id;
+        const adminId =
+          typeof adminIdValue === "string" ? adminIdValue.trim() : "";
+        const email =
+          typeof decodedRecord.email === "string"
+            ? decodedRecord.email.trim()
+            : "";
+
+        const admin = adminId
+          ? await prisma.admin.findUnique({
+              where: { id: adminId },
+              select: {
+                id: true,
+                email: true,
+              },
+            })
+          : null;
+
+        if (!admin || admin.email !== email) {
+          clearAuthCookies(res, req);
+          return sendResponse(res, 401, {
+            message: "Unauthorized",
+          });
+        }
+
+        return sendResponse(res, 200, {
+          message: "Session active",
+          data: {
+            user: {
+              id: admin.id,
+              adminId: admin.id,
+              email: admin.email,
+              role: unifiedRole,
+            },
+            expiresAt: getAccessTokenExpiresAt(),
+          },
+        });
+      }
+
+      const authUser = await resolveAuthUserFromAccessToken(rawToken);
+      if (!authUser) {
+        clearAuthCookies(res, req);
+        return sendResponse(res, 401, {
+          message: "Unauthorized",
+        });
+      }
+
+      return sendResponse(res, 200, {
+        message: "Session active",
+        data: {
+          user: {
+            id: authUser.id,
+            email: authUser.email,
+            name: authUser.name,
+            role: authUser.accountType === "WORKER" ? "worker" : "user",
+            businessId: authUser.businessId,
+            workerId: authUser.workerId ?? null,
+            isEmailVerified: authUser.isEmailVerified,
+          },
+          expiresAt: getAccessTokenExpiresAt(),
+        },
+      });
+    } catch (error) {
+      if (
+        error instanceof jwt.TokenExpiredError ||
+        error instanceof jwt.JsonWebTokenError ||
+        error instanceof jwt.NotBeforeError
+      ) {
+        return sendResponse(res, 401, {
+          message: "Unauthorized",
+        });
+      }
+
+      console.warn("[auth] session_failed", {
         message: error instanceof Error ? error.message : String(error),
       });
       return sendResponse(res, 503, {
@@ -1055,7 +1332,8 @@ class AuthController {
           id: worker.id,
           name: worker.name,
           email: worker.email,
-          role: worker.role,
+          role: "WORKER",
+          workerRole: worker.role,
           businessId: worker.businessId,
           accountType: "WORKER",
           workerId: worker.id,
@@ -1079,17 +1357,34 @@ class AuthController {
           id: true,
           name: true,
           email: true,
+          provider: true,
+          oauth_id: true,
+          password_hash: true,
+          session_version: true,
         },
       });
       if (!user) {
         return sendResponse(res, 200, {
-          message: "If an account exists for this email, a password reset link has been sent.",
+          message: PASSWORD_RESET_GENERIC_MESSAGE,
         });
       }
 
-      const token = crypto.randomBytes(24).toString("hex");
+      const token = crypto.randomBytes(32).toString("hex");
       const tokenHash = hashSecretValue(token);
-      const expires = new Date(Date.now() + 1000 * 60 * 30);
+      const expires = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
+      const hasGoogle =
+        user.provider === "google" || Boolean(user.oauth_id?.trim());
+
+      if (hasGoogle) {
+        logAuthDiagnostic("forgot_password.oauth_user", {
+          userId: user.id,
+          hadPassword: Boolean(user.password_hash),
+          hasGoogle,
+          sessionVersionBefore: user.session_version ?? 0,
+          sessionVersionAfter: user.session_version ?? 0,
+          stage: "requested",
+        });
+      }
 
       await prisma.$transaction([
         prisma.passwordResetToken.deleteMany({
@@ -1108,18 +1403,22 @@ class AuthController {
       ]);
 
       try {
-        await sendEmail("password_reset", {
-          email: user.email,
-          user_name: user.name,
-          reset_url: buildResetPasswordUrl(token, user.email),
-        }, {
-          audit: {
-            userId: user.id,
-            metadata: {
-              flow: "password_reset",
+        await sendEmail(
+          "password_reset",
+          {
+            email: user.email,
+            user_name: user.name,
+            reset_url: buildResetPasswordUrl(token, user.email),
+          },
+          {
+            audit: {
+              userId: user.id,
+              metadata: {
+                flow: "password_reset",
+              },
             },
           },
-        });
+        );
       } catch {
         await prisma.passwordResetToken.deleteMany({
           where: {
@@ -1129,8 +1428,8 @@ class AuthController {
           },
         });
 
-        return sendResponse(res, 503, {
-          message: "Unable to send the password reset email right now.",
+        return sendResponse(res, 200, {
+          message: PASSWORD_RESET_GENERIC_MESSAGE,
         });
       }
 
@@ -1148,7 +1447,36 @@ class AuthController {
       });
 
       return sendResponse(res, 200, {
-        message: "If an account exists for this email, a password reset link has been sent.",
+        message: PASSWORD_RESET_GENERIC_MESSAGE,
+      });
+    } catch {
+      return sendResponse(res, 500, { message: "Internal Server Error" });
+    }
+  }
+
+  static async validateResetPasswordToken(req: Request, res: Response) {
+    try {
+      const { email, token } = req.query as ResetPasswordValidateQuery;
+      const tokenState = await resolvePasswordResetTokenState(email, token);
+
+      if (tokenState.status !== "valid") {
+        return sendResponse(res, 422, {
+          message: tokenState.message,
+          code: tokenState.status,
+          errors: { token: tokenState.message },
+        });
+      }
+
+      return sendResponse(res, 200, {
+        message: "Reset link is valid",
+        data: {
+          accountMode:
+            tokenState.user.provider === "google" && !tokenState.user.password_hash
+              ? "google_password_setup"
+              : tokenState.user.provider === "google"
+                ? "google_hybrid"
+                : "password",
+        },
       });
     } catch {
       return sendResponse(res, 500, { message: "Internal Server Error" });
@@ -1160,64 +1488,79 @@ class AuthController {
       const email = normalizeEmailAddress(req.body.email);
       const { password, token } = req.body as ResetPasswordPayload;
 
-      const user = await prisma.user.findUnique({
-        where: { email },
-        select: {
-          id: true,
-        },
-      });
-      if (!user) {
+      const tokenState = await resolvePasswordResetTokenState(email, token);
+      if (tokenState.status !== "valid" || !tokenState.user || !tokenState.reset) {
         return sendResponse(res, 422, {
-          message: "Invalid reset request",
-          errors: { email: "Invalid reset request" },
-        });
-      }
-
-      const reset = await prisma.passwordResetToken.findFirst({
-        where: {
-          user_id: user.id,
-          token: hashSecretValue(token),
-          used_at: null,
-          expires_at: { gt: new Date() },
-        },
-      });
-
-      if (!reset) {
-        return sendResponse(res, 422, {
-          message: "Invalid or expired reset token",
-          errors: { token: "Invalid token" },
+          message: tokenState.message,
+          code: tokenState.status,
+          errors: { token: tokenState.message },
         });
       }
 
       const password_hash = await bcrypt.hash(password, 12);
-      await prisma.$transaction([
-        prisma.user.update({
-          where: { id: user.id },
+      const changedAt = new Date();
+      const resetUserBefore = tokenState.user as PasswordResetUserState;
+      const hadPassword = Boolean(resetUserBefore.password_hash);
+      const hasGoogle =
+        resetUserBefore.provider === "google" ||
+        Boolean(resetUserBefore.oauth_id?.trim());
+      let sessionVersionAfter = resetUserBefore.session_version ?? 0;
+
+      await prisma.$transaction(async (tx) => {
+        const consumed = await tx.passwordResetToken.updateMany({
+          where: {
+            id: tokenState.reset.id,
+            used_at: null,
+            expires_at: { gt: changedAt },
+          },
+          data: { used_at: changedAt },
+        });
+
+        if (consumed.count !== 1) {
+          throw new Error("PASSWORD_RESET_TOKEN_CONSUMED");
+        }
+
+        const updatedUser = await tx.user.update({
+          where: { id: tokenState.user.id },
           data: {
             password_hash,
+            password_changed_at: changedAt,
+            is_email_verified: hasGoogle ? true : undefined,
+            email_verified_at: hasGoogle ? (changedAt) : undefined,
             session_version: {
               increment: 1,
             },
           },
-          select: { id: true },
-        }),
-        prisma.passwordResetToken.update({
-          where: { id: reset.id },
-          data: { used_at: new Date() },
-        }),
-        prisma.passwordResetToken.deleteMany({
+          select: { id: true, session_version: true },
+        });
+        sessionVersionAfter = updatedUser.session_version ?? sessionVersionAfter + 1;
+
+        await tx.passwordResetToken.deleteMany({
           where: {
-            user_id: user.id,
+            user_id: tokenState.user.id,
             used_at: null,
-            NOT: { id: reset.id },
+            NOT: { id: tokenState.reset.id },
           },
-        }),
-      ]);
-      await revokeAllRefreshTokensForUser(user.id, "password_reset");
+        });
+      });
+
+      if (hasGoogle) {
+        logAuthDiagnostic("forgot_password.oauth_user", {
+          userId: tokenState.user.id,
+          hadPassword,
+          hasGoogle,
+          provider: resetUserBefore.provider,
+          preservedGoogleId: Boolean(resetUserBefore.oauth_id?.trim()),
+          sessionVersionBefore: resetUserBefore.session_version ?? 0,
+          sessionVersionAfter,
+          stage: "completed",
+        });
+      }
+      await revokeAllRefreshTokensForUser(tokenState.user.id, "password_reset");
 
       await recordAuthEvent({
         req,
-        userId: user.id,
+        userId: tokenState.user.id,
         method: AuthMethod.PASSWORD,
         success: true,
         actorType: "OWNER",
@@ -1227,19 +1570,30 @@ class AuthController {
       });
       await recordAuditLog({
         req,
-        userId: user.id,
-        actorId: String(user.id),
+        userId: tokenState.user.id,
+        actorId: String(tokenState.user.id),
         actorType: "OWNER",
         action: "auth.password_reset.completed",
         resourceType: "user",
-        resourceId: String(user.id),
+        resourceId: String(tokenState.user.id),
         metadata: {
           email,
         },
       });
 
-      return sendResponse(res, 200, { message: "Password reset successful" });
-    } catch {
+      return sendResponse(res, 200, { message: "Password changed successfully" });
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "PASSWORD_RESET_TOKEN_CONSUMED"
+      ) {
+        return sendResponse(res, 422, {
+          message: "This link has already been used",
+          code: "used",
+          errors: { token: "This link has already been used" },
+        });
+      }
+
       return sendResponse(res, 500, { message: "Internal Server Error" });
     }
   }

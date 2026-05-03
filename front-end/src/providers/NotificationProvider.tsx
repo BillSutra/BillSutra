@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 import {
   deleteNotification as deleteNotificationRequest,
   fetchNotifications,
@@ -16,6 +17,7 @@ import {
   type AppNotification,
   type NotificationListResponse,
 } from "@/lib/apiClient";
+import { isAuthLoginInProgress } from "@/lib/secureAuth";
 
 type NotificationContextValue = {
   notifications: AppNotification[];
@@ -33,10 +35,6 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 
 const NOTIFICATION_QUERY_KEY = ["notifications", "header"];
 
-type NotificationQuerySnapshot = Array<
-  readonly [readonly unknown[], NotificationListResponse | undefined]
->;
-
 const updateNotificationQueryCaches = (
   queryClient: ReturnType<typeof useQueryClient>,
   updater: (current: NotificationListResponse) => NotificationListResponse,
@@ -49,12 +47,19 @@ const updateNotificationQueryCaches = (
 
 export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   const queryClient = useQueryClient();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
+  const pathname = usePathname();
+  const workerMode = session?.user?.accountType === "WORKER";
+  const isCompletingGoogleAuth =
+    pathname?.startsWith("/auth/google-complete") ?? false;
 
   const query = useQuery({
-    queryKey: NOTIFICATION_QUERY_KEY,
-    queryFn: () => fetchNotifications({ limit: 5 }),
-    enabled: status === "authenticated",
+    queryKey: [...NOTIFICATION_QUERY_KEY, workerMode ? "worker" : "owner"],
+    queryFn: () => fetchNotifications({ limit: 5 }, { workerMode }),
+    enabled:
+      status === "authenticated" &&
+      !isCompletingGoogleAuth &&
+      !isAuthLoginInProgress(),
     refetchInterval: () =>
       typeof document !== "undefined" && document.hidden ? false : 60_000,
     refetchIntervalInBackground: false,
@@ -62,7 +67,8 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const markReadMutation = useMutation({
-    mutationFn: (id: string) => updateNotificationReadState(id, true),
+    mutationFn: (id: string) =>
+      updateNotificationReadState(id, true, { workerMode }),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ["notifications"] });
       const snapshots = queryClient.getQueriesData<NotificationListResponse>({
@@ -104,7 +110,8 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const markUnreadMutation = useMutation({
-    mutationFn: (id: string) => updateNotificationReadState(id, false),
+    mutationFn: (id: string) =>
+      updateNotificationReadState(id, false, { workerMode }),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ["notifications"] });
       const snapshots = queryClient.getQueriesData<NotificationListResponse>({
@@ -145,7 +152,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const markAllReadMutation = useMutation({
-    mutationFn: markAllNotificationsAsRead,
+    mutationFn: () => markAllNotificationsAsRead({ workerMode }),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ["notifications"] });
       const snapshots = queryClient.getQueriesData<NotificationListResponse>({
@@ -172,7 +179,7 @@ export const NotificationProvider = ({ children }: { children: ReactNode }) => {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: deleteNotificationRequest,
+    mutationFn: (id: string) => deleteNotificationRequest(id, { workerMode }),
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ["notifications"] });
       const snapshots = queryClient.getQueriesData<NotificationListResponse>({

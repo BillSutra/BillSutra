@@ -370,6 +370,12 @@ const isAnalyticsDailyStatsMissingError = (error: unknown) =>
   error instanceof Prisma.PrismaClientKnownRequestError &&
   (error.code === "P2021" || error.code === "P2022");
 
+const isAnalyticsDailyStatsUniqueConflictError = (error: unknown) =>
+  error instanceof Prisma.PrismaClientKnownRequestError &&
+  error.code === "P2002" &&
+  /user_?id/i.test(String(error.meta?.target ?? "")) &&
+  /date/i.test(String(error.meta?.target ?? ""));
+
 const setAnalyticsDailyStatsFallbackMode = (
   reason: string,
   error?: unknown,
@@ -867,6 +873,7 @@ export const rebuildAnalyticsDailyStatsRange = async (params: {
         ? [
             prisma.analyticsDailyStat.createMany({
               data: createData,
+              skipDuplicates: true,
             }),
           ]
         : []),
@@ -885,6 +892,16 @@ export const rebuildAnalyticsDailyStatsRange = async (params: {
 
     return persistedRows.map(toAnalyticsRecord);
   } catch (error) {
+    if (isAnalyticsDailyStatsUniqueConflictError(error)) {
+      console.warn("[analytics.daily-stats] rebuild conflict ignored", {
+        userId: params.userId,
+        start: start.toISOString(),
+        endExclusive: endExclusive.toISOString(),
+        reason: "duplicate_user_date",
+      });
+      return computedRows;
+    }
+
     if (!isAnalyticsDailyStatsMissingError(error)) {
       throw error;
     }

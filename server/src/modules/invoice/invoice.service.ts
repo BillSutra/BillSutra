@@ -1794,7 +1794,11 @@ export const createInvoice = async (
     warehouse_id?: number | null;
     items: InvoiceCalcItem[];
   },
+  options?: {
+    workerId?: string | null;
+  },
 ) => {
+  const workerId = options?.workerId?.trim() || null;
   const discountType = normalizeDiscountType(payload.discount_type);
   const taxMode = normalizeInvoiceTaxMode(payload.tax_mode);
   const discountValue = Math.max(0, Number(payload.discount ?? 0));
@@ -1984,6 +1988,14 @@ export const createInvoice = async (
       WHERE "id" = ${invoice.id}
     `);
 
+    if (workerId) {
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE "invoices"
+        SET "worker_id" = ${workerId}
+        WHERE "id" = ${invoice.id}
+      `);
+    }
+
     if (warehouse?.id || syncSales) {
       await tx.$executeRaw(Prisma.sql`
         UPDATE "invoices"
@@ -2052,7 +2064,7 @@ export const createInvoice = async (
       }));
 
       try {
-        await tx.sale.create({
+        const syncedSale = await tx.sale.create({
           data: {
             user_id: userId,
             customer_id: payload.customer_id,
@@ -2071,12 +2083,20 @@ export const createInvoice = async (
             items: { create: saleItems },
           },
         });
+
+        if (workerId) {
+          await tx.$executeRaw(Prisma.sql`
+            UPDATE "sales"
+            SET "worker_id" = ${workerId}
+            WHERE "id" = ${syncedSale.id}
+          `);
+        }
       } catch (error) {
         if (!hasUnknownPrismaArgument(error, "nonInventoryItem")) {
           throw error;
         }
 
-        await tx.sale.create({
+        const syncedSale = await tx.sale.create({
           data: {
             user_id: userId,
             customer_id: payload.customer_id,
@@ -2102,6 +2122,14 @@ export const createInvoice = async (
             },
           },
         });
+
+        if (workerId) {
+          await tx.$executeRaw(Prisma.sql`
+            UPDATE "sales"
+            SET "worker_id" = ${workerId}
+            WHERE "id" = ${syncedSale.id}
+          `);
+        }
       }
 
       negativeInventoryProducts = await applyBillingSaleInventoryAdjustments({
@@ -2119,6 +2147,19 @@ export const createInvoice = async (
       negativeInventoryProducts,
     };
   });
+
+  if (workerId) {
+    try {
+      await prisma.$executeRaw(Prisma.sql`
+        UPDATE "worker_profiles"
+        SET "last_active_at" = CURRENT_TIMESTAMP,
+            "updated_at" = CURRENT_TIMESTAMP
+        WHERE "worker_id" = ${workerId}
+      `);
+    } catch {
+      // Worker profile attribution is best-effort for older deployments.
+    }
+  }
 
   const uniqueNegativeProducts = Array.from(
     new Map(

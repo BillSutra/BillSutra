@@ -24,10 +24,12 @@ BillSutra is a monorepo-based business application with:
 
 ### Core framework
 
-- `Next.js 16.1.6`
+- `Next.js 16.x`
 - `React 19.2.0`
 - `React DOM 19.2.0`
 - App Router structure under `front-end/src/app`
+- Standalone production output via `front-end/next.config.mjs`
+- Production startup with `node .next/standalone/front-end/server.js`
 
 ### UI and styling
 
@@ -93,6 +95,7 @@ BillSutra is a monorepo-based business application with:
 - `ESLint 9`
 - `eslint-config-next`
 - `TypeScript 5`
+- `front-end/scripts/prepare-standalone.mjs` copies static/public assets into the standalone bundle after build
 
 ## Backend
 
@@ -139,10 +142,12 @@ BillSutra is a monorepo-based business application with:
 
 - `bullmq`
 - `node-cron`
+- dedicated compiled worker entry at `dist/queues/worker.js`
 
 ### Caching and infrastructure helpers
 
 - `ioredis`
+- `@upstash/redis`
 - in-memory caching layered with Redis in analytics/dashboard services
 
 ### Email and notifications

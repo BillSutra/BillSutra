@@ -6,18 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import MetricCard from "@/components/dashboard/metric-card";
 import {
   fetchWorkerDashboardOverview,
-  type WorkerDashboardOverviewResponse,
 } from "@/lib/apiClient";
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import { Loader2, ReceiptText, TrendingUp, Wallet, Sparkles } from "lucide-react";
+import { ReceiptText, TrendingUp, Wallet, Sparkles } from "lucide-react";
 
 const WorkerPerformanceSection = () => {
   const { data, isLoading, isError } = useQuery({

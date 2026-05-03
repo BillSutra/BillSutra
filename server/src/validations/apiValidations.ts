@@ -10,48 +10,183 @@ import { normalizeIndianState } from "../lib/indianAddress.js";
 import { getStateFromGstin, normalizeGstin } from "../lib/gstin.js";
 
 const PASSWORD_MIN_LENGTH = 8;
+const PASSWORD_MAX_LENGTH = 64;
 const PRODUCT_NAME_PATTERN = /[\p{L}\p{N}]/u;
 const PRODUCT_PRICE_MAX = 1_000_000;
 const ALLOWED_GST_RATES = [0, 5, 12, 18, 28] as const;
 const STRONG_PASSWORD_RULES = [
   {
-    regex: /.{8,}/,
-    message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
+    regex: new RegExp(`^.{${PASSWORD_MIN_LENGTH},${PASSWORD_MAX_LENGTH}}$`),
+    message: "Use a stronger password.",
   },
   {
     regex: /[A-Z]/,
-    message: "Password must include at least 1 uppercase letter",
+    message: "Use a stronger password.",
   },
   {
     regex: /[a-z]/,
-    message: "Password must include at least 1 lowercase letter",
+    message: "Use a stronger password.",
   },
   {
     regex: /\d/,
-    message: "Password must include at least 1 number",
+    message: "Use a stronger password.",
   },
   {
-    regex: /[@$!%*?&]/,
-    message: "Password must include at least 1 special character",
+    regex: /[^A-Za-z0-9\s]/,
+    message: "Use a stronger password.",
+  },
+  {
+    regex: /^\S+$/,
+    message: "Use a stronger password.",
   },
 ] as const;
+const FULL_NAME_PATTERN = /^[A-Za-z ]{2,50}$/;
+const SIGNUP_EMAIL_PATTERN =
+  /^[A-Za-z0-9](?:[A-Za-z0-9._%+-]{0,62}[A-Za-z0-9])?@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}$/;
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  "10minutemail.com",
+  "guerrillamail.com",
+  "mailinator.com",
+  "tempmail.com",
+  "yopmail.com",
+]);
+const ALLOWED_SIGNUP_TLDS = new Set([
+  "com",
+  "in",
+  "co",
+  "org",
+  "net",
+  "io",
+  "ai",
+  "app",
+  "dev",
+  "info",
+  "biz",
+  "me",
+  "edu",
+  "gov",
+  "us",
+  "uk",
+  "ca",
+  "au",
+  "sg",
+  "ae",
+]);
+const COMMON_BREACHED_PASSWORDS = new Set([
+  "123456",
+  "1234567",
+  "12345678",
+  "123456789",
+  "1234567890",
+  "password",
+  "password1",
+  "password123",
+  "qwerty",
+  "qwerty123",
+  "admin",
+  "admin123",
+  "bill1234",
+  "billsutra",
+  "letmein",
+  "welcome",
+  "welcome123",
+  "iloveyou",
+  "111111",
+  "000000",
+]);
 
 const strongPasswordSchema = z
-  .string()
-  .min(
-    PASSWORD_MIN_LENGTH,
-    `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
-  )
+  .string({ required_error: "Use a stronger password." })
   .superRefine((value, ctx) => {
-    STRONG_PASSWORD_RULES.forEach((rule) => {
-      if (!rule.regex.test(value)) {
+    const normalizedPassword = value.toLowerCase().replace(/\s+/g, "");
+    const hasWeakRule =
+      !value ||
+      STRONG_PASSWORD_RULES.some((rule) => !rule.regex.test(value)) ||
+      COMMON_BREACHED_PASSWORDS.has(normalizedPassword);
+
+    if (hasWeakRule) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: STRONG_PASSWORD_RULES[0].message,
+      });
+    }
+  });
+
+const sanitizeTextInput = (value: unknown) =>
+  typeof value === "string" ? value.trim().replace(/\s+/g, " ") : value;
+
+const normalizeSignupEmail = (value: unknown) =>
+  typeof value === "string" ? value.trim().toLowerCase() : value;
+
+const normalizeIndianMobile = (value: unknown) => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 12 && digits.startsWith("91")
+    ? digits.slice(2)
+    : digits;
+};
+
+const fullNameSchema = z.preprocess(
+  sanitizeTextInput,
+  z
+    .string({ required_error: "Enter a valid full name." })
+    .superRefine((value, ctx) => {
+      if (!value) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: rule.message,
+          message: "Name is required",
+        });
+        return;
+      }
+
+      if (/\d/.test(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Name cannot contain numbers",
+        });
+        return;
+      }
+
+      if (!FULL_NAME_PATTERN.test(value) || !/[A-Za-z]/.test(value)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Enter valid full name",
         });
       }
-    });
-  });
+    }),
+);
+
+const signupEmailSchema = z.preprocess(
+  normalizeSignupEmail,
+  z
+    .string({ required_error: "Enter a valid email address." })
+    .min(1, "Enter a valid email address.")
+    .max(100, "Enter a valid email address.")
+    .superRefine((value, ctx) => {
+      const domain = value.split("@")[1] ?? "";
+      const tld = domain.split(".").pop() ?? "";
+      if (
+        !SIGNUP_EMAIL_PATTERN.test(value) ||
+        DISPOSABLE_EMAIL_DOMAINS.has(domain) ||
+        !ALLOWED_SIGNUP_TLDS.has(tld)
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Enter a valid email address.",
+        });
+      }
+    }),
+);
+
+const indianMobileSchema = z.preprocess(
+  normalizeIndianMobile,
+  z
+    .string({ required_error: "Enter a valid 10-digit mobile number." })
+    .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number."),
+);
 
 export const idParamSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -80,8 +215,14 @@ export const invoiceIdParamSchema = z.object({
   invoiceId: z.coerce.number().int().positive(),
 });
 
+const normalizeCategoryNameInput = (value: unknown) =>
+  typeof value === "string" ? value.trim().replace(/\s+/g, " ") : value;
+
 export const categoryCreateSchema = z.object({
-  name: z.string().min(2),
+  name: z.preprocess(
+    normalizeCategoryNameInput,
+    z.string().min(2).max(80),
+  ),
 });
 
 export const categoryUpdateSchema = categoryCreateSchema.partial();
@@ -111,10 +252,11 @@ export const authOauthSchema = z.object({
 
 export const authRegisterSchema = z
   .object({
-    name: z.string().min(2),
-    email: z.string().email(),
+    name: fullNameSchema,
+    email: signupEmailSchema,
+    phone: indianMobileSchema,
     password: strongPasswordSchema,
-    confirm_password: z.string().min(PASSWORD_MIN_LENGTH),
+    confirm_password: z.string().min(1, "Confirm your password."),
   })
   .refine((data) => data.password === data.confirm_password, {
     message: "Passwords do not match",
@@ -122,8 +264,13 @@ export const authRegisterSchema = z
   });
 
 export const authForgotSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
 });
+
+const passwordResetTokenSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-f0-9]{48,128}$/i, "Invalid reset token");
 
 export const authVerifyEmailQuerySchema = z.object({
   token: z.string().trim().min(32).max(191),
@@ -210,15 +357,20 @@ export const passkeyRegisterVerifySchema = z.object({
 
 export const authResetSchema = z
   .object({
-    email: z.string().email(),
-    token: z.string().min(10),
-    password: z.string().min(6),
-    confirm_password: z.string().min(6),
+    email: z.string().trim().toLowerCase().email(),
+    token: passwordResetTokenSchema,
+    password: strongPasswordSchema,
+    confirm_password: z.string().trim().min(PASSWORD_MIN_LENGTH),
   })
   .refine((data) => data.password === data.confirm_password, {
-    message: "Passwords do not match",
+    message: "Passwords do not match.",
     path: ["confirm_password"],
   });
+
+export const authResetValidateQuerySchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  token: passwordResetTokenSchema,
+});
 
 export const adminLoginSchema = z.object({
   email: z.string().email(),
@@ -293,6 +445,24 @@ const workerAccessRoleSchema = z.enum([
 ]);
 const workerStatusSchema = z.enum(["ACTIVE", "INACTIVE"]);
 const workerIncentiveTypeSchema = z.enum(["NONE", "PERCENTAGE", "PER_SALE"]);
+const workerPasswordSchema = z
+  .string({ required_error: "Use 8+ chars with upper, lower, number, and special character" })
+  .superRefine((value, ctx) => {
+    const isStrong =
+      value.length >= 8 &&
+      /[A-Z]/.test(value) &&
+      /[a-z]/.test(value) &&
+      /\d/.test(value) &&
+      /[^A-Za-z0-9\s]/.test(value);
+
+    if (!isStrong) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Use 8+ chars with upper, lower, number, and special character",
+      });
+    }
+  });
+const optionalWorkerPasswordSchema = workerPasswordSchema.optional();
 
 const nullableDateInput = z
   .union([z.string(), z.date(), z.null(), z.undefined()])
@@ -306,7 +476,7 @@ export const workerCreateSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   phone: z.string().regex(/^\d{10,15}$/),
-  password: z.string().min(6),
+  password: workerPasswordSchema,
   accessRole: workerAccessRoleSchema.optional(),
   status: workerStatusSchema.optional(),
   joiningDate: nullableDateInput.optional(),
@@ -322,7 +492,7 @@ export const workerUpdateSchema = z
       .string()
       .regex(/^\d{10,15}$/)
       .optional(),
-    password: z.string().min(6).optional(),
+    password: optionalWorkerPasswordSchema,
     accessRole: workerAccessRoleSchema.optional(),
     status: workerStatusSchema.optional(),
     joiningDate: nullableDateInput.optional(),
@@ -1078,12 +1248,24 @@ const productGstRateSchema = z.coerce
     },
   );
 
+const productBarcodeSchema = z.preprocess(
+  emptyToUndefined,
+  z
+    .string()
+    .trim()
+    .min(6, "Barcode must be at least 6 characters")
+    .max(32, "Barcode cannot exceed 32 characters")
+    .regex(/^[A-Za-z0-9]+$/, "Barcode must be numeric or alphanumeric only")
+    .transform((value) => value.toUpperCase())
+    .optional(),
+);
+
 export const productCreateSchema = z.object({
   name: productNameSchema,
   sku: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
   price: productPriceSchema,
   cost: productPriceSchema.optional(),
-  barcode: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  barcode: productBarcodeSchema,
   gst_rate: productGstRateSchema.optional(),
   stock_on_hand: z.coerce.number().int().optional(),
   reorder_level: z.coerce.number().int().optional(),
@@ -1438,12 +1620,37 @@ export const accessRazorpayVerifySchema = z.object({
   razorpay_signature: z.string().min(1).max(191),
 });
 
-export const accessUpiSubmitSchema = z.object({
-  plan_id: accessPlanSchema,
-  billing_cycle: accessBillingCycleSchema,
-  name: z.string().trim().min(2).max(191),
-  utr: z.string().trim().min(8).max(22),
-});
+export const accessUpiSubmitSchema = z
+  .object({
+    plan_id: accessPlanSchema,
+    billing_cycle: accessBillingCycleSchema,
+    name: z.string().trim().min(3).max(191),
+    mobileNumber: z
+      .string()
+      .transform((value) => value.replace(/\D/g, ""))
+      .refine((value) => /^\d{10}$/.test(value), {
+        message: "Mobile number must be exactly 10 digits",
+      })
+      .optional(),
+    mobile_number: z
+      .string()
+      .transform((value) => value.replace(/\D/g, ""))
+      .refine((value) => /^\d{10}$/.test(value), {
+        message: "Mobile number must be exactly 10 digits",
+      })
+      .optional(),
+    utr: z
+      .string()
+      .trim()
+      .min(8)
+      .max(30)
+      .regex(/^[A-Za-z0-9]+$/, "UTR must contain only letters and numbers")
+      .transform((value) => value.toUpperCase()),
+  })
+  .transform((value) => ({
+    ...value,
+    mobileNumber: value.mobileNumber ?? value.mobile_number,
+  }));
 
 export const accessPaymentProofUploadSchema = z
   .object({
@@ -1451,14 +1658,45 @@ export const accessPaymentProofUploadSchema = z
     planId: accessPlanSchema.optional(),
     billing_cycle: accessBillingCycleSchema.optional(),
     billingCycle: accessBillingCycleSchema.optional(),
-    name: z.preprocess(emptyToUndefined, z.string().trim().min(2).max(191).optional()),
-    utr: z.preprocess(emptyToUndefined, z.string().trim().min(8).max(22).optional()),
+    name: z.preprocess(emptyToUndefined, z.string().trim().min(3).max(191).optional()),
+    mobileNumber: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .transform((value) => value.replace(/\D/g, ""))
+        .optional()
+        .refine((value) => value === undefined || /^\d{10}$/.test(value), {
+          message: "Mobile number must be exactly 10 digits",
+        }),
+    ),
+    mobile_number: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .transform((value) => value.replace(/\D/g, ""))
+        .optional()
+        .refine((value) => value === undefined || /^\d{10}$/.test(value), {
+          message: "Mobile number must be exactly 10 digits",
+        }),
+    ),
+    utr: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .trim()
+        .min(8)
+        .max(30)
+        .regex(/^[A-Za-z0-9]+$/, "UTR must contain only letters and numbers")
+        .transform((value) => value.toUpperCase())
+        .optional(),
+    ),
     userId: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional()),
   })
   .transform((value) => ({
     plan_id: value.plan_id ?? value.planId,
     billing_cycle: value.billing_cycle ?? value.billingCycle ?? "monthly",
     name: value.name,
+    mobileNumber: value.mobileNumber ?? value.mobile_number,
     utr: value.utr,
     userId: value.userId,
   }))

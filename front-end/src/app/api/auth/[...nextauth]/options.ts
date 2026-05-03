@@ -23,6 +23,8 @@ export type CustomUser = User & {
   token?: string | null;
   is_email_verified?: boolean | null;
   role?: "ADMIN" | "WORKER" | null;
+  workerRole?: "ADMIN" | "WORKER" | null;
+  worker_role?: "ADMIN" | "WORKER" | null;
   businessId?: string | null;
   accountType?: "OWNER" | "WORKER" | null;
   workerId?: string | null;
@@ -37,6 +39,8 @@ type AuthPayloadUser = {
   image?: string | null;
   is_email_verified?: boolean | null;
   role?: "ADMIN" | "WORKER" | null;
+  workerRole?: "ADMIN" | "WORKER" | null;
+  worker_role?: "ADMIN" | "WORKER" | null;
   businessId?: string | null;
   accountType?: "OWNER" | "WORKER" | null;
   account_type?: "OWNER" | "WORKER" | null;
@@ -76,6 +80,7 @@ const mapAuthPayloadToUser = (
     token: options?.includeBootstrapToken ? authPayload?.token ?? null : null,
     is_email_verified: user.is_email_verified ?? null,
     role: user.role ?? null,
+    workerRole: user.workerRole ?? user.worker_role ?? null,
     businessId: user.businessId ?? null,
     accountType: user.accountType ?? user.account_type ?? null,
     workerId: user.workerId ?? user.worker_id ?? null,
@@ -260,6 +265,7 @@ export const authOptions: AuthOptions = {
           user.token = mappedUser.token;
           user.provider = mappedUser.provider;
           user.role = mappedUser.role;
+          user.workerRole = mappedUser.workerRole;
           user.is_email_verified = mappedUser.is_email_verified;
           user.businessId = mappedUser.businessId;
           user.accountType = mappedUser.accountType;

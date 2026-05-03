@@ -73,7 +73,8 @@ class UsersController {
           email: worker.email,
           provider: "worker",
           is_email_verified: true,
-          role: worker.role,
+          role: "WORKER",
+          workerRole: worker.role,
           businessId: worker.businessId,
           account_type: "WORKER",
           worker_id: worker.id,
@@ -159,7 +160,8 @@ class UsersController {
           email: updatedWorker.email,
           provider: "worker",
           is_email_verified: true,
-          role: updatedWorker.role,
+          role: "WORKER",
+          workerRole: updatedWorker.role,
           businessId: updatedWorker.businessId,
           account_type: "WORKER",
           worker_id: updatedWorker.id,
@@ -263,7 +265,7 @@ class UsersController {
       return sendResponse(res, 404, { message: "User not found" });
     }
 
-    if (user.provider === "google") {
+    if (user.provider === "google" && !user.password_hash) {
       return sendResponse(res, 400, {
         message: "Password updates are managed by Google for this account",
       });
@@ -288,6 +290,7 @@ class UsersController {
       where: { id: userId },
       data: {
         password_hash,
+        password_changed_at: new Date(),
         session_version: {
           increment: 1,
         },

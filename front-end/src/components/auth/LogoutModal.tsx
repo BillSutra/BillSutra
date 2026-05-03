@@ -23,6 +23,7 @@ import {
   logClientAuthEvent,
 } from "@/lib/secureAuth";
 import { useSession } from "next-auth/react";
+import { usePathname } from "next/navigation";
 
 const LogoutModal = ({
   open,
@@ -33,10 +34,20 @@ const LogoutModal = ({
 }) => {
   const { t } = useI18n();
   const { data: session } = useSession();
+  const pathname = usePathname();
+  const [isLoggingOut, setIsLoggingOut] = React.useState(false);
   const callbackUrl =
-    session?.user?.accountType === "WORKER" ? "/worker/login" : "/login";
+    session?.user?.accountType === "WORKER" ||
+    pathname.startsWith("/worker-panel")
+      ? "/worker/login"
+      : "/login";
 
   const logoutUser = async () => {
+    if (isLoggingOut) {
+      return;
+    }
+
+    setIsLoggingOut(true);
     logClientAuthEvent("logout_reason=manual");
     captureAnalyticsEvent("auth_logout", {
       source: "logout_modal",
@@ -66,7 +77,7 @@ const LogoutModal = ({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
-          <AlertDialogAction onClick={logoutUser}>
+          <AlertDialogAction onClick={logoutUser} disabled={isLoggingOut}>
             {t("logoutModal.confirm")}
           </AlertDialogAction>
         </AlertDialogFooter>
