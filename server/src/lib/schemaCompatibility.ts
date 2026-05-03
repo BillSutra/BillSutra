@@ -285,6 +285,7 @@ const ensurePaymentSchemaCompatibilityInternal = async () => {
       ADD COLUMN IF NOT EXISTS "proof_uploaded_at" TIMESTAMP(3),
       ADD COLUMN IF NOT EXISTS "proof_uploaded_by" VARCHAR(191),
       ADD COLUMN IF NOT EXISTS "verified_by" VARCHAR(191),
+      ADD COLUMN IF NOT EXISTS "payment_idempotency_key" VARCHAR(191),
       ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
   `);
 
@@ -297,6 +298,11 @@ const ensurePaymentSchemaCompatibilityInternal = async () => {
   await prisma.$executeRawUnsafe(`
     CREATE INDEX IF NOT EXISTS "payments_invoice_id_paid_at_idx"
     ON "payments"("invoice_id", "paid_at");
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "payments_user_id_payment_idempotency_key_key"
+    ON "payments"("user_id", "payment_idempotency_key");
   `);
 };
 

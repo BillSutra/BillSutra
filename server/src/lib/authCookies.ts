@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { Prisma } from "@prisma/client";
 import jwt from "jsonwebtoken";
 import prisma from "../config/db.config.js";
-import { getRefreshTokenSecret } from "./authSecrets.js";
+import { getAccessTokenSecret, getRefreshTokenSecret } from "./authSecrets.js";
 import { hashSecretValue } from "./modernAuth.js";
 import { recordAuditLog } from "../services/auditLog.service.js";
 import { createNotification } from "../services/notification.service.js";
@@ -10,6 +10,8 @@ import { buildHttpOnlyCookieOptions } from "./cookieSecurity.js";
 import {
   getAccessTokenExpiresAt,
   getAccessTokenMaxAgeMs,
+  getAccessTokenTtl,
+  getRememberMeSessionTtl,
   getUserSessionVersionIfAvailable,
   resolveAuthSessionPreferences,
   resolveRememberMeFromDecoded,
@@ -21,6 +23,14 @@ export const ACCESS_TOKEN_COOKIE_NAME = "bill_sutra_access_token";
 export const REFRESH_TOKEN_COOKIE_NAME = "bill_sutra_refresh_token";
 export const ACCESS_TOKEN_COOKIE_ALIAS = "accessToken";
 export const REFRESH_TOKEN_COOKIE_ALIAS = "refreshToken";
+const LEGACY_FRAGMENTED_COOKIE_NAMES = [
+  "bill_sutra_super_admin_token",
+  "bill_sutra_admin_token",
+  "bill_sutra_worker_token",
+  "bill_sutra_user_token",
+  "bill_sutra_admin_session",
+  "bill_sutra_admin_refresh",
+];
 
 const TABLE_CACHE_TTL_MS = 60_000;
 
@@ -72,7 +82,12 @@ const parseDurationToMs = (value: string, fallbackMs: number) => {
 
 const authLogEnabled = process.env.AUTH_LOGGING_ENABLED !== "false";
 const AUTH_COOKIE_ROOT_PATH = "/";
-const REFRESH_COOKIE_PATH = "/api/auth";
+const REFRESH_COOKIE_PATH = AUTH_COOKIE_ROOT_PATH;
+const LEGACY_REFRESH_COOKIE_PATH = "/api/auth";
+const REFRESH_ROTATION_GRACE_MS = parseDurationToMs(
+  process.env.AUTH_REFRESH_ROTATION_GRACE ?? "30s",
+  30_000,
+);
 
 const trimForStorage = (value: string | null | undefined, maxLength: number) => {
   if (!value) {
@@ -143,6 +158,49 @@ const resolveDeviceName = (req?: Request) => {
   return trimForStorage(`${browser} on ${platform}`, 191) ?? "Unknown device";
 };
 
+const getDateMs = (value: Date | string | null | undefined) => {
+  if (!value) {
+    return null;
+  }
+
+  const time = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isFinite(time) ? time : null;
+};
+
+const isRecentlyRotatedRefreshToken = (
+  storedToken: {
+    revoked_at?: Date | string | null;
+    revoked_reason?: string | null;
+    ip_address?: string | null;
+    user_agent?: string | null;
+  } | null,
+  req: Request,
+) => {
+  if (
+    !storedToken?.revoked_at ||
+    storedToken.revoked_reason !== "rotated" ||
+    REFRESH_ROTATION_GRACE_MS <= 0
+  ) {
+    return false;
+  }
+
+  const revokedAt = getDateMs(storedToken.revoked_at);
+  if (revokedAt === null || Date.now() - revokedAt > REFRESH_ROTATION_GRACE_MS) {
+    return false;
+  }
+
+  const requestIp = resolveRequestIp(req);
+  const requestUserAgent = resolveRequestUserAgent(req);
+  const sameKnownIp =
+    !storedToken.ip_address || !requestIp || storedToken.ip_address === requestIp;
+  const sameKnownUserAgent =
+    !storedToken.user_agent ||
+    !requestUserAgent ||
+    storedToken.user_agent === requestUserAgent;
+
+  return sameKnownIp && sameKnownUserAgent;
+};
+
 const logAuth = (
   event: string,
   detail?: Record<string, unknown>,
@@ -155,6 +213,28 @@ const logAuth = (
   const logger = level === "warn" ? console.warn : console.info;
   logger(`[auth] ${event}`, detail ?? {});
 };
+
+const getRequestOrigin = (req?: Request) => {
+  if (!req) {
+    return null;
+  }
+
+  const origin = req.headers.origin;
+  return typeof origin === "string" && origin.trim() ? origin.trim() : null;
+};
+
+const hasCookieName = (req: Request, cookieName: string) =>
+  getRequestCookies(req).has(cookieName);
+
+const summarizeAuthCookieRequest = (req?: Request) => ({
+  origin: getRequestOrigin(req),
+  userAgent: resolveRequestUserAgent(req),
+  host: req?.get("host") ?? null,
+  forwardedProto:
+    typeof req?.headers["x-forwarded-proto"] === "string"
+      ? req.headers["x-forwarded-proto"]
+      : null,
+});
 
 const logRefreshTableFallback = (detail?: Record<string, unknown>) => {
   if (hasLoggedStatelessRefreshFallback) {
@@ -268,12 +348,20 @@ const setCookieNames = (
   maxAge: number,
   path = AUTH_COOKIE_ROOT_PATH,
 ) => {
+  const cookieOptions = buildHttpOnlyCookieOptions(req, { path, maxAge });
+
   cookieNames.forEach((cookieName) => {
-    res.cookie(
-      cookieName,
-      value,
-      buildHttpOnlyCookieOptions(req, { path, maxAge }),
-    );
+    res.cookie(cookieName, value, cookieOptions);
+  });
+
+  logAuth("cookie_set", {
+    names: cookieNames,
+    path: cookieOptions.path,
+    maxAge,
+    sameSite: cookieOptions.sameSite,
+    secure: cookieOptions.secure,
+    httpOnly: cookieOptions.httpOnly,
+    ...summarizeAuthCookieRequest(req),
   });
 };
 
@@ -288,7 +376,7 @@ export const clearAuthCookies = (res: Response, req?: Request) => {
     req,
     res,
     [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
-    REFRESH_COOKIE_PATH,
+    LEGACY_REFRESH_COOKIE_PATH,
   );
   clearCookieNames(
     req,
@@ -296,6 +384,7 @@ export const clearAuthCookies = (res: Response, req?: Request) => {
     [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
     AUTH_COOKIE_ROOT_PATH,
   );
+  clearCookieNames(req, res, LEGACY_FRAGMENTED_COOKIE_NAMES, AUTH_COOKIE_ROOT_PATH);
 };
 
 const setAccessCookie = (
@@ -306,7 +395,7 @@ const setAccessCookie = (
   setCookieNames(
     req,
     res,
-    [ACCESS_TOKEN_COOKIE_NAME, ACCESS_TOKEN_COOKIE_ALIAS],
+    [ACCESS_TOKEN_COOKIE_ALIAS],
     accessToken,
     getAccessTokenMaxAgeMs(),
     AUTH_COOKIE_ROOT_PATH,
@@ -321,7 +410,7 @@ const setRefreshCookie = (
   setCookieNames(
     req,
     res,
-    [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
+    [REFRESH_TOKEN_COOKIE_ALIAS],
     refreshToken,
     resolveAuthSessionPreferences({ rememberMe: true }).cookieMaxAgeMs,
     REFRESH_COOKIE_PATH,
@@ -332,10 +421,16 @@ const signRefreshToken = (
   authUser: AuthUser,
   refreshTokenTtl: string,
   rememberMe: boolean,
-) =>
-  jwt.sign(
+) => {
+  const unifiedRole = authUser.accountType === "WORKER" ? "worker" : "user";
+
+  return jwt.sign(
     {
       ...authUser,
+      id: authUser.id,
+      email: authUser.email,
+      role: unifiedRole,
+      legacyRole: authUser.role,
       token_type: "refresh_v1",
       remember_me: rememberMe,
     },
@@ -344,6 +439,7 @@ const signRefreshToken = (
       expiresIn: refreshTokenTtl as jwt.SignOptions["expiresIn"],
     },
   );
+};
 
 type IssuedAuthCookies = {
   accessToken: string;
@@ -379,7 +475,7 @@ export const issueAuthCookies = async (
     setCookieNames(
       req,
       res,
-      [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
+      [REFRESH_TOKEN_COOKIE_ALIAS],
       refreshToken,
       sessionPreferences.refreshTokenMaxAgeMs,
       REFRESH_COOKIE_PATH,
@@ -502,7 +598,7 @@ export const issueAuthCookies = async (
     setCookieNames(
       req,
       res,
-      [REFRESH_TOKEN_COOKIE_NAME, REFRESH_TOKEN_COOKIE_ALIAS],
+      [REFRESH_TOKEN_COOKIE_ALIAS],
       refreshToken,
       sessionPreferences.refreshTokenMaxAgeMs,
       REFRESH_COOKIE_PATH,
@@ -628,12 +724,27 @@ export const revokeRefreshTokenFromRequest = async (req: Request) => {
 };
 
 export const refreshAuthCookies = async (req: Request, res: Response) => {
+  logAuth("refresh_cookie_received", {
+    hasRefreshCookie:
+      hasCookieName(req, REFRESH_TOKEN_COOKIE_NAME) ||
+      hasCookieName(req, REFRESH_TOKEN_COOKIE_ALIAS),
+    hasAccessCookie:
+      hasCookieName(req, ACCESS_TOKEN_COOKIE_NAME) ||
+      hasCookieName(req, ACCESS_TOKEN_COOKIE_ALIAS),
+    ...summarizeAuthCookieRequest(req),
+  });
+
   const refreshToken = getCookieValueFromNames(req, [
     REFRESH_TOKEN_COOKIE_NAME,
     REFRESH_TOKEN_COOKIE_ALIAS,
   ]);
   if (!refreshToken) {
-    logAuth("refresh_failed", { reason: "missing_cookie" }, "warn");
+    res.locals.authRefreshFailureReason = "missing_cookie";
+    logAuth(
+      "refresh_failed",
+      { reason: "missing_cookie", ...summarizeAuthCookieRequest(req) },
+      "warn",
+    );
     return null;
   }
 
@@ -646,6 +757,7 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
   } catch (error) {
     await revokeRefreshTokenByHash(refreshToken, "jwt_verify_failed");
     clearAuthCookies(res, req);
+    res.locals.authRefreshFailureReason = "jwt_verify_failed";
     logAuth("refresh_failed", { reason: "jwt_verify_failed", message: (error as Error).message }, "warn");
     return null;
   }
@@ -653,6 +765,7 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
   if (!decoded || typeof decoded === "string") {
     await revokeRefreshTokenByHash(refreshToken, "invalid_payload");
     clearAuthCookies(res, req);
+    res.locals.authRefreshFailureReason = "invalid_payload";
     logAuth("refresh_failed", { reason: "invalid_payload" }, "warn");
     return null;
   }
@@ -662,14 +775,82 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
   if (tokenType !== "refresh_v1") {
     await revokeRefreshTokenByHash(refreshToken, "unexpected_token_type");
     clearAuthCookies(res, req);
+    res.locals.authRefreshFailureReason = "unexpected_token_type";
     logAuth("refresh_failed", { reason: "unexpected_token_type", tokenType }, "warn");
     return null;
+  }
+
+  const unifiedRole = normalizeUnifiedRole((decoded as Record<string, unknown>).role);
+  if (unifiedRole === "admin" || unifiedRole === "super_admin") {
+    const adminIdValue = (decoded as Record<string, unknown>).adminId ??
+      (decoded as Record<string, unknown>).id;
+    const adminId =
+      typeof adminIdValue === "string" ? adminIdValue.trim() : "";
+    const email =
+      typeof (decoded as Record<string, unknown>).email === "string"
+        ? ((decoded as Record<string, unknown>).email as string).trim()
+        : "";
+
+    if (!adminId || !email) {
+      clearAuthCookies(res, req);
+      res.locals.authRefreshFailureReason = "invalid_admin_payload";
+      logAuth("refresh_failed", { reason: "invalid_admin_payload" }, "warn");
+      return null;
+    }
+
+    const admin = await prismaUnsafe.admin.findUnique({
+      where: { id: adminId },
+      select: {
+        id: true,
+        email: true,
+      },
+    });
+
+    if (!admin || admin.email !== email) {
+      clearAuthCookies(res, req);
+      res.locals.authRefreshFailureReason = "admin_resolution_failed";
+      logAuth("refresh_failed", { reason: "admin_resolution_failed" }, "warn");
+      return null;
+    }
+
+    const issued = issueUnifiedAdminCookies(req, res, {
+      id: admin.id,
+      email: admin.email,
+      role: unifiedRole,
+    });
+
+    logAuth("refresh_success", {
+      adminId: admin.id,
+      role: unifiedRole,
+      storage: "unified_admin_cookie",
+    });
+
+    return {
+      authUser: {
+        id: 0,
+        ownerUserId: 0,
+        actorId: `${unifiedRole}:${admin.id}`,
+        businessId: "",
+        sessionVersion: 0,
+        latestSessionVersion: null,
+        isEmailVerified: true,
+        role: "ADMIN",
+        accountType: "OWNER",
+        name: admin.email,
+        email: admin.email,
+      } as AuthUser,
+      accessToken: issued.accessToken,
+      accessTokenExpiresAt: issued.accessTokenExpiresAt,
+      sessionExpiresAt: issued.sessionExpiresAt,
+      rememberMe: true,
+    };
   }
 
   const authUser = await resolveAuthUserFromDecoded(decoded);
   if (!authUser) {
     await revokeRefreshTokenByHash(refreshToken, "auth_user_resolution_failed");
     clearAuthCookies(res, req);
+    res.locals.authRefreshFailureReason = "auth_user_resolution_failed";
     logAuth("refresh_failed", { reason: "auth_user_resolution_failed" }, "warn");
     return null;
   }
@@ -702,6 +883,7 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
       },
     });
     clearAuthCookies(res, req);
+    res.locals.authRefreshFailureReason = "session_version_mismatch";
     logAuth("refresh_failed", { reason: "session_version_mismatch", ownerUserId: authUser.ownerUserId }, "warn");
     return null;
   }
@@ -739,6 +921,29 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
     storedToken.revoked_at ||
     storedToken.expires_at.getTime() <= Date.now()
   ) {
+    if (isRecentlyRotatedRefreshToken(storedToken, req)) {
+      const issued = await issueAuthCookies(req, res, authUser, {
+        rememberMe,
+        reason: "refresh_race_grace",
+      });
+
+      logAuth("refresh_rotated_token_grace", {
+        ownerUserId: authUser.ownerUserId,
+        accountType: authUser.accountType,
+        role: authUser.role,
+        tokenId: storedToken.id,
+        graceMs: REFRESH_ROTATION_GRACE_MS,
+      });
+
+      return {
+        authUser,
+        accessToken: issued.accessToken,
+        accessTokenExpiresAt: issued.accessTokenExpiresAt,
+        sessionExpiresAt: issued.sessionExpiresAt,
+        rememberMe: issued.rememberMe,
+      };
+    }
+
     const failureReason = storedToken?.revoked_at
       ? "refresh_token_reuse_detected"
       : "stored_token_missing_or_expired";
@@ -758,7 +963,8 @@ export const refreshAuthCookies = async (req: Request, res: Response) => {
         deviceName: storedToken?.device_name ?? null,
       },
     });
-    clearAuthCookies(res);
+    clearAuthCookies(res, req);
+    res.locals.authRefreshFailureReason = failureReason;
     logAuth(
       "refresh_failed",
       {
@@ -828,4 +1034,98 @@ export const logResolvedTokenSource = (
   }
 
   logAuth("token_source", { source, ...extra });
+};
+
+const normalizeUnifiedRole = (value: unknown) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  return normalized === "user" ||
+    normalized === "worker" ||
+    normalized === "admin" ||
+    normalized === "super_admin"
+    ? normalized
+    : null;
+};
+
+export const signUnifiedAdminAccessToken = (admin: {
+  id: string;
+  email: string;
+  role: "admin" | "super_admin";
+}) =>
+  jwt.sign(
+    {
+      id: admin.id,
+      adminId: admin.id,
+      email: admin.email,
+      role: admin.role,
+      token_type: "access_v2",
+    },
+    getAccessTokenSecret(),
+    {
+      expiresIn: getAccessTokenTtl() as jwt.SignOptions["expiresIn"],
+    },
+  );
+
+export const signUnifiedAdminRefreshToken = (
+  admin: {
+    id: string;
+    email: string;
+    role: "admin" | "super_admin";
+  },
+  rememberMe = true,
+) =>
+  jwt.sign(
+    {
+      id: admin.id,
+      adminId: admin.id,
+      email: admin.email,
+      role: admin.role,
+      token_type: "refresh_v1",
+      remember_me: rememberMe,
+    },
+    getRefreshTokenSecret(),
+    {
+      expiresIn: getRememberMeSessionTtl() as jwt.SignOptions["expiresIn"],
+    },
+  );
+
+export const issueUnifiedAdminCookies = (
+  req: Request | undefined,
+  res: Response,
+  admin: {
+    id: string;
+    email: string;
+    role: "admin" | "super_admin";
+  },
+) => {
+  const accessToken = signUnifiedAdminAccessToken(admin);
+  const refreshToken = signUnifiedAdminRefreshToken(admin);
+  const sessionPreferences = resolveAuthSessionPreferences({ rememberMe: true });
+
+  setCookieNames(
+    req,
+    res,
+    [ACCESS_TOKEN_COOKIE_ALIAS],
+    accessToken,
+    getAccessTokenMaxAgeMs(),
+    AUTH_COOKIE_ROOT_PATH,
+  );
+  setCookieNames(
+    req,
+    res,
+    [REFRESH_TOKEN_COOKIE_ALIAS],
+    refreshToken,
+    sessionPreferences.refreshTokenMaxAgeMs,
+    AUTH_COOKIE_ROOT_PATH,
+  );
+
+  return {
+    accessToken,
+    refreshToken,
+    accessTokenExpiresAt: getAccessTokenExpiresAt(),
+    sessionExpiresAt: sessionPreferences.sessionExpiresAt,
+  };
 };

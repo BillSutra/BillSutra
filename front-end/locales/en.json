@@ -1,4 +1,4 @@
-﻿{
+{
     "common":  {
                    "appName":  "BillSutra",
                    "loading":  "Loading...",
@@ -429,7 +429,14 @@
                                     "emailLabel":  "Email",
                                     "emailPlaceholder":  "Type your email",
                                     "emailSent":  "Email sent successfully",
-                                    "emailFailed":  "Failed to send email"
+                                    "emailFailed":  "Failed to send email",
+                                    "emailRequired":  "Email is required",
+                                    "emailInvalid":  "Enter a valid email address",
+                                    "tooManyRequests":  "Too many requests. Please wait before trying again.",
+                                    "waitToResend":  "Please wait before requesting another reset link.",
+                                    "sending":  "Sending",
+                                    "sendResetLink":  "Send reset link",
+                                    "resendIn":  "Resend in {seconds}s"
                                 },
                  "resetForm":  {
                                    "emailLabel":  "Email",
@@ -437,7 +444,21 @@
                                    "passwordLabel":  "Password",
                                    "passwordPlaceholder":  "Enter your password",
                                    "confirmPasswordLabel":  "Confirm password",
-                                   "confirmPasswordPlaceholder":  "Confirm your password"
+                                   "confirmPasswordPlaceholder":  "Confirm your password",
+                                   "emailRequired":  "Email is required",
+                                   "emailInvalid":  "Enter a valid email address",
+                                   "passwordRequired":  "Password is required",
+                                   "confirmPasswordRequired":  "Confirm password is required",
+                                   "passwordMismatch":  "Passwords do not match",
+                                   "strengthLabel":  "Strength",
+                                   "ruleLength":  "At least 8 characters",
+                                   "ruleUppercase":  "1 uppercase letter",
+                                   "ruleLowercase":  "1 lowercase letter",
+                                   "ruleNumber":  "1 number",
+                                   "ruleSpecial":  "1 special character",
+                                   "requestNewLink":  "Request a new link",
+                                   "updatingPassword":  "Updating password",
+                                   "changePassword":  "Change password"
                                }
              },
     "customers":  {
@@ -779,6 +800,10 @@
                        "businessProfile":  "Business Profile",
                        "settings":  "Settings"
                    },
+    "workerPanel":  {
+                        "title":  "Worker Dashboard",
+                        "subtitle":  "Manage your tasks, invoices and attendance"
+                    },
     "profileMenu":  {
                         "myAccount":  "My Account",
                         "profile":  "Profile",

@@ -12,6 +12,7 @@ const ALLOWED_EXTENSIONS: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/jpg": ".jpg",
   "image/svg+xml": ".svg",
+  "image/webp": ".webp",
 };
 
 /**

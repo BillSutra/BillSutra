@@ -31,9 +31,11 @@ import {
 } from "@/lib/authClient";
 import {
   bootstrapSecureAuthSession,
+  clearAuthLoginInProgress,
   getAuthTokenExpiry,
   isSecureAuthEnabled,
   logClientAuthEvent,
+  markAuthLoginInProgress,
   setLegacyStoredToken,
   setPendingRememberMePreference,
 } from "@/lib/secureAuth";
@@ -155,6 +157,8 @@ export default function Login({
   );
   const otpInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const lastSubmittedOtpRef = useRef<string | null>(null);
+  const loginCompletionRef = useRef<Promise<boolean> | null>(null);
+  const handledLoginTokenRef = useRef<string | null>(null);
   const hydrated = useHydrated();
 
   const supportsPasskeys = useMemo(
@@ -187,8 +191,13 @@ export default function Login({
         return false;
       }
 
-      setIsSigningIn(true);
-      try {
+      if (loginCompletionRef.current) {
+        return loginCompletionRef.current;
+      }
+
+      loginCompletionRef.current = (async () => {
+        setIsSigningIn(true);
+        markAuthLoginInProgress();
         setLegacyStoredToken(token);
         logClientAuthEvent("login_token_received", {
           mode,
@@ -198,13 +207,16 @@ export default function Login({
           expiresAt: getAuthTokenExpiry(token),
         });
 
-        if (isSecureAuthEnabled()) {
-          const bootstrapped = await bootstrapSecureAuthSession(token, {
-            rememberMe:
-              typeof options?.rememberMe === "boolean"
-                ? options.rememberMe
-                : undefined,
-          });
+        const secureAuthEnabled = isSecureAuthEnabled();
+        const bootstrapped = await bootstrapSecureAuthSession(token, {
+          rememberMe:
+            typeof options?.rememberMe === "boolean"
+              ? options.rememberMe
+              : undefined,
+          allowWhenSecureAuthDisabled: true,
+        });
+
+        if (secureAuthEnabled) {
           if (!bootstrapped) {
             throw new Error("Unable to establish your secure session.");
           }
@@ -212,6 +224,12 @@ export default function Login({
           logClientAuthEvent("secure_session_bootstrapped", {
             mode,
             callbackUrl,
+          });
+        } else {
+          logClientAuthEvent("refresh_session_bootstrap_completed", {
+            mode,
+            callbackUrl,
+            bootstrapped,
           });
         }
 
@@ -228,6 +246,7 @@ export default function Login({
           mode,
           callbackUrl,
         });
+        clearAuthLoginInProgress();
 
         const destination =
           !isWorkerMode && options?.isEmailVerified === false
@@ -238,10 +257,19 @@ export default function Login({
           destination,
           mode,
         });
-        router.push(destination);
-        router.refresh();
+        router.replace(destination);
         return true;
+      })();
+
+      try {
+        const completed = await loginCompletionRef.current;
+        if (!completed) {
+          loginCompletionRef.current = null;
+        }
+        return completed;
       } catch (error) {
+        loginCompletionRef.current = null;
+        clearAuthLoginInProgress();
         captureFrontendException(error, {
           tags: {
             flow: "auth.complete_token_login",
@@ -255,7 +283,9 @@ export default function Login({
         toast.error(message);
         return false;
       } finally {
-        setIsSigningIn(false);
+        if (!loginCompletionRef.current) {
+          setIsSigningIn(false);
+        }
       }
     },
     [callbackUrl, isWorkerMode, mode, router],
@@ -366,12 +396,21 @@ export default function Login({
       });
       toast.error(state.message);
     } else if (state.status === 200) {
+      const loginToken = normalizeToken(state.data?.token);
+      if (loginToken && handledLoginTokenRef.current === loginToken) {
+        return;
+      }
+
+      if (loginToken) {
+        handledLoginTokenRef.current = loginToken;
+      }
+
       captureAnalyticsEvent("auth_login_succeeded", {
         method: "password",
         mode,
       });
       toast.success(state.message);
-      void completeTokenLogin(state.data?.token, {
+      void completeTokenLogin(loginToken, {
         isEmailVerified:
           typeof state.data?.user?.is_email_verified === "boolean"
             ? state.data.user.is_email_verified
@@ -380,6 +419,10 @@ export default function Login({
           typeof state.data?.rememberMe === "boolean"
             ? state.data.rememberMe
             : rememberMe,
+      }).then((completed) => {
+        if (!completed && loginToken && handledLoginTokenRef.current === loginToken) {
+          handledLoginTokenRef.current = null;
+        }
       });
     }
   }, [

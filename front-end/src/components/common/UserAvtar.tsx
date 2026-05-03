@@ -10,9 +10,17 @@ function initials(name = "") {
     .join("");
 }
 
-const UserAvtar = ({ name, image }: { name: string; image?: string }) => {
+const UserAvtar = ({
+  name,
+  image,
+  className,
+}: {
+  name: string;
+  image?: string;
+  className?: string;
+}) => {
   return (
-    <Avatar>
+    <Avatar className={className}>
       {image ? (
         <AvatarImage src={image} alt={name} referrerPolicy="no-referrer" />
       ) : null}

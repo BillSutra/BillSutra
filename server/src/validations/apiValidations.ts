@@ -31,13 +31,14 @@ const STRONG_PASSWORD_RULES = [
     message: "Password must include at least 1 number",
   },
   {
-    regex: /[@$!%*?&]/,
+    regex: /[^A-Za-z0-9\s]/,
     message: "Password must include at least 1 special character",
   },
 ] as const;
 
 const strongPasswordSchema = z
   .string()
+  .trim()
   .min(
     PASSWORD_MIN_LENGTH,
     `Password must be at least ${PASSWORD_MIN_LENGTH} characters`,
@@ -122,8 +123,13 @@ export const authRegisterSchema = z
   });
 
 export const authForgotSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().toLowerCase().email(),
 });
+
+const passwordResetTokenSchema = z
+  .string()
+  .trim()
+  .regex(/^[a-f0-9]{48,128}$/i, "Invalid reset token");
 
 export const authVerifyEmailQuerySchema = z.object({
   token: z.string().trim().min(32).max(191),
@@ -210,15 +216,20 @@ export const passkeyRegisterVerifySchema = z.object({
 
 export const authResetSchema = z
   .object({
-    email: z.string().email(),
-    token: z.string().min(10),
-    password: z.string().min(6),
-    confirm_password: z.string().min(6),
+    email: z.string().trim().toLowerCase().email(),
+    token: passwordResetTokenSchema,
+    password: strongPasswordSchema,
+    confirm_password: z.string().trim().min(PASSWORD_MIN_LENGTH),
   })
   .refine((data) => data.password === data.confirm_password, {
     message: "Passwords do not match",
     path: ["confirm_password"],
   });
+
+export const authResetValidateQuerySchema = z.object({
+  email: z.string().trim().toLowerCase().email(),
+  token: passwordResetTokenSchema,
+});
 
 export const adminLoginSchema = z.object({
   email: z.string().email(),
@@ -1438,12 +1449,37 @@ export const accessRazorpayVerifySchema = z.object({
   razorpay_signature: z.string().min(1).max(191),
 });
 
-export const accessUpiSubmitSchema = z.object({
-  plan_id: accessPlanSchema,
-  billing_cycle: accessBillingCycleSchema,
-  name: z.string().trim().min(2).max(191),
-  utr: z.string().trim().min(8).max(22),
-});
+export const accessUpiSubmitSchema = z
+  .object({
+    plan_id: accessPlanSchema,
+    billing_cycle: accessBillingCycleSchema,
+    name: z.string().trim().min(3).max(191),
+    mobileNumber: z
+      .string()
+      .transform((value) => value.replace(/\D/g, ""))
+      .refine((value) => /^\d{10}$/.test(value), {
+        message: "Mobile number must be exactly 10 digits",
+      })
+      .optional(),
+    mobile_number: z
+      .string()
+      .transform((value) => value.replace(/\D/g, ""))
+      .refine((value) => /^\d{10}$/.test(value), {
+        message: "Mobile number must be exactly 10 digits",
+      })
+      .optional(),
+    utr: z
+      .string()
+      .trim()
+      .min(8)
+      .max(30)
+      .regex(/^[A-Za-z0-9]+$/, "UTR must contain only letters and numbers")
+      .transform((value) => value.toUpperCase()),
+  })
+  .transform((value) => ({
+    ...value,
+    mobileNumber: value.mobileNumber ?? value.mobile_number,
+  }));
 
 export const accessPaymentProofUploadSchema = z
   .object({
@@ -1451,14 +1487,45 @@ export const accessPaymentProofUploadSchema = z
     planId: accessPlanSchema.optional(),
     billing_cycle: accessBillingCycleSchema.optional(),
     billingCycle: accessBillingCycleSchema.optional(),
-    name: z.preprocess(emptyToUndefined, z.string().trim().min(2).max(191).optional()),
-    utr: z.preprocess(emptyToUndefined, z.string().trim().min(8).max(22).optional()),
+    name: z.preprocess(emptyToUndefined, z.string().trim().min(3).max(191).optional()),
+    mobileNumber: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .transform((value) => value.replace(/\D/g, ""))
+        .optional()
+        .refine((value) => value === undefined || /^\d{10}$/.test(value), {
+          message: "Mobile number must be exactly 10 digits",
+        }),
+    ),
+    mobile_number: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .transform((value) => value.replace(/\D/g, ""))
+        .optional()
+        .refine((value) => value === undefined || /^\d{10}$/.test(value), {
+          message: "Mobile number must be exactly 10 digits",
+        }),
+    ),
+    utr: z.preprocess(
+      emptyToUndefined,
+      z
+        .string()
+        .trim()
+        .min(8)
+        .max(30)
+        .regex(/^[A-Za-z0-9]+$/, "UTR must contain only letters and numbers")
+        .transform((value) => value.toUpperCase())
+        .optional(),
+    ),
     userId: z.preprocess(emptyToUndefined, z.coerce.number().int().positive().optional()),
   })
   .transform((value) => ({
     plan_id: value.plan_id ?? value.planId,
     billing_cycle: value.billing_cycle ?? value.billingCycle ?? "monthly",
     name: value.name,
+    mobileNumber: value.mobileNumber ?? value.mobile_number,
     utr: value.utr,
     userId: value.userId,
   }))

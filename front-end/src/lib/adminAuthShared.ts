@@ -1,6 +1,7 @@
 export const ADMIN_SESSION_COOKIE_KEY = "bill_sutra_admin_session";
 export const ADMIN_REFRESH_COOKIE_KEY = "bill_sutra_admin_refresh";
 export const ADMIN_TOKEN_STORAGE_KEY = "bill_sutra_super_admin_token";
+export const UNIFIED_ACCESS_COOKIE_KEY = "accessToken";
 export const SUPER_ADMIN_ROLE = "SUPER_ADMIN";
 
 const decodeBase64Url = (value: string) => {
@@ -36,5 +37,20 @@ export const decodeAdminTokenPayload = (token: string | null | undefined) => {
 
 export const getAdminRoleFromToken = (token: string | null | undefined) => {
   const payload = decodeAdminTokenPayload(token);
-  return payload?.role === SUPER_ADMIN_ROLE ? SUPER_ADMIN_ROLE : null;
+  const role = typeof payload?.role === "string" ? payload.role.toLowerCase() : "";
+  return role === "super_admin" || payload?.role === SUPER_ADMIN_ROLE
+    ? SUPER_ADMIN_ROLE
+    : null;
+};
+
+export const getUnifiedRoleFromToken = (token: string | null | undefined) => {
+  const payload = decodeAdminTokenPayload(token);
+  const role = typeof payload?.role === "string" ? payload.role.toLowerCase() : "";
+
+  return role === "user" ||
+    role === "worker" ||
+    role === "admin" ||
+    role === "super_admin"
+    ? role
+    : null;
 };

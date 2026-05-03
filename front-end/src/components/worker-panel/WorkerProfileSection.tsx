@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import {
   fetchWorkerProfile,
   updateWorkerProfile,
-  type WorkerProfileResponse,
 } from "@/lib/apiClient";
 import { User, Mail, Phone, Calendar, ShieldCheck, Loader2, Save, X } from "lucide-react";
 

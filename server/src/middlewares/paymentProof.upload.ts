@@ -8,14 +8,12 @@ const ALLOWED_MIME_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/jpg",
-  "image/webp",
   "application/pdf",
 ]);
 const ALLOWED_EXTENSIONS = new Set([
   ".png",
   ".jpg",
   ".jpeg",
-  ".webp",
   ".pdf",
 ]);
 
@@ -34,7 +32,7 @@ const upload = multer({
 
     cb(
       Object.assign(
-        new Error("Only JPG, JPEG, PNG, WEBP, and PDF payment proofs are allowed."),
+        new Error("Only JPG, JPEG, PNG, and PDF payment proofs are allowed."),
         {
           status: 400,
         },
@@ -62,7 +60,6 @@ export const paymentProofUploadMiddleware = (
           !matchesAllowedUploadKinds(paymentProof.buffer, [
             "png",
             "jpeg",
-            "webp",
             "pdf",
           ])
         ) {
@@ -81,7 +78,7 @@ export const paymentProofUploadMiddleware = (
     if (err instanceof multer.MulterError) {
       if (err.code === "LIMIT_FILE_SIZE") {
         sendResponse(res, 400, {
-          message: "Payment proof size must not exceed 5MB.",
+          message: "File exceeds 5MB limit",
         });
         return;
       }

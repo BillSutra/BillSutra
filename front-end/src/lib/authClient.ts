@@ -6,6 +6,8 @@ import {
   buildRequiredCsrfHeaders,
 } from "./csrfClient";
 
+axios.defaults.withCredentials = true;
+
 export type AuthSuccessPayload = {
   user: {
     id: number | string;
@@ -15,6 +17,8 @@ export type AuthSuccessPayload = {
     image?: string | null;
     is_email_verified?: boolean;
     role?: "ADMIN" | "WORKER";
+    workerRole?: "ADMIN" | "WORKER";
+    worker_role?: "ADMIN" | "WORKER";
     businessId?: string | null;
     accountType?: "OWNER" | "WORKER";
     workerId?: string | null;

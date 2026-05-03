@@ -33,7 +33,7 @@ import {
   maybeDecryptSensitiveValue,
 } from "../lib/fieldEncryption.js";
 
-const UTR_REGEX = /^[A-Z0-9]{8,22}$/i;
+const UTR_REGEX = /^[A-Z0-9]{8,30}$/i;
 const RAZORPAY_API_BASE = "https://api.razorpay.com/v1";
 
 type RazorpayOrderResponse = {
@@ -241,6 +241,39 @@ const buildUpiLink = ({
   return url.toString();
 };
 
+const isActivePaidSubscription = (snapshot: Awaited<ReturnType<typeof getSubscriptionSnapshot>>) =>
+  snapshot.planId !== "free" &&
+  (snapshot.status === "ACTIVE" ||
+    snapshot.status === "TRIAL" ||
+    snapshot.status === "CANCELLED");
+
+const getBusinessProfileCompletion = async (userId: number) => {
+  const profile = await prisma.businessProfile.findUnique({
+    where: { user_id: userId },
+    select: { business_name: true },
+  });
+
+  return Boolean(profile?.business_name?.trim());
+};
+
+const assertPaymentCanStart = async (userId: number) => {
+  const [subscription, businessProfileCompleted] = await Promise.all([
+    getSubscriptionSnapshot(userId),
+    getBusinessProfileCompletion(userId),
+  ]);
+
+  if (!businessProfileCompleted) {
+    throw new AppError(
+      "Complete your business profile before starting a billing payment.",
+      422,
+    );
+  }
+
+  if (isActivePaidSubscription(subscription)) {
+    throw new AppError("You already have an active paid subscription.", 409);
+  }
+};
+
 const requestRazorpay = async <T>(
   endpoint: string,
   init: RequestInit = {},
@@ -293,11 +326,18 @@ const getPaymentHistory = async (userId: number) =>
 export const hasPaymentAccess = async (userId: number) => hasPaidAccess(userId);
 
 export const getAccessPaymentStatus = async (userId: number) => {
-  const [activePayment, payments, hasAccess, subscription] = await Promise.all([
+  const [
+    activePayment,
+    payments,
+    hasAccess,
+    subscription,
+    businessProfileCompleted,
+  ] = await Promise.all([
     findAccessGrant(userId),
     getPaymentHistory(userId),
     hasPaidAccess(userId),
     getSubscriptionSnapshot(userId),
+    getBusinessProfileCompletion(userId),
   ]);
   const { upiId, payeeName } = buildUpiConfig();
   const plans = listAccessPlans().map((plan) => ({
@@ -324,6 +364,7 @@ export const getAccessPaymentStatus = async (userId: number) => {
     hasAccess,
     activePayment: activePayment ? serializePayment(activePayment) : null,
     subscription,
+    businessProfileCompleted,
     payments: payments.map(serializePayment),
     upi: {
       upiId,
@@ -349,6 +390,8 @@ export const createAccessRazorpayOrder = async ({
   planId: AccessPlanId;
   billingCycle: AccessBillingCycle;
 }) => {
+  await assertPaymentCanStart(userId);
+
   const quote = resolveAccessPlanQuote(planId, billingCycle);
   const receipt = `acc_${userId}_${Date.now()}`.slice(0, 40);
 
@@ -471,27 +514,36 @@ export const submitAccessUpiPayment = async ({
   billingCycle,
   utr,
   name,
+  mobileNumber,
   paymentProof,
 }: {
   userId: number;
   planId: AccessPlanId;
   billingCycle: AccessBillingCycle;
   name?: string;
+  mobileNumber?: string;
   utr?: string;
   paymentProof?: Express.Multer.File;
 }) => {
+  await assertPaymentCanStart(userId);
+
   if (!paymentProof) {
     throw new AppError("Payment proof file is required.", 422);
   }
 
   const normalizedName = name?.trim() || null;
+  const normalizedMobile = mobileNumber?.replace(/\D/g, "") || null;
   const normalizedUtr = utr?.trim().toUpperCase() || null;
 
   if (normalizedUtr && !UTR_REGEX.test(normalizedUtr)) {
     throw new AppError(
-      "Enter a valid UTR number with 8 to 22 letters or digits.",
+      "Enter a valid UTR number with 8 to 30 letters or digits.",
       422,
     );
+  }
+
+  if (normalizedMobile && !/^\d{10}$/.test(normalizedMobile)) {
+    throw new AppError("Enter a valid 10 digit mobile number.", 422);
   }
 
   const pendingPayment = await prisma.accessPayment.findFirst({
@@ -585,6 +637,9 @@ export const submitAccessUpiPayment = async ({
       originalName: paymentProof.originalname,
       size: paymentProof.size,
       uploadedAt: new Date().toISOString(),
+    },
+    payer: {
+      mobileNumber: normalizedMobile,
     },
   };
 

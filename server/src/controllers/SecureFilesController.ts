@@ -84,8 +84,12 @@ const verifyAdminToken = (token: string) => {
     const adminId =
       typeof payload.adminId === "string" ? payload.adminId.trim() : "";
     const email = typeof payload.email === "string" ? payload.email.trim() : "";
+    const normalizedRole =
+      typeof payload.role === "string" ? payload.role.trim().toLowerCase() : "";
     const role =
-      payload.role === "SUPER_ADMIN" ? "SUPER_ADMIN" : undefined;
+      normalizedRole === "super_admin" || payload.role === "SUPER_ADMIN"
+        ? "SUPER_ADMIN"
+        : undefined;
 
     if (!adminId || !email || role !== "SUPER_ADMIN") {
       return null;
@@ -153,6 +157,21 @@ const resolveSecureFileActor = async (
       return {
         kind: "owner",
         ownerUserId: ownerUser.ownerUserId,
+        source: "cookie",
+      };
+    }
+
+    const admin = verifyAdminToken(cookieToken);
+    if (admin) {
+      console.info("[uploads] secure file token source", {
+        source: "cookie",
+        admin: true,
+      });
+
+      return {
+        kind: "admin",
+        adminId: admin.adminId,
+        email: admin.email,
         source: "cookie",
       };
     }

@@ -419,7 +419,11 @@ export default function AdminDashboardClient() {
       ]
     : [];
 
-  if (status !== "authenticated" || isLoading) {
+  if (status === "unauthenticated") {
+    return null;
+  }
+
+  if (status === "loading" || isLoading) {
     return (
       <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(15,118,110,0.08),_transparent_42%),linear-gradient(180deg,_#f8fafc_0%,_#eef2ff_100%)] px-4 py-8 text-slate-900 sm:px-6 lg:px-8">
         <div className="mx-auto flex max-w-7xl items-center justify-center rounded-3xl border border-white/70 bg-white/80 p-16 shadow-xl backdrop-blur">

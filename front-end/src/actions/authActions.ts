@@ -10,6 +10,9 @@ import axios, { AxiosError } from "axios";
 import { resetPassword } from "../lib/apiEndPoints";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const AUTH_REQUEST_CONFIG = {
+  withCredentials: true,
+} as const;
 
 const normalizeIdentifier = (value: unknown) => {
   if (typeof value !== "string") {
@@ -22,25 +25,56 @@ const normalizeIdentifier = (value: unknown) => {
 const extractAxiosMessage = (error: AxiosError, fallback: string) => {
   const responseMessage = (error.response?.data as { message?: unknown })
     ?.message;
+  const responseError = (error.response?.data as { error?: unknown })?.error;
 
   if (typeof responseMessage === "string" && responseMessage.trim()) {
     return responseMessage;
   }
 
+  if (typeof responseError === "string" && responseError.trim()) {
+    return responseError;
+  }
+
   return fallback;
+};
+
+const extractAxiosErrors = (error: AxiosError) => {
+  const data = error.response?.data as {
+    errors?: unknown;
+    details?: { errors?: unknown };
+    data?: { errors?: unknown };
+  };
+
+  if (data?.errors && typeof data.errors === "object") {
+    return data.errors;
+  }
+
+  if (data?.details?.errors && typeof data.details.errors === "object") {
+    return data.details.errors;
+  }
+
+  if (data?.data?.errors && typeof data.data.errors === "object") {
+    return data.data.errors;
+  }
+
+  return {};
 };
 
 export async function registerAction(prevState: unknown, formdata: FormData) {
   try {
     const phone = normalizeIdentifier(formdata.get("phone"));
 
-    const response = await axios.post(REGISTER_URL, {
-      name: formdata.get("name"),
-      email: formdata.get("email"),
-      phone: phone || undefined,
-      password: formdata.get("password"),
-      confirm_password: formdata.get("confirm_password"),
-    });
+    const response = await axios.post(
+      REGISTER_URL,
+      {
+        name: formdata.get("name"),
+        email: formdata.get("email"),
+        phone: phone || undefined,
+        password: formdata.get("password"),
+        confirm_password: formdata.get("confirm_password"),
+      },
+      AUTH_REQUEST_CONFIG,
+    );
     return {
       status: response.status,
       message:
@@ -101,22 +135,29 @@ export async function registerAction(prevState: unknown, formdata: FormData) {
 }
 export async function forgetAction(prevState: unknown, formData: FormData) {
   try {
-    const response = await axios.post(forgetPassword, {
-      email: formData.get("email"),
-    });
+    const email = normalizeIdentifier(formData.get("email")).toLowerCase();
+    const response = await axios.post(
+      forgetPassword,
+      {
+        email,
+      },
+      AUTH_REQUEST_CONFIG,
+    );
     return {
       status: 200,
-      message: response.data?.message ?? "Password reset email sent.",
+      message:
+        response.data?.message ??
+        "If an account exists, a reset link has been sent.",
       errors: {},
       data: {},
     };
   } catch (error) {
     if (error instanceof AxiosError) {
-      if (error.response?.status === 422) {
+      if (error.response?.status === 422 || error.response?.status === 429) {
         return {
-          status: 422,
-          message: error.response.data.message,
-          errors: error.response.data.errors,
+          status: error.response.status,
+          message: extractAxiosMessage(error, "Please check the email address."),
+          errors: extractAxiosErrors(error),
           data: {},
         };
       }
@@ -140,13 +181,17 @@ export async function loginAction(prevState: unknown, formData: FormData) {
 
     const rememberMe = formData.get("rememberMe") === "true";
 
-    const response = await axios.post(check_credential, {
-      identifier: rawIdentifier,
-      email: isEmailIdentifier ? rawIdentifier.toLowerCase() : undefined,
-      phone: !isEmailIdentifier ? normalizedPhone || undefined : undefined,
-      password: formData.get("password"),
-      rememberMe,
-    });
+    const response = await axios.post(
+      check_credential,
+      {
+        identifier: rawIdentifier,
+        email: isEmailIdentifier ? rawIdentifier.toLowerCase() : undefined,
+        phone: !isEmailIdentifier ? normalizedPhone || undefined : undefined,
+        password: formData.get("password"),
+        rememberMe,
+      },
+      AUTH_REQUEST_CONFIG,
+    );
     const authPayload = response.data?.data ?? response.data;
     return {
       status: 200,
@@ -219,13 +264,17 @@ export async function workerLoginAction(prevState: unknown, formData: FormData) 
 
     const rememberMe = formData.get("rememberMe") === "true";
 
-    const response = await axios.post(WORKER_LOGIN_URL, {
-      identifier: rawIdentifier,
-      email: isEmailIdentifier ? rawIdentifier.toLowerCase() : undefined,
-      phone: !isEmailIdentifier ? normalizedPhone || undefined : undefined,
-      password: formData.get("password"),
-      rememberMe,
-    });
+    const response = await axios.post(
+      WORKER_LOGIN_URL,
+      {
+        identifier: rawIdentifier,
+        email: isEmailIdentifier ? rawIdentifier.toLowerCase() : undefined,
+        phone: !isEmailIdentifier ? normalizedPhone || undefined : undefined,
+        password: formData.get("password"),
+        rememberMe,
+      },
+      AUTH_REQUEST_CONFIG,
+    );
     const authPayload = response.data?.data ?? response.data;
     return {
       status: 200,
@@ -271,24 +320,35 @@ export async function workerLoginAction(prevState: unknown, formData: FormData) 
 
 export async function resetPasswordAction(prevState: unknown, formdata: FormData) {
   try {
-    await axios.post(resetPassword, {
-      email: formdata.get("email"),
-      password: formdata.get("password"),
-      confirm_password: formdata.get("confirm_password"),
-      token: formdata.get("token"),
-    });
+    const email = normalizeIdentifier(formdata.get("email")).toLowerCase();
+    const password = normalizeIdentifier(formdata.get("password"));
+    const confirmPassword = normalizeIdentifier(
+      formdata.get("confirm_password") ?? formdata.get("confirmpassword"),
+    );
+    const token = normalizeIdentifier(formdata.get("token"));
+
+    await axios.post(
+      resetPassword,
+      {
+        email,
+        password,
+        confirm_password: confirmPassword,
+        token,
+      },
+      AUTH_REQUEST_CONFIG,
+    );
     return {
       status: 200,
-      message: "Reset password successful ",
+      message: "Password changed successfully. Redirecting to login...",
       errors: {},
     };
   } catch (error) {
     if (error instanceof AxiosError) {
-      if (error.response?.status === 422) {
+      if (error.response?.status === 422 || error.response?.status === 429) {
         return {
-          status: 422,
-          message: error.response.data.message,
-          errors: error.response.data.errors,
+          status: error.response.status,
+          message: extractAxiosMessage(error, "Unable to reset password."),
+          errors: extractAxiosErrors(error),
           data: {},
         };
       }

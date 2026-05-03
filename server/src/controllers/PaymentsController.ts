@@ -42,6 +42,7 @@ import {
   isUploadedFilesTableAvailable,
   registerUploadedFile,
 } from "../services/uploadedFiles.service.js";
+import { ensurePaymentSchemaCompatibility } from "../lib/schemaCompatibility.js";
 
 type PaymentCreateInput = z.infer<typeof paymentCreateSchema>;
 type PaymentUpdateInput = z.infer<typeof paymentUpdateSchema>;
@@ -1029,6 +1030,8 @@ class PaymentsController {
     }
 
     const body: PaymentCreateInput = req.body;
+    await ensurePaymentSchemaCompatibility();
+    paymentIdempotencyColumnAvailability = null;
     const idempotencyEnabled = await hasPaymentIdempotencyColumn();
     const resolvedIdempotency = resolvePaymentIdempotencyKey(req, body, userId);
     const paymentIdempotencyKey = idempotencyEnabled

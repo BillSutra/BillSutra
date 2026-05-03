@@ -3,13 +3,17 @@ import { API_URL } from "./apiEndPoints";
 import { buildRequiredCsrfHeaders } from "./csrfClient";
 
 export const LEGACY_AUTH_TOKEN_STORAGE_KEY = "token";
+export const OWNER_AUTH_TOKEN_STORAGE_KEY = "bill_sutra_owner_access_token";
+export const WORKER_AUTH_TOKEN_STORAGE_KEY = "bill_sutra_worker_access_token";
 export const SECURE_AUTH_BOOTSTRAPPED_KEY = "bill_sutra_secure_auth_bootstrapped";
 export const SECURE_AUTH_EXPIRES_AT_KEY = "bill_sutra_secure_auth_expires_at";
 export const PENDING_REMEMBER_ME_KEY = "bill_sutra_pending_remember_me";
+export const AUTH_LOGIN_IN_PROGRESS_KEY = "bill_sutra_auth_login_in_progress";
 export const AUTH_LOGOUT_EVENT = "billsutra:auth-logout";
 
 const ACCESS_TOKEN_REFRESH_LEAD_MS = 60_000;
 const LOGOUT_DEDUPE_WINDOW_MS = 5_000;
+const LOGIN_IN_PROGRESS_TTL_MS = 30_000;
 
 let refreshRequestInFlight: Promise<SecureAuthRefreshResult> | null = null;
 let lastLogoutRequestAt = 0;
@@ -21,6 +25,7 @@ export type SecureAuthRefreshResult = {
   reason:
     | "success"
     | "disabled"
+    | "missing_cookie"
     | "auth_invalid"
     | "server_error"
     | "network_error";
@@ -82,10 +87,27 @@ const decodeJwtPayload = (rawToken: string) => {
         ? window.atob(padded)
         : Buffer.from(padded, "base64").toString("utf-8");
 
-    return JSON.parse(json) as { exp?: number };
+    return JSON.parse(json) as {
+      exp?: number;
+      accountType?: string;
+      account_type?: string;
+    };
   } catch {
     return null;
   }
+};
+
+const getTokenAccountType = (rawToken: string | null | undefined) => {
+  const token = normalizeAuthToken(rawToken);
+  if (!token) {
+    return null;
+  }
+
+  const payload = decodeJwtPayload(token);
+  const accountType = payload?.accountType ?? payload?.account_type;
+  return accountType === "WORKER" || accountType === "OWNER"
+    ? accountType
+    : null;
 };
 
 export const getAuthTokenExpiry = (rawToken: string | null | undefined) => {
@@ -151,6 +173,7 @@ export const setLegacyStoredToken = (token: string) => {
   window.localStorage.setItem(LEGACY_AUTH_TOKEN_STORAGE_KEY, normalizedToken);
   logClientAuthEvent("token_stored", {
     mode: isSecureAuthEnabled() ? "hybrid" : "legacy",
+    accountType: getTokenAccountType(normalizedToken),
     expiresAt: getAuthTokenExpiry(normalizedToken),
   });
 };
@@ -162,6 +185,8 @@ export const clearLegacyStoredToken = () => {
 
   setInMemoryAccessToken(null);
   window.localStorage.removeItem(LEGACY_AUTH_TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(OWNER_AUTH_TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(WORKER_AUTH_TOKEN_STORAGE_KEY);
 };
 
 export const hasSecureAuthBootstrap = () => {
@@ -261,6 +286,40 @@ export const clearPendingRememberMePreference = () => {
   window.sessionStorage.removeItem(PENDING_REMEMBER_ME_KEY);
 };
 
+export const markAuthLoginInProgress = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.setItem(
+    AUTH_LOGIN_IN_PROGRESS_KEY,
+    String(Date.now() + LOGIN_IN_PROGRESS_TTL_MS),
+  );
+};
+
+export const clearAuthLoginInProgress = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.sessionStorage.removeItem(AUTH_LOGIN_IN_PROGRESS_KEY);
+};
+
+export const isAuthLoginInProgress = () => {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const rawValue = window.sessionStorage.getItem(AUTH_LOGIN_IN_PROGRESS_KEY);
+  const expiresAt = rawValue ? Number.parseInt(rawValue, 10) : 0;
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    window.sessionStorage.removeItem(AUTH_LOGIN_IN_PROGRESS_KEY);
+    return false;
+  }
+
+  return true;
+};
+
 export const getInMemoryAccessToken = () => inMemoryAccessToken;
 
 const setInMemoryAccessToken = (token: string | null | undefined) => {
@@ -287,6 +346,7 @@ export const clearClientAuthState = () => {
   setInMemoryAccessToken(null);
   clearLegacyStoredToken();
   clearPendingRememberMePreference();
+  clearAuthLoginInProgress();
   clearSecureAuthBootstrapped();
   clearSecureAuthExpiresAt();
 };
@@ -321,9 +381,14 @@ export const bootstrapSecureAuthSession = async (
   rawToken: string,
   options?: {
     rememberMe?: boolean | null;
+    allowWhenSecureAuthDisabled?: boolean;
   },
 ) => {
-  if (typeof window === "undefined" || !isSecureAuthEnabled()) {
+  const secureAuthEnabled = isSecureAuthEnabled();
+  if (
+    typeof window === "undefined" ||
+    (!secureAuthEnabled && !options?.allowWhenSecureAuthDisabled)
+  ) {
     return false;
   }
 
@@ -370,7 +435,9 @@ export const bootstrapSecureAuthSession = async (
         ? payload.data.expiresAt
         : null,
     );
-    markSecureAuthBootstrapped();
+    if (secureAuthEnabled) {
+      markSecureAuthBootstrapped();
+    }
     if (typeof options?.rememberMe === "boolean") {
       clearPendingRememberMePreference();
     }
@@ -386,8 +453,14 @@ export const bootstrapSecureAuthSession = async (
 };
 
 export const refreshSecureAuthSessionDetailed =
-  async (): Promise<SecureAuthRefreshResult> => {
-    if (typeof window === "undefined" || !isSecureAuthEnabled()) {
+  async (options?: {
+    allowWhenSecureAuthDisabled?: boolean;
+  }): Promise<SecureAuthRefreshResult> => {
+    const secureAuthEnabled = isSecureAuthEnabled();
+    if (
+      typeof window === "undefined" ||
+      (!secureAuthEnabled && !options?.allowWhenSecureAuthDisabled)
+    ) {
       return {
         ok: false,
         reason: "disabled",
@@ -405,8 +478,20 @@ export const refreshSecureAuthSessionDetailed =
           });
 
           if (!response.ok) {
+            const payload = (await response.json().catch(() => null)) as
+              | { code?: string; data?: { reason?: string }; message?: string }
+              | null;
+            const serverReason =
+              typeof payload?.data?.reason === "string"
+                ? payload.data.reason
+                : typeof payload?.code === "string"
+                  ? payload.code
+                  : null;
             const reason =
-              response.status === 401 || response.status === 403
+              serverReason === "missing_cookie" ||
+              serverReason === "AUTH_REFRESH_COOKIE_MISSING"
+                ? "missing_cookie"
+                : response.status === 401 || response.status === 403
                 ? "auth_invalid"
                 : "server_error";
 
@@ -416,6 +501,7 @@ export const refreshSecureAuthSessionDetailed =
             if (reason !== "auth_invalid") {
               logIgnoredNetworkFailure("auth_refresh", {
                 status: response.status,
+                reason,
               });
             }
 
@@ -436,9 +522,17 @@ export const refreshSecureAuthSessionDetailed =
               : null;
           const token = normalizeAuthToken(payload?.data?.token ?? null);
 
-          setInMemoryAccessToken(token);
+          if (secureAuthEnabled || isCookieOnlyAuthEnabled()) {
+            setInMemoryAccessToken(token);
+          } else if (token) {
+            setLegacyStoredToken(token);
+          } else {
+            setInMemoryAccessToken(null);
+          }
           setSecureAuthExpiresAt(expiresAt);
-          markSecureAuthBootstrapped();
+          if (secureAuthEnabled) {
+            markSecureAuthBootstrapped();
+          }
           lastLogoutReason = null;
           lastLogoutRequestAt = 0;
           return {
@@ -468,12 +562,23 @@ export const refreshSecureAuthSessionDetailed =
 export const ensureFreshSecureAuthSessionDetailed = async (options?: {
   force?: boolean;
   minValidityMs?: number;
+  allowWhenSecureAuthDisabled?: boolean;
 }): Promise<SecureAuthRefreshResult> => {
-  if (typeof window === "undefined" || !isSecureAuthEnabled()) {
+  const secureAuthEnabled = isSecureAuthEnabled();
+  if (
+    typeof window === "undefined" ||
+    (!secureAuthEnabled && !options?.allowWhenSecureAuthDisabled)
+  ) {
     return {
       ok: false,
       reason: "disabled",
     };
+  }
+
+  if (!secureAuthEnabled && options?.allowWhenSecureAuthDisabled) {
+    return refreshSecureAuthSessionDetailed({
+      allowWhenSecureAuthDisabled: true,
+    });
   }
 
   const minValidityMs = options?.minValidityMs ?? ACCESS_TOKEN_REFRESH_LEAD_MS;

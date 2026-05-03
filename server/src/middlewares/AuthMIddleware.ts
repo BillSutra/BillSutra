@@ -23,6 +23,8 @@ const workerAllowedRoutes = [
   { prefix: "/products", methods: ["GET"] },
   { prefix: "/warehouses", methods: ["GET"] },
   { prefix: "/business-profile", methods: ["GET"] },
+  { prefix: "/settings/preferences", methods: ["GET"] },
+  { prefix: "/notifications", methods: ["GET"] },
   { prefix: "/users/me", methods: ["GET"] },
   { prefix: "/users/password", methods: ["PUT"] },
 ];
@@ -143,7 +145,27 @@ const verifyResolvedToken = async (
       path: req.path,
       accountType: authUser.accountType,
       role: authUser.role,
+      workerId: authUser.workerId ?? null,
     });
+
+    if (authUser.accountType === "WORKER" && !authUser.workerId) {
+      console.warn("[auth] worker_token_missing_worker_id", {
+        path: req.path,
+        source,
+        actorId: authUser.actorId,
+      });
+      res.status(401).json({
+        status: 401,
+        message: "Worker session is missing worker identity. Please login again.",
+        code: "WORKER_ID_MISSING",
+      });
+      recordRequestAuthSummary({
+        source,
+        durationMs: performance.now() - startedAt,
+        outcome: "rejected",
+      });
+      return true;
+    }
 
     if (
       authUser.accountType === "OWNER" &&

@@ -1,4 +1,4 @@
-﻿{
+{
     "common":  {
                    "appName":  "बिलसूत्र",
                    "loading":  "लोड हो रहा है...",
@@ -253,6 +253,10 @@
                        "businessProfile":  "बिजनेस प्रोफाइल",
                        "settings":  "सेटिंग्स"
                    },
+    "workerPanel":  {
+                        "title":  "Worker Dashboard",
+                        "subtitle":  "Manage your tasks, invoices and attendance"
+                    },
     "profileMenu":  {
                         "myAccount":  "मेरा अकाउंट",
                         "profile":  "प्रोफाइल",
@@ -2002,7 +2006,14 @@
                                     "emailLabel":  "ईमेल",
                                     "emailPlaceholder":  "अपना ईमेल लिखें",
                                     "emailSent":  "ईमेल सफलतापूर्वक भेज दिया गया",
-                                    "emailFailed":  "ईमेल भेजना विफल रहा"
+                                    "emailFailed":  "ईमेल भेजना विफल रहा",
+                                    "emailRequired":  "ईमेल आवश्यक है",
+                                    "emailInvalid":  "मान्य ईमेल पता दर्ज करें",
+                                    "tooManyRequests":  "बहुत अधिक अनुरोध हो गए हैं। कृपया दोबारा प्रयास करने से पहले प्रतीक्षा करें।",
+                                    "waitToResend":  "दूसरा रीसेट लिंक मांगने से पहले कृपया प्रतीक्षा करें।",
+                                    "sending":  "भेजा जा रहा है",
+                                    "sendResetLink":  "रीसेट लिंक भेजें",
+                                    "resendIn":  "{seconds}s में दोबारा भेजें"
                                 },
                  "resetForm":  {
                                    "emailLabel":  "ईमेल",
@@ -2010,7 +2021,21 @@
                                    "passwordLabel":  "पासवर्ड",
                                    "passwordPlaceholder":  "अपना पासवर्ड दर्ज करें",
                                    "confirmPasswordLabel":  "पासवर्ड की पुष्टि करें",
-                                   "confirmPasswordPlaceholder":  "अपना पासवर्ड दोबारा पुष्ट करें"
+                                   "confirmPasswordPlaceholder":  "अपना पासवर्ड दोबारा पुष्ट करें",
+                                   "emailRequired":  "ईमेल आवश्यक है",
+                                   "emailInvalid":  "मान्य ईमेल पता दर्ज करें",
+                                   "passwordRequired":  "पासवर्ड आवश्यक है",
+                                   "confirmPasswordRequired":  "पासवर्ड की पुष्टि आवश्यक है",
+                                   "passwordMismatch":  "पासवर्ड मेल नहीं खाते",
+                                   "strengthLabel":  "मजबूती",
+                                   "ruleLength":  "कम से कम 8 अक्षर",
+                                   "ruleUppercase":  "1 बड़ा अक्षर",
+                                   "ruleLowercase":  "1 छोटा अक्षर",
+                                   "ruleNumber":  "1 संख्या",
+                                   "ruleSpecial":  "1 विशेष चिन्ह",
+                                   "requestNewLink":  "नया लिंक मांगें",
+                                   "updatingPassword":  "पासवर्ड अपडेट हो रहा है",
+                                   "changePassword":  "पासवर्ड बदलें"
                                }
              },
     "customers":  {

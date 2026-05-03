@@ -40,6 +40,26 @@ export const otpResendRateLimiter = createRedisRateLimiter({
   },
 });
 
+export const passwordResetRequestRateLimiter = createRedisRateLimiter({
+  keyPrefix: "password-reset-request",
+  windowMs: 15 * 60 * 1000,
+  limit: 6,
+  message: {
+    success: false,
+    message: "Too many password reset requests. Please try again after 15 minutes.",
+  },
+});
+
+export const passwordResetAttemptRateLimiter = createRedisRateLimiter({
+  keyPrefix: "password-reset-attempt",
+  windowMs: 15 * 60 * 1000,
+  limit: 12,
+  message: {
+    success: false,
+    message: "Too many password reset attempts. Please try again after 15 minutes.",
+  },
+});
+
 export const paymentRateLimiter = createRedisRateLimiter({
   keyPrefix: "payments",
   windowMs: 10 * 60 * 1000,

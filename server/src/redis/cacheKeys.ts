@@ -236,6 +236,7 @@ export const buildCustomerListCachePrefix = (params: {
 export const buildNotificationsRedisKey = (params: {
   businessId?: string | null;
   userId?: number | null;
+  workerId?: string | null;
   page: number;
   limit: number;
   type?: string | null;
@@ -244,6 +245,7 @@ export const buildNotificationsRedisKey = (params: {
   buildKey(
     ...buildTenantScope(params),
     "notifications",
+    serializePrimitive(params.workerId),
     params.page,
     params.limit,
     serializePrimitive(params.type),

@@ -4,6 +4,9 @@ import bcrypt from "bcryptjs";
 import prisma from "../config/db.config.js";
 import { getTotalPages, parsePagination } from "../utils/pagination.js";
 import { sendResponse } from "../utils/sendResponse.js";
+import { ensureWorkerPerformanceSchema } from "../lib/workerPerformanceSchema.js";
+import { storageProvider } from "../services/storage/storage.provider.js";
+import { UPLOADS_ROOT, resolveUploadPath } from "../lib/uploadPaths.js";
 
 type WorkerIncentiveType = "NONE" | "PERCENTAGE" | "PER_SALE";
 
@@ -37,27 +40,11 @@ const missingWorkerExtensionError = (error: unknown) => {
   );
 };
 
-const ensureWorkerProfilesTable = async () => {
-  await prisma.$executeRaw`
-    CREATE TABLE IF NOT EXISTS "worker_profiles" (
-      "worker_id" VARCHAR(191) PRIMARY KEY,
-      "access_role" VARCHAR(32) NOT NULL DEFAULT 'STAFF',
-      "status" VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
-      "joining_date" TIMESTAMP(3),
-      "incentive_type" VARCHAR(32) NOT NULL DEFAULT 'NONE',
-      "incentive_value" NUMERIC(12,2) NOT NULL DEFAULT 0,
-      "last_active_at" TIMESTAMP(3),
-      "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )
-  `;
-};
-
 const loadWorkerProfile = async (
   workerId: string,
 ): Promise<WorkerProfileData | null> => {
   try {
-    await ensureWorkerProfilesTable();
+    await ensureWorkerPerformanceSchema();
 
     const rows = await prisma.$queryRaw<
       Array<{
@@ -182,6 +169,8 @@ const getWorkerSelfSalesAgg = async (
   startDate: Date | null,
   endDate?: Date | null,
 ) => {
+  await ensureWorkerPerformanceSchema();
+
   const filters = [Prisma.sql`s."worker_id" = ${workerId}`];
 
   if (startDate) {
@@ -222,6 +211,8 @@ const getWorkerSelfInvoicesAgg = async (
   startDate: Date | null,
   endDate?: Date | null,
 ) => {
+  await ensureWorkerPerformanceSchema();
+
   const filters = [Prisma.sql`i."worker_id" = ${workerId}`];
 
   if (startDate) {
@@ -262,6 +253,8 @@ const getMonthlyIncentiveData = async (
   incentiveType: WorkerIncentiveType,
   incentiveValue: number,
 ): Promise<Array<{ month: string; incentive: number }>> => {
+  await ensureWorkerPerformanceSchema();
+
   const periodStart = getLast12MonthsStart();
 
   const [salesRows, invoiceRows] = await Promise.all([
@@ -366,11 +359,269 @@ const getIncentiveNote = (
   return "No incentive configured yet";
 };
 
+const ensureWorkerImageColumn = async () => {
+  await prisma.$executeRaw`
+    ALTER TABLE "workers"
+      ADD COLUMN IF NOT EXISTS "image_url" VARCHAR(255)
+  `;
+};
+
+const publicUploadUrlToFilePath = (url: string): string => {
+  const relative = url.replace(/^\//, "").replace(/^uploads\//, "");
+  return resolveUploadPath(UPLOADS_ROOT, relative);
+};
+
+const resolveWorkerIdFromRequest = (req: Request) => {
+  if (req.user?.workerId?.trim()) {
+    return req.user.workerId.trim();
+  }
+
+  const actorId = req.user?.actorId;
+  if (!actorId?.startsWith("worker:")) {
+    return null;
+  }
+
+  const parsedWorkerId = actorId.slice("worker:".length).trim();
+  return parsedWorkerId.length > 0 ? parsedWorkerId : null;
+};
+
+const ensureWorkerSelfServiceAuth = (
+  req: Request,
+  res: Response,
+  route: string,
+) => {
+  const workerId = resolveWorkerIdFromRequest(req);
+
+  if (!req.user) {
+    console.warn("[worker] request_rejected", {
+      route,
+      reason: "missing_auth_user",
+    });
+    sendResponse(res, 401, { message: "Unauthorized" });
+    return null;
+  }
+
+  if (req.user.accountType !== "WORKER") {
+    console.warn("[worker] request_rejected", {
+      route,
+      reason: "wrong_account_type",
+      accountType: req.user.accountType,
+      role: req.user.role,
+    });
+    sendResponse(res, 403, { message: "Worker access required" });
+    return null;
+  }
+
+  if (!workerId) {
+    console.warn("[worker] request_rejected", {
+      route,
+      reason: "missing_worker_id",
+      decoded: req.user,
+    });
+    sendResponse(res, 401, {
+      message: "Worker session is missing worker identity. Please sign in again.",
+      code: "WORKER_ID_MISSING",
+    });
+    return null;
+  }
+
+  return workerId;
+};
+
+const getWorkerPendingPayments = async (workerId: string) => {
+  await ensureWorkerPerformanceSchema();
+
+  const [salesRows, invoiceRows] = await Promise.all([
+    prisma.$queryRaw<Array<{ pending_amount: Prisma.Decimal | number }>>(
+      Prisma.sql`
+        SELECT
+          COALESCE(
+            SUM(
+              GREATEST(
+                COALESCE(s."pending_amount", s."total" - COALESCE(s."paid_amount", 0), s."total"),
+                0
+              )
+            ),
+            0
+          ) AS pending_amount
+        FROM "sales" s
+        WHERE s."worker_id" = ${workerId}
+          AND COALESCE(s."payment_status"::text, 'UNPAID') <> 'PAID'
+      `,
+    ),
+    prisma.$queryRaw<Array<{ pending_amount: Prisma.Decimal | number }>>(
+      Prisma.sql`
+        SELECT
+          COALESCE(SUM(GREATEST(i."total" - COALESCE(payment_totals."paid_amount", 0), 0)), 0) AS pending_amount
+        FROM "invoices" i
+        LEFT JOIN (
+          SELECT
+            p."invoice_id",
+            COALESCE(SUM(p."amount"), 0) AS paid_amount
+          FROM "payments" p
+          GROUP BY p."invoice_id"
+        ) AS payment_totals ON payment_totals."invoice_id" = i."id"
+        WHERE i."worker_id" = ${workerId}
+      `,
+    ),
+  ]);
+
+  return (
+    toNumber(salesRows[0]?.pending_amount ?? 0) +
+    toNumber(invoiceRows[0]?.pending_amount ?? 0)
+  );
+};
+
+const getWorkerCustomersServed = async (workerId: string) => {
+  await ensureWorkerPerformanceSchema();
+
+  const rows = await prisma.$queryRaw<Array<{ customer_count: bigint | number }>>(
+    Prisma.sql`
+      SELECT COUNT(DISTINCT customer_id) AS customer_count
+      FROM (
+        SELECT s."customer_id" AS customer_id
+        FROM "sales" s
+        WHERE s."worker_id" = ${workerId}
+          AND s."customer_id" IS NOT NULL
+
+        UNION
+
+        SELECT i."customer_id" AS customer_id
+        FROM "invoices" i
+        WHERE i."worker_id" = ${workerId}
+          AND i."customer_id" IS NOT NULL
+      ) AS assigned_customers
+    `,
+  );
+
+  return Number(rows[0]?.customer_count ?? 0);
+};
+
+const getWorkerMonthlySales = async (workerId: string) => {
+  await ensureWorkerPerformanceSchema();
+
+  const now = new Date();
+  const periodStart = new Date(now.getFullYear(), now.getMonth() - 5, 1);
+  periodStart.setHours(0, 0, 0, 0);
+
+  const rows = await prisma.$queryRaw<
+    Array<{ month_start: Date; sales: Prisma.Decimal | number }>
+  >(Prisma.sql`
+    SELECT
+      month_start,
+      COALESCE(SUM(amount), 0) AS sales
+    FROM (
+      SELECT
+        DATE_TRUNC('month', COALESCE(s."sale_date", s."created_at")) AS month_start,
+        COALESCE(s."total_amount", s."total") AS amount
+      FROM "sales" s
+      WHERE s."worker_id" = ${workerId}
+        AND COALESCE(s."sale_date", s."created_at") >= ${periodStart}
+
+      UNION ALL
+
+      SELECT
+        DATE_TRUNC('month', COALESCE(i."issue_date", i."created_at")) AS month_start,
+        i."total" AS amount
+      FROM "invoices" i
+      WHERE i."worker_id" = ${workerId}
+        AND COALESCE(i."issue_date", i."created_at") >= ${periodStart}
+    ) AS worker_monthly_sales
+    GROUP BY month_start
+    ORDER BY month_start ASC
+  `);
+
+  const salesByMonth = new Map(
+    rows.map((row) => [
+      buildMonthKey(new Date(row.month_start)),
+      toNumber(row.sales),
+    ]),
+  );
+
+  return Array.from({ length: 6 }, (_, index) => {
+    const date = new Date(
+      periodStart.getFullYear(),
+      periodStart.getMonth() + index,
+      1,
+    );
+    const key = buildMonthKey(date);
+    return {
+      month: date.toLocaleString("en-US", { month: "short" }),
+      sales: salesByMonth.get(key) ?? 0,
+    };
+  });
+};
+
+const buildDayKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+
+const getWorkerWeeklyPerformance = async (workerId: string) => {
+  await ensureWorkerPerformanceSchema();
+
+  const periodStart = new Date();
+  periodStart.setDate(periodStart.getDate() - 6);
+  periodStart.setHours(0, 0, 0, 0);
+
+  const rows = await prisma.$queryRaw<
+    Array<{
+      day_start: Date;
+      sales: Prisma.Decimal | number;
+      orders: bigint | number;
+    }>
+  >(Prisma.sql`
+    SELECT
+      day_start,
+      COALESCE(SUM(amount), 0) AS sales,
+      COUNT(*) AS orders
+    FROM (
+      SELECT
+        DATE_TRUNC('day', COALESCE(s."sale_date", s."created_at")) AS day_start,
+        COALESCE(s."total_amount", s."total") AS amount
+      FROM "sales" s
+      WHERE s."worker_id" = ${workerId}
+        AND COALESCE(s."sale_date", s."created_at") >= ${periodStart}
+
+      UNION ALL
+
+      SELECT
+        DATE_TRUNC('day', COALESCE(i."issue_date", i."created_at")) AS day_start,
+        i."total" AS amount
+      FROM "invoices" i
+      WHERE i."worker_id" = ${workerId}
+        AND COALESCE(i."issue_date", i."created_at") >= ${periodStart}
+    ) AS worker_weekly_performance
+    GROUP BY day_start
+    ORDER BY day_start ASC
+  `);
+
+  const dataByDay = new Map(
+    rows.map((row) => [
+      buildDayKey(new Date(row.day_start)),
+      { sales: toNumber(row.sales), orders: Number(row.orders) },
+    ]),
+  );
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(periodStart);
+    date.setDate(periodStart.getDate() + index);
+    const key = buildDayKey(date);
+    const entry = dataByDay.get(key);
+    return {
+      day: date.toLocaleString("en-US", { weekday: "short" }),
+      sales: entry?.sales ?? 0,
+      orders: entry?.orders ?? 0,
+    };
+  });
+};
+
 export type WorkerProfileResponse = {
   id: string;
   name: string;
   email: string;
   phone: string | null;
+  imageUrl: string | null;
   role: string;
   accessRole: string;
   status: string;
@@ -386,7 +637,11 @@ export type WorkerDashboardOverviewResponse = {
     averageOrderValue: number;
     thisMonthSales: number;
     incentiveEarned: number;
+    pendingPayments: number;
+    customersServed: number;
   };
+  monthlySales: Array<{ month: string; sales: number }>;
+  weeklyPerformance: Array<{ day: string; sales: number; orders: number }>;
 };
 
 export type WorkerIncentiveResponse = {
@@ -417,11 +672,19 @@ export type WorkerHistoryResponse = {
 
 class WorkerPanelController {
   static async getProfile(req: Request, res: Response) {
-    const workerId = req.user?.workerId;
+    const workerId = ensureWorkerSelfServiceAuth(req, res, "/api/worker/profile");
 
-    if (!workerId || req.user?.accountType !== "WORKER") {
-      return sendResponse(res, 403, { message: "Forbidden" });
+    if (!workerId) {
+      return;
     }
+
+    console.info("[worker] profile_auth_context", {
+      route: "/api/worker/profile",
+      decoded: req.user,
+      workerId,
+    });
+
+    await ensureWorkerImageColumn();
 
     const worker = await prisma.worker.findUnique({
       where: { id: workerId },
@@ -430,6 +693,7 @@ class WorkerPanelController {
         name: true,
         email: true,
         phone: true,
+        imageUrl: true,
         role: true,
         createdAt: true,
       },
@@ -447,6 +711,7 @@ class WorkerPanelController {
         name: worker.name,
         email: worker.email,
         phone: worker.phone,
+        imageUrl: worker.imageUrl,
         role: worker.role,
         accessRole: profile?.accessRole ?? "STAFF",
         status: profile?.status ?? "ACTIVE",
@@ -457,10 +722,10 @@ class WorkerPanelController {
   }
 
   static async updateProfile(req: Request, res: Response) {
-    const workerId = req.user?.workerId;
+    const workerId = ensureWorkerSelfServiceAuth(req, res, "/api/worker/profile");
 
-    if (!workerId || req.user?.accountType !== "WORKER") {
-      return sendResponse(res, 403, { message: "Forbidden" });
+    if (!workerId) {
+      return;
     }
 
     const { name, email, phone } = req.body as {
@@ -478,6 +743,8 @@ class WorkerPanelController {
     if (Object.keys(updateData).length === 0) {
       return sendResponse(res, 400, { message: "No fields to update" });
     }
+
+    await ensureWorkerImageColumn();
 
     if (email) {
       const existing = await prisma.worker.findFirst({
@@ -513,6 +780,7 @@ class WorkerPanelController {
         name: true,
         email: true,
         phone: true,
+        imageUrl: true,
         role: true,
         createdAt: true,
       },
@@ -527,6 +795,7 @@ class WorkerPanelController {
         name: updated.name,
         email: updated.email,
         phone: updated.phone,
+        imageUrl: updated.imageUrl,
         role: updated.role,
         accessRole: profile?.accessRole ?? "STAFF",
         status: profile?.status ?? "ACTIVE",
@@ -537,10 +806,10 @@ class WorkerPanelController {
   }
 
   static async changePassword(req: Request, res: Response) {
-    const workerId = req.user?.workerId;
+    const workerId = ensureWorkerSelfServiceAuth(req, res, "/api/worker/password");
 
-    if (!workerId || req.user?.accountType !== "WORKER") {
-      return sendResponse(res, 403, { message: "Forbidden" });
+    if (!workerId) {
+      return;
     }
 
     const { current_password, password } = req.body as {
@@ -576,10 +845,14 @@ class WorkerPanelController {
   }
 
   static async getDashboardOverview(req: Request, res: Response) {
-    const workerId = req.user?.workerId;
+    const workerId = ensureWorkerSelfServiceAuth(
+      req,
+      res,
+      "/api/worker/dashboard/overview",
+    );
 
-    if (!workerId || req.user?.accountType !== "WORKER") {
-      return sendResponse(res, 403, { message: "Forbidden" });
+    if (!workerId) {
+      return;
     }
 
     const profile = await loadWorkerProfile(workerId);
@@ -590,6 +863,10 @@ class WorkerPanelController {
     const [
       [allTimeSales, allTimeInvoices],
       [thisMonthSalesAgg, thisMonthInvoicesAgg],
+      pendingPayments,
+      customersServed,
+      monthlySales,
+      weeklyPerformance,
     ] = await Promise.all([
       Promise.all([
         getWorkerSelfSalesAgg(workerId, null),
@@ -599,6 +876,10 @@ class WorkerPanelController {
         getWorkerSelfSalesAgg(workerId, thisMonthStart),
         getWorkerSelfInvoicesAgg(workerId, thisMonthStart),
       ]),
+      getWorkerPendingPayments(workerId),
+      getWorkerCustomersServed(workerId),
+      getWorkerMonthlySales(workerId),
+      getWorkerWeeklyPerformance(workerId),
     ]);
 
     const totalSales = allTimeSales.total + allTimeInvoices.total;
@@ -622,16 +903,91 @@ class WorkerPanelController {
           averageOrderValue,
           thisMonthSales,
           incentiveEarned,
+          pendingPayments,
+          customersServed,
         },
+        monthlySales,
+        weeklyPerformance,
       } satisfies WorkerDashboardOverviewResponse,
     });
   }
 
-  static async getIncentives(req: Request, res: Response) {
-    const workerId = req.user?.workerId;
+  static async uploadPhoto(req: Request, res: Response) {
+    const workerId = ensureWorkerSelfServiceAuth(req, res, "/api/worker/profile/photo");
+    const userId = req.user?.id;
 
-    if (!workerId || req.user?.accountType !== "WORKER") {
-      return sendResponse(res, 403, { message: "Forbidden" });
+    if (!workerId) {
+      return;
+    }
+
+    if (!userId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    if (!req.file) {
+      return sendResponse(res, 400, { message: "No photo uploaded." });
+    }
+
+    console.info("[worker] profile_photo_update_started", {
+      route: "/api/worker/profile/photo",
+      fileSize: req.file.size,
+      mime: req.file.mimetype,
+      workerId,
+    });
+
+    await ensureWorkerImageColumn();
+
+    const worker = await prisma.worker.findUnique({
+      where: { id: workerId },
+      select: { id: true, imageUrl: true },
+    });
+
+    if (!worker) {
+      return sendResponse(res, 404, { message: "Worker not found" });
+    }
+
+    let url: string;
+    try {
+      ({ url } = await storageProvider.save(userId, req.file));
+    } catch (error) {
+      const status = (error as { status?: number }).status ?? 500;
+      const message =
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "Unable to save profile photo.";
+      console.warn("[worker] profile_photo_storage_failed", {
+        route: "/api/worker/profile/photo",
+        workerId,
+        status,
+        message,
+      });
+      return sendResponse(res, status, { message });
+    }
+
+    await prisma.worker.update({
+      where: { id: worker.id },
+      data: { imageUrl: url },
+    });
+
+    if (worker.imageUrl) {
+      await storageProvider.delete(publicUploadUrlToFilePath(worker.imageUrl));
+    }
+
+    return sendResponse(res, 200, {
+      message: "Profile photo updated",
+      data: { imageUrl: url, photoUrl: url },
+    });
+  }
+
+  static async getIncentives(req: Request, res: Response) {
+    const workerId = ensureWorkerSelfServiceAuth(
+      req,
+      res,
+      "/api/worker/dashboard/incentives",
+    );
+
+    if (!workerId) {
+      return;
     }
 
     const profile = await loadWorkerProfile(workerId);
@@ -674,10 +1030,14 @@ class WorkerPanelController {
   }
 
   static async getWorkHistory(req: Request, res: Response) {
-    const workerId = req.user?.workerId;
+    const workerId = ensureWorkerSelfServiceAuth(
+      req,
+      res,
+      "/api/worker/dashboard/history",
+    );
 
-    if (!workerId || req.user?.accountType !== "WORKER") {
-      return sendResponse(res, 403, { message: "Forbidden" });
+    if (!workerId) {
+      return;
     }
 
     const { page, limit, skip } = parsePagination(req.query, {
@@ -778,6 +1138,8 @@ class WorkerPanelController {
 
     const salesWhereClause = combineFilters(salesFilters);
     const invoiceWhereClause = combineFilters(invoiceFilters);
+
+    await ensureWorkerPerformanceSchema();
 
     const combinedActivityQuery = Prisma.sql`
       SELECT

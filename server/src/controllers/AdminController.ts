@@ -2,20 +2,18 @@ import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import prisma from "../config/db.config.js";
-import {
-  getAccessTokenSecret,
-  getRefreshTokenSecret,
-} from "../lib/authSecrets.js";
+import { getRefreshTokenSecret } from "../lib/authSecrets.js";
 import { buildHttpOnlyCookieOptions } from "../lib/cookieSecurity.js";
-import { parseCookies } from "../lib/authCookies.js";
+import {
+  clearAuthCookies,
+  issueUnifiedAdminCookies,
+  parseCookies,
+} from "../lib/authCookies.js";
 import { sendResponse } from "../utils/sendResponse.js";
 
 const ADMIN_AUTH_COOKIE_NAME = "bill_sutra_admin_session";
 const ADMIN_REFRESH_COOKIE_NAME = "bill_sutra_admin_refresh";
-const ADMIN_ACCESS_TOKEN_TTL = "15m";
-const ADMIN_REFRESH_TOKEN_TTL = "7d";
 const ADMIN_ACCESS_TOKEN_TTL_MS = 15 * 60 * 1000;
-const ADMIN_REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const parseOwnerUserId = (ownerId: string) => {
   const parsed = Number.parseInt(ownerId, 10);
@@ -25,49 +23,8 @@ const parseOwnerUserId = (ownerId: string) => {
 const readRouteParam = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
 
-const createAdminAccessToken = (payload: AdminAuthUser) =>
-  jwt.sign(payload, getAccessTokenSecret(), {
-    expiresIn: ADMIN_ACCESS_TOKEN_TTL,
-  });
-
-const createAdminRefreshToken = (payload: AdminAuthUser) =>
-  jwt.sign(
-    {
-      ...payload,
-      token_type: "admin_refresh_v1",
-    },
-    getRefreshTokenSecret(),
-    {
-      expiresIn: ADMIN_REFRESH_TOKEN_TTL,
-    },
-  );
-
-const setAdminAuthCookies = (
-  req: Request,
-  res: Response,
-  accessToken: string,
-  refreshToken: string,
-) => {
-  res.cookie(
-    ADMIN_AUTH_COOKIE_NAME,
-    accessToken,
-    buildHttpOnlyCookieOptions(req, {
-      path: "/",
-      maxAge: ADMIN_ACCESS_TOKEN_TTL_MS,
-    }),
-  );
-
-  res.cookie(
-    ADMIN_REFRESH_COOKIE_NAME,
-    refreshToken,
-    buildHttpOnlyCookieOptions(req, {
-      path: "/",
-      maxAge: ADMIN_REFRESH_TOKEN_TTL_MS,
-    }),
-  );
-};
-
 const clearAdminAuthCookies = (req: Request | undefined, res: Response) => {
+  clearAuthCookies(res, req);
   res.clearCookie(
     ADMIN_AUTH_COOKIE_NAME,
     buildHttpOnlyCookieOptions(req, {
@@ -84,15 +41,17 @@ const clearAdminAuthCookies = (req: Request | undefined, res: Response) => {
 };
 
 const issueAdminSession = (req: Request, res: Response, authUser: AdminAuthUser) => {
-  const accessToken = createAdminAccessToken(authUser);
-  const refreshToken = createAdminRefreshToken(authUser);
-
-  setAdminAuthCookies(req, res, accessToken, refreshToken);
+  clearAdminAuthCookies(req, res);
+  const issued = issueUnifiedAdminCookies(req, res, {
+    id: authUser.adminId,
+    email: authUser.email,
+    role: "super_admin",
+  });
 
   return {
     user: authUser,
-    token: `Bearer ${accessToken}`,
-    expiresAt: Date.now() + ADMIN_ACCESS_TOKEN_TTL_MS,
+    token: `Bearer ${issued.accessToken}`,
+    expiresAt: issued.accessTokenExpiresAt,
   };
 };
 
@@ -106,7 +65,12 @@ const verifyRefreshToken = (token: string) => {
   const adminId =
     typeof payload.adminId === "string" ? payload.adminId.trim() : "";
   const email = typeof payload.email === "string" ? payload.email.trim() : "";
-  const role = payload.role === "SUPER_ADMIN" ? "SUPER_ADMIN" : undefined;
+  const normalizedRole =
+    typeof payload.role === "string" ? payload.role.trim().toLowerCase() : "";
+  const role =
+    normalizedRole === "super_admin" || payload.role === "SUPER_ADMIN"
+      ? "SUPER_ADMIN"
+      : undefined;
   const tokenType =
     typeof payload.token_type === "string" ? payload.token_type : "";
 
@@ -114,7 +78,7 @@ const verifyRefreshToken = (token: string) => {
     return null;
   }
 
-  if (tokenType && tokenType !== "admin_refresh_v1") {
+  if (tokenType && tokenType !== "refresh_v1" && tokenType !== "admin_refresh_v1") {
     return null;
   }
 
@@ -175,8 +139,11 @@ class AdminController {
   }
 
   static async refresh(req: Request, res: Response) {
+    const cookies = parseCookies(req.headers.cookie);
     const refreshToken =
-      parseCookies(req.headers.cookie).get(ADMIN_REFRESH_COOKIE_NAME) ?? null;
+      cookies.get("refreshToken") ??
+      cookies.get(ADMIN_REFRESH_COOKIE_NAME) ??
+      null;
 
     if (!refreshToken) {
       clearAdminAuthCookies(req, res);

@@ -4,6 +4,7 @@ import { parseCookies } from "../lib/authCookies.js";
 import { getAccessTokenSecret } from "../lib/authSecrets.js";
 
 const ADMIN_AUTH_COOKIE_NAME = "bill_sutra_admin_session";
+const UNIFIED_AUTH_COOKIE_NAME = "accessToken";
 
 const getAdminTokenFromRequest = (req: Request) => {
   const authHeader = req.headers.authorization;
@@ -13,8 +14,11 @@ const getAdminTokenFromRequest = (req: Request) => {
       ? authHeader.trim().slice("bearer ".length).trim()
       : null;
 
+  const cookies = parseCookies(req.headers.cookie);
   const cookieToken =
-    parseCookies(req.headers.cookie).get(ADMIN_AUTH_COOKIE_NAME) ?? null;
+    cookies.get(UNIFIED_AUTH_COOKIE_NAME) ??
+    cookies.get(ADMIN_AUTH_COOKIE_NAME) ??
+    null;
 
   return {
     headerToken,
@@ -44,8 +48,12 @@ const verifyAdminToken = (
     const adminId =
       typeof payload.adminId === "string" ? payload.adminId.trim() : "";
     const email = typeof payload.email === "string" ? payload.email.trim() : "";
+    const normalizedRole =
+      typeof payload.role === "string" ? payload.role.trim().toLowerCase() : "";
     const role =
-      payload.role === "SUPER_ADMIN" ? "SUPER_ADMIN" : undefined;
+      normalizedRole === "super_admin" || payload.role === "SUPER_ADMIN"
+        ? "SUPER_ADMIN"
+        : undefined;
 
     if (!adminId || !email || role !== "SUPER_ADMIN") {
       res.status(403).json({ status: 403, message: "Super admin access required" });

@@ -10,12 +10,12 @@ const ForgotPasswordPageContent = () => {
   const { t } = useI18n();
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-6 py-10 text-foreground">
+    <div className="relative flex min-h-screen items-center justify-center overflow-x-hidden bg-background px-4 py-8 text-foreground sm:px-6 sm:py-10">
       <div className="absolute inset-0 -z-10">
         <div className="absolute -left-20 top-10 h-72 w-72 rounded-full bg-[radial-gradient(circle_at_center,rgba(18,61,101,0.18),rgba(18,61,101,0))]" />
         <div className="absolute right-0 top-16 h-80 w-80 rounded-full bg-[radial-gradient(circle_at_center,rgba(241,175,34,0.22),rgba(241,175,34,0))]" />
       </div>
-      <div className="relative w-full max-w-xl overflow-hidden rounded-4xl border border-border/80 bg-card/90 px-10 py-8 shadow-[0_36px_110px_-70px_rgba(17,37,63,0.4)] backdrop-blur-xl">
+      <div className="relative w-full max-w-xl overflow-hidden rounded-3xl border border-border/80 bg-card/90 px-5 py-7 shadow-[0_24px_70px_-48px_rgba(17,37,63,0.45)] backdrop-blur-xl sm:px-10 sm:py-8">
         <BrandLogo
           variant="icon"
           className="pointer-events-none absolute -right-8 bottom-4 hidden opacity-[0.08] md:inline-flex"

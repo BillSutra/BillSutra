@@ -6,7 +6,9 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { isAxiosError } from "axios";
 import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import {
+  AlertTriangle,
   CheckCircle2,
   Clock3,
   Copy,
@@ -29,6 +31,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import Modal from "@/components/ui/modal";
 import {
   createAccessRazorpayOrder,
   fetchAccessPaymentStatus,
@@ -114,6 +117,62 @@ const statusMeta: Record<
   success: { label: "Paid and active", variant: "paid" },
 };
 
+const MAX_PROOF_SIZE_BYTES = 5 * 1024 * 1024;
+const ACCEPTED_PROOF_MIME_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "application/pdf",
+]);
+const ACCEPTED_PROOF_EXTENSIONS = new Set(["jpg", "jpeg", "png", "pdf"]);
+
+type ManualPaymentErrors = Partial<
+  Record<"name" | "mobileNumber" | "utr" | "paymentProof", string>
+>;
+
+const getApiErrorMessage = (error: unknown, fallback: string) => {
+  if (isAxiosError(error)) {
+    const data = error.response?.data as
+      | {
+          message?: string;
+          error?: string;
+          details?: { errors?: Record<string, string[]> };
+        }
+      | undefined;
+    const fieldErrors = data?.details?.errors;
+    const firstFieldError = fieldErrors
+      ? Object.values(fieldErrors).flat().find(Boolean)
+      : null;
+
+    return firstFieldError ?? data?.message ?? data?.error ?? fallback;
+  }
+
+  return error instanceof Error ? error.message : fallback;
+};
+
+const getFileExtension = (fileName: string) =>
+  fileName.split(".").pop()?.trim().toLowerCase() ?? "";
+
+const validateProofFile = (file: File | null) => {
+  if (!file) {
+    return "Upload a payment proof file.";
+  }
+
+  const extension = getFileExtension(file.name);
+  if (
+    !ACCEPTED_PROOF_MIME_TYPES.has(file.type) ||
+    !ACCEPTED_PROOF_EXTENSIONS.has(extension)
+  ) {
+    return "Upload only JPG, JPEG, PNG, or PDF payment proof.";
+  }
+
+  if (file.size > MAX_PROOF_SIZE_BYTES) {
+    return "File exceeds 5MB limit";
+  }
+
+  return null;
+};
+
 export default function PaymentAccessClient({
   userName,
   userEmail,
@@ -132,12 +191,18 @@ export default function PaymentAccessClient({
     searchParams.get("cycle") === "yearly" ? "yearly" : "monthly",
   );
   const [name, setName] = useState(userName);
+  const [mobileNumber, setMobileNumber] = useState("");
   const [utr, setUtr] = useState("");
   const [screenshot, setScreenshot] = useState<File | null>(null);
+  const [manualErrors, setManualErrors] = useState<ManualPaymentErrors>({});
   const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [banner, setBanner] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [comparePlansOpen, setComparePlansOpen] = useState(false);
+  const [selectedPaymentMode, setSelectedPaymentMode] = useState<
+    "razorpay" | "upi"
+  >("razorpay");
   const [isLoading, startLoadingTransition] = useTransition();
   const [isPaying, startPaymentTransition] = useTransition();
   const [isSubmittingUpi, startUpiTransition] = useTransition();
@@ -209,6 +274,21 @@ export default function PaymentAccessClient({
     () => statusData?.plans.find((plan) => plan.id === selectedPlanId) ?? null,
     [selectedPlanId, statusData],
   );
+  const monthlyAmount = selectedPlan?.amounts.monthly ?? 0;
+  const yearlyAmount = selectedPlan?.amounts.yearly ?? 0;
+  const selectedAmount = selectedPlan?.amounts[billingCycle] ?? 0;
+  const yearlySavingsPercent =
+    monthlyAmount > 0 && yearlyAmount > 0
+      ? Math.max(0, Math.round((1 - yearlyAmount / (monthlyAmount * 12)) * 100))
+      : 0;
+  const gstAmount = 0;
+  const finalPayableAmount = selectedAmount + gstAmount;
+  const hasActiveSubscription = Boolean(statusData?.hasAccess);
+  const canStartPayment = Boolean(
+    selectedPlan &&
+      statusData?.businessProfileCompleted !== false &&
+      !hasActiveSubscription,
+  );
   const selectedPlanPaymentHistory = useMemo(
     () =>
       statusData?.payments.filter(
@@ -228,6 +308,19 @@ export default function PaymentAccessClient({
 
   const currentStatus = statusData?.activePayment?.status ?? statusData?.payments[0]?.status ?? "none";
   const currentStatusMeta = statusMeta[currentStatus];
+  const normalizedUtr = utr.trim().toUpperCase();
+  const duplicateUtrPayment = useMemo(
+    () =>
+      normalizedUtr
+        ? statusData?.payments.find(
+            (payment) =>
+              payment.method === "upi" &&
+              payment.status !== "rejected" &&
+              payment.utr?.toUpperCase() === normalizedUtr,
+          )
+        : undefined,
+    [normalizedUtr, statusData?.payments],
+  );
   const selectedUpiLink = selectedPlan?.upiLink[billingCycle] ?? "";
   const qrCodeUrl = selectedUpiLink
     ? `https://quickchart.io/qr?size=220&text=${encodeURIComponent(selectedUpiLink)}`
@@ -237,24 +330,76 @@ export default function PaymentAccessClient({
     try {
       await navigator.clipboard.writeText(value);
       setBanner(message);
+      toast.success(message);
     } catch {
       setError("Clipboard access failed. Copy it manually.");
+      toast.error("Clipboard access failed. Copy it manually.");
     }
   };
 
+  const validateManualPayment = () => {
+    const nextErrors: ManualPaymentErrors = {};
+    const trimmedName = name.trim();
+    const normalizedMobile = mobileNumber.replace(/\D/g, "");
+    const proofError = validateProofFile(screenshot);
+
+    if (!trimmedName) {
+      nextErrors.name = "Full name is required.";
+    } else if (trimmedName.length < 3) {
+      nextErrors.name = "Full name must be at least 3 characters.";
+    }
+
+    if (!/^\d{10}$/.test(normalizedMobile)) {
+      nextErrors.mobileNumber = "Enter a valid Indian 10 digit mobile number.";
+    }
+
+    if (!normalizedUtr) {
+      nextErrors.utr = "UTR number is required.";
+    } else if (!/^[A-Z0-9]{8,30}$/.test(normalizedUtr)) {
+      nextErrors.utr =
+        "UTR must be 8 to 30 uppercase letters and numbers only.";
+    } else if (duplicateUtrPayment) {
+      nextErrors.utr = "This UTR number has already been submitted.";
+    }
+
+    if (proofError) {
+      nextErrors.paymentProof = proofError;
+    }
+
+    setManualErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
   const handleRazorpayPayment = () => {
+    setSelectedPaymentMode("razorpay");
+
     if (!statusData?.razorpay.enabled || !statusData.razorpay.keyId) {
       setError("Razorpay is not configured yet.");
+      toast.error("Razorpay is not configured yet.");
       return;
     }
 
     if (!selectedPlan) {
       setError("Select a plan before starting payment.");
+      toast.error("Select a plan before starting payment.");
+      return;
+    }
+
+    if (statusData?.businessProfileCompleted === false) {
+      setError("Complete your business profile before starting payment.");
+      toast.error("Complete your business profile before starting payment.");
+      return;
+    }
+
+    if (hasActiveSubscription) {
+      setError("You already have an active paid subscription.");
+      toast.info("You already have an active paid subscription.");
       return;
     }
 
     if (!window.Razorpay) {
       setError("Razorpay checkout is still loading. Try again in a moment.");
+      toast.error("Razorpay checkout is still loading. Try again in a moment.");
       return;
     }
 
@@ -263,6 +408,7 @@ export default function PaymentAccessClient({
 
     if (!razorpayKey) {
       setError("Razorpay is not configured yet.");
+      toast.error("Razorpay is not configured yet.");
       return;
     }
 
@@ -295,6 +441,7 @@ export default function PaymentAccessClient({
               await verifyAccessRazorpayPayment(response);
               await syncBillingQueries();
               setBanner("Razorpay payment verified and access unlocked.");
+              toast.success("Razorpay payment verified and access unlocked.");
               loadStatus();
               router.refresh();
             },
@@ -302,33 +449,59 @@ export default function PaymentAccessClient({
 
           razorpay.on?.("payment.failed", () => {
             setError("Razorpay reported a failed payment. Please try again.");
+            toast.error("Razorpay reported a failed payment. Please try again.");
           });
 
           razorpay.open();
         } catch (paymentError) {
-          setError(
-            paymentError instanceof Error
-              ? paymentError.message
-              : "Unable to start Razorpay checkout.",
+          const message = getApiErrorMessage(
+            paymentError,
+            "Unable to start Razorpay checkout.",
           );
+          setError(message);
+          toast.error(message);
         }
       })();
     });
   };
 
   const handleUpiSubmit = () => {
+    setSelectedPaymentMode("upi");
+
     if (!selectedPlan) {
       setError("Select a plan before submitting UPI proof.");
+      toast.error("Select a plan before submitting UPI proof.");
       return;
     }
 
-    if (!screenshot) {
-      setError("Upload a payment proof file before submitting.");
+    if (statusData?.businessProfileCompleted === false) {
+      setError("Complete your business profile before uploading proof.");
+      toast.error("Complete your business profile before uploading proof.");
+      return;
+    }
+
+    if (hasActiveSubscription) {
+      setError("You already have an active paid subscription.");
+      toast.info("You already have an active paid subscription.");
+      return;
+    }
+
+    if (!validateManualPayment()) {
+      setError("Fix the highlighted payment proof details before submitting.");
+      toast.error("Fix the highlighted payment proof details before submitting.");
       return;
     }
 
     if (selectedPendingManualPayment) {
       setError("A payment proof for this plan is already pending review.");
+      toast.error("A payment proof for this plan is already pending review.");
+      return;
+    }
+
+    const proofFile = screenshot;
+    if (!proofFile) {
+      setError("Upload a payment proof file before submitting.");
+      toast.error("Upload a payment proof file before submitting.");
       return;
     }
 
@@ -348,9 +521,10 @@ export default function PaymentAccessClient({
                 {
                   planId: selectedPlan.id,
                   billingCycle,
-                  name,
-                  utr,
-                  paymentProof: screenshot,
+                  name: name.trim(),
+                  mobileNumber: mobileNumber.replace(/\D/g, ""),
+                  utr: normalizedUtr,
+                  paymentProof: proofFile,
                 },
                 {
                   onUploadProgress: (progressPercent) =>
@@ -378,16 +552,20 @@ export default function PaymentAccessClient({
           }
 
           setBanner("Proof uploaded. Awaiting approval.");
+          toast.success("Proof uploaded. Awaiting approval.");
           setUtr("");
+          setMobileNumber("");
           setScreenshot(null);
+          setManualErrors({});
           setUploadProgress(100);
           loadStatus();
         } catch (submitError) {
-          setError(
-            submitError instanceof Error
-              ? submitError.message
-              : "Unable to upload payment proof.",
+          const message = getApiErrorMessage(
+            submitError,
+            "Unable to upload payment proof.",
           );
+          setError(message);
+          toast.error(message);
           setUploadProgress(0);
         }
       })();
@@ -429,22 +607,37 @@ export default function PaymentAccessClient({
                 <ShieldCheck className="mr-1 size-3.5" />
                 {currentStatusMeta.label}
               </Badge>
+              <Button asChild variant="secondary" className="bg-white text-slate-950 hover:bg-blue-50">
+                <Link href="/pricing">
+                  Need help?
+                  <ExternalLink className="size-4" />
+                </Link>
+              </Button>
             </div>
           </CardHeader>
 
           <CardContent className="grid gap-4 md:grid-cols-3">
             <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
-              <p className="text-sm text-blue-100/76">Access state</p>
+              <p className="text-sm text-blue-100/76">Selected plan</p>
               <p className="mt-2 text-2xl font-semibold">
-                {statusData?.hasAccess ? "Unlocked" : "Awaiting payment"}
+                {selectedPlan?.name ?? "Loading..."}
               </p>
               <p className="mt-2 text-sm text-blue-50/82">
-                Verified states are <span className="font-semibold">approved</span> or{" "}
-                <span className="font-semibold">success</span>.
+                {billingCycle === "yearly" ? "Yearly" : "Monthly"} billing,{" "}
+                {selectedPlan ? formatCurrency(finalPayableAmount) : "amount loading"}.
               </p>
             </div>
             <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
-              <p className="text-sm text-blue-100/76">Latest update</p>
+              <p className="text-sm text-blue-100/76">Current payment status</p>
+              <p className="mt-2 text-lg font-semibold">
+                {currentStatusMeta.label}
+              </p>
+              <p className="mt-2 text-sm text-blue-50/82">
+                {statusData?.hasAccess ? "Workspace access is unlocked." : "Pending, approved, rejected, and paid states appear here."}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
+              <p className="text-sm text-blue-100/76">Last updated</p>
               <p className="mt-2 text-lg font-semibold">
                 {statusData?.payments[0]
                   ? formatDateTime(statusData.payments[0].updatedAt)
@@ -455,19 +648,6 @@ export default function PaymentAccessClient({
                   ? "Manual UPI entries stay pending until reviewed."
                   : "Razorpay records become active right after backend verification."}
               </p>
-            </div>
-            <div className="rounded-2xl border border-white/15 bg-white/10 p-4">
-              <p className="text-sm text-blue-100/76">Need help?</p>
-              <p className="mt-2 text-lg font-semibold">Compare plans first</p>
-              <p className="mt-2 text-sm text-blue-50/82">
-                You can review feature differences anytime before paying.
-              </p>
-              <Button asChild variant="secondary" className="mt-4 bg-white text-slate-950 hover:bg-blue-50">
-                <Link href="/pricing">
-                  Open pricing
-                  <ExternalLink className="size-4" />
-                </Link>
-              </Button>
             </div>
           </CardContent>
         </Card>
@@ -501,12 +681,17 @@ export default function PaymentAccessClient({
                     <button
                       key={plan.id}
                       type="button"
-                      onClick={() => setSelectedPlanId(plan.id)}
+                      onClick={() => {
+                        if (!hasActiveSubscription) {
+                          setSelectedPlanId(plan.id);
+                        }
+                      }}
+                      disabled={hasActiveSubscription}
                       className={`rounded-3xl border p-5 text-left transition ${
                         selected
                           ? "border-blue-600 bg-blue-50 shadow-[0_18px_40px_-28px_rgba(37,99,235,0.55)]"
                           : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"
-                      }`}
+                      } ${hasActiveSubscription ? "cursor-not-allowed opacity-60" : ""}`}
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div>
@@ -518,7 +703,11 @@ export default function PaymentAccessClient({
                           </h3>
                         </div>
                         <Badge variant={selected ? "paid" : "default"}>
-                          {selected ? "Selected" : "Choose"}
+                          {hasActiveSubscription
+                            ? "Subscribed"
+                            : selected
+                              ? "Selected"
+                              : "Choose"}
                         </Badge>
                       </div>
                       <p className="mt-3 text-sm leading-6 text-slate-600">
@@ -545,10 +734,20 @@ export default function PaymentAccessClient({
                     type="button"
                     variant={billingCycle === cycle ? "default" : "outline"}
                     onClick={() => setBillingCycle(cycle)}
+                    disabled={hasActiveSubscription}
                   >
-                    {cycle === "monthly" ? "Monthly billing" : "Yearly billing"}
+                    {cycle === "monthly"
+                      ? "Monthly billing"
+                      : `Yearly billing${yearlySavingsPercent ? ` - save ${yearlySavingsPercent}%` : ""}`}
                   </Button>
                 ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setComparePlansOpen(true)}
+                >
+                  Compare features
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -569,16 +768,58 @@ export default function PaymentAccessClient({
                 </p>
                 <p className="mt-1 text-sm text-slate-600">
                   {billingCycle === "monthly" ? "Monthly" : "Yearly"} charge:{" "}
-                  {selectedPlan ? formatCurrency(selectedPlan.amounts[billingCycle]) : "N/A"}
+                  {selectedPlan ? formatCurrency(selectedAmount) : "N/A"}
                 </p>
               </div>
+
+              <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-slate-500">GST</span>
+                  <span className="font-medium text-slate-900">
+                    {gstAmount > 0 ? formatCurrency(gstAmount) : "Included / not applied"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-slate-500">Billing cycle</span>
+                  <span className="font-medium capitalize text-slate-900">
+                    {billingCycle}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-slate-500">Payment mode</span>
+                  <span className="font-medium text-slate-900">
+                    {selectedPaymentMode === "razorpay" ? "Razorpay" : "Manual UPI"}
+                  </span>
+                </div>
+                <div className="border-t border-slate-200 pt-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-semibold text-slate-950">Final payable</span>
+                    <span className="text-xl font-semibold text-slate-950">
+                      {formatCurrency(finalPayableAmount)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {statusData?.businessProfileCompleted === false ? (
+                <div className="flex gap-2 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                  Complete your business profile before starting a billing payment.
+                </div>
+              ) : null}
+
+              {hasActiveSubscription ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+                  Your paid subscription is already active. New payments are disabled.
+                </div>
+              ) : null}
 
               <Button
                 type="button"
                 className="w-full"
                 size="lg"
                 onClick={handleRazorpayPayment}
-                disabled={isPaying || isLoading || !selectedPlan}
+                disabled={isPaying || isLoading || !canStartPayment}
               >
                 <CreditCard className="size-4" />
                 {isPaying ? "Starting Razorpay..." : "Pay with Razorpay"}
@@ -634,17 +875,18 @@ export default function PaymentAccessClient({
                       variant="outline"
                       onClick={() =>
                         statusData?.upi.upiId
-                          ? void copyToClipboard(
+                          ? (setSelectedPaymentMode("upi"),
+                            void copyToClipboard(
                               statusData.upi.upiId,
                               "UPI ID copied to clipboard.",
-                            )
+                            ))
                           : undefined
                       }
                     >
                       <Copy className="size-4" />
                       Copy UPI ID
                     </Button>
-                    <Button asChild>
+                    <Button asChild onClick={() => setSelectedPaymentMode("upi")}>
                       <a href={selectedUpiLink}>
                         <ExternalLink className="size-4" />
                         Open UPI app
@@ -696,10 +938,49 @@ export default function PaymentAccessClient({
                     <Input
                       id="manual-upi-name"
                       value={name}
-                      onChange={(event) => setName(event.target.value)}
+                      onChange={(event) => {
+                        setName(event.target.value);
+                        setManualErrors((current) => ({
+                          ...current,
+                          name: undefined,
+                        }));
+                      }}
                       className="mt-2"
                       placeholder="Enter the payer name"
                     />
+                    {manualErrors.name ? (
+                      <p className="mt-2 text-xs font-medium text-red-600">
+                        {manualErrors.name}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-800" htmlFor="manual-upi-mobile">
+                      Mobile number
+                    </label>
+                    <Input
+                      id="manual-upi-mobile"
+                      value={mobileNumber}
+                      inputMode="numeric"
+                      maxLength={10}
+                      onChange={(event) => {
+                        setMobileNumber(
+                          event.target.value.replace(/\D/g, "").slice(0, 10),
+                        );
+                        setManualErrors((current) => ({
+                          ...current,
+                          mobileNumber: undefined,
+                        }));
+                      }}
+                      className="mt-2"
+                      placeholder="10 digit mobile number"
+                    />
+                    {manualErrors.mobileNumber ? (
+                      <p className="mt-2 text-xs font-medium text-red-600">
+                        {manualErrors.mobileNumber}
+                      </p>
+                    ) : null}
                   </div>
 
                   <div>
@@ -709,10 +990,41 @@ export default function PaymentAccessClient({
                     <Input
                       id="manual-upi-utr"
                       value={utr}
-                      onChange={(event) => setUtr(event.target.value.toUpperCase())}
+                      onChange={(event) => {
+                        setUtr(
+                          event.target.value
+                            .replace(/[^a-z0-9]/gi, "")
+                            .toUpperCase()
+                            .slice(0, 30),
+                        );
+                        setManualErrors((current) => ({
+                          ...current,
+                          utr: undefined,
+                        }));
+                      }}
                       className="mt-2"
                       placeholder="Example: 1234ABCD5678"
                     />
+                    {manualErrors.utr ? (
+                      <p className="mt-2 text-xs font-medium text-red-600">
+                        {manualErrors.utr}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="grid gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-2">
+                    <div>
+                      <p className="text-slate-500">Selected plan</p>
+                      <p className="mt-1 font-semibold text-slate-950">
+                        {selectedPlan?.name ?? "Select a plan"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500">Amount</p>
+                      <p className="mt-1 font-semibold text-slate-950">
+                        {formatCurrency(finalPayableAmount)}
+                      </p>
+                    </div>
                   </div>
 
                   <div>
@@ -726,12 +1038,37 @@ export default function PaymentAccessClient({
                       className="mt-2"
                       onChange={(event) => {
                         setUploadProgress(0);
-                        setScreenshot(event.target.files?.[0] ?? null);
+                        const nextFile = event.target.files?.[0] ?? null;
+                        const validationError = validateProofFile(nextFile);
+
+                        if (validationError) {
+                          setScreenshot(null);
+                          setManualErrors((current) => ({
+                            ...current,
+                            paymentProof: validationError,
+                          }));
+                          if (nextFile) {
+                            toast.error(validationError);
+                          }
+                          event.target.value = "";
+                          return;
+                        }
+
+                        setManualErrors((current) => ({
+                          ...current,
+                          paymentProof: undefined,
+                        }));
+                        setScreenshot(nextFile);
                       }}
                     />
                     <p className="mt-2 text-xs text-slate-500">
                       Required. Upload JPG, JPEG, PNG, or PDF up to 5 MB.
                     </p>
+                    {manualErrors.paymentProof ? (
+                      <p className="mt-2 text-xs font-medium text-red-600">
+                        {manualErrors.paymentProof}
+                      </p>
+                    ) : null}
                   </div>
 
                   {screenshot ? (
@@ -751,6 +1088,11 @@ export default function PaymentAccessClient({
                           alt="Payment proof preview"
                           className="mt-3 max-h-52 rounded-2xl border border-slate-200 object-contain"
                         />
+                      ) : screenshot.type === "application/pdf" ? (
+                        <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                          <FileText className="size-4" />
+                          PDF proof selected
+                        </div>
                       ) : (
                         <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-600">
                           <FileText className="size-4" />
@@ -781,7 +1123,7 @@ export default function PaymentAccessClient({
                     onClick={handleUpiSubmit}
                     disabled={
                       isSubmittingUpi ||
-                      !selectedPlan ||
+                      !canStartPayment ||
                       !screenshot ||
                       Boolean(selectedPendingManualPayment)
                     }
@@ -916,6 +1258,38 @@ export default function PaymentAccessClient({
           </CardContent>
         </Card>
       </div>
+
+      <Modal
+        open={comparePlansOpen}
+        onOpenChange={setComparePlansOpen}
+        title="Compare paid plans"
+        description="Review the main access differences before choosing a billing cycle."
+        contentClassName="max-w-3xl"
+      >
+        <div className="overflow-hidden rounded-2xl border border-slate-200">
+          <div className="grid grid-cols-[1.1fr_1fr_1fr] bg-slate-50 text-sm font-semibold text-slate-700">
+            <div className="p-3">Feature</div>
+            <div className="p-3">Pro</div>
+            <div className="p-3">Pro Plus</div>
+          </div>
+          {[
+            ["Invoices", "Unlimited", "Unlimited"],
+            ["Worker management", "Included", "Included"],
+            ["Analytics", "Standard", "Advanced"],
+            ["Exports", "Basic", "Advanced"],
+            ["Operational controls", "Core controls", "Premium controls"],
+          ].map(([feature, pro, proPlus]) => (
+            <div
+              key={feature}
+              className="grid grid-cols-[1.1fr_1fr_1fr] border-t border-slate-200 text-sm"
+            >
+              <div className="p-3 font-medium text-slate-900">{feature}</div>
+              <div className="p-3 text-slate-600">{pro}</div>
+              <div className="p-3 text-slate-600">{proPlus}</div>
+            </div>
+          ))}
+        </div>
+      </Modal>
     </>
   );
 }

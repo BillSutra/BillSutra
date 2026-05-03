@@ -181,6 +181,37 @@ const setAdminSessionCache = (user: AdminSessionUser) => {
   };
 };
 
+const normalizeAdminSessionUser = (value: unknown): AdminSessionUser | null => {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const record = value as {
+    id?: unknown;
+    adminId?: unknown;
+    email?: unknown;
+    role?: unknown;
+  };
+  const adminId =
+    typeof record.adminId === "string"
+      ? record.adminId
+      : typeof record.id === "string"
+        ? record.id
+        : "";
+  const email = typeof record.email === "string" ? record.email : "";
+  const role = typeof record.role === "string" ? record.role.toLowerCase() : "";
+
+  if (!adminId || !email || (role !== "super_admin" && role !== "admin")) {
+    return null;
+  }
+
+  return {
+    adminId,
+    email,
+    role: "SUPER_ADMIN",
+  };
+};
+
 const shouldUseCachedAdminSession = () =>
   !!adminSessionCache &&
   Date.now() - adminSessionCache.cachedAt < ADMIN_SESSION_CACHE_TTL_MS;
@@ -205,7 +236,7 @@ const refreshAdminSession = async () => {
       try {
         const csrfHeaders = await buildRequiredCsrfHeaders();
         const response = await axios.post(
-          `${API_URL}/admin/refresh`,
+          `${API_URL}/auth/refresh`,
           {},
           {
             withCredentials: true,
@@ -213,7 +244,7 @@ const refreshAdminSession = async () => {
           },
         );
 
-        const nextUser = response.data?.data?.user as AdminSessionUser | undefined;
+        const nextUser = normalizeAdminSessionUser(response.data?.data?.user);
         if (nextUser) {
           setAdminSessionCache(nextUser);
         }
@@ -340,10 +371,15 @@ export const fetchAdminSession = async (options?: AdminRequestOptions) => {
   const request = getAdmin<{
     user: AdminSessionUser;
     expiresAt?: number;
-  }>("/admin/session", options)
+  }>("/auth/session", options)
     .then((data) => {
-      setAdminSessionCache(data.user);
-      return data.user;
+      const user = normalizeAdminSessionUser(data.user);
+      if (!user) {
+        throw new Error("Unauthorized");
+      }
+
+      setAdminSessionCache(user);
+      return user;
     })
     .finally(() => {
       if (adminSessionRequestInFlight === request) {

@@ -1,14 +1,19 @@
 import type { Request, Response } from "express";
 import { sendResponse } from "../utils/sendResponse.js";
 import {
+  countUnreadWorkerNotifications,
   countUnreadNotifications,
   deleteNotification,
+  deleteWorkerNotification,
   invalidateNotificationCaches,
   listNotifications,
+  listWorkerNotifications,
   markAllNotificationsAsRead,
+  markAllWorkerNotificationsAsRead,
   serializeNotification,
   syncNotificationsIfStale,
   updateNotificationReadState,
+  updateWorkerNotificationReadState,
 } from "../services/notification.service.js";
 import type { AppNotificationType } from "../services/notification.service.js";
 import { measureRequestPhase } from "../lib/requestPerformance.js";
@@ -38,14 +43,7 @@ const NOTIFICATIONS_CACHE_SWR_SECONDS = Math.max(
 );
 
 class NotificationsController {
-  static async index(req: Request, res: Response) {
-    const userId = req.user?.id;
-    const businessId = req.user?.businessId?.trim();
-
-    if (!userId || !businessId) {
-      return sendResponse(res, 401, { message: "Unauthorized" });
-    }
-
+  private static parseListQuery(req: Request) {
     const limitRaw =
       typeof req.query.limit === "string" ? Number(req.query.limit) : 10;
     const pageRaw =
@@ -65,6 +63,56 @@ class NotificationsController {
             ? false
             : null
           : null;
+
+    return { limit, page, type, isRead };
+  }
+
+  private static resolveWorkerScope(req: Request, res: Response) {
+    const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
+    const workerId = req.user?.workerId?.trim();
+
+    if (!userId || !businessId) {
+      sendResponse(res, 401, { message: "Unauthorized" });
+      return null;
+    }
+
+    if (req.user?.accountType !== "WORKER") {
+      sendResponse(res, 403, { message: "Worker access required" });
+      return null;
+    }
+
+    if (!workerId) {
+      sendResponse(res, 401, {
+        message: "Worker session is missing worker identity. Please login again.",
+        code: "WORKER_ID_MISSING",
+      });
+      return null;
+    }
+
+    return { userId, businessId, workerId };
+  }
+
+  static async index(req: Request, res: Response) {
+    const userId = req.user?.id;
+    const businessId = req.user?.businessId?.trim();
+
+    if (!userId || !businessId) {
+      return sendResponse(res, 401, { message: "Unauthorized" });
+    }
+
+    console.info("[notifications] request_context", {
+      route: "/api/notifications",
+      accountType: req.user?.accountType,
+      role: req.user?.role,
+      workerId: req.user?.workerId ?? null,
+    });
+
+    if (req.user?.accountType === "WORKER") {
+      return NotificationsController.workerIndex(req, res);
+    }
+
+    const { limit, page, type, isRead } = NotificationsController.parseListQuery(req);
 
     return respondWithRedisCachedData({
       req,
@@ -130,6 +178,71 @@ class NotificationsController {
     });
   }
 
+  static async workerIndex(req: Request, res: Response) {
+    const scope = NotificationsController.resolveWorkerScope(req, res);
+    if (!scope) {
+      return;
+    }
+
+    const { limit, page, type, isRead } = NotificationsController.parseListQuery(req);
+
+    console.info("[notifications] request_context", {
+      route: req.path,
+      accountType: req.user?.accountType,
+      role: req.user?.role,
+      workerId: scope.workerId,
+    });
+
+    return respondWithRedisCachedData({
+      req,
+      res,
+      key: buildNotificationsRedisKey({
+        businessId: scope.businessId,
+        userId: scope.userId,
+        workerId: scope.workerId,
+        page,
+        limit,
+        type,
+        isRead,
+      }),
+      label: "worker_notifications",
+      ttlSeconds: NOTIFICATIONS_CACHE_TTL_SECONDS,
+      staleWhileRevalidateSeconds: NOTIFICATIONS_CACHE_SWR_SECONDS,
+      invalidationPrefixes: [
+        buildNotificationsCachePrefix({
+          businessId: scope.businessId,
+          userId: scope.userId,
+        }),
+      ],
+      resolver: async () => {
+        const [notificationResult, unreadCount] = await measureRequestPhase(
+          "notifications.db.worker_index",
+          () =>
+            Promise.all([
+              listWorkerNotifications({
+                userId: scope.userId,
+                businessId: scope.businessId,
+                workerId: scope.workerId,
+                page,
+                limit,
+                type,
+                isRead,
+              }),
+              countUnreadWorkerNotifications(scope),
+            ]),
+        );
+
+        return measureRequestPhase("notifications.serialize.worker_index", async () => ({
+          notifications: notificationResult.notifications.map(serializeNotification),
+          unreadCount,
+          total: notificationResult.total,
+          page: notificationResult.page,
+          limit: notificationResult.limit,
+        }));
+      },
+    });
+  }
+
   static async markRead(req: Request, res: Response) {
     const userId = req.user?.id;
     const id = typeof req.params.id === "string" ? req.params.id.trim() : "";
@@ -159,6 +272,39 @@ class NotificationsController {
     });
   }
 
+  static async workerMarkRead(req: Request, res: Response) {
+    const scope = NotificationsController.resolveWorkerScope(req, res);
+    const id = typeof req.params.id === "string" ? req.params.id.trim() : "";
+
+    if (!scope) {
+      return;
+    }
+
+    if (!id) {
+      return sendResponse(res, 422, { message: "Notification id is required" });
+    }
+
+    const isRead =
+      typeof req.body?.isRead === "boolean" ? req.body.isRead : true;
+    const updated = await updateWorkerNotificationReadState({
+      ...scope,
+      id,
+      isRead,
+    });
+
+    if (!updated) {
+      return sendResponse(res, 404, { message: "Notification not found" });
+    }
+    void invalidateNotificationCaches(scope.businessId, scope.userId);
+
+    return sendResponse(res, 200, {
+      message: isRead
+        ? "Notification marked as read"
+        : "Notification marked as unread",
+      data: serializeNotification(updated),
+    });
+  }
+
   static async markAllRead(req: Request, res: Response) {
     const userId = req.user?.id;
 
@@ -168,6 +314,17 @@ class NotificationsController {
 
     await markAllNotificationsAsRead(userId);
     void invalidateNotificationCaches(req.user?.businessId?.trim(), userId);
+    return sendResponse(res, 200, { message: "All notifications marked as read" });
+  }
+
+  static async workerMarkAllRead(req: Request, res: Response) {
+    const scope = NotificationsController.resolveWorkerScope(req, res);
+    if (!scope) {
+      return;
+    }
+
+    await markAllWorkerNotificationsAsRead(scope);
+    void invalidateNotificationCaches(scope.businessId, scope.userId);
     return sendResponse(res, 200, { message: "All notifications marked as read" });
   }
 
@@ -188,6 +345,27 @@ class NotificationsController {
       return sendResponse(res, 404, { message: "Notification not found" });
     }
     void invalidateNotificationCaches(req.user?.businessId?.trim(), userId);
+
+    return sendResponse(res, 200, { message: "Notification deleted" });
+  }
+
+  static async workerDestroy(req: Request, res: Response) {
+    const scope = NotificationsController.resolveWorkerScope(req, res);
+    const id = typeof req.params.id === "string" ? req.params.id.trim() : "";
+
+    if (!scope) {
+      return;
+    }
+
+    if (!id) {
+      return sendResponse(res, 422, { message: "Notification id is required" });
+    }
+
+    const deleted = await deleteWorkerNotification({ ...scope, id });
+    if (!deleted.count) {
+      return sendResponse(res, 404, { message: "Notification not found" });
+    }
+    void invalidateNotificationCaches(scope.businessId, scope.userId);
 
     return sendResponse(res, 200, { message: "Notification deleted" });
   }

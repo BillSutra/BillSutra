@@ -9,6 +9,7 @@ import {
   ensureFreshSecureAuthSessionDetailed,
   getSecureAuthExpiresAt,
   hasSecureAuthBootstrap,
+  isAuthLoginInProgress,
   isSecureAuthEnabled,
   logClientAuthEvent,
 } from "@/lib/secureAuth";
@@ -81,6 +82,10 @@ const AuthSessionGuard = () => {
 
   useEffect(() => {
     if (status === "unauthenticated") {
+      if (isAuthLoginInProgress()) {
+        return undefined;
+      }
+
       clearClientAuthState();
       return undefined;
     }
@@ -116,7 +121,11 @@ const AuthSessionGuard = () => {
             return;
           }
 
-          if (!result.ok && result.reason === "auth_invalid") {
+          if (
+            !result.ok &&
+            result.reason === "auth_invalid" &&
+            !isAuthLoginInProgress()
+          ) {
             void performLogout("401_refresh_failed");
             return;
           }
