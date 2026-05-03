@@ -35,9 +35,18 @@ type RegisterProps = {
   autoFocusFirstField?: boolean;
 };
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const INDIAN_PHONE_REGEX = /^(?:\+91|91)?[6-9]\d{9}$/;
-const SPECIAL_CHARACTER_REGEX = /[@$!%*?&]/;
+const EMAIL_REGEX = /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i;
+const FULL_NAME_REGEX = /^[\p{L}\p{M} .'-]+$/u;
+const ALPHABET_REGEX = /\p{L}/u;
+const INDIAN_PHONE_REGEX = /^[6-9]\d{9}$/;
+const SPECIAL_CHARACTER_REGEX = /[^A-Za-z0-9\s]/;
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  "10minutemail.com",
+  "guerrillamail.com",
+  "mailinator.com",
+  "tempmail.com",
+  "yopmail.com",
+]);
 const COMMON_BREACHED_PASSWORDS = new Set([
   "123456",
   "1234567",
@@ -51,15 +60,31 @@ const COMMON_BREACHED_PASSWORDS = new Set([
   "qwerty123",
   "admin",
   "admin123",
+  "bill1234",
+  "billsutra",
   "letmein",
   "welcome",
   "welcome123",
   "iloveyou",
+  "111111",
+  "000000",
 ]);
 
-const normalizePhone = (value: string) => value.replace(/[^\d+]/g, "");
+const sanitizeName = (value: string) => value.trim();
+const sanitizeEmail = (value: string) => value.trim().toLowerCase();
+const normalizePhone = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 12 && digits.startsWith("91")
+    ? digits.slice(2)
+    : digits;
+};
 const isCommonBreachedPassword = (value: string) =>
   COMMON_BREACHED_PASSWORDS.has(value.toLowerCase().replace(/\s+/g, ""));
+
+const getEmailDomain = (value: string) => {
+  const [, domain = ""] = sanitizeEmail(value).split("@");
+  return domain;
+};
 
 const asErrorText = (value: unknown) => {
   if (Array.isArray(value)) {
@@ -106,6 +131,10 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
         met: password.length >= 8,
       },
       {
+        label: "Maximum 64 characters",
+        met: password.length > 0 && password.length <= 64,
+      },
+      {
         label: "At least 1 uppercase letter",
         met: /[A-Z]/.test(password),
       },
@@ -122,8 +151,12 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
         met: SPECIAL_CHARACTER_REGEX.test(password),
       },
       {
+        label: "No spaces",
+        met: password.length > 0 && !/\s/.test(password),
+      },
+      {
         label: "Not a common breached password",
-        met: !isCommonBreachedPassword(password),
+        met: password.length > 0 && !isCommonBreachedPassword(password),
       },
     ],
     [password],
@@ -158,23 +191,32 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
   const isPasswordStrong = passwordChecks.every((rule) => rule.met);
 
   const validateName = (value: string) => {
-    if (!value.trim()) {
-      return "Enter your full name.";
-    }
+    const trimmed = sanitizeName(value);
 
-    if (value.trim().length < 2) {
-      return "Name should have at least 2 characters.";
+    if (
+      !trimmed ||
+      trimmed.length < 2 ||
+      trimmed.length > 50 ||
+      /\s{2,}/.test(trimmed) ||
+      !FULL_NAME_REGEX.test(trimmed) ||
+      !ALPHABET_REGEX.test(trimmed)
+    ) {
+      return "Enter a valid full name.";
     }
 
     return "";
   };
 
   const validateEmail = (value: string) => {
-    if (!value.trim()) {
-      return "Enter your email.";
-    }
+    const normalized = sanitizeEmail(value);
+    const domain = getEmailDomain(normalized);
 
-    if (!EMAIL_REGEX.test(value.trim())) {
+    if (
+      !normalized ||
+      normalized.length > 100 ||
+      !EMAIL_REGEX.test(normalized) ||
+      DISPOSABLE_EMAIL_DOMAINS.has(domain)
+    ) {
       return "Enter a valid email address.";
     }
 
@@ -182,51 +224,28 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
   };
 
   const validatePhone = (value: string) => {
-    if (!value.trim()) {
-      return "Enter your phone number.";
-    }
+    const normalized = normalizePhone(value);
 
-    if (!INDIAN_PHONE_REGEX.test(normalizePhone(value))) {
-      return "Enter a valid Indian phone number.";
+    if (!INDIAN_PHONE_REGEX.test(normalized)) {
+      return "Enter a valid 10-digit mobile number.";
     }
 
     return "";
   };
 
   const validatePassword = (value: string) => {
-    if (!value.trim()) {
-      return "Create a password.";
-    }
-
-    const firstUnmetRule = [
-      {
-        test: value.length >= 8,
-        message: "Minimum 8 characters",
-      },
-      {
-        test: /[A-Z]/.test(value),
-        message: "Must include uppercase letter",
-      },
-      {
-        test: /[a-z]/.test(value),
-        message: "Must include lowercase letter",
-      },
-      {
-        test: /\d/.test(value),
-        message: "Must include number",
-      },
-      {
-        test: SPECIAL_CHARACTER_REGEX.test(value),
-        message: "Must include special character",
-      },
-      {
-        test: !isCommonBreachedPassword(value),
-        message: "Use a unique password not found in common breaches",
-      },
-    ].find((rule) => !rule.test);
-
-    if (firstUnmetRule) {
-      return firstUnmetRule.message;
+    if (
+      !value ||
+      value.length < 8 ||
+      value.length > 64 ||
+      !/[A-Z]/.test(value) ||
+      !/[a-z]/.test(value) ||
+      !/\d/.test(value) ||
+      !SPECIAL_CHARACTER_REGEX.test(value) ||
+      /\s/.test(value) ||
+      isCommonBreachedPassword(value)
+    ) {
+      return "Use a stronger password.";
     }
 
     return "";
@@ -277,12 +296,15 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
       !validateConfirmPassword(confirmPassword, password),
   );
 
+  const serverFieldErrors = state.errors as Partial<
+    Record<"name" | "email" | "phone" | "password" | "confirm_password", unknown>
+  >;
   const serverErrors = {
-    name: asErrorText(state.errors?.name),
-    email: asErrorText(state.errors?.email),
-    phone: asErrorText(state.errors?.phone),
-    password: asErrorText(state.errors?.password),
-    confirm_password: asErrorText(state.errors?.confirm_password),
+    name: asErrorText(serverFieldErrors.name),
+    email: asErrorText(serverFieldErrors.email),
+    phone: asErrorText(serverFieldErrors.phone),
+    password: asErrorText(serverFieldErrors.password),
+    confirm_password: asErrorText(serverFieldErrors.confirm_password),
   };
 
   useEffect(() => {
@@ -367,6 +389,14 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
   };
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    const form = event.currentTarget;
+    const sanitizedValues = {
+      name: sanitizeName(name),
+      email: sanitizeEmail(email),
+      phone: normalizePhone(phone),
+      password,
+      confirmPassword,
+    };
     const nextTouched = {
       name: true,
       email: true,
@@ -378,11 +408,14 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
     setTouched(nextTouched);
 
     const errors = {
-      name: validateName(name),
-      email: validateEmail(email),
-      phone: validatePhone(phone),
-      password: validatePassword(password),
-      confirm_password: validateConfirmPassword(confirmPassword, password),
+      name: validateName(sanitizedValues.name),
+      email: validateEmail(sanitizedValues.email),
+      phone: validatePhone(sanitizedValues.phone),
+      password: validatePassword(sanitizedValues.password),
+      confirm_password: validateConfirmPassword(
+        sanitizedValues.confirmPassword,
+        sanitizedValues.password,
+      ),
     };
 
     if (
@@ -393,8 +426,26 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
       errors.confirm_password
     ) {
       event.preventDefault();
+      const firstInvalidName =
+        (Object.entries(errors).find(([, error]) => Boolean(error))?.[0] as
+          | string
+          | undefined) ?? "name";
+      const firstInvalidField = form.elements.namedItem(firstInvalidName);
+      if (firstInvalidField instanceof HTMLElement) {
+        firstInvalidField.focus();
+      }
       return;
     }
+
+    setName(sanitizedValues.name);
+    setEmail(sanitizedValues.email);
+    setPhone(sanitizedValues.phone);
+    const nameField = form.elements.namedItem("name");
+    const emailField = form.elements.namedItem("email");
+    const phoneField = form.elements.namedItem("phone");
+    if (nameField instanceof HTMLInputElement) nameField.value = sanitizedValues.name;
+    if (emailField instanceof HTMLInputElement) emailField.value = sanitizedValues.email;
+    if (phoneField instanceof HTMLInputElement) phoneField.value = sanitizedValues.phone;
 
     captureAnalyticsEvent("auth_signup_started", {
       method: "password",
@@ -448,11 +499,18 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           placeholder={t("auth.registerForm.namePlaceholder")}
           type="text"
           value={name}
-          onChange={setName}
-          onBlur={() => setTouched((current) => ({ ...current, name: true }))}
+          onChange={(value) => {
+            setName(value);
+            setTouched((current) => ({ ...current, name: true }));
+          }}
+          onBlur={() => {
+            setName((current) => sanitizeName(current));
+            setTouched((current) => ({ ...current, name: true }));
+          }}
           autoComplete="name"
           autoFocus={autoFocusFirstField}
           error={clientErrors.name || serverErrors.name}
+          valid={!validateName(name)}
           disabled={isRegisterSubmitting}
           leftAdornment={<User2 className="h-4 w-4" />}
         />
@@ -464,10 +522,17 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           placeholder={t("auth.registerForm.emailPlaceholder")}
           type="email"
           value={email}
-          onChange={setEmail}
-          onBlur={() => setTouched((current) => ({ ...current, email: true }))}
+          onChange={(value) => {
+            setEmail(value);
+            setTouched((current) => ({ ...current, email: true }));
+          }}
+          onBlur={() => {
+            setEmail((current) => sanitizeEmail(current));
+            setTouched((current) => ({ ...current, email: true }));
+          }}
           autoComplete="email"
           error={clientErrors.email || serverErrors.email}
+          valid={!validateEmail(email)}
           disabled={isRegisterSubmitting}
           leftAdornment={<Mail className="h-4 w-4" />}
         />
@@ -479,11 +544,18 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           placeholder={t("auth.shared.phonePlaceholder")}
           type="tel"
           value={phone}
-          onChange={setPhone}
-          onBlur={() => setTouched((current) => ({ ...current, phone: true }))}
+          onChange={(value) => {
+            setPhone(value);
+            setTouched((current) => ({ ...current, phone: true }));
+          }}
+          onBlur={() => {
+            setPhone((current) => normalizePhone(current));
+            setTouched((current) => ({ ...current, phone: true }));
+          }}
           autoComplete="tel-national"
           inputMode="tel"
           error={clientErrors.phone || serverErrors.phone}
+          valid={!validatePhone(phone)}
           disabled={isRegisterSubmitting}
           helperText={t("auth.shared.phoneHelper")}
           leftAdornment={<Phone className="h-4 w-4" />}
@@ -496,10 +568,14 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           placeholder={t("auth.registerForm.passwordPlaceholder")}
           type={showPassword ? "text" : "password"}
           value={password}
-          onChange={setPassword}
+          onChange={(value) => {
+            setPassword(value);
+            setTouched((current) => ({ ...current, password: true }));
+          }}
           onBlur={() => setTouched((current) => ({ ...current, password: true }))}
           autoComplete="new-password"
           error={clientErrors.password || serverErrors.password}
+          valid={!validatePassword(password)}
           disabled={isRegisterSubmitting || isCompletingSignup}
           leftAdornment={<LockKeyhole className="h-4 w-4" />}
           rightAdornment={
@@ -565,12 +641,16 @@ const Register = ({ autoFocusFirstField = false }: RegisterProps) => {
           placeholder={t("auth.registerForm.confirmPasswordPlaceholder")}
           type={showConfirmPassword ? "text" : "password"}
           value={confirmPassword}
-          onChange={setConfirmPassword}
+          onChange={(value) => {
+            setConfirmPassword(value);
+            setTouched((current) => ({ ...current, confirmPassword: true }));
+          }}
           onBlur={() =>
             setTouched((current) => ({ ...current, confirmPassword: true }))
           }
           autoComplete="new-password"
           error={clientErrors.confirm_password || serverErrors.confirm_password}
+          valid={!validateConfirmPassword(confirmPassword, password)}
           disabled={isRegisterSubmitting || isCompletingSignup}
           leftAdornment={<LockKeyhole className="h-4 w-4" />}
           rightAdornment={

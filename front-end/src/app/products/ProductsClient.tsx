@@ -2,11 +2,13 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { PackagePlus, Sparkles } from "lucide-react";
+import { Barcode, PackagePlus, ScanLine, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import { isAxiosError } from "axios";
 import BeginnerGuideCard from "@/components/beginner/BeginnerGuideCard";
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import DataExportDialog from "@/components/export/DataExportDialog";
+import BarcodeScannerDialog from "@/components/products/BarcodeScannerDialog";
 import FriendlyEmptyState from "@/components/ui/FriendlyEmptyState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +19,7 @@ import {
   useCreateCategoryMutation,
   useCreateProductMutation,
   useDeleteProductMutation,
+  useProductSearchQuery,
   useProductsPageQuery,
   useUpdateProductMutation,
 } from "@/hooks/useInventoryQueries";
@@ -24,6 +27,7 @@ import {
   confirmProductImport,
   downloadProductImportTemplate,
   previewProductImport,
+  type Product,
   type ProductImportPreview,
 } from "@/lib/apiClient";
 import { invalidateDashboardQueries } from "@/lib/dashboardRealtime";
@@ -55,6 +59,12 @@ const toSafeCsvCell = (value: unknown) => {
   return /^[=+\-@]/.test(text) ? `'${text}` : text;
 };
 
+const normalizeBarcodeValue = (value: string) =>
+  value.trim().replace(/\s+/g, "").toUpperCase();
+
+const sanitizeBarcodeInput = (value: string) =>
+  normalizeBarcodeValue(value).replace(/[^A-Z0-9]/g, "").slice(0, 32);
+
 export default function ProductsClient({
   name,
   image,
@@ -83,7 +93,8 @@ export default function ProductsClient({
   });
   const [editingForm, setEditingForm] = useState(form);
   const [newCategoryName, setNewCategoryName] = useState("");
-  const [formTouched, setFormTouched] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [barcodeServerError, setBarcodeServerError] = useState("");
   const [selectedImportFile, setSelectedImportFile] = useState<File | null>(
     null,
   );
@@ -129,6 +140,23 @@ export default function ProductsClient({
   }, [currentPage, data?.totalPages]);
 
   const products = useMemo(() => data?.products ?? [], [data]);
+  const normalizedBarcode = normalizeBarcodeValue(form.barcode);
+  const barcodeLookup = useProductSearchQuery(
+    normalizedBarcode.length >= 6 ? normalizedBarcode : "",
+    { limit: 8 },
+  );
+  const existingBarcodeProduct = useMemo(
+    () => {
+      const barcodeMatches = barcodeLookup.data ?? [];
+      return normalizedBarcode.length >= 6
+        ? barcodeMatches.find(
+            (product) =>
+              normalizeBarcodeValue(product.barcode ?? "") === normalizedBarcode,
+          )
+        : undefined;
+    },
+    [barcodeLookup.data, normalizedBarcode],
+  );
   const categoryOptions = categories ?? [];
   const totalProducts = data?.total ?? 0;
   const totalPages = data?.totalPages ?? 1;
@@ -142,7 +170,8 @@ export default function ProductsClient({
     updateProduct.isPending ||
     deleteProduct.isPending;
 
-  const resetForm = () =>
+  const resetForm = () => {
+    setBarcodeServerError("");
     setForm({
       name: "",
       sku: "",
@@ -154,6 +183,7 @@ export default function ProductsClient({
       reorder_level: "0",
       category_id: "",
     });
+  };
 
   const resetImportState = () => {
     setSelectedImportFile(null);
@@ -185,9 +215,30 @@ export default function ProductsClient({
     if (!/^\d+(\.\d+)?$/.test(value)) return t("validation.validNumber");
     return "";
   };
+  const validateBarcodeField = (value: string) => {
+    const barcode = normalizeBarcodeValue(value);
+    if (!barcode) return "";
+    if (!/^[A-Z0-9]+$/.test(barcode)) {
+      return t("productsPage.validation.invalidBarcode");
+    }
+    if (barcode.length < 6) {
+      return t("productsPage.validation.barcodeMin");
+    }
+    if (barcode.length > 32) {
+      return t("productsPage.validation.barcodeMax");
+    }
+    if (barcodeServerError) {
+      return barcodeServerError;
+    }
+    if (existingBarcodeProduct) {
+      return t("productsPage.validation.barcodeDuplicate");
+    }
+    return "";
+  };
   const validateAll = () =>
     !validateProductNameField(form.name) &&
     !validateRequiredField(form.sku) &&
+    !validateBarcodeField(form.barcode) &&
     !validateNumberField(form.price) &&
     !validateOptionalNumberField(form.cost) &&
     !validateNumberField(form.gst_rate) &&
@@ -196,21 +247,31 @@ export default function ProductsClient({
 
   const handleCreate = async (event: React.FormEvent) => {
     event.preventDefault();
-    setFormTouched(true);
+    setBarcodeServerError("");
     if (!validateAll()) return;
-    await createProduct.mutateAsync({
-      name: form.name.trim(),
-      sku: form.sku.trim(),
-      barcode: form.barcode.trim() || undefined,
-      price: Number(form.price),
-      cost: toNumber(form.cost),
-      gst_rate: toNumber(form.gst_rate),
-      stock_on_hand: toNumber(form.stock_on_hand),
-      reorder_level: toNumber(form.reorder_level),
-      category_id: form.category_id ? Number(form.category_id) : null,
-    });
-    resetForm();
-    setFormTouched(false);
+    try {
+      await createProduct.mutateAsync({
+        name: form.name.trim(),
+        sku: form.sku.trim(),
+        barcode: normalizeBarcodeValue(form.barcode) || undefined,
+        price: Number(form.price),
+        cost: toNumber(form.cost),
+        gst_rate: toNumber(form.gst_rate),
+        stock_on_hand: toNumber(form.stock_on_hand),
+        reorder_level: toNumber(form.reorder_level),
+        category_id: form.category_id ? Number(form.category_id) : null,
+      });
+      resetForm();
+    } catch (error) {
+      if (
+        isAxiosError<{ message?: string }>(error) &&
+        error.response?.data?.message === "Barcode already exists"
+      ) {
+        setBarcodeServerError(t("productsPage.validation.barcodeDuplicate"));
+        return;
+      }
+      toast.error(t("productsPage.saveError"));
+    }
   };
 
   const handleCreateCategory = async () => {
@@ -221,10 +282,8 @@ export default function ProductsClient({
     setForm((prev) => ({ ...prev, category_id: created.id.toString() }));
   };
 
-  const handleEdit = (id: number) => {
-    const current = products.find((product) => product.id === id);
-    if (!current) return;
-    setEditingId(id);
+  const beginEditingProduct = (current: Product) => {
+    setEditingId(current.id);
     setEditingForm({
       name: current.name ?? "",
       sku: current.sku ?? "",
@@ -236,6 +295,12 @@ export default function ProductsClient({
       reorder_level: current.reorder_level.toString(),
       category_id: current.category?.id?.toString() ?? "",
     });
+  };
+
+  const handleEdit = (id: number) => {
+    const current = products.find((product) => product.id === id);
+    if (!current) return;
+    beginEditingProduct(current);
   };
 
   const handleUpdate = async (event: React.FormEvent) => {
@@ -908,17 +973,87 @@ export default function ProductsClient({
                 placeholder={t("productsPage.placeholders.sku")}
                 success
               />
-              <ValidationField
-                id="barcode"
-                label={t("productsPage.fields.barcode")}
-                value={form.barcode}
-                onChange={(value) =>
-                  setForm((prev) => ({ ...prev, barcode: value }))
-                }
-                validate={() => ""}
-                placeholder={t("productsPage.placeholders.barcode")}
-                success
-              />
+              <div className="grid gap-2">
+                <div className="flex items-end gap-2">
+                  <div className="min-w-0 flex-1">
+                    <ValidationField
+                      id="barcode"
+                      label={t("productsPage.fields.barcode")}
+                      value={form.barcode}
+                      onChange={(value) => {
+                        setBarcodeServerError("");
+                        setForm((prev) => ({
+                          ...prev,
+                          barcode: sanitizeBarcodeInput(value),
+                        }));
+                      }}
+                      normalizeOnBlur={normalizeBarcodeValue}
+                      validate={validateBarcodeField}
+                      placeholder={t("productsPage.placeholders.barcode")}
+                      inputMode="text"
+                      maxLength={32}
+                      pattern="[A-Za-z0-9]{6,32}"
+                      forceTouched={Boolean(validateBarcodeField(form.barcode))}
+                      success
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mb-2 h-10"
+                    onClick={() => setIsScannerOpen(true)}
+                  >
+                    <ScanLine className="h-4 w-4" />
+                    {t("productsPage.barcode.scanButton")}
+                  </Button>
+                </div>
+                {barcodeLookup.isFetching && normalizedBarcode.length >= 6 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t("productsPage.barcode.checking")}
+                  </p>
+                ) : null}
+                {existingBarcodeProduct ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold">
+                          {t("productsPage.barcode.existingFound")}
+                        </p>
+                        <p className="mt-1 text-xs">
+                          {existingBarcodeProduct.name} · SKU{" "}
+                          {existingBarcodeProduct.sku} ·{" "}
+                          {t("productsPage.stockLabel", {
+                            count: existingBarcodeProduct.stock_on_hand,
+                          })}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          beginEditingProduct(existingBarcodeProduct);
+                          setSearchInput(existingBarcodeProduct.barcode ?? "");
+                          setCurrentPage(1);
+                          window.setTimeout(() => {
+                            document
+                              .getElementById(
+                                `product-${existingBarcodeProduct.id}`,
+                              )
+                              ?.scrollIntoView({
+                                behavior: "smooth",
+                                block: "center",
+                              });
+                          }, 350);
+                        }}
+                      >
+                        <Barcode className="h-4 w-4" />
+                        {t("productsPage.barcode.updateStock")}
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
               <ValidationField
                 id="price"
                 label={t("productsPage.fields.sellingPrice")}
@@ -1035,8 +1170,8 @@ export default function ProductsClient({
               </div>
               <Button
                 type="submit"
-                disabled={isMutating || (formTouched && !validateAll())}
-                aria-disabled={isMutating || (formTouched && !validateAll())}
+                disabled={isMutating || !validateAll()}
+                aria-disabled={isMutating || !validateAll()}
               >
                 {t("productsPage.actions.add")}
               </Button>
@@ -1150,7 +1285,11 @@ export default function ProductsClient({
                 <>
                   <div className="grid gap-3">
                     {products.map((product) => (
-                      <div key={product.id} className="app-list-item px-4 py-4">
+                      <div
+                        key={product.id}
+                        id={`product-${product.id}`}
+                        className="app-list-item px-4 py-4"
+                      >
                         {editingId === product.id ? (
                           <form className="grid gap-3" onSubmit={handleUpdate}>
                             <div className="grid gap-3 sm:grid-cols-2">
@@ -1370,6 +1509,19 @@ export default function ProductsClient({
           </div>
         </section>
       </div>
+      <BarcodeScannerDialog
+        open={isScannerOpen}
+        onOpenChange={setIsScannerOpen}
+        onManualEntry={() => document.getElementById("barcode")?.focus()}
+        onScan={(barcode) => {
+          setBarcodeServerError("");
+          setForm((prev) => ({
+            ...prev,
+            barcode: sanitizeBarcodeInput(barcode),
+          }));
+          toast.success(t("productsPage.barcode.scanSuccess"));
+        }}
+      />
     </DashboardLayout>
   );
 }

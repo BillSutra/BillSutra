@@ -40,6 +40,14 @@ const PRODUCT_OPTIONS_CACHE_SWR_SECONDS = Math.max(
 const normalizeProductName = (value: string) =>
   value.trim().replace(/\s+/g, " ");
 
+const isUniqueConstraintError = (error: unknown) =>
+  Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === "P2002",
+  );
+
 const buildQuickProductSku = (productName: string) => {
   const base = productName
     .toUpperCase()
@@ -281,11 +289,11 @@ class ProductsController {
 
     if (barcode) {
       const existingBarcode = await prisma.product.findFirst({
-        where: { barcode },
+        where: { user_id: userId, barcode },
       });
 
       if (existingBarcode) {
-        return sendResponse(res, 409, { message: "Barcode already in use" });
+        return res.status(409).json({ message: "Barcode already exists" });
       }
     }
 
@@ -313,21 +321,29 @@ class ProductsController {
       productName: normalizedName,
     });
 
-    const product = await prisma.product.create({
-      data: {
-        user_id: userId,
-        category_id,
-        name: normalizedName,
-        sku: resolvedSku,
-        barcode,
-        gst_rate,
-        price,
-        cost,
-        stock_on_hand: stock_on_hand ?? 0,
-        reorder_level: reorder_level ?? 0,
-      },
-      include: productCategoryInclude,
-    });
+    let product;
+    try {
+      product = await prisma.product.create({
+        data: {
+          user_id: userId,
+          category_id,
+          name: normalizedName,
+          sku: resolvedSku,
+          barcode,
+          gst_rate,
+          price,
+          cost,
+          stock_on_hand: stock_on_hand ?? 0,
+          reorder_level: reorder_level ?? 0,
+        },
+        include: productCategoryInclude,
+      });
+    } catch (error) {
+      if (barcode && isUniqueConstraintError(error)) {
+        return res.status(409).json({ message: "Barcode already exists" });
+      }
+      throw error;
+    }
     void invalidateProductOptionCaches(req.user?.businessId?.trim(), userId);
 
     if (businessId) {
@@ -403,11 +419,11 @@ class ProductsController {
 
     if (barcode) {
       const existingBarcode = await prisma.product.findFirst({
-        where: { barcode, NOT: { id } },
+        where: { user_id: userId, barcode, NOT: { id } },
       });
 
       if (existingBarcode) {
-        return sendResponse(res, 409, { message: "Barcode already in use" });
+        return res.status(409).json({ message: "Barcode already exists" });
       }
     }
 
@@ -441,21 +457,29 @@ class ProductsController {
       }
     }
 
-    const updated = await prisma.product.update({
-      where: { id: existingProduct.id },
-      data: {
-        name: normalizedName,
-        sku,
-        barcode,
-        gst_rate,
-        price,
-        cost,
-        stock_on_hand,
-        reorder_level,
-        category_id,
-      },
-      include: productCategoryInclude,
-    });
+    let updated;
+    try {
+      updated = await prisma.product.update({
+        where: { id: existingProduct.id },
+        data: {
+          name: normalizedName,
+          sku,
+          barcode,
+          gst_rate,
+          price,
+          cost,
+          stock_on_hand,
+          reorder_level,
+          category_id,
+        },
+        include: productCategoryInclude,
+      });
+    } catch (error) {
+      if (barcode && isUniqueConstraintError(error)) {
+        return res.status(409).json({ message: "Barcode already exists" });
+      }
+      throw error;
+    }
     void invalidateProductOptionCaches(req.user?.businessId?.trim(), userId);
 
     return sendResponse(res, 200, {

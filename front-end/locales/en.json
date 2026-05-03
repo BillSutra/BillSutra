@@ -696,6 +696,13 @@
                                          "delete":  "Delete",
                                          "cancel":  "Cancel"
                                      },
+                         "barcode":  {
+                                         "scanButton":  "Scan Barcode",
+                                         "checking":  "Checking barcode availability...",
+                                         "existingFound":  "Existing product found",
+                                         "updateStock":  "Update stock",
+                                         "scanSuccess":  "Barcode scanned successfully"
+                                     },
                          "fields":  {
                                         "name":  "Product name",
                                         "sku":  "SKU",
@@ -714,10 +721,14 @@
                                               "barcode":  "Barcode",
                                               "zero":  "0",
                                               "gstRate":  "18",
-                                              "categoryName":  "e.g. Electronics"
-                                          },
+                                          "categoryName":  "e.g. Electronics"
+                                      },
                          "validation":  {
-                                            "invalidName":  "Please enter a valid product name"
+                                            "invalidName":  "Please enter a valid product name",
+                                            "invalidBarcode":  "Barcode must contain only letters and numbers",
+                                            "barcodeMin":  "Barcode must be at least 6 characters",
+                                            "barcodeMax":  "Barcode cannot exceed 32 characters",
+                                            "barcodeDuplicate":  "Barcode already exists"
                                         }
                      },
     "warehousesPage":  {
@@ -2462,9 +2473,9 @@
                         "placeholders":  {
                                              "name":  "Riya Sharma",
                                              "email":  "riya@company.com",
-                                             "phone":  "9876543210",
-                                             "password":  "Minimum 6 characters",
-                                             "keepPassword":  "Leave blank to keep current password",
+                         "phone":  "9876543210",
+                         "password":  "8+ chars, Aa, 1, special",
+                         "keepPassword":  "Leave blank to keep current password",
                                              "incentivePercent":  "e.g. 2.5",
                                              "incentiveAmount":  "e.g. 50"
                                          },
@@ -2496,19 +2507,33 @@
                                         "disable":  "Disable",
                                         "enable":  "Enable"
                                     },
-                        "messages":  {
-                                         "createError":  "Unable to create the worker right now.",
+    "messages":  {
+                     "createError":  "Unable to create the worker right now.",
                                          "updateError":  "Unable to update the worker right now.",
                                          "noPhone":  "No phone number",
                                          "addedMeta":  "{role} - Added {date}",
-                                         "neverActive":  "Never"
-                                     },
-                        "validation":  {
-                                           "passwordRequired":  "This field is required",
-                                           "passwordMin":  "Password must be at least 6 characters",
-                                           "incentiveInvalid":  "Enter a valid incentive value",
-                                           "incentivePercentMax":  "Percentage cannot exceed 100"
-                                       }
+                     "neverActive":  "Never"
+                 },
+    "passwordStrength":  {
+                             "label":  "Password strength",
+                             "weak":  "Weak",
+                             "medium":  "Medium",
+                             "strong":  "Strong"
+                         },
+    "passwordRules":  {
+                          "length":  "8+ characters",
+                          "uppercase":  "Uppercase",
+                          "lowercase":  "Lowercase",
+                          "number":  "Number",
+                          "special":  "Special character"
+                      },
+    "validation":  {
+                       "passwordRequired":  "This field is required",
+                       "passwordMin":  "Password must be at least 8 characters",
+                       "passwordStrong":  "Use 8+ chars with upper, lower, number, and special character",
+                       "incentiveInvalid":  "Enter a valid incentive value",
+                       "incentivePercentMax":  "Percentage cannot exceed 100"
+                   }
                     },
     "profilePage":  {
                         "kicker":  "Profile",

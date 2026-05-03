@@ -22,6 +22,17 @@ const normalizeIdentifier = (value: unknown) => {
   return value.trim();
 };
 
+const normalizeIndianPhone = (value: unknown) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  const digits = value.replace(/\D/g, "");
+  return digits.length === 12 && digits.startsWith("91")
+    ? digits.slice(2)
+    : digits;
+};
+
 const extractAxiosMessage = (error: AxiosError, fallback: string) => {
   const responseMessage = (error.response?.data as { message?: unknown })
     ?.message;
@@ -62,14 +73,16 @@ const extractAxiosErrors = (error: AxiosError) => {
 
 export async function registerAction(prevState: unknown, formdata: FormData) {
   try {
-    const phone = normalizeIdentifier(formdata.get("phone"));
+    const name = normalizeIdentifier(formdata.get("name"));
+    const email = normalizeIdentifier(formdata.get("email")).toLowerCase();
+    const phone = normalizeIndianPhone(formdata.get("phone"));
 
     const response = await axios.post(
       REGISTER_URL,
       {
-        name: formdata.get("name"),
-        email: formdata.get("email"),
-        phone: phone || undefined,
+        name,
+        email,
+        phone,
         password: formdata.get("password"),
         confirm_password: formdata.get("confirm_password"),
       },
@@ -92,7 +105,7 @@ export async function registerAction(prevState: unknown, formdata: FormData) {
         return {
           status: 422,
           message: extractAxiosMessage(error, "Please check the form details."),
-          errors: error.response.data.errors,
+          errors: extractAxiosErrors(error),
           data: {},
         };
       }

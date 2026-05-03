@@ -50,6 +50,7 @@ import {
   passwordResetAttemptRateLimiter,
   passwordResetRequestRateLimiter,
   paymentRateLimiter,
+  signupRateLimiter,
   uploadRateLimiter,
 } from "../middlewares/rateLimit.middleware.js";
 import validate from "../middlewares/validate.js";
@@ -256,7 +257,7 @@ router.patch(
 // Auth routes
 router.post(
   "/auth/signup",
-  authRateLimiter,
+  signupRateLimiter,
   validate({ body: authRegisterSchema }),
   AuthController.signup,
 );
@@ -274,7 +275,7 @@ router.post(
 );
 router.post(
   "/auth/register",
-  authRateLimiter,
+  signupRateLimiter,
   validate({ body: authRegisterSchema }),
   AuthController.register,
 );

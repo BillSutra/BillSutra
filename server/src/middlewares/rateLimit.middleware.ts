@@ -20,6 +20,16 @@ export const authRateLimiter = createRedisRateLimiter({
   },
 });
 
+export const signupRateLimiter = createRedisRateLimiter({
+  keyPrefix: "auth-signup",
+  windowMs: 15 * 60 * 1000,
+  limit: 12,
+  message: {
+    success: false,
+    message: "Too many signup attempts. Please try again after 15 minutes.",
+  },
+});
+
 export const loginRateLimiter = createRedisRateLimiter({
   keyPrefix: "auth-login",
   windowMs: 15 * 60 * 1000,

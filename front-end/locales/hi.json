@@ -73,16 +73,23 @@
                          "categoryLabel":  "कैटेगरी: {name}",
                          "stockLabel":  "स्टॉक: {count}",
                          "priceLabel":  "कीमत: {amount}",
-                         "actions":  {
-                                         "add":  "प्रोडक्ट जोड़ें",
-                                         "addCategory":  "जोड़ें",
-                                         "adding":  "जोड़ा जा रहा है...",
-                                         "save":  "सेव करें",
-                                         "edit":  "एडिट करें",
-                                         "delete":  "डिलीट करें",
-                                         "cancel":  "रद्द करें"
-                                     },
-                         "fields":  {
+                        "actions":  {
+                                        "add":  "प्रोडक्ट जोड़ें",
+                                        "addCategory":  "जोड़ें",
+                                        "adding":  "जोड़ा जा रहा है...",
+                                        "save":  "सेव करें",
+                                        "edit":  "एडिट करें",
+                                        "delete":  "डिलीट करें",
+                                        "cancel":  "रद्द करें"
+                                    },
+                        "barcode":  {
+                                        "scanButton":  "बारकोड स्कैन करें",
+                                        "checking":  "बारकोड उपलब्धता जांची जा रही है...",
+                                        "existingFound":  "मौजूदा प्रोडक्ट मिला",
+                                        "updateStock":  "स्टॉक अपडेट करें",
+                                        "scanSuccess":  "बारकोड सफलतापूर्वक स्कैन हुआ"
+                                    },
+                        "fields":  {
                                         "name":  "प्रोडक्ट नाम",
                                         "sku":  "SKU",
                                         "barcode":  "बारकोड",
@@ -102,8 +109,12 @@
                                               "gstRate":  "18",
                                               "categoryName":  "जैसे इलेक्ट्रॉनिक्स"
                                           },
-                         "validation":  {
-                                            "invalidName":  "कृपया सही प्रोडक्ट नाम दर्ज करें"
+                        "validation":  {
+                                            "invalidName":  "कृपया सही प्रोडक्ट नाम दर्ज करें",
+                                            "invalidBarcode":  "बारकोड में केवल अक्षर और अंक होने चाहिए",
+                                            "barcodeMin":  "बारकोड कम से कम 6 अक्षरों का होना चाहिए",
+                                            "barcodeMax":  "बारकोड 32 अक्षरों से अधिक नहीं हो सकता",
+                                            "barcodeDuplicate":  "बारकोड पहले से मौजूद है"
                                         },
                          "filters":  {
                                          "searchPlaceholder":  "प्रोडक्ट नाम, SKU या बारकोड से खोजें",
@@ -2033,6 +2044,9 @@
                                    "ruleLowercase":  "1 छोटा अक्षर",
                                    "ruleNumber":  "1 संख्या",
                                    "ruleSpecial":  "1 विशेष चिन्ह",
+                                   "ruleUnique":  "सामान्य पासवर्ड नहीं",
+                                   "uniquePasswordHint":  "ऐसा पासवर्ड चुनें जो आम या आसानी से अनुमान लगाने योग्य न हो।",
+                                   "googlePasswordSetupNotice":  "Google से बने खातों के लिए पासवर्ड सेटअप अलग से संभाला जाता है।",
                                    "requestNewLink":  "नया लिंक मांगें",
                                    "updatingPassword":  "पासवर्ड अपडेट हो रहा है",
                                    "changePassword":  "पासवर्ड बदलें"
@@ -2393,7 +2407,7 @@
                                              "name":  "रिया शर्मा",
                                              "email":  "riya@company.com",
                                              "phone":  "9876543210",
-                                             "password":  "कम से कम 6 अक्षर",
+                                             "password":  "8+ अक्षर, Aa, 1, विशेष",
                                              "keepPassword":  "मौजूदा पासवर्ड रखने के लिए खाली छोड़ें",
                                              "incentivePercent":  "जैसे 2.5",
                                              "incentiveAmount":  "जैसे 50"
@@ -2433,9 +2447,23 @@
                                          "addedMeta":  "{role} - जोड़ा गया {date}",
                                          "neverActive":  "कभी नहीं"
                                      },
+                        "passwordStrength":  {
+                                                 "label":  "पासवर्ड मजबूती",
+                                                 "weak":  "कमजोर",
+                                                 "medium":  "मध्यम",
+                                                 "strong":  "मजबूत"
+                                             },
+                        "passwordRules":  {
+                                              "length":  "8+ अक्षर",
+                                              "uppercase":  "बड़ा अक्षर",
+                                              "lowercase":  "छोटा अक्षर",
+                                              "number":  "संख्या",
+                                              "special":  "विशेष चिन्ह"
+                                          },
                         "validation":  {
                                            "passwordRequired":  "यह फ़ील्ड आवश्यक है",
-                                           "passwordMin":  "पासवर्ड कम से कम 6 अक्षरों का होना चाहिए",
+                                           "passwordMin":  "पासवर्ड कम से कम 8 अक्षरों का होना चाहिए",
+                                           "passwordStrong":  "8+ अक्षर, बड़ा अक्षर, छोटा अक्षर, संख्या और विशेष चिन्ह इस्तेमाल करें",
                                            "incentiveInvalid":  "मान्य इंसेंटिव मान दर्ज करें",
                                            "incentivePercentMax":  "प्रतिशत 100 से अधिक नहीं हो सकता"
                                        }
