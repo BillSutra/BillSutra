@@ -40,7 +40,8 @@ flowchart LR
       NotificationSvc[Notification Service]
       StorageSvc[Storage Service]
       MailSvc[Mail Service]
-      RealtimeSvc[Dashboard Realtime / SSE]
+    RealtimeSvc[Dashboard Realtime / SSE / Socket.IO]
+    SecureFiles[Secure File Controller]
     end
 
     Jobs[Cron Jobs + Queue Worker]
@@ -95,6 +96,7 @@ flowchart LR
   Controllers --> AnalyticsSvc
   Controllers --> NotificationSvc
   Controllers --> StorageSvc
+  Controllers --> SecureFiles
   Controllers --> MailSvc
   Controllers --> RealtimeSvc
   Jobs --> InvoiceModule
@@ -114,6 +116,7 @@ flowchart LR
   AnalyticsSvc --> Postgres
   NotificationSvc --> Postgres
   StorageSvc --> Uploads
+  SecureFiles --> Uploads
 
   %% External integrations
   Controllers --> FaceService
@@ -127,8 +130,9 @@ flowchart LR
 
 ## Notes
 
-- Frontend: Next.js App Router application serving public, owner, worker, and admin experiences.
+- Frontend: Next.js App Router application serving public, owner, worker, and admin experiences; production builds run from the generated standalone server.
 - Backend: single Express-based modular monolith with feature-specific controllers, modules, and services.
 - Database: PostgreSQL is the source of truth through Prisma.
-- Async processing: BullMQ is used for invoice email queueing when Redis is enabled; cron jobs handle recurring invoices and cache warming.
+- Async processing: BullMQ workers are used when TCP Redis queues are enabled; cron jobs handle recurring invoices and cache warming.
+- Storage: public assets are served from `/uploads/public`; private uploads/exports are served through authenticated or signed controller paths.
 - Sidecar: face recognition runs as a separate Python service invoked by the backend.

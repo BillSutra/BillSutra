@@ -2,6 +2,9 @@
 
 Audit date: 2026-04-25
 
+Maintenance update: 2026-05-04
+- Documentation was resynchronized with the current monorepo scripts, Node/npm requirements, frontend standalone startup, and secure upload/face-encryption implementation notes.
+
 Audit scope reviewed from source:
 - Root workspace configuration and documentation
 - `front-end/src` (320 source files)
@@ -41,7 +44,7 @@ This report is derived from actual code paths, Prisma models, route declarations
 | Background / async | BullMQ invoice email queue, cron jobs for recurring invoices and inventory insight warming |
 | AI / intelligence | Rule-based assistant service, financial copilot engines, sales forecast module, inventory-demand prediction module |
 | External services | Google OAuth, Razorpay, SMTP/Resend-style mail delivery, Redis (optional queue), Sentry, PostHog, address lookup, Python face-recognition sidecar |
-| Storage | Local filesystem uploads exposed from `server/uploads` |
+| Storage | Local filesystem uploads with public assets under `/uploads/public` and private files served through secure controller paths |
 | Deployment shape inferred from code | Monorepo with separate Next.js frontend, Express API server, PostgreSQL, optional Redis, and optional Python Flask sidecar for face recognition |
 
 ### Repository shape
@@ -839,7 +842,7 @@ This report is derived from actual code paths, Prisma models, route declarations
 - Primary architecture: modular monolith.
 - Frontend and backend are deployed as separate services, but backend business domains live in one Express application rather than as microservices.
 - A lightweight Python sidecar provides face-recognition compute.
-- Redis is optional and only used for queue-backed invoice email delivery.
+- Redis is optional and used for queue-backed jobs, cache, rate limiting, and realtime throttling when the matching feature flags are enabled.
 
 ### Client -> server -> database flow
 1. Next.js frontend renders App Router pages and uses React Query plus an Axios-based API client.
@@ -1606,7 +1609,7 @@ flowchart LR
   Api[Express API Service]
   Pg[(PostgreSQL)]
   Redis[(Redis optional)]
-  Files[(Server Uploads Disk)]
+  Files[(Server Uploads Disk / Secure File Routes)]
   Face[Python Face Service]
   Mail[Mail Provider]
   Pay[Razorpay]
@@ -1623,4 +1626,4 @@ flowchart LR
 
 ## Closing summary
 
-BillSutra is a broad modular-monolith business platform with strong coverage across billing, inventory, procurement, CRM, payments, and analytics. The codebase already contains most of the building blocks a production SMB platform needs. The main engineering priority is not feature breadth but operational hardening: unify domain patterns, eliminate schema-drift workarounds, tighten token/upload/biometric security, and reduce coupling between frontend and backend internals.
+BillSutra is a broad modular-monolith business platform with strong coverage across billing, inventory, procurement, CRM, payments, and analytics. The codebase already contains most of the building blocks a production SMB platform needs. The main engineering priority is not feature breadth but operational hardening: unify domain patterns, eliminate schema-drift workarounds, finish token/session hardening, keep secure upload and biometric migration paths enforced, and reduce coupling between frontend and backend internals.

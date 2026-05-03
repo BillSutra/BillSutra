@@ -2,6 +2,10 @@
 
 Audit date: 2026-04-25
 
+Maintenance update: 2026-05-04
+- Documentation references to the missing `feature_summary.txt`, frontend `middleware.ts`, Node 18 setup, and port 5000 have been updated.
+- Face encoding encryption support now exists in the backend (`faceEncryption.ts`, `FACE_ENCRYPTION_KEY`, `is_encrypted`, audit/migration scripts). Existing deployments should still run the migration/audit path before considering this fully remediated in production data.
+
 This file lists the main issues identified during source review. Severity reflects current production risk if the observed code paths are active.
 
 ## 1. Long-lived JWT access tokens
@@ -52,15 +56,17 @@ This file lists the main issues identified during source review. Severity reflec
   - Serve files through signed URLs or authenticated controller endpoints.
   - Separate public branding assets from private compliance/payment documents.
 
-## 4. Face encodings are stored in plaintext despite documentation claiming encryption
+## 4. Face encodings were stored in plaintext despite documentation claiming encryption
 
 - Severity: Critical
+- Status: Partially remediated in code; verify production data migration/audit before closing.
 - File location:
   - `server/src/controllers/FaceRecognitionController.ts:542-543`
   - `server/src/controllers/FaceRecognitionController.ts:549-550`
   - `face_recognition_service/README.md:216-220`
 - Description:
-  - Biometric face encodings are stored as serialized text in the database. The project documentation states they are encrypted, but the implementation does not match that claim.
+  - The original audit found biometric face encodings stored as serialized text in the database while documentation claimed encryption.
+  - Current code includes encrypted face encoding helpers, `is_encrypted` tracking, and migration/audit scripts, but existing rows may still require migration.
 - Root cause:
   - Face-recognition feature was implemented with serialized vectors, but encryption-at-rest for biometric templates was not added.
 - Suggested fix:
@@ -210,9 +216,10 @@ This file lists the main issues identified during source review. Severity reflec
   - Keep only one canonical invoice implementation.
   - Document migration/refactor decisions in ADRs or technical notes.
 
-## 14. Documentation is out of sync with the repository
+## 14. Documentation was out of sync with the repository
 
 - Severity: Low
+- Status: Remediated for the listed references on 2026-05-04.
 - File location:
   - `README.md:30`
   - `README.md:55`
@@ -220,7 +227,8 @@ This file lists the main issues identified during source review. Severity reflec
   - `front-end/README.md:86`
   - `front-end/README.md:97`
 - Description:
-  - Root README references `feature_summary.txt`, which is not present. Frontend README documents `middleware.ts`, while the repo currently contains `src/proxy.ts` instead.
+  - The original audit found that the root README referenced `feature_summary.txt`, which is not present, and that the frontend README documented `middleware.ts` while the repo contains `src/proxy.ts`.
+  - The README files now point to `PROJECT_REPORT.md`, `src/proxy.ts`, `next.config.mjs`, current Node/npm requirements, and the standalone frontend start command.
 - Root cause:
   - Documentation was not updated as the codebase evolved.
 - Suggested fix:

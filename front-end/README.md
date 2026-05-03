@@ -12,9 +12,10 @@ This is the **Next.js** web application for BillSutra. It provides the UI for ma
 - Dashboard-first experience with actionable financial and operational insights
 - Responsive and accessible interface patterns across business-critical pages
 
-## Updated Features (April 2026)
+## Updated Features (May 2026)
 
 - Added facial recognition UI flow (registration and login integration points)
+- Production builds use `output: "standalone"` and start through `.next/standalone/front-end/server.js`
 - Improved dashboard KPI layout to better separate inbound and outbound payment pressure
 - Refined inventory risk visualization to align summary counts with detailed risk lists
 - Continued feature parity alignment with backend analytics and auth capabilities
@@ -83,9 +84,10 @@ front-end/
 │   ├── lib/                    # Shared utilities (axios instance, helpers)
 │   ├── providers/              # React context providers (auth, query, theme)
 │   ├── types/                  # TypeScript types for API data models
-│   └── middleware.ts           # NextAuth JWT route guard for /dashboard/**
+│   └── proxy.ts                # NextAuth JWT route guard for protected app routes
 ├── public/                     # Static assets
-├── next.config.ts
+├── next.config.mjs             # Next.js standalone config and env loading
+├── scripts/                    # Build helpers, including standalone asset copy
 ├── tailwind.config.ts
 └── package.json
 ```
@@ -94,10 +96,10 @@ front-end/
 
 ## 🔐 Authentication Flow
 
-1. User visits any `/dashboard/` route → intercepted by `middleware.ts`
-2. Middleware reads NextAuth JWT from cookie
-3. If no token → redirect to `/` (landing page with login) + `callbackUrl` param
-4. After login (credentials or Google OAuth) → NextAuth session created
+1. User visits a protected workspace route and is intercepted by `src/proxy.ts`
+2. Proxy reads the NextAuth JWT from cookie
+3. If no token is present, the user is redirected into the login flow
+4. After login (credentials, worker credentials, token bootstrap, or Google OAuth) -> NextAuth session created
 5. Front-end passes the JWT to the back-end API as a `Bearer` token in headers
 
 ---
@@ -130,21 +132,22 @@ front-end/
 ## 🔧 Setup & Installation
 
 ### Requirements
-- Node.js 18+
+- Node.js 20.19.0+
+- npm 10+
 - A running BillSutra server (see `server/README.md`)
 
 ### Steps
 
 ```bash
-# 1. Install dependencies
-npm install
+# 1. Install dependencies from the monorepo root
+npm ci
 
 # 2. Configure environment
-cp .env.local.example .env.local
+cp front-end/.env.example front-end/.env.local
 # Edit .env.local with your values (see below)
 
 # 3. Start development server
-npm run dev
+npm run dev --workspace front-end
 ```
 
 The app will be available at **http://localhost:3000**.
@@ -177,8 +180,11 @@ GOOGLE_CLIENT_SECRET=your-google-client-secret
 |---|---|
 | `npm run dev` | Start development server with hot reload |
 | `npm run build` | Build production bundle |
-| `npm run start` | Start production server |
+| `npm run start` | Start the generated standalone production server |
 | `npm run lint` | Run ESLint |
+
+Production note: because this app uses `output: "standalone"`, use `npm run start`
+after `npm run build`; do not run `next start` directly.
 
 ---
 
