@@ -1505,6 +1505,11 @@ export type UserSettingsPreferences = {
     terms: string;
     signature: string;
   };
+  accountType?: "OWNER" | "WORKER";
+  role?: "ADMIN" | "WORKER";
+  actorId?: string;
+  workerId?: string | null;
+  canManageBusinessSettings?: boolean;
 };
 
 export type AppNotificationType =

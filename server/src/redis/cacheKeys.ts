@@ -167,7 +167,11 @@ export const buildBusinessProfileCachePrefix = (params: {
 export const buildSettingsPreferencesRedisKey = (params: {
   businessId?: string | null;
   userId?: number | null;
-}) => buildKey(...buildTenantScope(params), "settings");
+  actorId?: string | null;
+}) =>
+  params.actorId?.trim()
+    ? buildKey(...buildTenantScope(params), "settings", "actor", params.actorId)
+    : buildKey(...buildTenantScope(params), "settings");
 
 export const buildSettingsPreferencesCachePrefix = (params: {
   businessId?: string | null;
